@@ -1,0 +1,291 @@
+#+TITLE: 任务执行
+#+HTML_HEAD: <link rel="stylesheet" type="text/css" href="css/main.css" />
+#+OPTIONS: num:nil timestamp:nil
+* 线程中执行任务
+** 串行执行
+吞吐量低，响应慢，IO操作中浪费cpu
+
+** 每个请求单独线程
+1. 线程的创建和销毁会占用一定的资源。如果请求频繁而对请求的处理是轻量级的(大多的web请求符合该情形), 创建一个线程处理请求后将其销毁的方式是不划算的
+2. 过多的线程导致线程切换频繁, 用于处理请求的CPU时间反而会减少. 如果当前的线程数已经让CPU处于忙碌状态, 那么增加更多的线程不会改善应用的性能 
+3. 过多的线程会导致系统稳定性下降　
+
+* Executor框架
+将创建好的线程组织成线程池, 当请求来临时从池中取出线程处理请求, 处理完毕后将线程归还给线程池, 而不是销毁
+
+通过限制线程池中的线程数, 以克服线程过多时性能和稳定性下降的缺陷 
+
+Executor框架包含多个线程池的实现, 所有线程池都派生自Executor接口
+ 　
+Executor接口只定义了一个方法: execute(Runnable task) 
+#+BEGIN_SRC java
+  public interface Executor {
+          void execute(Runnable command);
+  }
+#+END_SRC
+
+Executor接口解耦了任务提交和任务执行, 提交任务的线程为生产者, 执行任务的线程为消费者 
+#+BEGIN_SRC java
+  class TaskExecutionWebServer {   
+          private static final int NTHREADS = 100;   
+          // 创建线程池  
+          private static final Executor exec   
+          = Executors.newFixedThreadPool(NTHREADS);   
+     
+          public static void main(String[] args) throws IOException {   
+                  ServerSocket socket = new ServerSocket(80);   
+                  while (true) {   
+                          final Socket connection = socket.accept();   
+                          Runnable task = new Runnable() {   
+                                          public void run() {   
+                                                  handleRequest(connection);   
+                                          }   
+                                  };   
+                          // 将任务提交给线程池执行  
+                          exec.execute(task);   
+                  }   
+          }   
+  }  
+#+END_SRC
+
+使用Executor实现每个请求一个线程
+
+#+BEGIN_SRC java
+  public class ThreadPerTaskExecutor implements Executor {
+          public void execute(Runnable r) {
+                  new Thread(r).start();
+          };
+  }
+#+END_SRC
+
+** 线程执行策略
++ 任务在哪个线程中执行
++ 任务以何种顺序（FIFO, LIFO, 优先级）执行
++ 同时有多少线程同步执行任务
++ 多少任务可以等待执行
++ 当负荷过载时候，那些任务可以被牺牲，如何通知应用这些任务
++ 任务执行前和执行后需要哪些操作
+
+** 线程池 
+ExecutorService接口继承自Executor, 而预定义的线程池类大多实现了ExecutorService接口 
+- newFixedThreadPool: 最大线程数固定的线程池.
+- newCachedThreadPool: 可伸缩式线程池, 当线程池中线程的数量超过程序所需时, 会自动销毁多余的线程; 当线程池中的线程不能需要时再创建新的线程执行提交的任务, 该线程池没有最大线程数的限定
+- newSingleThreadExecutor: 仅包含一个线程的线程池, 提交给该线程池执行的任务, 都将在这一单个线程中完成处理
+- newScheduledThreadPool. 最大线程数固定且支持延迟和周期性重复执行任务的线程池
+
+** Executor生命周期：运行，关闭中，终止
+
+   #+BEGIN_SRC java
+     public interface ExecutorService extends Executor {
+             void shutdown();
+             List<Runnable> shutdownNow();
+             boolean isShutdown();
+             boolean isTerminated();
+             boolean awaitTermination(long timeout, TimeUnit unit)
+                     throws InterruptedException;
+     // ... additional convenience methods for task submission
+     }
+   #+END_SRC
+- shutdown: 在关闭前允许执行以前提交的任务, 包括那些已提交但尚未开始执行的任务 
+- shutdownNow: 阻止尚未开始执行的任务启动并试图停止当前正在执行的任务, 返回从未开始执行的任务的列表
+- isShutdown：判断线程池是否已关闭. 线程池关闭后将拒绝接受新任务, 将抛出RejectedExecutionException
+- awaitTermination: 将使得主线程阻塞, 直到线程池转变为终止状态, 通常在调用shutdown方法后紧接着调用awaitTermination方法
+- isTerminated: 检测线程池是否处于终止状态, 当线程池已关闭, 并且所有提交给线程池的任务都已完成时, 线程池转变为终止状态
+
+
+   #+BEGIN_SRC java
+     class LifecycleWebServer {
+             private final ExecutorService exec = ...;
+             public void start() throws IOException {
+                     ServerSocket socket = new ServerSocket(80);
+                     while (!exec.isShutdown()) {
+                             try {
+                                     final Socket conn = socket.accept();
+                                     exec.execute(new Runnable() {
+                                                     public void run() { handleRequest(conn); }
+                                             });
+                             } catch (RejectedExecutionException e) {
+                                     if (!exec.isShutdown())
+                                             log("task submission rejected", e);
+                             }
+                     }
+             }
+             public void stop() { exec.shutdown(); }
+             void handleRequest(Socket connection) {
+                     Request req = readRequest(connection);
+                     if (isShutdownRequest(req))
+                             stop();
+                     else
+                             dispatchRequest(req);
+             }
+     }
+   #+END_SRC
+
+** Timer和ScheduledThreadPool 
+两者都可以用于延时或周期性重复执行某个任务, 但是Timer存在一些缺陷:
+1. Timer基于绝对时间来安排任务的调度, 因此系统时钟的改变会对其产生影响. ScheduledThreadPoolExecutor基于相对时间进行任务的调度
+2. Timer创建单一的线程执行定时任务. 假如Timer对象以10ms的间隔重复执行某个任务, 但是其中的一次执行花去了40ms, 这就意味着少执行了至少4次重复任务. ScheduledThreadPoolExecutor可以使用多个线程执行定时任务
+3. 如果在执行任务的过程中抛出运行时异常, Timer的线程会被终止且没有恢复机制
+几乎没有理由继续使用Timer调度定时任务了
+
+* 发现可利用的并发
+
+** 返回结果的任务　
+Executor的使用Runnable作为基本的任务表达形式，但是Runnable无法返回结果或抛出异常
+
+Callable作为Runnable的扩展，可以返回结果或抛出异常
+#+BEGIN_SRC java
+  public interface Callable<V> {
+          V call() throws Exception;
+  }
+#+END_SRC
+Executor提交的任务有４个生命周期：创建，提交，开始和完成
+
+已经提交但尚未开始的任务可以取消，已经开始执行但尚未完成的任务只有它们能响应中断才能取消，取消一个已经完成的任务没有任何影响
+
+Future表示一个任务的生命周期，并提供相应的方法判断任务是否已经开始，完成，取消，以及获取任务结果，取消任务等
+#+BEGIN_SRC java
+  public interface Future<V> {
+          boolean cancel(boolean mayInterruptIfRunning);
+          boolean isCancelled();
+          boolean isDone();
+          V get() throws InterruptedException, ExecutionException,
+                  CancellationException;
+          V get(long timeout, TimeUnit unit)
+                  throws InterruptedException, ExecutionException,
+                  CancellationException, TimeoutException;
+  }
+#+END_SRC
+get方法的行为取决与任务的状态
+- 已经完成：立即返回结果或者抛出异常ExecutionException, 可以通过getClause获得被封装的初始异常
+- 没有完成：阻塞主线程直到任务结束
+- 取消：将抛出CancellationException
+
+创建Future
++ ExecutorService中所有submit方法都会返回一个Future, 将Runnable或Callable提交给Executor得到Future
++ 也可以显式地为Runnable或者Callable创建一个FutureTask提交给Executor
++ ExecutorService也可以使用newTaskFor方法为Callable获得Future
+#+BEGIN_SRC java
+  protected <T> RunnableFuture<T> newTaskFor(Callable<T> task) {
+          return new FutureTask<T>(task);
+  }
+#+END_SRC
+
+使用Future渲染图片
+#+BEGIN_SRC java
+  public class FutureRenderer implements Render {
+          private static final int NTHREADS = 100;
+          private final ExecutorService executor = Executors.newFixedThreadPool(NTHREADS);
+
+          @Override
+          public void renderPage(CharSequence source) {
+                  final List<ImageInfo> imageInfos = scanForImageInfo(source);
+                  Callable<List<ImageData>> task;
+                  task = () -> {
+                          List<ImageData> result
+                          = new ArrayList<>();
+                          imageInfos.forEach((imageInfo) -> {
+                                          result.add(imageInfo.downloadImage());
+                                  });
+                          return result;
+                  };
+                  Future<List<ImageData>> future = executor.submit(task);
+                  // 渲染文本  
+                  renderText(source);
+                  try {
+                          // get方法将阻塞, 直到task完成下载  
+                          List<ImageData> imageData = future.get();
+                          imageData.forEach((data) -> {
+                                          // 渲染图片  
+                                          renderImage(data);
+                                  });
+                  } catch (InterruptedException e) {
+                          // Re-assert the thread’s interrupted status
+                          Thread.currentThread().interrupt();
+                          // We don’t need the result, so cancel the task too
+                          future.cancel(true);
+                  } catch (ExecutionException e) {
+                          throw launderThrowable(e.getCause());
+                  }
+          }
+  }
+#+END_SRC
+
+下载图片任务比渲染文本任务慢的多，可以把下载图片拆分成多个任务
+** CompletionService
+CompletionService把Executor和BlockingQueue融合在一起 
+ 
+将Callable任务提交给CompletionService执行，然后使用类似队列操作的take和poll方法来获得已知的结果，这些结果会在全部结束时候封装为Future 
+
+ExecutorCompletionService实现了CompletionService。ExecutorCompletionService的构造函数中创建一个BlockingQueue来保存计算完成的结果。当计算完成时候，调用FutureTask的done方法。当提交某个任务的时候，该任务将包装成为QueueingFuture, 这是FutureTask的一个子类，然后改写子类的done方法，将结果放入BlockingQueue中。take和poll方法委托给BlockingQueue, 这些方法在得出结果前会阻塞
+#+BEGIN_SRC java
+  public class ExecutorCompletionService<V> implements CompletionService<V> {
+...
+          private final BlockingQueue<Future<V>> completionQueue;
+
+          public ExecutorCompletionService(Executor executor) {
+...
+                  this.completionQueue = new LinkedBlockingQueue<Future<V>>();
+          }
+          
+          public Future<V> submit(Callable<V> task) {  
+                  if (task == null) throw new NullPointerException();  
+                  RunnableFuture<V> f = newTaskFor(task);  
+                  // 将任务包装成QueueingFuture对象后委托给executor执行  
+                  executor.execute(new QueueingFuture(f));  
+                  return f;  
+          }
+
+          private class QueueingFuture<V> extends FutureTask<V> {
+                  QueueingFuture(Callable<V> c) { super(c); }
+                  QueueingFuture(Runnable t, V r) { super(t, r); }
+                  protected void done() {
+                          completionQueue.add(this);
+                  }
+          }
+
+          public Future<V> take() throws InterruptedException {  
+                  return completionQueue.take();  
+          }  
+    
+          public Future<V> poll() {  
+                  return completionQueue.poll();  
+          }
+          ...
+  }
+
+#+END_SRC
+
+使用CompletionService渲染
+
+#+BEGIN_SRC java
+  public class CompletionRenderer implements Render {
+          private final ExecutorService executor = Executors.newCachedThreadPool();
+
+          public void renderPage(CharSequence source) {
+                  List<ImageInfo> info = scanForImageInfo(source);
+                  // 将图片下载拆分为多个任务  
+                  CompletionService<ImageData> completionService
+                          = new ExecutorCompletionService<>(executor);
+                  info.forEach((imageInfo) -> {
+                                  completionService.submit(() -> imageInfo.downloadImage());
+                          });
+                  renderText(source);
+                  try {
+                          for (int t = 0, n = info.size(); t < n; t++) {
+                                  // take方法可能阻塞: 当已完成队列中为空时  
+                                  Future<ImageData> f = completionService.take();
+                                  // get方法不会阻塞, 因为从take方法返回的Future对象肯定是已完成的  
+                                  ImageData imageData = f.get();
+                                  renderImage(imageData);
+                          }
+                  } catch (InterruptedException e) {
+                          Thread.currentThread().interrupt();
+                  } catch (ExecutionException e) {
+                          throw launderThrowable(e.getCause());
+                  }
+          }
+  }
+#+END_SRC
+
+[[file:cancellation.org][Next:任务取消]]　[[file:build_blocks.org][Previous:基础模块]]　[[file:jcip.org][Up:目录]]
