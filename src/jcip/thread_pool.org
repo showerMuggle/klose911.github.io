@@ -1,6 +1,39 @@
 #+TITLE: 线程池
 #+HTML_HEAD: <link rel="stylesheet" type="text/css" href="css/main.css" />
 #+OPTIONS: num:nil timestamp:nil
-* 任务和线程池的隐形耦合
+* 任务和执行策略的隐形耦合
+某些任务的特质会要求或者排除某些特定的执行策略
++ 有相互依赖的任务在同一个线程池会要求线程池无限大
++ 依赖于线程封闭的任务只能用单线程执行的线程池
++ 快速响应的任务不适合单线程执行的线程池
++ 使用ThreadLocal的任务不适合线程池
+
+** 线程饥饿死锁
+相互依赖的任务在一个线程池中执行，就可能出现饥饿死锁
+
+比如在一个单线程执行的线程池中，线程B需要等待线程A执行完毕才能进入线程池执行，而线程A又要等待线程B执行完毕才能完毕。这样就造成了死锁。
+当线程池容量更大一点的情况下，依然可能所有存在于线程池中的线程都在等待“未能进入线程池”的线程执行完毕
+#+BEGIN_SRC java
+  public class ThreadDeadlock {
+          ExecutorService exec = Executors.newSingleThreadExecutor();
+          private class RenderPageTask implements Callable<String> {
+                  public String call() throws Exception {
+                          Future<String> header, footer;
+                          header = exec.submit(new LoadFileTask("header.html")); 
+                          footer = exec.submit(new LoadFileTask("footer.html"));
+                          String page = renderBody();
+                          // Will deadlock -- task waiting for result of subtask
+                          return header.get() + page + footer.get();
+                  }
+          }
+  }
+#+END_SRC
+
+** 长时间运行任务
+线程池包含许多运行长时间的任务会导致所有任务哪怕本来响应很快的响应变慢 
+
+使用timeout机制，标记那些超时的任务为失败，在未来串行执行
+
+* 线程池大小
 
 * 线程池配置
