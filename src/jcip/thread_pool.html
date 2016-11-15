@@ -149,7 +149,14 @@ for the JavaScript code in this tag.
 </ul>
 </li>
 <li><a href="#sec-2">线程池大小</a></li>
-<li><a href="#sec-3">线程池配置</a></li>
+<li><a href="#sec-3">线程池配置</a>
+<ul>
+<li><a href="#sec-3-1">线程的创建和销毁</a></li>
+<li><a href="#sec-3-2">任务队列</a></li>
+<li><a href="#sec-3-3">饱和策略</a></li>
+</ul>
+</li>
+<li><a href="#sec-4">自定义线程池</a></li>
 </ul>
 </div>
 </div>
@@ -182,8 +189,6 @@ for the JavaScript code in this tag.
 比如在一个单线程执行的线程池中，线程B需要等待线程A执行完毕才能进入线程池执行，而线程A又要等待线程B执行完毕才能完毕。这样就造成了死锁。
 当线程池容量更大一点的情况下，依然可能所有存在于线程池中的线程都在等待“未能进入线程池”的线程执行完毕
 </p>
-
-
 <div class="org-src-container">
 
 <pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">ThreadDeadlock</span> {
@@ -191,7 +196,9 @@ for the JavaScript code in this tag.
     <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">RenderPageTask</span> <span style="color: #00ffff;">implements</span> <span style="color: #98fb98;">Callable</span>&lt;<span style="color: #98fb98;">String</span>&gt; {
         <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">String</span> <span style="color: #87cefa;">call</span>() <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Exception</span> {
             <span style="color: #98fb98;">Future</span>&lt;<span style="color: #98fb98;">String</span>&gt; <span style="color: #eedd82;">header</span>, <span style="color: #eedd82;">footer</span>;
-            header = exec.submit(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">LoadFileTask</span>(<span style="color: #ffa07a;">"header.html"</span>)); footer = exec.submit(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">LoadFileTask</span>(<span style="color: #ffa07a;">"footer.html"</span>));                <span style="color: #98fb98;">String</span> <span style="color: #eedd82;">page</span> = renderBody();
+            header = exec.submit(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">LoadFileTask</span>(<span style="color: #ffa07a;">"header.html"</span>)); 
+            footer = exec.submit(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">LoadFileTask</span>(<span style="color: #ffa07a;">"footer.html"</span>));
+            <span style="color: #98fb98;">String</span> <span style="color: #eedd82;">page</span> = renderBody();
             <span style="color: #ff4500;">// </span><span style="color: #ff4500;">Will deadlock -- task waiting for result of subtask</span>
             <span style="color: #00ffff;">return</span> header.get() + page + footer.get();
         }
@@ -204,14 +211,171 @@ for the JavaScript code in this tag.
 
 <div id="outline-container-sec-1-2" class="outline-3">
 <h3 id="sec-1-2">长时间运行任务</h3>
+<div class="outline-text-3" id="text-1-2">
+<p>
+线程池包含许多运行长时间的任务会导致所有任务哪怕本来响应很快的响应变慢 
+</p>
+
+<p>
+使用timeout机制，标记那些超时的任务为失败，在未来串行执行
+</p>
+</div>
 </div>
 </div>
 
 <div id="outline-container-sec-2" class="outline-2">
 <h2 id="sec-2">线程池大小</h2>
+<div class="outline-text-2" id="text-2">
+<ul class="org-ul">
+<li>对于计算密集型task, 合适的size大约为CPU数量+1
+</li>
+<li>对于I/O占较大比例的task, 合适的size可以通过以下公式确定: size = CPU数量 * CPU利用率 * (1 + I/O时间比例) 
+</li>
+</ul>
+
+<p>
+实际size还受到内存, 文件句柄, socket, 数据库连接数等稀缺资源的约束。将总的稀缺资源除以每一个task使用的资源数, 能得到线程数的上限
+</p>
 </div>
+</div>
+
 <div id="outline-container-sec-3" class="outline-2">
 <h2 id="sec-3">线程池配置</h2>
+<div class="outline-text-2" id="text-3">
+</div><div id="outline-container-sec-3-1" class="outline-3">
+<h3 id="sec-3-1">线程的创建和销毁</h3>
+<div class="outline-text-3" id="text-3-1">
+<p>
+ThreadPoolExecutor构造函数中的corePoolSize, maximumPoolSize, keepAliveTime参数与线程的创建和销毁 
+</p>
+<ol class="org-ol">
+<li>corePoolSize：线程池中持有的核心线程数, 除非task队列已满, ThreadPoolExecutor不会创建超过核心线程数的线程(corePoolSize为0时是一种特殊情况, 此时就算task队列没有饱和, 向线程池第一次提交task时仍然会创建新的线程), 核心线程一旦创建就不会销毁, 除非设置了allowCoreThreadTimeOut(true), 或者关闭线程池
+</li>
+<li>maximumPoolSize：线程池中持有的最大线程数. 
+</li>
+<li>keepAliveTime：对于超过核心线程数的线程, 如果在指定的超时时间内没有使用到, 就会被销毁
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">ExecutorService</span> <span style="color: #87cefa;">newCachedThreadPool</span>() {  
+    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#26680;&#24515;&#32447;&#31243;&#25968;&#20026;0, &#26368;&#22823;&#32447;&#31243;&#25968;&#20026;Integer.MAX_VALUE, &#36229;&#26102;&#26102;&#38388;&#20026;60s  </span>
+    <span style="color: #00ffff;">return</span> <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">ThreadPoolExecutor</span>(0, <span style="color: #7fffd4;">Integer</span>.MAX_VALUE, 60L, <span style="color: #7fffd4;">TimeUnit</span>.SECONDS, <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">SynchronousQueue</span>&lt;<span style="color: #98fb98;">Runnable</span>&gt;());  
+}  
+
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">ExecutorService</span> <span style="color: #87cefa;">newFixedThreadPool</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">nThreads</span>) {  
+    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#26680;&#24515;&#32447;&#31243;&#25968;&#21644;&#26368;&#22823;&#32447;&#31243;&#25968;&#37117;&#20026;&#35843;&#29992;&#26041;&#25351;&#23450;&#30340;&#20540;nThreads, &#36229;&#26102;&#26102;&#38388;&#20026;0  </span>
+    <span style="color: #00ffff;">return</span> <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">ThreadPoolExecutor</span>(nThreads, nThreads, 0L, <span style="color: #7fffd4;">TimeUnit</span>.MILLISECONDS,  
+                      <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">LinkedBlockingQueue</span>&lt;<span style="color: #98fb98;">Runnable</span>&gt;());  
+}  
+
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">ScheduledExecutorService</span> <span style="color: #87cefa;">newScheduledThreadPool</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">corePoolSize</span>) {  
+    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#26680;&#24515;&#32447;&#31243;&#25968;&#30001;&#35843;&#29992;&#26041;&#25351;&#23450;, &#26368;&#22823;&#32447;&#31243;&#25968;&#20026;Integer.MAX_VALUE, &#36229;&#26102;&#26102;&#38388;&#20026;0  </span>
+    <span style="color: #00ffff;">return</span> <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">ThreadPoolExecutor</span>(corePoolSize, <span style="color: #7fffd4;">Integer</span>.MAX_VALUE, 0, <span style="color: #7fffd4;">TimeUnit</span>.NANOSECONDS, <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">DelayedWorkQueue</span>());  
+}
+</pre>
+</div>
+</li>
+</ol>
+</div>
+</div>
+
+<div id="outline-container-sec-3-2" class="outline-3">
+<h3 id="sec-3-2">任务队列</h3>
+<div class="outline-text-3" id="text-3-2">
+<p>
+线程池内部持有一个任务队列, 当任务的提交速度超过任务的执行速度时, 任务将被缓存在任务队列中等待有线程可用时再执行. ThreadPoolExecutor在创建时可以为其指定任务队列。
+</p>
+
+<p>
+一般有三种选择: 
+</p>
+<ol class="org-ol">
+<li>有界队列：
+</li>
+<li>无界队列：newFixedThreadPool, newScheduledThreadPool
+</li>
+<li>同步队列：newCashedThreadPool
+</li>
+</ol>
+
+<p>
+为线程数不多的线程池指定一个容量大的队列(或者无界队列), 有助于减少线程间切换, CPU等方面的消耗, 代价是可能会造成吞吐量下降。如果使用的是有界队列, 队列可能会被填满, 将根据指定的饱和策略进行处理
+</p>
+
+<p>
+对于线程数很大的线程池, 可以使用同步队列. 同步队列其实不能算是一种队列, 因为同步队列没有缓存的作用。使用同步队列时, task被提交时, 直接由线程池中的线程接手. 如果此时线程池中没有可用的线程, 线程池将创建新的线程接手. 如果线程池无法创建新的线程(比如线程数已到达maximumPoolSize), 则根据指定的饱和策略进行处理 
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-3-3" class="outline-3">
+<h3 id="sec-3-3">饱和策略</h3>
+<div class="outline-text-3" id="text-3-3">
+<ul class="org-ul">
+<li>有界队列满时继续提交task时饱和策略会被触发.
+</li>
+<li>同步队列当线程池无法创建新的线程接手task时饱和策略会被触发.
+</li>
+<li>线程池被关闭后, 仍然向其提交task时, 饱和策略也会被触发.
+</li>
+</ul>
+
+<p>
+ThreadPoolExecutor.setRejectedExecutionHandler方法用于设定饱和策略
+</p>
+
+<p>
+ThreadPoolExecutor类中预定义了多个RejectedExecutionHandler的实现类
+</p>
+<ol class="org-ol">
+<li>AbortPolicy: 默认的饱和策略, 抛出RejectedExecutionException异常 
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">rejectedExecution</span>(<span style="color: #98fb98;">Runnable</span> <span style="color: #eedd82;">r</span>, <span style="color: #98fb98;">ThreadPoolExecutor</span> <span style="color: #eedd82;">e</span>) {  
+    <span style="color: #00ffff;">throw</span> <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">RejectedExecutionException</span>();  
+}
+</pre>
+</div>
+</li>
+<li>CallerRunsPolicy: 在提交task的线程中执行task, 而不是由线程池中的线程执行
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">rejectedExecution</span>(<span style="color: #98fb98;">Runnable</span> <span style="color: #eedd82;">r</span>, <span style="color: #98fb98;">ThreadPoolExecutor</span> <span style="color: #eedd82;">e</span>) {  
+    <span style="color: #00ffff;">if</span> (!e.isShutdown()) {  
+        r.run();  
+    }  
+}
+</pre>
+</div>
+</li>
+<li>DiscardPolicy: 将最新提交的任务丢弃
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">rejectedExecution</span>(<span style="color: #98fb98;">Runnable</span> <span style="color: #eedd82;">r</span>, <span style="color: #98fb98;">ThreadPoolExecutor</span> <span style="color: #eedd82;">e</span>) {  
+    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#20002;&#24323;, &#19981;&#20570;&#20219;&#20309;&#22788;&#29702;  </span>
+}
+</pre>
+</div>
+</li>
+
+<li>DiscardOldestPolicy: 将队列头部的任务丢弃，然后尝试重新提交新的任务
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">rejectedExecution</span>(<span style="color: #98fb98;">Runnable</span> <span style="color: #eedd82;">r</span>, <span style="color: #98fb98;">ThreadPoolExecutor</span> <span style="color: #eedd82;">e</span>) {  
+    <span style="color: #00ffff;">if</span> (!e.isShutdown()) {  
+        e.getQueue().poll();  
+        e.execute(r);  
+    }  
+}
+</pre>
+</div>
+</li>
+</ol>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-4" class="outline-2">
+<h2 id="sec-4">自定义线程池</h2>
 </div>
 </div>
 <div id="postamble" class="status">

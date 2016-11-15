@@ -41,5 +41,326 @@
 实际size还受到内存, 文件句柄, socket, 数据库连接数等稀缺资源的约束。将总的稀缺资源除以每一个task使用的资源数, 能得到线程数的上限
 
 * 线程池配置
+** 线程的创建和销毁 
+ThreadPoolExecutor构造函数中的corePoolSize, maximumPoolSize, keepAliveTime参数与线程的创建和销毁 
+1. corePoolSize：线程池中持有的核心线程数, 除非task队列已满, ThreadPoolExecutor不会创建超过核心线程数的线程(corePoolSize为0时是一种特殊情况, 此时就算task队列没有饱和, 向线程池第一次提交task时仍然会创建新的线程), 核心线程一旦创建就不会销毁, 除非设置了allowCoreThreadTimeOut(true), 或者关闭线程池
+2. maximumPoolSize：线程池中持有的最大线程数. 
+3. keepAliveTime：对于超过核心线程数的线程, 如果在指定的超时时间内没有使用到, 就会被销毁
+   #+BEGIN_SRC java
+     public static ExecutorService newCachedThreadPool() {  
+             // 核心线程数为0, 最大线程数为Integer.MAX_VALUE, 超时时间为60s  
+             return new ThreadPoolExecutor(0, Integer.MAX_VALUE, 60L, TimeUnit.SECONDS, new SynchronousQueue<Runnable>());  
+     }  
+           
+     public static ExecutorService newFixedThreadPool(int nThreads) {  
+             // 核心线程数和最大线程数都为调用方指定的值nThreads, 超时时间为0  
+             return new ThreadPoolExecutor(nThreads, nThreads, 0L, TimeUnit.MILLISECONDS,  
+                                           new LinkedBlockingQueue<Runnable>());  
+     }  
+           
+     public static ScheduledExecutorService newScheduledThreadPool(int corePoolSize) {  
+             // 核心线程数由调用方指定, 最大线程数为Integer.MAX_VALUE, 超时时间为0  
+             return new ThreadPoolExecutor(corePoolSize, Integer.MAX_VALUE, 0, TimeUnit.NANOSECONDS, new DelayedWorkQueue());  
+     }   
+   #+END_SRC
 
-* 自定义线程池
+** 任务队列
+线程池内部持有一个任务队列, 当任务的提交速度超过任务的执行速度时, 任务将被缓存在任务队列中等待有线程可用时再执行. ThreadPoolExecutor在创建时可以为其指定任务队列。
+
+一般有三种选择: 
+1. 有界队列
+2. 无界队列：newFixedThreadPool, newScheduledThreadPool
+3. 同步队列：newCashedThreadPool
+
+为线程数不多的线程池指定一个容量大的队列(或者无界队列), 有助于减少线程间切换, CPU等方面的消耗, 代价是可能会造成吞吐量下降。如果使用的是有界队列, 队列可能会被填满, 将根据指定的饱和策略进行处理
+
+对于线程数很大的线程池, 可以使用同步队列. 同步队列其实不能算是一种队列, 因为同步队列没有缓存的作用。使用同步队列时, task被提交时, 直接由线程池中的线程接手. 如果此时线程池中没有可用的线程, 线程池将创建新的线程接手. 如果线程池无法创建新的线程(比如线程数已到达maximumPoolSize), 则根据指定的饱和策略进行处理 
+
+**  饱和策略
++ 有界队列满时继续提交task时, 饱和策略会被触发.
++ 同步队列当线程池无法创建新的线程接手task时, 饱和策略会被触发.
++ 线程池被关闭后, 向其提交task时, 饱和策略也会被触发.
+
+ThreadPoolExecutor.setRejectedExecutionHandler方法用于设定饱和策略
+
+预定义RejectedExecutionHandler的实现类
+1. AbortPolicy: 默认的饱和策略, 抛出RejectedExecutionException异常 
+   #+BEGIN_SRC java
+     public void rejectedExecution(Runnable r, ThreadPoolExecutor e) {  
+             throw new RejectedExecutionException();  
+     }   
+   #+END_SRC
+2. CallerRunsPolicy: 在提交task的线程中执行task, 而不是由线程池中的线程执行
+   #+BEGIN_SRC java
+     public void rejectedExecution(Runnable r, ThreadPoolExecutor e) {  
+             if (!e.isShutdown()) {  
+                     r.run();  
+             }  
+     }  
+   #+END_SRC
+3. DiscardPolicy: 将最新提交的任务丢弃
+   #+BEGIN_SRC java
+     public void rejectedExecution(Runnable r, ThreadPoolExecutor e) {  
+             // 丢弃, 不做任何处理  
+     }   
+   #+END_SRC
+
+4. DiscardOldestPolicy: 将队列头部的任务丢弃，然后尝试重新提交新的任务
+   #+BEGIN_SRC java
+     public void rejectedExecution(Runnable r, ThreadPoolExecutor e) {  
+             if (!e.isShutdown()) {  
+                     e.getQueue().poll();  
+                     e.execute(r);  
+             }  
+     }   
+   #+END_SRC
+
+*** 使用CallerRunsPolicy处理请求过载
+    #+BEGIN_SRC java
+      class LifecycleWebServer {  
+              // MAX_THREAD_COUNT和MAX_QUEUE_COUNT的值根据系统的实际情况确定  
+              private static final int MAX_THREAD_COUNT = 100;  
+              private static final int MAX_QUEUE_COUNT = 1000;  
+            
+              // 使用有界队列作为task队列, 当有界队列满时, 将触发饱和策略  
+              private final ThreadPoolExecutor exec = new ThreadPoolExecutor(0, MAX_THREAD_COUNT, 60L, TimeUnit.SECONDS,  
+                                                                             new ArrayBlockingQueue<Runnable>(MAX_QUEUE_COUNT));  
+            
+              public void start() throws IOException {  
+                      // 设置饱和策略为CallerRunsPolicy  
+                      exec.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());  
+                      ServerSocket socket = new ServerSocket(80);  
+                      while (!exec.isShutdown()) {  
+                              try {  
+                                      final Socket conn = socket.accept();  
+                                      exec.execute(new Runnable() {  
+                                                      public void run() {  
+                                                              handleRequest(conn);  
+                                                      }  
+                                              });  
+                              } catch (RejectedExecutionException e) {  
+                                      if (!exec.isShutdown())  
+                                              log("task submission rejected", e);  
+                              }  
+                      }  
+              }  
+            
+              public void stop() {  
+                      exec.shutdown();  
+              }  
+            
+              void handleRequest(Socket connection) {  
+                      Request req = readRequest(connection);  
+                      if (isShutdownRequest(req))  
+                              stop();  
+                      else  
+                              dispatchRequest(req);  
+              }  
+                
+              public static void main(String[] args) {  
+                      LifecycleWebServer server = new LifecycleWebServer();  
+                      try {  
+                              // 在main线程中启动server  
+                              server.start();  
+                      } catch (IOException e) {  
+                              e.printStackTrace();  
+                      }  
+              }  
+      }   
+    #+END_SRC
+如果线程池饱和时主线程仍然向线程池提交任务, 那么任务将在主线程中执行。主线程执行任务是需要一定时间的，这样就给了线程池喘息的机会, 而且主线程在执行任务的时间内无法接受socket连接, 因此socket连接请求将缓存在tcp层。如果server过载持续的时间较长, 使得tcp层的缓存不够, 那么tcp缓存将根据其策略丢弃部分请求
+
+整个系统的过载压力逐步向外扩散: 线程池-线程池中的队列-main线程-tcp层-client。不会因为过多的请求而导致系统资源耗尽, 也不会一发生过载时就拒绝服务, 只有发生长时间系统过载时才会出现客户端无法连接的情况
+
+*** BoundExecutor
+没有预定的饱和策略来限定线程池中执行任务线程的数量，可以结合Semaphore来实现
+    #+BEGIN_SRC java
+      public class BoundedExecutor {
+              private final Executor exec;
+              private final Semaphore semaphore;
+
+              public BoundedExecutor(Executor exec, int bound) {
+                      this.exec = exec;
+                      // 设定信号量permit的上限
+                      this.semaphore = new Semaphore(bound);
+              }
+
+              public void submitTask(final Runnable command) throws InterruptedException {
+                      // 提交task前先申请permit, 如果无法申请到permit, 调用submitTask的线程将被阻塞, 直到有permit可用
+                      semaphore.acquire();
+                      try {
+                              exec.execute(new Runnable() {
+                                              public void run() {
+                                                      try {
+                                                              command.run();
+                                                      } finally {
+                                                              // 提交成功了, 运行task后释放permit
+                                                              semaphore.release();
+                                                      }
+                                              }
+                                      });
+                      } catch (RejectedExecutionException e) {
+                              // 如果没有提交成功, 也需要释放permit
+                              semaphore.release();
+                      }
+              }
+      }
+    #+END_SRC
+
+** ThreadFactory 
+创建ThreadPoolExecutor时还可以为其指定ThreadFactory, 当线程池需要创建新的线程时会调用ThreadFactory的newThread方法
+
+默认的ThreadFactory创建的线程是nonDaemon, 线程优先级为普通的线程, 并且为其指定了可识别的线程名称 
+#+BEGIN_SRC java
+  public Thread newThread(Runnable r) {  
+          Thread t = new Thread(group, r, namePrefix + threadNumber.getAndIncrement(), 0);  
+          if (t.isDaemon())  
+                  t.setDaemon(false);  
+          if (t.getPriority() != Thread.NORM_PRIORITY)  
+                  t.setPriority(Thread.NORM_PRIORITY);  
+          return t;  
+  }  
+#+END_SRC
+
+客户化的MyAppThread
+#+BEGIN_SRC java
+  public class MyAppThread extends Thread {
+          public static final String DEFAULT_NAME = "MyAppThread";
+          private static final AtomicInteger created = new AtomicInteger();
+          private static final AtomicInteger alive = new AtomicInteger();
+          private static final Logger log = Logger.getAnonymousLogger();
+          private static volatile boolean debugLifecycle = false;
+
+          public MyAppThread(Runnable r) {
+                  this(r, DEFAULT_NAME);
+          }
+
+          public MyAppThread(Runnable runnable, String name) {
+                  // 为自定义的Thread类指定线程名称
+                  super(runnable, name + "-" + created.incrementAndGet());
+                  // 设置UncaughtExceptionHandler. UncaughtExceptionHandler的uncaughtException方法将在线程运行中抛出未捕获异常时由系统调用
+                  setUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
+                                  public void uncaughtException(Thread t, Throwable e) {
+                                          log.log(Level.SEVERE, "UNCAUGHT in thread " + t.getName(), e);
+                                  }
+                          });
+          }
+
+          public static int getThreadsCreated() {
+                  return created.get();
+          }
+
+          public static int getThreadsAlive() {
+                  return alive.get();
+          }
+
+          public static boolean getDebug() {
+                  return debugLifecycle;
+          }
+
+          public static void setDebug(boolean b) {
+                  debugLifecycle = b;
+          }
+
+          @Override
+          public void run() {
+                  // Copy debug flag to ensure consistent value throughout.
+                  boolean debug = debugLifecycle;
+                  if (debug)
+                          log.log(Level.FINE, "Created " + getName());
+                  try {
+                          alive.incrementAndGet();
+                          super.run();
+                  } finally {
+                          alive.decrementAndGet();
+                          if (debug)
+                                  log.log(Level.FINE, "Exiting " + getName());
+                  }
+          }
+  }
+#+END_SRC
+
+客户化ThreadFactory返回MyAppThread
+#+BEGIN_SRC java
+  public class MyThreadFactory implements ThreadFactory {  
+          private final String poolName;  
+    
+          public MyThreadFactory(String poolName) {  
+                  this.poolName = poolName;  
+          }  
+    
+          public Thread newThread(Runnable runnable) {  
+                  return new MyAppThread(runnable, poolName);  
+          }  
+  }  
+#+END_SRC
+
+* 扩展线程池
+ThreadPoolExecutor类提供了多个"钩子"方法, 以供其子类实现
+1. beforeExecute: 任务执行前
+2. afterExecute: 任务执行后
+3. terminated: 线程池被关闭后(释放线程池申请的资源) 
+#+BEGIN_SRC java
+  private void runTask(Runnable task) {  
+          final ReentrantLock runLock = this.runLock;  
+          runLock.lock();  
+          try {  
+                  if (runState < STOP && Thread.interrupted() && runState >= STOP)  
+                          thread.interrupt();  
+                  boolean ran = false;  
+                  beforeExecute(thread, task);  
+                  try {  
+                          task.run();  
+                          ran = true;  
+                          afterExecute(task, null);  
+                          ++completedTasks;  
+                  } catch (RuntimeException ex) {  
+                          if (!ran)  
+                                  afterExecute(task, ex);  
+                          throw ex;  
+                  }  
+          } finally {  
+                  runLock.unlock();  
+          }  
+  }   
+#+END_SRC
+
+扩展线程池，在在日志中记录每个任务执行时间
+#+BEGIN_SRC java
+  public class TimingThreadPool extends ThreadPoolExecutor {
+          private final ThreadLocal<Long> startTime = new ThreadLocal<Long>();
+          private final Logger log = Logger.getLogger("TimingThreadPool");
+          private final AtomicLong numTasks = new AtomicLong();
+          private final AtomicLong totalTime = new AtomicLong();
+
+          protected void beforeExecute(Thread t, Runnable r) {
+                  super.beforeExecute(t, r);
+                  log.fine(String.format("Thread %s: start %s", t, r));
+                  startTime.set(System.nanoTime());
+          }
+
+          protected void afterExecute(Runnable r, Throwable t) {
+                  try {
+                          long endTime = System.nanoTime();
+                          long taskTime = endTime - startTime.get();
+                          numTasks.incrementAndGet();
+                          totalTime.addAndGet(taskTime);
+                          log.fine(String.format("Thread %s: end %s, time=%dns",
+                                                 t, r, taskTime));
+                  } finally {
+                          super.afterExecute(r, t);
+                  }
+          }
+
+          protected void terminated() {
+                  try {
+                          log.info(String.format("Terminated: avg time=%dns",
+                                                 totalTime.get() / numTasks.get()));
+                  } finally {
+                          super.terminated();
+                  }
+          }
+  }
+#+END_SRC
+
+* 并行执行递归算法
