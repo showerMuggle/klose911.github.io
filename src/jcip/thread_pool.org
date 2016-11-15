@@ -1,6 +1,8 @@
 #+TITLE: 线程池
 #+HTML_HEAD: <link rel="stylesheet" type="text/css" href="css/main.css" />
 #+OPTIONS: num:nil timestamp:nil
+#+HTML_LINK_UP: cancellation.html   
+#+HTML_LINK_HOME: jcip.html
 * 任务和执行策略的隐形耦合
 某些任务的特质会要求或者排除某些特定的执行策略
 + 有相互依赖的任务在同一个线程池会要求线程池无限大
@@ -364,3 +366,59 @@ ThreadPoolExecutor类提供了多个"钩子"方法, 以供其子类实现
 #+END_SRC
 
 * 并行执行递归算法
+如果循环体所进行的操作是相互独立的, 这样的循环可以并发的运行 
+#+BEGIN_SRC java
+  void processSequentially(List<Element> elements) {
+          for (Element e : elements)
+                  process(e);
+  }
+
+  // 将相互独立的循环操作转变为并发操作
+  void processInParallel(Executor exec, List<Element> elements) {
+          for (final Element e : elements)
+                  exec.execute(new Runnable() {
+                                  public void run() { process(e); }
+                          });
+          exec.shutdown();   
+          exec.awaitTermination(Long.MAX_VALUE, TimeUnit.SECONDS); 
+  }
+#+END_SRC
+
+有循环的递归操作也可以并发进行计算
+#+BEGIN_SRC java
+  public<T> void sequentialRecursive(List<Node<T>> nodes,
+                                     Collection<T> results) {
+          for (Node<T> n : nodes) {
+                  results.add(n.compute());
+                  sequentialRecursive(n.getChildren(), results);
+          }
+  }
+
+  public<T> void parallelRecursive(final Executor exec,
+                                   List<Node<T>> nodes,
+                                   final Collection<T> results) {
+          for (final Node<T> n : nodes) {
+                  //并发进行计算
+                  exec.execute(new Runnable() {
+                                  public void run() {
+                                          results.add(n.compute());
+                                  }
+                          });
+                  //遍历依旧是递归
+                  parallelRecursive(exec, n.getChildren(), results);
+          }
+  }
+
+  //获取最终结果
+  public<T> Collection<T> getParallelResults(List<Node<T>> nodes)
+          throws InterruptedException {
+          ExecutorService exec = Executors.newCachedThreadPool();
+          Queue<T> resultQueue = new ConcurrentLinkedQueue<T>();
+          parallelRecursive(exec, nodes, resultQueue);
+          exec.shutdown();
+          exec.awaitTermination(Long.MAX_VALUE, TimeUnit.SECONDS);
+          return resultQueue;
+  }
+#+END_SRC
+
+[[file:explicit_lock.org][Next:显式锁]]　[[file:cancellation.org][Previous:任务取消]]　[[file:jcip.org][Up:目录]]
