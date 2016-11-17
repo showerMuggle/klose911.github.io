@@ -146,12 +146,110 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#sec-1">Lock和ReentrantLock</a></li>
+<li><a href="#sec-1">Lock和ReentrantLock</a>
+<ul>
+<li><a href="#sec-1-1">尝试型申请</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
 <div id="outline-container-sec-1" class="outline-2">
 <h2 id="sec-1">Lock和ReentrantLock</h2>
+<div class="outline-text-2" id="text-1">
+<p>
+显式锁: Lock及其子类(如ReentrantLock, ReadWriteLock等) 
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">interface</span> <span style="color: #98fb98;">Lock</span> {
+    <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">lock</span>();
+    <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">lockInterruptibly</span>() <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">InterruptedException</span>;
+    <span style="color: #98fb98;">boolean</span> <span style="color: #87cefa;">tryLock</span>();
+    <span style="color: #98fb98;">boolean</span> <span style="color: #87cefa;">tryLock</span>(<span style="color: #98fb98;">long</span> <span style="color: #eedd82;">timeout</span>, <span style="color: #98fb98;">TimeUnit</span> <span style="color: #eedd82;">unit</span>)
+        <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">InterruptedException</span>;
+    <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">unlock</span>();
+    <span style="color: #98fb98;">Condition</span> <span style="color: #87cefa;">newCondition</span>();
+}
+</pre>
+</div>
+<p>
+ReentrantLock实现了和内置锁相同的互斥和可见特性
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #98fb98;">Lock</span> <span style="color: #eedd82;">lock</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">ReentrantLock</span>();
+...
+lock.lock();
+<span style="color: #00ffff;">try</span> {
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">update object state</span>
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">catch exceptions and restore invariants if necessary</span>
+} <span style="color: #00ffff;">finally</span> {
+    lock.unlock();
+}
+</pre>
+</div>
+<p>
+必须在finally块内加入释放锁！
+</p>
+</div>
+<div id="outline-container-sec-1-1" class="outline-3">
+<h3 id="sec-1-1">尝试型申请</h3>
+<div class="outline-text-3" id="text-1-1">
+<p>
+Lock.tryLock和Lock.tryLock(long time, TimeUnit unit)方法用于尝试获取锁. 如果尝试没有成功, 则返回false, 否则返回true. 
+</p>
+
+<p>
+内置锁则不提供这种特性, 一旦开始申请内置锁, 在申请成功之前, 线程无法中断, 申请也无法取消
+</p>
+
+<p>
+Lock的尝试型申请通常用于实现时间限定的task
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #98fb98;">boolean</span> <span style="color: #87cefa;">transferMoney</span>(<span style="color: #98fb98;">Account</span> <span style="color: #eedd82;">fromAcct</span>,
+                 <span style="color: #98fb98;">Account</span> <span style="color: #eedd82;">toAcct</span>,
+                 <span style="color: #98fb98;">DollarAmount</span> <span style="color: #eedd82;">amount</span>,
+                 <span style="color: #98fb98;">long</span> <span style="color: #eedd82;">timeout</span>,
+                 <span style="color: #98fb98;">TimeUnit</span> <span style="color: #eedd82;">unit</span>)
+    <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">InsufficientFundsException</span>, <span style="color: #98fb98;">InterruptedException</span> {
+    <span style="color: #98fb98;">long</span> <span style="color: #eedd82;">fixedDelay</span> = getFixedDelayComponentNanos(timeout, unit);
+    <span style="color: #98fb98;">long</span> <span style="color: #eedd82;">randMod</span> = getRandomDelayModulusNanos(timeout, unit);
+    <span style="color: #98fb98;">long</span> <span style="color: #eedd82;">stopTime</span> = System.nanoTime() + unit.toNanos(timeout);
+    <span style="color: #00ffff;">while</span> (<span style="color: #7fffd4;">true</span>) {
+        <span style="color: #00ffff;">if</span> (fromAcct.lock.tryLock()) {
+            <span style="color: #00ffff;">try</span> {
+                <span style="color: #00ffff;">if</span> (toAcct.lock.tryLock()) {
+                    <span style="color: #00ffff;">try</span> {
+                        <span style="color: #00ffff;">if</span> (fromAcct.getBalance().compareTo(amount)
+                            &lt; 0)
+                            <span style="color: #00ffff;">throw</span> <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">InsufficientFundsException</span>();
+                        <span style="color: #00ffff;">else</span> {
+                            fromAcct.debit(amount);
+                            toAcct.credit(amount);
+                            <span style="color: #00ffff;">return</span> <span style="color: #7fffd4;">true</span>;
+                        }
+                    } <span style="color: #00ffff;">finally</span> {
+                        toAcct.lock.unlock();
+                    }
+                }
+            } <span style="color: #00ffff;">finally</span> {
+                fromAcct.lock.unlock();
+            }
+        }
+        <span style="color: #00ffff;">if</span> (System.nanoTime() &gt; stopTime)
+            <span style="color: #00ffff;">return</span> <span style="color: #7fffd4;">false</span>;
+        NANOSECONDS.sleep(fixedDelay + rnd.nextLong() % randMod);
+    }
+}
+</pre>
+</div>
+</div>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">

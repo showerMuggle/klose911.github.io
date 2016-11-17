@@ -4,3 +4,73 @@
 #+HTML_LINK_UP: thread_pool.html   
 #+HTML_LINK_HOME: jcip.html
 * Lock和ReentrantLock
+显式锁: Lock及其子类(如ReentrantLock, ReadWriteLock等) 
+#+BEGIN_SRC java
+  public interface Lock {
+          void lock();
+          void lockInterruptibly() throws InterruptedException;
+          boolean tryLock();
+          boolean tryLock(long timeout, TimeUnit unit)
+                  throws InterruptedException;
+          void unlock();
+          Condition newCondition();
+  }
+#+END_SRC
+ReentrantLock实现了和内置锁相同的互斥和可见特性
+
+#+BEGIN_SRC java
+  Lock lock = new ReentrantLock();
+  ...
+  lock.lock();
+  try {
+  // update object state
+  // catch exceptions and restore invariants if necessary
+  } finally {
+          lock.unlock();
+  }
+#+END_SRC
+必须在finally块内加入释放锁！
+** 尝试型申请 
+Lock.tryLock和Lock.tryLock(long time, TimeUnit unit)方法用于尝试获取锁. 如果尝试没有成功, 则返回false, 否则返回true. 
+
+内置锁则不提供这种特性, 一旦开始申请内置锁, 在申请成功之前, 线程无法中断, 申请也无法取消
+
+Lock的尝试型申请通常用于实现时间限定的task
+
+#+BEGIN_SRC java
+  public boolean transferMoney(Account fromAcct,
+                               Account toAcct,
+                               DollarAmount amount,
+                               long timeout,
+                               TimeUnit unit)
+          throws InsufficientFundsException, InterruptedException {
+          long fixedDelay = getFixedDelayComponentNanos(timeout, unit);
+          long randMod = getRandomDelayModulusNanos(timeout, unit);
+          long stopTime = System.nanoTime() + unit.toNanos(timeout);
+          while (true) {
+                  if (fromAcct.lock.tryLock()) {
+                          try {
+                                  if (toAcct.lock.tryLock()) {
+                                          try {
+                                                  if (fromAcct.getBalance().compareTo(amount)
+                                                      < 0)
+                                                          throw new InsufficientFundsException();
+                                                  else {
+                                                          fromAcct.debit(amount);
+                                                          toAcct.credit(amount);
+                                                          return true;
+                                                  }
+                                          } finally {
+                                                  toAcct.lock.unlock();
+                                          }
+                                  }
+                          } finally {
+                                  fromAcct.lock.unlock();
+                          }
+                  }
+                  if (System.nanoTime() > stopTime)
+                          return false;
+                  NANOSECONDS.sleep(fixedDelay + rnd.nextLong() % randMod);
+          }
+  }
+#+END_SRC
