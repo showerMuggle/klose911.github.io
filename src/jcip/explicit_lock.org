@@ -1,7 +1,7 @@
 #+TITLE: 显式锁
 #+HTML_HEAD: <link rel="stylesheet" type="text/css" href="css/main.css" />
 #+OPTIONS: num:nil timestamp:nil
-#+HTML_LINK_UP: thread_pool.html   
+#+HTML_LINK_UP: thread_pool.html 
 #+HTML_LINK_HOME: jcip.html
 * Lock和ReentrantLock
 显式锁: Lock及其子类(如ReentrantLock, ReadWriteLock等) 
@@ -104,3 +104,55 @@ Lock的尝试型申请通常用于实现时间限定的task
 ** 何时使用显式锁
 Java6.0以后显式锁相对内置锁并没有明显的性能优势，只有在发挥显式锁灵活特性的地方才应该使用！
 * 读写锁
+ReentrantLock互斥锁不但限制了多个线程对同一个资源的读/写和写/写竞争，还禁止了读/读竞争。事实上大部分的应用中绝大部分的操作都是读操作，只有少数操作是写操作
+
+读写锁：多个进程可以拥有读锁，只有一个进程可以拥有写锁，读锁和写锁不能同时被拥有
+#+BEGIN_SRC java
+  public interface ReadWriteLock {
+          Lock readLock();
+          Lock writeLock();
+  }
+#+END_SRC
+** 读写锁实现策略
+1. 拥有优先级：当一个锁被释放，是排队中的读锁，还是写锁先占据，还是随机选择
+2. 读锁闯入：当有写锁在排队，是否允许新的线程拥有读锁
+3. 可否重入
+4. 降级：写锁是否能降级为读锁
+5. 升级：读锁是否能升级为写锁，两个读锁同时升级为写锁会造成死锁　
+
+** ReentrantReadWriteLock实现
+1. 公平/非公平
+2. 当有写锁在排队，不允许其他线程拥有读锁
+3. 可重入
+4. 可降级
+5. 不可升级
+#+BEGIN_SRC java
+  public class ReadWriteMap<K,V> {
+          private final Map<K,V> map;
+          private final ReadWriteLock lock = new ReentrantReadWriteLock();
+          private final Lock r = lock.readLock();
+          private final Lock w = lock.writeLock();
+          public ReadWriteMap(Map<K,V> map) {
+                  this.map = map;
+          }
+          public V put(K key, V value) {
+                  w.lock();
+                  try {
+                          return map.put(key, value);
+                  } finally {
+                          w.unlock();
+                  }
+          }
+  // Do the same for remove(), putAll(), clear()
+          public V get(Object key) {
+                  r.lock();
+                  try {
+                          return map.get(key);
+                  } finally {
+                          r.unlock();
+                  }
+          }
+  // Do the same for other read-only Map methods
+  }
+#+END_SRC
+[[file:customer_synchronizer.org][Next:客户化同步类]]　[[file:thread_pool.org][Previous:线程池]]　[[file:jcip.org][Up:目录]]
