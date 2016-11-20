@@ -1,0 +1,164 @@
+#+TITLE: Solr
+#+HTML_HEAD: <link rel="stylesheet" type="text/css" href="css/main.css" />
+#+OPTIONS: num:nil timestamp:nil
+* 概念
++ Solr: 开源的企业级搜索服务器，底层使用易于扩展和修改的Java来实现,服务器通信使用标准的HTTP和XML
++ Lucene: 基于Java的全文信息检索工具包，它不是一个完整的搜索应用程序，只是为你的应用程序提供索引和搜索功能
+Solr依存于Lucene，Lucene是Solr的底层库,　Solr是Lucene的企业化应用服务器
+#+CAPTION: Solr架构图
+#+ATTR_HTML: image :width 1000px 
+[[./pic/solr.png]]
+** Solr特性
+1. 高级的全文搜索功能
+2. 专为高通量的网络流量进行的优化
+3. 基于开放接口（XML和HTTP）的标准
+4. 综合的HTML管理界面
+5. 可伸缩性－能够有效地复制到另外一个Solr搜索服务器
+6. 使用XML配置达到灵活性和适配性
+7. 可扩展的插件体系
+   
+* Solr基础 
++ 在Solr和Lucene中，使用一个或多个Document来构建索引
++ Document包括一个或多个Field
++ Field包括名称、内容以及告诉Solr如何处理内容的元数据 
+  
+#+CAPTION: Field类别
+#+ATTR_HTML: :border 1 :rules all :frame boader
+| 属性         | 描述                                                                         |
+| Index Field  | 可以进行搜索和排序，还可以运行Solr分析过程，此过程可修改内容以改进或更改结果 |
+| Stored Field | 内容保存在索引中。这对于检索和醒目显示内容很有用，但对于实际搜索则不是必需的 |
+
+** schema配置
+*** types 
+    定义了 Solr如何处理Field, 添加到索引中的xml文件属性中的类型，如int、text、date等
+    
+    #+BEGIN_SRC nxml
+      <fieldType name="string" class="solr.StrField" sortMissingLast="true"/>
+      <fieldType name="boolean" class="solr.BoolField" sortMissingLast="true"/>
+      <fieldType name="int" class="solr.TrieIntField" precisionStep="0" positionIncrementGap="0"/>
+
+      <fieldType name="text_general" class="solr.TextField" positionIncrementGap="100">
+        <analyzer type="index">
+          <tokenizer class="solr.StandardTokenizerFactory"/>
+          <filter class="solr.StopFilterFactory" ignoreCase="true" words="stopwords.txt" enablePositionIncrements="true" />
+          <filter class="solr.LowerCaseFilterFactory"/>
+        </analyzer>
+
+        <analyzer type="query">
+          <tokenizer class="solr.StandardTokenizerFactory"/>
+          <filter class="solr.StopFilterFactory" ignoreCase="true" words="stopwords.txt" enablePositionIncrements="true" />
+          <filter class="solr.SynonymFilterFactory" synonyms="synonyms.txt" ignoreCase="true" expand="true"/>
+          <filter class="solr.LowerCaseFilterFactory"/>
+        </analyzer>
+      </fieldType>
+    #+END_SRC
+    
+    #+CAPTION: type字段属性
+    #+ATTR_HTML: :border 1 :rules all :frame boader
+    | 属性         | 描述                                                                                          |
+    | name             | 标识                                                                                          |
+    | class            | 和其他属性决定了这个fieldType的实际行为                                                         |
+    | sortMissingLast  | 设置成true: 没有该field的数据排在有该field的数据之后，而不管请求时的排序规则, 默认是false。    |
+    | sortMissingFirst | 跟上面倒过来呗。 默认成false                                                   |
+    | analyzer         | 字段类型指定的分词器                                                                            |
+    | type             | 当前分词用用于的操作: index代表生成索引时使用的分词器, query代码在查询时使用的分词器            |
+    | tokenizer        | 分词器类                                                                                        |
+    | filter           | 分词后应用的过滤器, 过滤器调用顺序和配置相同                                                    |
+*** fileds
+    添加到索引文件中出现的属性名称，而声明类型就需要用到上面的types
+1. field: 固定的字段设置
+#+BEGIN_SRC nxml
+  <field name="id" type="string" indexed="true" stored="true" required="true" multiValued="false"/>
+  <field name="path" type="text_smartcn" indexed="false" stored="true" multiValued="false" termVector="true" />
+  <field name="content" type="text_smartcn" indexed="false" stored="true" multiValued="false" termVector="true"/>
+  <field name ="text" type ="text_ik" indexed ="true" stored ="false" multiValued ="true"/>
+  <field name ="pinyin" type ="text_pinyin" indexed ="true" stored ="false" multiValued ="false"/>
+  <field name="_version_" type="long" indexed="true" stored="true"/>
+#+END_SRC
+2. dynamicField: 动态的字段设置,用于后期自定义字段,*号通配符
+   #+BEGIN_SRC nxml
+     <dynamicField name="*_i" type="int" indexed="true" stored="true"/>
+     <dynamicField name="*_l" type="long" indexed="true" stored="true"/>
+     <dynamicField name="*_s" type="string" indexed="true" stored="true"/>
+   #+END_SRC
+3. copyField: 一般用于检索时用的字段。只对这一个字段进行索引分词就行了，dest字段如果有多个source一定要设置multiValued=true,否则会报错
+   #+BEGIN_SRC nxml
+     <copyField source="content" dest="pinyin"/>
+     <copyField source="content" dest="text"/>
+     <copyField source="pinyin" dest="text"/>
+   #+END_SRC
+   
+#+CAPTION: field字段属性
+#+ATTR_HTML: :border 1 :rules all :frame boader
+| 属性                 | 描述                                                                                                                             |
+| name                 | 字段类型名                                                                                                                       |
+| class                | java类名                                                                                                                         |
+| indexed              | 缺省true。 这个数据应被搜索和排序，如果数据没有indexed，则stored应是true。                                                       |
+| stored               | 缺省true。这个字段被包含在搜索结果中是合适的。如果数据没有stored,　则indexed应是true。                                           |
+| omitNorms            | 字段的长度不影响得分和在索引时不做boost时，设置它为true。一般文本字段不设置为true。                                              |
+| termVectors          | 如果字段被用来做more like this和highlight的特性时应设置为true。                                                                  |
+| compressed           | 字段是压缩的。这可能导致索引和搜索变慢，但会减少存储空间，只有StrField和TextField是可以压缩，这通常适合字段的长度超过200个字符。 |
+| multiValued          | 字段多于一个值的时候，可设置为true。                                                                                             |
+| positionIncrementGap | 和multiValued一起使用，设置多个值之间的虚拟空白的数量                                                                            |
+*** 其他配置
+1. uniqueKey: 唯一键，配置的是上面出现的fileds，一般是id、url等不重复的。在更新、删除的时候可以用到
+2. defaultSearchField: 默认搜索属性，如q=solr就是默认的搜索那个字段
+3. solrQueryParser: 查询转换模式，是并且还是或者（AND/OR必须大写）
+   
+** solr配置
+*** index
+    #+CAPTION: 索引配置
+    #+ATTR_HTML: :border 1 :rules all :frame boader
+    | 属性                             | 描述                                                                                                                                                                                               |
+    | useCompoundFile                  | 将很多Lucene内部文件整合到一个文件来减少使用中的文件的数量，有助于减少Solr使用的文件句柄数目，代价是降低了性能。除非是应用程序用完了文件句柄，否则false的默认值应该就已经足够。                    |
+    | ramBufferSizeMB，maxBufferedDocs | 在添加或删除文档时，为了减少频繁的更些索引,Solr会选缓存在内存中,当内存中的文件大于设置的值,才会更新到索引库。较大的值可使索引时间变快但会牺牲较多的内存。如两个值同时设置,满足一个就会进行刷新索引 |
+    | mergeFactor                      | 决定低水平的 Lucene 段被合并的频率。较小的值（最小为 2）使用的内存较少但导致的索引时间也更慢。较大的值可使索引时间变快但会牺牲较多的内存                                                           |
+    | maxIndexingThreads               | indexWriter生成索引时使用的最大线程数                                                                                                                                                              |
+    | unlockOnStartup                  | Solr忽略在多线程环境中用来保护索引的锁定机制。在某些情况下索引可能会由于不正确的关机或其他错误而一直处于锁定，这就妨碍了添加和更新。将其设置为 true 可以禁用启动锁定，进而允许进行添加和更新。     |
+    | lockType                         | single: 在只读索引或是没有其它进程修改索引时使用。native: 使用操作系统本地文件锁,不能使用多个Solr在同一个JVM中共享一个索引, simple :使用一个文本文件锁定索引                                       |
+*** query
+    #+CAPTION: 查询配置
+    #+ATTR_HTML: :border 1 :rules all :frame boader
+    | 属性                     | 描述                                                                                                                                                                                                                                                                                                                          |
+    | maxBooleanClauses        | 最大的BooleanQuery数量. 当值超出时，抛出 TooManyClausesException.注意这个是全局的,如果是多个SolrCore都会使用一个值,每个Core里设置不一样的化,会使用最后一个的.                                                                                                                                                                 |
+    | filterCache              | filterCache存储了无序的lucene document id集合，1.存储了filter queries(“fq”参数)得到 的ocument id集合结果。2还可用于facet查询3. 3）如果配置了useFilterForSortedQuery，那么如果查询有filter，则使用filterCache                                                                                                                  |
+    | queryResultCache         | 缓存搜索结果,一个文档ID列表                                                                                                                                                                                                                                                                                                   |
+    | documentCache            | 缓存Lucene的Document对象,不会自热                                                                                                                                                                                                                                                                                             |
+    | fieldValueCache          | 字段缓存使用文档ID进行快速访问。默认情况下创建fieldValueCache即使这里没有配置。                                                                                                                                                                                                                                               |
+    | enableLazyFieldLoading   | 若应用程序预期只会检索 Document 上少数几个 Field，那么可以将属性设置为 true。延迟加载的一个常见场景大都发生在应用程序返回和显示一系列搜索结果的时候，用户常常会单击其中的一个来查看存储在此索引中的原始文档。初始的显示常常只需要显示很短的一段信息。若考虑到检索大型 Document 的代价，除非必需，否则就应该避免加载整个文档。 |
+    | queryResultWindowSize    | 一次查询中存储最多的doc的id数目.                                                                                                                                                                                                                                                                                              |
+    | queryResultMaxDocsCached | 查询结果doc的最大缓存数量, 例如要求每页显示10条,这里设置是20条,也就是说>缓存里总会给你多出10条的数据.让你点示下一页时很快拿到数据.                                                                                                                                                                                            |
+    | listener                 | 选项定义 newSearcher 和 firstSearcher 事件，您可以使用这些事件来指定实例化新搜索程序或第一个搜索程序时应该执行哪些查询。如果应用程序期望请求某些特定的查询，那么在创建新搜索程序或第一个搜索>程序时就应该反注释这些部分并执行适当的查询。                                                                                     |
+    | useColdSearcher          | 是否使用冷搜索,为false时使用自热后的searcher                                                                                                                                                                                                                                                                                  |
+    | maxWarmingSearchers      | 最大自热searcher数量                                                                                                                                                                                                                                                                                                          |
+** 中文分词器　
+* Solr使用 
+** 维护索引
+*** 增加索引 
+    Solr在add文档时, 如果文档不存在就直接添加,如果文档存在就删除后添加,这也就是修改功能了. 判断文档是否存在的依据是定义好的uniqueKey字段
+    #+BEGIN_SRC java
+      SolrInputDocument doc = new SolrInputDocument();
+      doc.setField("id", "ABC");
+      doc.setField("content", "中华人民共和国");
+
+      //构建好文档后添加的上面初始化好的server里就行了.
+      server.add(doc);
+      server.commit();//这句一般不用加因为我们可以通过在配置文件中的autoCommit来提高性能
+    #+END_SRC
+*** 删除索引
++ 通过文档ID删除
+  #+BEGIN_SRC java
+    server.deleteById(id);
+    //或是使用批量删除
+    server.deleteById(ids);
+  #+END_SRC
++ 通过查询删除
+  #+BEGIN_SRC java
+    server.deleteByQuery("*.*");//这样就删除了所有文档索引
+    //”*.*”就查询所有内容的,介绍查询时会详细说明
+  #+END_SRC
+*** 优化索引
+** 查询索引
+   
+   
+   
