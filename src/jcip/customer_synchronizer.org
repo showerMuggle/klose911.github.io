@@ -4,3 +4,233 @@
 #+HTML_LINK_UP: explicit_lock.html   
 #+HTML_LINK_HOME: jcip.html
 * 管理状态依赖
+状态依赖的类：某些方法只有满足特定的前置条件才能继续
+状态依赖的操作:
+#+BEGIN_SRC
+  申请锁  
+  while(前置条件不满足) {  
+       释放锁
+       重新获取锁  
+  }  
+  执行操作  
+  释放锁  
+#+END_SRC
+
+#+BEGIN_SRC java
+  public abstract class BaseBoundedBuffer<V> {  
+          private final V[] buf;  
+          private int tail;  
+          private int head;  
+          private int count;  
+    
+          @SuppressWarnings("unchecked")  
+          protected BaseBoundedBuffer(int capacity) {  
+                  this.buf = (V[]) new Object[capacity];  
+          }  
+    
+          protected synchronized final void doPut(V v) {  
+                  buf[tail] = v;  
+                  if (++tail == buf.length) {  
+                          tail = 0;  
+                  }  
+                  ++count;  
+          }  
+    
+          protected synchronized final V doTake() {  
+                  V v = buf[head];  
+                  buf[head] = null;  
+                  if (++head == buf.length) {  
+                          head = 0;  
+                  }  
+                  --count;  
+                  return v;  
+          }  
+    
+          public synchronized final boolean isFull() {  
+                  return count == buf.length;  
+          }  
+    
+          public synchronized final boolean isEmpty() {  
+                  return count == 0;  
+          }
+  }   
+#+END_SRC
+需要保证put的前置条件：buf没有满，take的前置条件：buf不为空　
+
+** 抛出异常
+当不满足前置条件的时候，直接抛出异常
+   #+BEGIN_SRC java
+     public class GrumpyBoundedBuffer<V> extends BaseBoundedBuffer<V> {
+             public GrumpyBoundedBuffer(int capacity) {
+                     super(capacity);
+             }
+         
+             @Override
+             public synchronized void put(V v) throws BufferFullException {
+                     if (isFull()) {
+                             throw new BufferFullException();
+                     }
+                     doPut(v);
+             }
+
+             @Override
+             public synchronized V take() throws BufferEmptyException {
+                     if (isEmpty()) {
+                             throw new BufferEmptyException();
+                     }
+                     return doTake();
+             }
+     }
+
+   #+END_SRC
+实现起来很简单, 但是很难使用: 调用方需要捕获异常并手动重试
+#+BEGIN_SRC java
+  while (true) {
+          try {
+                  V item = buffer.take();
+                  // use item
+                  break;
+          } catch (BufferEmptyException e) {
+                  Thread.sleep(SLEEP_GRANULARITY);
+          }
+  }
+#+END_SRC
+
+** 轮询
+把重试的逻辑放入SleepyBoundedBuffer
+   #+BEGIN_SRC java
+     @ThreadSafe
+     public class SleepyBoundedBuffer<V> extends BaseBoundedBuffer<V> {
+             private static final long SLEEP_GRANULARITY = 1000L;
+
+             public SleepyBoundedBuffer(int size) {
+                     super(size);
+             }
+
+             public void put(V v) throws InterruptedException {
+                     while (true) {
+                             synchronized (this) {
+                                     if (!isFull()) {
+                                             doPut(v);
+                                             return;
+                                     }
+                             }
+                             // 释放锁后sleep一段时间再进行重试  
+                             Thread.sleep(SLEEP_GRANULARITY);
+                     }
+             }
+
+             public V take() throws InterruptedException {
+                     while (true) {
+                             synchronized (this) {
+                                     if (!isEmpty()) {
+                                             return doTake();
+                                     }
+                             }
+                             // 释放锁后sleep一段时间再进行重试  
+                             Thread.sleep(SLEEP_GRANULARITY);
+                     }
+             }
+     }
+   #+END_SRC
+1. 代码变得更复杂，在让线程沉睡前，必须释放锁，不然会引起死锁的糟糕情况！
+2. sleep的时间不好确定: 如果设定的太短, 将大量消耗CPU资源。如果设定的太长, 则程序的响应性不好
+3. 客户端依然需要处理InterruptedException
+
+** 条件等待
+条件队列：等待某个特殊条件为真的一组线程。
+
+每个Java对象都可以被用作内置锁，同样每个Java对象也可以通过wait,notify/notifyAll方法用作条件队列。
+1. wait: 立刻释放锁，阻塞当前线程，让其他线程有机会获得锁，修改内部状态，使得前置条件为真
+2. notify/All:唤醒在此对象监视器上等待的单个/所有线程,执行完synchronized代码后释放锁 
+
+只有获得内置锁，否则无法去检查前置条件是否为真，同样只有修改内部状态，否则无法使其他的等待线程的前置条件为真。因此wait,notify/All方法必须运行在同步代码内
+
+#+BEGIN_SRC java
+  public class BoundedBuffer<V> extends BaseBoundedBuffer<V> {
+          public BoundedBuffer(int capacity) {
+                  super(capacity);
+          }
+
+          public synchronized void put(V v) throws InterruptedException {
+                  // 当缓冲区已满时将线程挂起, 等待其他线程唤醒  
+                  // 不给唤醒之后再次判断缓冲区是否已满         
+                  while (isFull())
+                          wait();
+                  doPut(v);
+                  // 操作完成后唤醒其他线程  
+                  notifyAll();
+          }
+
+          public synchronized V take() throws InterruptedException {
+                  // 当缓冲区为空时将线程挂起, 等待其他线程唤醒  
+                  // 被唤醒之后再次判断缓冲区是否为空  
+                  while (isEmpty())
+                        wait();
+                  V v = doTake();
+                  // 操作完成后唤醒其他线程  
+                  notifyAll();
+                  return v;
+          }
+  }
+#+END_SRC
+BoundedBuffer具有更好的响应性, 更高的CPU效率，更少的上下文切换。当然生产环境必须提供一个有超时的版本
+
+* 使用条件队列
+条件队列容易构造高效率，快响应的程序，但是条件队列同样很容易被错误使用
+
+** 条件谓词
+使某个操作成为状态依赖的前提条件
+
+在条件等待中存在一个重要的三元关系：加锁，wait方法，条件谓词。条件谓词中包含多个状态变量，而状态变量由一个锁来保护，在测试条件谓词前，必须先持有这个锁。锁对象与条件队列对象(调用wait/notfiy/notifyAll的对象)必须是同一个对象。
+
+在BoundBuffer中take方法的条件谓词是：buf数组不为空。状态变量：buf数组。锁是BoundBuffer的内置锁。条件队列同样是这个BoundBuffer对象。首先take方法获得BoundBuffer的内置锁，然后测试条件谓词
+1. 如果buf数组不为空，则拿走第一个元素，其实这已经修改了条件变量，之所以可以这样做是因为此时仍然持有BoundBuffer的内置锁
+2. 如果buf数组为空，则将在BoundBuffer这个条件队列上调用wait方法,　其前提是已经获得这个对象的内置锁。在测试条件谓词的时候已经获得这个内置锁。wait将立刻释放内置锁，然后阻塞当前线程，直到其他线程唤醒，或者发生中断异常，或者等待超时。
+唤醒后，重新与其他线程竞争运行，再次测试前置条件
+
+每一次wait调用都会隐式地与一个条件谓词关联。当调用与某个条件谓词关联的wait方法时候，必须首先持有与条件队列相关的锁，而且这个锁保护着构成条件谓词的状态变量！　
+
+事实上Java语言规范根本没有定义条件谓词，但如果不清楚条件谓词，条件队列将很可能会被错误使用
+
+** 过早唤醒
+唤醒并不意味着条件谓词已经为真，所以必须再次测试条件谓词
+#+BEGIN_SRC java
+  void stateDependentMethod() throws InterruptedException {
+          // condition predicate must be guarded by lock
+          synchronized(lock) {
+                  while (!conditionPredicate())
+                          lock.wait();
+              // object is now in desired state
+              // execute some business logic ...　
+　　　　　　　　//don't release lock too early 
+          }
+  }
+#+END_SRC
+使用条件等待Object.wait/Condition.await:
++ 线程在开始执行前必须通过条件谓词测试
++ 在调用wait前必须测试条件谓词，在从wait返回后必须重新测试条件谓词
++ wait总是在一个循环体内
++ 确保构成条件谓词的状态变量处于条件队列的对象内置锁保护中
++ 在调用wait,notfiy,notifyAll前必须确保获得了条件队列对象的内置锁
++ 在通过条件谓词测试，但没有执行完业务操作前不能释放锁
+
+** 丢失信号
+线程必须等待一个已经为真的条件，但在开始等待前却忘记检查条件谓词
+
+** 通知
+每当在等待一个条件时，必须确保在条件谓词为真时通过某种方式发出通知。使用notfiy而不是notfiyAll通知会导致某些线程无法被唤醒
+
+只有同时满足以下２个条件才可以使用notify,而不是notfiyAll 
+1. 所有等待线程的类型相同：只有一个条件谓词与条件队列相关
+2. 单进单出：条件变量的每次通知只能唤醒一个线程
+
+基本上所有情况应该都使用notifyAll
+
+** 子类的安全问题
+要么把条件队列的等待和通知机制文档公开，要么就完全禁止子类化
+
+** 封装条件队列
+使用私有的条件队列及其内置锁，使得客户端无法对条件队列对象进行加锁操作
+
+* 显示的Condition对象

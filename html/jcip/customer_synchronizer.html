@@ -146,12 +146,387 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#sec-1">管理状态依赖</a></li>
+<li><a href="#sec-1">管理状态依赖</a>
+<ul>
+<li><a href="#sec-1-1">抛出异常</a></li>
+<li><a href="#sec-1-2">轮询</a></li>
+<li><a href="#sec-1-3">条件等待</a></li>
+</ul>
+</li>
+<li><a href="#sec-2">使用条件队列</a>
+<ul>
+<li><a href="#sec-2-1">条件谓词</a></li>
+<li><a href="#sec-2-2">过早唤醒</a></li>
+<li><a href="#sec-2-3">丢失信号</a></li>
+<li><a href="#sec-2-4">通知</a></li>
+<li><a href="#sec-2-5">子类的安全问题</a></li>
+<li><a href="#sec-2-6">封装条件队列</a></li>
+</ul>
+</li>
+<li><a href="#sec-3">显示的Condition对象</a></li>
 </ul>
 </div>
 </div>
 <div id="outline-container-sec-1" class="outline-2">
 <h2 id="sec-1">管理状态依赖</h2>
+<div class="outline-text-2" id="text-1">
+<p>
+状态依赖的类：某些方法只有满足特定的前置条件才能继续
+状态依赖的操作:
+</p>
+<pre class="example">
+申请锁  
+while(前置条件不满足) {  
+     释放锁
+     重新获取锁  
+}  
+执行操作  
+释放锁
+</pre>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">abstract</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">BaseBoundedBuffer</span>&lt;<span style="color: #98fb98;">V</span>&gt; {  
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">V</span>[] <span style="color: #eedd82;">buf</span>;  
+    <span style="color: #00ffff;">private</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">tail</span>;  
+    <span style="color: #00ffff;">private</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">head</span>;  
+    <span style="color: #00ffff;">private</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">count</span>;  
+
+    <span style="color: #7fffd4;">@SuppressWarnings</span>(<span style="color: #ffa07a;">"unchecked"</span>)  
+    <span style="color: #00ffff;">protected</span> <span style="color: #87cefa;">BaseBoundedBuffer</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">capacity</span>) {  
+        <span style="color: #00ffff;">this</span>.buf = (<span style="color: #98fb98;">V</span>[]) <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">Object</span>[capacity];  
+    }  
+
+    <span style="color: #00ffff;">protected</span> <span style="color: #00ffff;">synchronized</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">doPut</span>(<span style="color: #98fb98;">V</span> <span style="color: #eedd82;">v</span>) {  
+        buf[tail] = v;  
+        <span style="color: #00ffff;">if</span> (++tail == buf.length) {  
+            tail = 0;  
+        }  
+        ++count;  
+    }  
+
+    <span style="color: #00ffff;">protected</span> <span style="color: #00ffff;">synchronized</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">V</span> <span style="color: #87cefa;">doTake</span>() {  
+        <span style="color: #98fb98;">V</span> <span style="color: #eedd82;">v</span> = buf[head];  
+        buf[head] = <span style="color: #7fffd4;">null</span>;  
+        <span style="color: #00ffff;">if</span> (++head == buf.length) {  
+            head = 0;  
+        }  
+        --count;  
+        <span style="color: #00ffff;">return</span> v;  
+    }  
+
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">synchronized</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">boolean</span> <span style="color: #87cefa;">isFull</span>() {  
+        <span style="color: #00ffff;">return</span> count == buf.length;  
+    }  
+
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">synchronized</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">boolean</span> <span style="color: #87cefa;">isEmpty</span>() {  
+        <span style="color: #00ffff;">return</span> count == 0;  
+    }
+}
+</pre>
+</div>
+<p>
+需要保证put的前置条件：buf没有满，take的前置条件：buf不为空　
+</p>
+</div>
+
+<div id="outline-container-sec-1-1" class="outline-3">
+<h3 id="sec-1-1">抛出异常</h3>
+<div class="outline-text-3" id="text-1-1">
+<p>
+当不满足前置条件的时候，直接抛出异常
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">GrumpyBoundedBuffer</span>&lt;<span style="color: #98fb98;">V</span>&gt; <span style="color: #00ffff;">extends</span> <span style="color: #98fb98;">BaseBoundedBuffer</span>&lt;<span style="color: #98fb98;">V</span>&gt; {
+    <span style="color: #00ffff;">public</span> <span style="color: #87cefa;">GrumpyBoundedBuffer</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">capacity</span>) {
+        <span style="color: #00ffff;">super</span>(capacity);
+    }
+
+    <span style="color: #7fffd4;">@Override</span>
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">synchronized</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">put</span>(<span style="color: #98fb98;">V</span> <span style="color: #eedd82;">v</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">BufferFullException</span> {
+        <span style="color: #00ffff;">if</span> (isFull()) {
+            <span style="color: #00ffff;">throw</span> <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">BufferFullException</span>();
+        }
+        doPut(v);
+    }
+
+    <span style="color: #7fffd4;">@Override</span>
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">synchronized</span> <span style="color: #98fb98;">V</span> <span style="color: #87cefa;">take</span>() <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">BufferEmptyException</span> {
+        <span style="color: #00ffff;">if</span> (isEmpty()) {
+            <span style="color: #00ffff;">throw</span> <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">BufferEmptyException</span>();
+        }
+        <span style="color: #00ffff;">return</span> doTake();
+    }
+}
+</pre>
+</div>
+<p>
+实现起来很简单, 但是很难使用: 调用方需要捕获异常并手动重试
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">while</span> (<span style="color: #7fffd4;">true</span>) {
+    <span style="color: #00ffff;">try</span> {
+        <span style="color: #98fb98;">V</span> <span style="color: #eedd82;">item</span> = buffer.take();
+        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">use item</span>
+        <span style="color: #00ffff;">break</span>;
+    } <span style="color: #00ffff;">catch</span> (<span style="color: #98fb98;">BufferEmptyException</span> <span style="color: #eedd82;">e</span>) {
+        Thread.sleep(SLEEP_GRANULARITY);
+    }
+}
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-1-2" class="outline-3">
+<h3 id="sec-1-2">轮询</h3>
+<div class="outline-text-3" id="text-1-2">
+<p>
+把重试的逻辑放入SleepyBoundedBuffer
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #7fffd4;">@ThreadSafe</span>
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">SleepyBoundedBuffer</span>&lt;<span style="color: #98fb98;">V</span>&gt; <span style="color: #00ffff;">extends</span> <span style="color: #98fb98;">BaseBoundedBuffer</span>&lt;<span style="color: #98fb98;">V</span>&gt; {
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">long</span> <span style="color: #eedd82;">SLEEP_GRANULARITY</span> = 1000L;
+
+    <span style="color: #00ffff;">public</span> <span style="color: #87cefa;">SleepyBoundedBuffer</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">size</span>) {
+        <span style="color: #00ffff;">super</span>(size);
+    }
+
+    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">put</span>(<span style="color: #98fb98;">V</span> <span style="color: #eedd82;">v</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">InterruptedException</span> {
+        <span style="color: #00ffff;">while</span> (<span style="color: #7fffd4;">true</span>) {
+            <span style="color: #00ffff;">synchronized</span> (<span style="color: #00ffff;">this</span>) {
+                <span style="color: #00ffff;">if</span> (!isFull()) {
+                    doPut(v);
+                    <span style="color: #00ffff;">return</span>;
+                }
+            }
+            <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#37322;&#25918;&#38145;&#21518;sleep&#19968;&#27573;&#26102;&#38388;&#20877;&#36827;&#34892;&#37325;&#35797;  </span>
+            Thread.sleep(SLEEP_GRANULARITY);
+        }
+    }
+
+    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">V</span> <span style="color: #87cefa;">take</span>() <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">InterruptedException</span> {
+        <span style="color: #00ffff;">while</span> (<span style="color: #7fffd4;">true</span>) {
+            <span style="color: #00ffff;">synchronized</span> (<span style="color: #00ffff;">this</span>) {
+                <span style="color: #00ffff;">if</span> (!isEmpty()) {
+                    <span style="color: #00ffff;">return</span> doTake();
+                }
+            }
+            <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#37322;&#25918;&#38145;&#21518;sleep&#19968;&#27573;&#26102;&#38388;&#20877;&#36827;&#34892;&#37325;&#35797;  </span>
+            Thread.sleep(SLEEP_GRANULARITY);
+        }
+    }
+}
+</pre>
+</div>
+<ol class="org-ol">
+<li>代码变得更复杂，在让线程沉睡前，必须释放锁，不然会引起死锁的糟糕情况！
+</li>
+<li>sleep的时间不好确定: 如果设定的太短, 将大量消耗CPU资源。如果设定的太长, 则程序的响应性不好
+</li>
+<li>客户端依然需要处理InterruptedException
+</li>
+</ol>
+</div>
+</div>
+
+<div id="outline-container-sec-1-3" class="outline-3">
+<h3 id="sec-1-3">条件等待</h3>
+<div class="outline-text-3" id="text-1-3">
+<p>
+条件队列：等待某个特殊条件为真的一组线程。
+</p>
+
+<p>
+每个Java对象都可以被用作内置锁，同样每个Java对象也可以通过wait,notify/notifyAll方法用作条件队列。
+</p>
+<ol class="org-ol">
+<li>wait: 立刻释放锁，阻塞当前线程，让其他线程有机会获得锁，修改内部状态，使得前置条件为真
+</li>
+<li>notify/All:唤醒在此对象监视器上等待的单个/所有线程,执行完synchronized代码后释放锁 
+</li>
+</ol>
+
+<p>
+只有获得内置锁，否则无法去检查前置条件是否为真，同样只有修改内部状态，否则无法使其他的等待线程的前置条件为真。因此wait,notify/All方法必须运行在同步代码内
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">BoundedBuffer</span>&lt;<span style="color: #98fb98;">V</span>&gt; <span style="color: #00ffff;">extends</span> <span style="color: #98fb98;">BaseBoundedBuffer</span>&lt;<span style="color: #98fb98;">V</span>&gt; {
+    <span style="color: #00ffff;">public</span> <span style="color: #87cefa;">BoundedBuffer</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">capacity</span>) {
+        <span style="color: #00ffff;">super</span>(capacity);
+    }
+
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">synchronized</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">put</span>(<span style="color: #98fb98;">V</span> <span style="color: #eedd82;">v</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">InterruptedException</span> {
+        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#24403;&#32531;&#20914;&#21306;&#24050;&#28385;&#26102;&#23558;&#32447;&#31243;&#25346;&#36215;, &#31561;&#24453;&#20854;&#20182;&#32447;&#31243;&#21796;&#37266;  </span>
+        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#19981;&#32473;&#21796;&#37266;&#20043;&#21518;&#20877;&#27425;&#21028;&#26029;&#32531;&#20914;&#21306;&#26159;&#21542;&#24050;&#28385;         </span>
+        <span style="color: #00ffff;">while</span> (isFull())
+            wait();
+        doPut(v);
+        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#25805;&#20316;&#23436;&#25104;&#21518;&#21796;&#37266;&#20854;&#20182;&#32447;&#31243;  </span>
+        notifyAll();
+    }
+
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">synchronized</span> <span style="color: #98fb98;">V</span> <span style="color: #87cefa;">take</span>() <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">InterruptedException</span> {
+        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#24403;&#32531;&#20914;&#21306;&#20026;&#31354;&#26102;&#23558;&#32447;&#31243;&#25346;&#36215;, &#31561;&#24453;&#20854;&#20182;&#32447;&#31243;&#21796;&#37266;  </span>
+        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#34987;&#21796;&#37266;&#20043;&#21518;&#20877;&#27425;&#21028;&#26029;&#32531;&#20914;&#21306;&#26159;&#21542;&#20026;&#31354;  </span>
+        <span style="color: #00ffff;">while</span> (isEmpty())
+              wait();
+        <span style="color: #98fb98;">V</span> <span style="color: #eedd82;">v</span> = doTake();
+        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#25805;&#20316;&#23436;&#25104;&#21518;&#21796;&#37266;&#20854;&#20182;&#32447;&#31243;  </span>
+        notifyAll();
+        <span style="color: #00ffff;">return</span> v;
+    }
+}
+</pre>
+</div>
+<p>
+BoundedBuffer具有更好的响应性, 更高的CPU效率，更少的上下文切换。当然生产环境必须提供一个有超时的版本
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2" class="outline-2">
+<h2 id="sec-2">使用条件队列</h2>
+<div class="outline-text-2" id="text-2">
+<p>
+条件队列容易构造高效率，快响应的程序，但是条件队列同样很容易被错误使用
+</p>
+</div>
+
+<div id="outline-container-sec-2-1" class="outline-3">
+<h3 id="sec-2-1">条件谓词</h3>
+<div class="outline-text-3" id="text-2-1">
+<p>
+使某个操作成为状态依赖的前提条件
+</p>
+
+<p>
+在条件等待中存在一个重要的三元关系：加锁，wait方法，条件谓词。条件谓词中包含多个状态变量，而状态变量由一个锁来保护，在测试条件谓词前，必须先持有这个锁。锁对象与条件队列对象(调用wait/notfiy/notifyAll的对象)必须是同一个对象。
+</p>
+
+<p>
+在BoundBuffer中take方法的条件谓词是：buf数组不为空。状态变量：buf数组。锁是BoundBuffer的内置锁。条件队列同样是这个BoundBuffer对象。首先take方法获得BoundBuffer的内置锁，然后测试条件谓词
+</p>
+<ol class="org-ol">
+<li>如果buf数组不为空，则拿走第一个元素，其实这已经修改了条件变量，之所以可以这样做是因为此时仍然持有BoundBuffer的内置锁
+</li>
+<li>如果buf数组为空，则将在BoundBuffer这个条件队列上调用wait方法,　其前提是已经获得这个对象的内置锁。在测试条件谓词的时候已经获得这个内置锁。wait将立刻释放内置锁，然后阻塞当前线程，直到其他线程唤醒，或者发生中断异常，或者等待超时。
+</li>
+</ol>
+<p>
+唤醒后，重新与其他线程竞争运行，再次测试前置条件
+</p>
+
+<p>
+每一次wait调用都会隐式地与一个条件谓词关联。当调用与某个条件谓词关联的wait方法时候，必须首先持有与条件队列相关的锁，而且这个锁保护着构成条件谓词的状态变量！　
+</p>
+
+<p>
+事实上Java语言规范根本没有定义条件谓词，但如果不清楚条件谓词，条件队列将很可能会被错误使用
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-2" class="outline-3">
+<h3 id="sec-2-2">过早唤醒</h3>
+<div class="outline-text-3" id="text-2-2">
+<p>
+唤醒并不意味着条件谓词已经为真，所以必须再次测试条件谓词
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java">  <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">stateDependentMethod</span>() <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">InterruptedException</span> {
+      <span style="color: #ff4500;">// </span><span style="color: #ff4500;">condition predicate must be guarded by lock</span>
+      <span style="color: #00ffff;">synchronized</span>(lock) {
+          <span style="color: #00ffff;">while</span> (!conditionPredicate())
+              lock.wait();
+          <span style="color: #ff4500;">// </span><span style="color: #ff4500;">object is now in desired state</span>
+          <span style="color: #ff4500;">// </span><span style="color: #ff4500;">execute some business logic ...&#12288;</span>
+&#12288;&#12288;&#12288;&#12288;&#12288;&#12288;&#12288;&#12288;<span style="color: #ff4500;">//</span><span style="color: #ff4500;">don't release lock too early </span>
+      }
+  }
+</pre>
+</div>
+<p>
+使用条件等待Object.wait/Condition.await:
+</p>
+<ul class="org-ul">
+<li>线程在开始执行前必须通过条件谓词测试
+</li>
+<li>在调用wait前必须测试条件谓词，在从wait返回后必须重新测试条件谓词
+</li>
+<li>wait总是在一个循环体内
+</li>
+<li>确保构成条件谓词的状态变量处于条件队列的对象内置锁保护中
+</li>
+<li>在调用wait,notfiy,notifyAll前必须确保获得了条件队列对象的内置锁
+</li>
+<li>在通过条件谓词测试，但没有执行完业务操作前不能释放锁
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-2-3" class="outline-3">
+<h3 id="sec-2-3">丢失信号</h3>
+<div class="outline-text-3" id="text-2-3">
+<p>
+线程必须等待一个已经为真的条件，但在开始等待前却忘记检查条件谓词
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-4" class="outline-3">
+<h3 id="sec-2-4">通知</h3>
+<div class="outline-text-3" id="text-2-4">
+<p>
+每当在等待一个条件时，必须确保在条件谓词为真时通过某种方式发出通知。使用notfiy而不是notfiyAll通知会导致某些线程无法被唤醒
+</p>
+
+<p>
+只有同时满足以下２个条件才可以使用notify,而不是notfiyAll 
+</p>
+<ol class="org-ol">
+<li>所有等待线程的类型相同：只有一个条件谓词与条件队列相关
+</li>
+<li>单进单出：条件变量的每次通知只能唤醒一个线程
+</li>
+</ol>
+
+<p>
+基本上所有情况应该都使用notifyAll
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-5" class="outline-3">
+<h3 id="sec-2-5">子类的安全问题</h3>
+<div class="outline-text-3" id="text-2-5">
+<p>
+要么把条件队列的等待和通知机制文档公开，要么就完全禁止子类化
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-6" class="outline-3">
+<h3 id="sec-2-6">封装条件队列</h3>
+<div class="outline-text-3" id="text-2-6">
+<p>
+使用私有的条件队列及其内置锁，使得客户端无法对条件队列对象进行加锁操作
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-3" class="outline-2">
+<h2 id="sec-3">显示的Condition对象</h2>
 </div>
 </div>
 <div id="postamble" class="status">
