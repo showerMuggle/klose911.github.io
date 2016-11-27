@@ -5,6 +5,7 @@
 #+HTML_LINK_HOME: jcip.html
 * 管理状态依赖
   状态依赖的类：某些方法只有满足特定的前置条件才能继续
+  
   状态依赖操作的模式:
   #+BEGIN_SRC
   申请锁  
@@ -391,15 +392,15 @@ BoundedBuffer具有更好的响应性, 更高的CPU效率，更少的上下文�
      }
    #+END_SRC
 ** 扩展AQS
-AQS的acquire/acquireShared, release/releaseShared会调用子类中带try开头的方法
+   AQS的acquire/acquireShared, release/releaseShared会调用子类中带try开头的方法
 + 支持独占的同步器需要扩展tryAcquire, tryRelease, isHeldExclusively等方法
 + 支持共享的同步器需要扩展tryAcquireShared, tryReleaseShared等方法
 子类通过getState,setState,compareAndSetState等方法来检查和更新状态，并通过try开头的扩展方法的返回值来通知AQS获取和释放同步器操作是否成功
 + tryAcquire/tryAcquireShared: 返回负值表示获取失败，返回0表示通过独占方式被获取，返回正值表示被共享方式被获取
 + tryRelease/tryReleaseShared: 如果释放操作使得其他线程可以执行获取操作，返回true
-
+  
 *** 一次开启闭锁
-   #+BEGIN_SRC java
+    #+BEGIN_SRC java
      @ThreadSafe
      public class OneShotLatch {
              //default sync state is 0,, it means the latch is closed
@@ -426,16 +427,16 @@ AQS的acquire/acquireShared, release/releaseShared会调用子类中带try开头
                      }
              }
      }
-   #+END_SRC
+    #+END_SRC
 + Sync类的状态：0表示关闭，１表示开启
 + OneShotLatch的await方法调用AQS的acquireSharedInterruptibly方法，最终再调用Sync.tryAcquireShared方法
 + OneShotLatch的signal方法调用AQS的releaseShared方法，最终再调用Sync.tryReleaseShared方法
 + OneShotLatch可以通过继承AQS实现，但是这样会导致破坏父类的同步协议的可能性。不应该直接扩展AQS,而是委托给私有类AQS子类实现
-
+  
 ** java同步包
-
+   
 *** ReentrantLock
-非公平版本的tryAcquire
+    非公平版本的tryAcquire
     #+BEGIN_SRC java
       protected boolean tryAcquire(int ignored) {
               final Thread current = Thread.currentThread();
@@ -452,9 +453,9 @@ AQS的acquire/acquireShared, release/releaseShared会调用子类中带try开头
               return false;
       }
     #+END_SRC
-同步状态用来保存锁获取操作的次数，并且还维护一个owner变量来标识当前线程所有者来区分是重入还是竞争。当一个线程尝试获取锁的时候，如果锁未被获取(状态为０),将用尝试更新锁的状态来表示已经被占有，由于可能状态被检查后立即更新，所以使用compareAndSetState来更新。如果锁已经被占据，则检查当前线程是否拥有者，如果拥有则设置状态为当前状态+1，反之则返回false表示获取失败
+    同步状态用来保存锁获取操作的次数，并且还维护一个owner变量来标识当前线程所有者来区分是重入还是竞争。当一个线程尝试获取锁的时候，如果锁未被获取(状态为０),将用尝试更新锁的状态来表示已经被占有，由于可能状态被检查后立即更新，所以使用compareAndSetState来更新。如果锁已经被占据，则检查当前线程是否拥有者，如果拥有则设置状态为当前状态+1，反之则返回false表示获取失败
 *** Semaphore & CountDownLatch
-Semaphore是共享获取
+    Semaphore是共享获取
     #+BEGIN_SRC java
       protected int tryAcquireShared(int acquires) {
               while (true) {
@@ -473,14 +474,14 @@ Semaphore是共享获取
               }
       }
     #+END_SRC
-Semaphore的状态用来表示当前可用许可的数量
+    Semaphore的状态用来表示当前可用许可的数量
 + tryAcquireShared首先检查是否有足够可用的许可，如果没有足够的许可，直接返回负值，如果有足够的许可，尝试更新状态，如果更新成功，则返回０或正值，如果没有更新成功则轮询再次尝试
 + tryReleaseShared尝试更新状态来增加当前可用的许可数量，更新成功直接返回true,更新失败同样轮询重新尝试
-
+  
 CountDownLatch实现类似Semaphore，它的状态用来表示计数值，每次释放的时候状态减去１，当计数值为0时候，可以获取
 *** FutureTask
-FutureTask的状态用来表示任务的状态，正在完成，已经完成，已经取消。FutureTask中存在一个指向当前计算线程的引用。当某个特定事件发生，计算线程执行结束，计算线程抛出中断异常等，更新FutureTask的状态，来释放阻塞
+    FutureTask的状态用来表示任务的状态，正在完成，已经完成，已经取消。FutureTask中存在一个指向当前计算线程的引用。当某个特定事件发生，计算线程执行结束，计算线程抛出中断异常等，更新FutureTask的状态，来释放阻塞
 *** ReentrantReadWriteLock
-ReentrantReadWriteLock虽然有读锁和写锁，但用一个32位整形变量来保存状态。一个16位用来表示写入锁的计数，另一个16用来表示读取锁的计数。读取锁使用共享的获取释放方法，写入锁使用独占的读取锁和写入锁方法
-
-AQS内部中存在一个CLH队列来表示等待的队列。当ReentrantReadWriteLock锁可用时，如果这个队列的第一个线程是写操作，则独占写入锁，反之在这个队列中第一个写线程之前的所有读线程都将获取读取锁
+    ReentrantReadWriteLock虽然有读锁和写锁，但用一个32位整形变量来保存状态。一个16位用来表示写入锁的计数，另一个16用来表示读取锁的计数。读取锁使用共享的获取释放方法，写入锁使用独占的读取锁和写入锁方法
+    
+    AQS内部中存在一个CLH队列来表示等待的队列。当ReentrantReadWriteLock锁可用时，如果这个队列的第一个线程是写操作，则独占写入锁，反之在这个队列中第一个写线程之前的所有读线程都将获取读取锁
