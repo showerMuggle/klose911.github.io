@@ -1,14 +1,15 @@
 #+TITLE: Solr
 #+HTML_HEAD: <link rel="stylesheet" type="text/css" href="css/main.css" />
-#+OPTIONS: num:nil timestamp:nil
-* 概念
+#+OPTIONS: num:nil timestamp:nil ^:nil
+* 基础
+** 概念
 + Solr: 开源的企业级搜索服务器，底层使用易于扩展和修改的Java来实现,服务器通信使用标准的HTTP和XML
 + Lucene: 基于Java的全文信息检索工具包，它不是一个完整的搜索应用程序，只是为你的应用程序提供索引和搜索功能
 Solr依存于Lucene，Lucene是Solr的底层库,　Solr是Lucene的企业化应用服务器
 #+CAPTION: Solr架构图
 #+ATTR_HTML: image :width 1000px 
-[[./pic/solr.png]]
-** Solr特性
+[[./pic/solr.png]]    
+** 特性
 1. 高级的全文搜索功能
 2. 专为高通量的网络流量进行的优化
 3. 基于开放接口（XML和HTTP）的标准
@@ -17,18 +18,18 @@ Solr依存于Lucene，Lucene是Solr的底层库,　Solr是Lucene的企业化应�
 6. 使用XML配置达到灵活性和适配性
 7. 可扩展的插件体系
    
-* Solr基础 
+** 原理 
 + 在Solr和Lucene中，使用一个或多个Document来构建索引
 + Document包括一个或多个Field
-+ Field包括名称、内容以及告诉Solr如何处理内容的元数据 
-  
++ Field包括名称、内容以及告诉Solr如何处理内容的元数据   
 #+CAPTION: Field类别
 #+ATTR_HTML: :border 1 :rules all :frame boader
 | 属性         | 描述                                                                         |
 | Index Field  | 可以进行搜索和排序，还可以运行Solr分析过程，此过程可修改内容以改进或更改结果 |
 | Stored Field | 内容保存在索引中。这对于检索和醒目显示内容很有用，但对于实际搜索则不是必需的 |
 
-** schema配置
+* 配置 
+** schema
 *** types 
     定义了 Solr如何处理Field, 添加到索引中的xml文件属性中的类型，如int、text、date等
     
@@ -64,7 +65,7 @@ Solr依存于Lucene，Lucene是Solr的底层库,　Solr是Lucene的企业化应�
     | type             | 当前分词用用于的操作: index代表生成索引时使用的分词器, query代码在查询时使用的分词器            |
     | tokenizer        | 分词器类                                                                                        |
     | filter           | 分词后应用的过滤器, 过滤器调用顺序和配置相同                                                    |
-*** fileds
+*** fields
     添加到索引文件中出现的属性名称，而声明类型就需要用到上面的types
 1. field: 固定的字段设置
 #+BEGIN_SRC nxml
@@ -100,12 +101,12 @@ Solr依存于Lucene，Lucene是Solr的底层库,　Solr是Lucene的企业化应�
 | compressed           | 字段是压缩的。这可能导致索引和搜索变慢，但会减少存储空间，只有StrField和TextField是可以压缩，这通常适合字段的长度超过200个字符。 |
 | multiValued          | 字段多于一个值的时候，可设置为true。                                                                                             |
 | positionIncrementGap | 和multiValued一起使用，设置多个值之间的虚拟空白的数量                                                                            |
-*** 其他配置
+*** 其他
 1. uniqueKey: 唯一键，配置的是上面出现的fileds，一般是id、url等不重复的。在更新、删除的时候可以用到
 2. defaultSearchField: 默认搜索属性，如q=solr就是默认的搜索那个字段
-3. solrQueryParser: 查询转换模式，是并且还是或者（AND/OR必须大写）
+3. solrQueryParser: 查询转换模式，是AND还是OR
    
-** solr配置
+** solr
 *** index
     #+CAPTION: 索引配置
     #+ATTR_HTML: :border 1 :rules all :frame boader
@@ -131,8 +132,9 @@ Solr依存于Lucene，Lucene是Solr的底层库,　Solr是Lucene的企业化应�
     | listener                 | 选项定义 newSearcher 和 firstSearcher 事件，您可以使用这些事件来指定实例化新搜索程序或第一个搜索程序时应该执行哪些查询。如果应用程序期望请求某些特定的查询，那么在创建新搜索程序或第一个搜索>程序时就应该反注释这些部分并执行适当的查询。                                                                                     |
     | useColdSearcher          | 是否使用冷搜索,为false时使用自热后的searcher                                                                                                                                                                                                                                                                                  |
     | maxWarmingSearchers      | 最大自热searcher数量                                                                                                                                                                                                                                                                                                          |
-** 中文分词器　
-* Solr使用 
+** 中文分词器
+   　
+* 使用 
 ** 维护索引
 *** 增加索引 
     Solr在add文档时, 如果文档不存在就直接添加,如果文档存在就删除后添加,这也就是修改功能了. 判断文档是否存在的依据是定义好的uniqueKey字段
@@ -159,6 +161,171 @@ Solr依存于Lucene，Lucene是Solr的底层库,　Solr是Lucene的企业化应�
   #+END_SRC
 *** 优化索引
 ** 查询索引
-   
-   
-   
+*** 直接URL查询
+    collection1的SolrCore中所有内容用xml格式返回并且有缩进
+    #+BEGIN_SRC html
+     http://localhost:8983/solr/collection1/select?q=*%3A*&wt=xml&indent=true
+    #+END_SRC
+    
+    返回结果中的doc就是一个文档,在doc里面的就是在schema.xml中定义的各个字段
+    #+BEGIN_SRC nxml
+     <response>
+       <lst name="responseHeader">
+         <int name="status">0</int>
+         <int name="QTime">1</int>
+         <lst name="params">
+           <str name="q">*:*</str>
+           <str name="indent">true</str>
+           <str name="wt">xml</str>
+         </lst>
+       </lst>
+       <result name="response" numFound="32" start="0">
+         <doc>
+           <str name="id">GB18030TEST</str>
+           <str name="name">Test with some GB18030 encoded characters</str>
+           <arr name="features">
+             <str>No accents here</str>
+             <str>这是一个功能</str>
+             <str>This is a feature (translated)</str>
+             <str>这份文件是很有光泽</str>
+             <str>This document is very shiny (translated)</str>
+           </arr>
+           <float name="price">0.0</float>
+           <str name="price_c">0,USD</str>
+           <bool name="inStock">true</bool>
+           <long name="_version_">1551530971591868416</long>
+         </doc>
+         <doc>
+           <str name="id">SP2514N</str>
+           <str name="name">
+             Samsung SpinPoint P120 SP2514N - hard drive - 250 GB - ATA-133
+           </str>
+           <str name="manu">Samsung Electronics Co. Ltd.</str>
+           <str name="manu_id_s">samsung</str>
+           <arr name="cat">
+             <str>electronics</str>
+             <str>hard drive</str>
+           </arr>
+           <arr name="features">
+             <str>7200RPM, 8MB cache, IDE Ultra ATA-133</str>
+             <str>
+               NoiseGuard, SilentSeek technology, Fluid Dynamic Bearing (FDB) motor
+             </str>
+           </arr>
+           <float name="price">92.0</float>
+           <str name="price_c">92,USD</str>
+           <int name="popularity">6</int>
+           <bool name="inStock">true</bool>
+           <date name="manufacturedate_dt">2006-02-13T15:26:37Z</date>
+           <str name="store">35.0752,-97.032</str>
+           <long name="_version_">1551530971597111296</long>
+         </doc>
+　　　　　...
+       </result>
+     </response>
+    #+END_SRC
+*** 使用java查询
+    #+BEGIN_SRC java
+      SolrQuery query = new SolrQuery();
+      query.set("q","*.*");
+      QueryResponse rsp =server.query(query);
+      SolrDocumentList list = rsp.getResults();
+    #+END_SRC
+    遍历返回结果
+    #+BEGIN_SRC java
+  for (int i = 0; i < list.size(); i++) {
+          SolrDocument sd = list.get(i);
+          String id = (String) sd.getFieldValue("id");
+          System.out.println(id);
+  }
+    #+END_SRC
+*** 查询参数 
+    #+CAPTION: 查询参数
+    #+ATTR_HTML: :border 1 :rules all :frame boader
+| 名称         | 描述                                                                                  | 示例                                                                                          |
+| q            | 查询字符串，必须的                                                                    | q=mm                                                                                          |
+| fq           | filter query, 利用Filter Query Cache，提高检索性能。在q查询符合结果中同时是fq查询符合 | q=mm&fq=dateTime:[20081001 TO 20091031]，找关键字mm，并且dateTime是20081001到20091031之间的   |
+| fl           | field list, 指定返回结果字段                                                          | 以空格“ ”或逗号“,”分隔                                                                        |
+| start        | 用于分页定义结果起始记录数                                                            | 默认为0                                                                                       |
+| rows         | 用于分页定义结果每页返回记录数                                                        | 默认为10                                                                                      |
+| sort         | 排序，sort=<field name>+<desc/asc>[,<field name>+<desc/asc>]                          | （inStock desc, price asc）先 “inStock” 降序, 再 “price” 升序                                 |
+| df           | 默认的查询字段                                                                        |                                                                                               |
+| q.op         | 覆盖schema.xml的defaultOperator（有空格时用"AND"还是用"OR"操作逻辑）                  |                                                                                               |
+| wt           | writer type, 指定查询输出结构格式，默认为“xml”                                        | 在solrconfig.xml中定义了查询输出格式：xml、json、python、ruby、php、phps、custom              |
+| qt           | query type，指定查询使用的Query Handler                                               | 默认为“standard”                                                                              |
+| explainOther | 当debugQuery=true时，显示其他的查询说明                                               |                                                                                               |
+| defType      | 查询解析器名称                                                                        |                                                                                               |
+| timeAllowed  | 查询超时时间                                                                          |                                                                                               |
+| omitHeader   | 是否忽略查询结果返回头信息                                                            | 默认为“false”                                                                                 |
+| indent       | 返回的结果是否缩进                                                                    | 默认关闭，用 indent=true 开启，一般调试用                                                     |
+| version      | 查询语法的版本                                                                        | 建议不使用                                                                                    |
+| debugQuery   | 返回结果是否显示Debug信息                                                             |                                                                                               |
+*** 查询语法
+**** 匹配所有文档
+q=*:* 
+**** 强制、阻止和可选查询
++ Mandatory： +make +up +kiss
++ prohibited：+make +up -kiss
++ optional:   +make +up kiss
+**** 布尔操作
+AND、OR和NOT必须大写
++ make AND up ＝ +make +up，AND左右两边的操作都是mandatory
++ make || up ＝ make OR up，OR左右两边的操作都是optional
++ +make +up NOT kiss ＝ +make +up –kiss
++ make AND up OR french AND Kiss，错误！因为AND两边的操作都是mandatory的。
+**** 子表达式查询
+(make AND up) OR (french AND Kiss)
+**** 子表达式查询中阻止查询
+make (-up *:*)查询make或者不包括up的结果
+**** 通配符查询
++ 通配符？和*：“*”表示匹配任意字符；“？”表示匹配出现的位置。示例：ma?*（ma后面的一个位置匹配），ma??*(ma后面两个位置都匹配)
++ 查询字符必须要小写:+Ma +be**可以搜索到结果,+Ma +Be**没有搜索结果
++ 查询速度较慢，尤其是通配符在首位：首先需要迭代查询字段中的每个term，判断是否匹配；其次匹配上的term被加到内部的查询，当terms数量达到1024的时候，查询会失败
++ Solr中默认通配符不能出现在首位（可以修改QueryParser，设置setAllowLeadingWildcard为true）
+**** 模糊查询 
+通过对查询的字段进行重新插入、删除和转换来取得得分较高的查询解决（由Levenstein Distance Algorithm算法支持）
++ 一般模糊查询：示例：make-believ~
++ 门槛模糊查询：对模糊查询可以设置查询门槛，门槛是0~1之间的数值，门槛越高表面相似度越高。示例：make-believ~0.5、make-believ~0.8、make-believ~0.9
+**** 范围查询
+Lucene支持对数字、日期甚至文本的范围查询。结束的范围可以使用“*”通配符
++ 日期范围（ISO-8601） aBeginDate:[ 1990-01-01T00:00:00.000Z TO 1999-12-31T24:59:99.999Z]
++ 数字 salary:[2000 TO *]
++ 文本 entryNm:[a TO a]
+**** 日期匹配
+YEAR, MONTH, DAY, DATE (DAY) HOUR, MINUTE, SECOND, MILLISECOND, and MILLI (MILLISECOND)可以被标志成日期
++ rEventDate:[* TO NOW-2YEAR]：到2年前为止
++ rEventDate:[* TO NOW/DAY-2YEAR]：到2年前前一天为止
+*** 函数查询 
+利用numeric字段的值或者与字段相关的的某个特定的值的函数，来对文档进行评分
+**** 函数查询方法
+1. 使用FunctionQParserPlugin：q={!func}log(foo)
+2. 使用“_val_”内嵌方法：内嵌在正常的solr查询表达式中，将函数查询写在q这个参数中，使用“_val_”将函数与其他的查询加以区别。比如entryNm:make　&& _val_:ord(entryNm)
+3. 使用dismax中的bf参数：明确为函数查询的参数，dismax中的bf（boost function）这个参数。注意：bf这个参数是可以接受多个函数查询的，之间用空格隔开，还可以带上权重。所以当使用bf这个参数的时候，必须保证单个函数中是没有空格出现的，不然程序有可能会以为是两个函数。比如q=dismax&bf="ord(popularity)^0.5 recip(rord(price),1,1000,1000)^0.3　
+**** 函数格式
+诸如sum(a,b)
+**** 可用函数
+    #+CAPTION: 查询函数列表
+    #+ATTR_HTML: :border 1 :rules all :frame boader
+| 函数名     | 作用                                                                                                                                                               | 举例                                                                                                                                                                                                                                                       |
+| constant   | 支持有小数点的常量                                                                                                                                                 | SolrQuerySyntax:_val_:1.5                                                                                                                                                                                                                                  |
+| fieldvalue | 返回numeric field的值，字段必须是indexd的，非multiValued                                                                                                           | 该字段的名字。如果这个字段中没有这样的值，那么将会返回0                                                                                                                                                                                                    |
+| ord        | 返回要查询的特定的字段值在字典排列顺序中的排名。必须是非multiValued的,当没有值存在的时候，将返回0                                                                  | 某个特定的字段只有三个值，“apple”、“banana”、“pear”，那么ord（“apple”）=1，ord（“banana”）=2，ord（“pear”）=3。需要注意的是，ord（）这个函数，依赖于值在索引中的位置，所以当有文档被删除、或者添加的时候，ord的值就会发生变化                              |
+| rord       | 返回与ord相对应的倒排序的排名                                                                                                                                      | rord(myIndexedField)                                                                                                                                                                                                                                       |
+| sum        | 加法                                                                                                                                                               | sum(x,1), sum(x,y),sum(sqrt(x),log(y),z,0.5)                                                                                                                                                                                                               |
+| product    | 乘积                                                                                                                                                               | product(x,2),product(x,y)                                                                                                                                                                                                                                  |
+| div        | div(x,y)表示x除以y的值                                                                                                                                             | div（1,x）,div(sum(x,100),max(y,1))                                                                                                                                                                                                                        |
+| pow        | 幂值                                                                                                                                                               | pow(x,0.5) 表示开方pow(x,log(y))                                                                                                                                                                                                                           |
+| abs        | 绝对值                                                                                                                                                             | 格式：abs(-5), abs(x)                                                                                                                                                                                                                                      |
+| log        | 基数为10的对数                                                                                                                                                     | log(x), log(sum(x,100))                                                                                                                                                                                                                                    |
+| sqrt       | 平方根                                                                                                                                                             | sqrt（2),sqrt(sum(x,100))                                                                                                                                                                                                                                  |
+| map        | 如果 x>=min,且x<=max,那么map(x,min,max,target)=target, 反之map(x,min,max,target)=x                                                                                 | map(x,0,0,1)                                                                                                                                                                                                                                               |
+| scale      | scale(x,minTarget,maxTarget)将会把x的值限制在[minTarget,maxTarget]范围内                                                                                           |                                                                                                                                                                                                                                                            |
+| query      | query(subquery,default)返回给定subquery的分数，如果subquery与文档不匹配，那么将会返回默认值。任何的查询类型都 是受支持的, 可以通过引用的方式，也可以直接指定查询串 | q=product(popularity, query({!dismax v='solr rocks'}) 将会返回popularity和通过dismax查询得到的分数的乘积, q=product(popularity, query($qq)&qq={!dismax}solr rocks使用引用的方式, q=product(popularity, query($qq,0.1)&qq={!dismax}solr rocks加了一个默认值 |
+| linear     | linear(x,m,c)表示 m*x+c ,其中m和c都是常量，x是一个变量也可以是一个函数                                                                                             | linear(x,2,4)=2*x+4                                                                                                                                                                                                                                        |
+| recip      | recip(x,m,a,b)=a/(m*x+b)其中，m、a、b是常量，x是变量或者一个函数。当a=b，并且x>=0的时候，这个函数的最大值是1，值的大小随着x的增大而减小                            | recip(rord(creationDate),1,1000,1000)                                                                                                                                                                                                                      |
+| max        | max(x,c)将会返回一个函数和一个常量之间的最大值                                                                                                                     | max(myfield,0)                                                                                                                                                                                                                                             |
+**** 注意事项
++ 用于函数查询的field必须是被索引的
++ 字段不可以是多值的（multi-value）
+
+*** 高亮显示
