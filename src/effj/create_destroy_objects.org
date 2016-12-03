@@ -271,5 +271,130 @@ cocaCola对象不可变，同样具有很好的可读性
 * 使用private构造器来禁止用户显式创建对象
 私有构造器可以禁止用户创建对像，副作用也禁止用户继承这个类
 * 避免创建不必要的对象
+** 重用不可变对象
+  #+BEGIN_SRC java
+    // DON'T DO THIS!
+    String s = new String("stringette");
+  #+END_SRC
+
+  #+BEGIN_SRC java
+    //improved version
+    String s = "stringette";
+  #+END_SRC
+** 缓存常量
+  #+BEGIN_SRC java
+    public class Person {
+            private final Date birthDate;
+            // DON'T DO THIS!
+            public boolean isBabyBoomer() {
+    // Unnecessary allocation of expensive object
+                    Calendar gmtCal =
+                            Calendar.getInstance(TimeZone.getTimeZone("GMT"));
+                    gmtCal.set(1946, Calendar.JANUARY, 1, 0, 0, 0);
+                    Date boomStart = gmtCal.getTime();
+                    gmtCal.set(1965, Calendar.JANUARY, 1, 0, 0, 0);
+                    Date boomEnd = gmtCal.getTime();
+                    return birthDate.compareTo(boomStart) >= 0 &&
+                            birthDate.compareTo(boomEnd) < 0;
+            }
+    }
+  #+END_SRC
+
+
+#+BEGIN_SRC java
+  public class Person {
+          private final Date birthDate;
+  /**
+   ,* The starting and ending dates of the baby boom.
+   ,*/
+          private static final Date BOOM_START;
+          private static final Date BOOM_END;
+          static {
+                  Calendar gmtCal =
+                          Calendar.getInstance(TimeZone.getTimeZone("GMT"));
+                  gmtCal.set(1946, Calendar.JANUARY, 1, 0, 0, 0);
+                  BOOM_START = gmtCal.getTime();
+                  gmtCal.set(1965, Calendar.JANUARY, 1, 0, 0, 0);
+                  BOOM_END = gmtCal.getTime();
+          }
+          public boolean isBabyBoomer() {
+                  return birthDate.compareTo(BOOM_START) >= 0 &&
+                          birthDate.compareTo(BOOM_END) < 0;
+          }
+  }
+#+END_SRC
+** 优先使用基本类型，而不是装箱基本类型
+  #+BEGIN_SRC java
+    // Hideously slow program! Can you spot the object creation?
+    public static void main(String[] args) {
+            Long sum = 0L;
+            for (long i = 0; i < Integer.MAX_VALUE; i++) {
+                    sum += i;
+            }
+            System.out.println(sum);
+    }
+  #+END_SRC
+
 * 消除过时的对象引用
+** 手动管理内存中请当心内存泄漏
+pop完之后元素的引用并没有被设置为null, 这会导致无法被垃圾回收产生内存泄漏
+  #+BEGIN_SRC java
+    // Can you spot the "memory leak"?
+    public class Stack {
+            private Object[] elements;
+            private int size = 0;
+            private static final int DEFAULT_INITIAL_CAPACITY = 16;
+
+            public Stack() {
+                    elements = new Object[DEFAULT_INITIAL_CAPACITY];
+            }
+
+            public void push(Object e) {
+                    ensureCapacity();
+                    elements[size++] = e;
+            }
+
+            public Object pop() {
+                    if (size == 0)
+                            throw new EmptyStackException();
+                    return elements[--size];
+            }
+    /**
+     ,* Ensure space for at least one more element, roughly
+     ,* doubling the capacity each time the array needs to grow.
+     ,*/
+            private void ensureCapacity() {
+                    if (elements.length == size)
+                            elements = Arrays.copyOf(elements, 2 * size + 1);
+            }
+    }
+  #+END_SRC
+修复
+#+BEGIN_SRC java
+  public Object pop() {
+          if (size == 0)
+                  throw new EmptyStackException();
+          Object result = elements[--size];
+          elements[size] = null; // Eliminate obsolete reference
+          return result;
+  }
+#+END_SRC
+** 缓存　
+对象被放置到缓存中会被遗忘
+1. 使用WeakHashMap
+2. 使用过期时间
+
+** 监听器和其他回调
+使用weak reference
+
 * 避免调用finialize方法
+** 缺陷
+1. finalize方法的调用时间不确定，不要把关键的逻辑放在finalize中
+2. finalize方法的效率很差
+
+** 用途
+1. 额外的保护网
+2. 回收native资源　
+即使手动编写了finialize方法，请确保调用super.finialize，并记录相关log
+
+[[file:common_method.org][Next:通用方法]]　[[file:effj.org][Up:目录]]

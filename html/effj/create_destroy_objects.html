@@ -167,9 +167,26 @@ for the JavaScript code in this tag.
 </ul>
 </li>
 <li><a href="#sec-4">使用private构造器来禁止用户显式创建对象</a></li>
-<li><a href="#sec-5">避免创建不必要的对象</a></li>
-<li><a href="#sec-6">消除过时的对象引用</a></li>
-<li><a href="#sec-7">避免调用finialize方法</a></li>
+<li><a href="#sec-5">避免创建不必要的对象</a>
+<ul>
+<li><a href="#sec-5-1">重用不可变对象</a></li>
+<li><a href="#sec-5-2">缓存常量</a></li>
+<li><a href="#sec-5-3">优先使用基本类型，而不是装箱基本类型</a></li>
+</ul>
+</li>
+<li><a href="#sec-6">消除过时的对象引用</a>
+<ul>
+<li><a href="#sec-6-1">手动管理内存中请当心内存泄漏</a></li>
+<li><a href="#sec-6-2">缓存　</a></li>
+<li><a href="#sec-6-3">监听器和其他回调</a></li>
+</ul>
+</li>
+<li><a href="#sec-7">避免调用finialize方法</a>
+<ul>
+<li><a href="#sec-7-1">缺陷</a></li>
+<li><a href="#sec-7-2">用途</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
@@ -540,12 +557,210 @@ cocaCola对象不可变，同样具有很好的可读性
 </div>
 <div id="outline-container-sec-5" class="outline-2">
 <h2 id="sec-5">避免创建不必要的对象</h2>
+<div class="outline-text-2" id="text-5">
+</div><div id="outline-container-sec-5-1" class="outline-3">
+<h3 id="sec-5-1">重用不可变对象</h3>
+<div class="outline-text-3" id="text-5-1">
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">DON'T DO THIS!</span>
+<span style="color: #98fb98;">String</span> <span style="color: #eedd82;">s</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">String</span>(<span style="color: #ffa07a;">"stringette"</span>);
+</pre>
 </div>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ff4500;">//</span><span style="color: #ff4500;">improved version</span>
+<span style="color: #98fb98;">String</span> <span style="color: #eedd82;">s</span> = <span style="color: #ffa07a;">"stringette"</span>;
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-sec-5-2" class="outline-3">
+<h3 id="sec-5-2">缓存常量</h3>
+<div class="outline-text-3" id="text-5-2">
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">Person</span> {
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">Date</span> <span style="color: #eedd82;">birthDate</span>;
+    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">DON'T DO THIS!</span>
+    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">boolean</span> <span style="color: #87cefa;">isBabyBoomer</span>() {
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">Unnecessary allocation of expensive object</span>
+        <span style="color: #98fb98;">Calendar</span> <span style="color: #eedd82;">gmtCal</span> =
+            Calendar.getInstance(TimeZone.getTimeZone(<span style="color: #ffa07a;">"GMT"</span>));
+        gmtCal.set(1946, <span style="color: #7fffd4;">Calendar</span>.JANUARY, 1, 0, 0, 0);
+        <span style="color: #98fb98;">Date</span> <span style="color: #eedd82;">boomStart</span> = gmtCal.getTime();
+        gmtCal.set(1965, <span style="color: #7fffd4;">Calendar</span>.JANUARY, 1, 0, 0, 0);
+        <span style="color: #98fb98;">Date</span> <span style="color: #eedd82;">boomEnd</span> = gmtCal.getTime();
+        <span style="color: #00ffff;">return</span> birthDate.compareTo(boomStart) &gt;= 0 &amp;&amp;
+            birthDate.compareTo(boomEnd) &lt; 0;
+    }
+}
+</pre>
+</div>
+
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">Person</span> {
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">Date</span> <span style="color: #eedd82;">birthDate</span>;
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;"> * The starting and ending dates of the baby boom.</span>
+<span style="color: #ffa07a;"> */</span>
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">Date</span> <span style="color: #eedd82;">BOOM_START</span>;
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">Date</span> <span style="color: #eedd82;">BOOM_END</span>;
+    <span style="color: #00ffff;">static</span> {
+        <span style="color: #98fb98;">Calendar</span> <span style="color: #eedd82;">gmtCal</span> =
+            Calendar.getInstance(TimeZone.getTimeZone(<span style="color: #ffa07a;">"GMT"</span>));
+        gmtCal.set(1946, <span style="color: #7fffd4;">Calendar</span>.JANUARY, 1, 0, 0, 0);
+        BOOM_START = gmtCal.getTime();
+        gmtCal.set(1965, <span style="color: #7fffd4;">Calendar</span>.JANUARY, 1, 0, 0, 0);
+        BOOM_END = gmtCal.getTime();
+    }
+    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">boolean</span> <span style="color: #87cefa;">isBabyBoomer</span>() {
+        <span style="color: #00ffff;">return</span> birthDate.compareTo(BOOM_START) &gt;= 0 &amp;&amp;
+            birthDate.compareTo(BOOM_END) &lt; 0;
+    }
+}
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-sec-5-3" class="outline-3">
+<h3 id="sec-5-3">优先使用基本类型，而不是装箱基本类型</h3>
+<div class="outline-text-3" id="text-5-3">
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">Hideously slow program! Can you spot the object creation?</span>
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">String</span>[] <span style="color: #eedd82;">args</span>) {
+    <span style="color: #98fb98;">Long</span> <span style="color: #eedd82;">sum</span> = 0L;
+    <span style="color: #00ffff;">for</span> (<span style="color: #98fb98;">long</span> <span style="color: #eedd82;">i</span> = 0; i &lt; <span style="color: #7fffd4;">Integer</span>.<span style="color: #98fb98;">MAX_VALUE</span>; i++) {
+        sum += i;
+    }
+    System.out.println(sum);
+}
+</pre>
+</div>
+</div>
+</div>
+</div>
+
 <div id="outline-container-sec-6" class="outline-2">
 <h2 id="sec-6">消除过时的对象引用</h2>
+<div class="outline-text-2" id="text-6">
+</div><div id="outline-container-sec-6-1" class="outline-3">
+<h3 id="sec-6-1">手动管理内存中请当心内存泄漏</h3>
+<div class="outline-text-3" id="text-6-1">
+<p>
+pop完之后元素的引用并没有被设置为null, 这会导致无法被垃圾回收产生内存泄漏
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">Can you spot the "memory leak"?</span>
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">Stack</span> {
+    <span style="color: #00ffff;">private</span> <span style="color: #98fb98;">Object</span>[] <span style="color: #eedd82;">elements</span>;
+    <span style="color: #00ffff;">private</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">size</span> = 0;
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">DEFAULT_INITIAL_CAPACITY</span> = 16;
+
+    <span style="color: #00ffff;">public</span> <span style="color: #87cefa;">Stack</span>() {
+        elements = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">Object</span>[DEFAULT_INITIAL_CAPACITY];
+    }
+
+    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">push</span>(<span style="color: #98fb98;">Object</span> <span style="color: #eedd82;">e</span>) {
+        ensureCapacity();
+        elements[size++] = e;
+    }
+
+    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">Object</span> <span style="color: #87cefa;">pop</span>() {
+        <span style="color: #00ffff;">if</span> (size == 0)
+            <span style="color: #00ffff;">throw</span> <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">EmptyStackException</span>();
+        <span style="color: #00ffff;">return</span> elements[--size];
+    }
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;"> * Ensure space for at least one more element, roughly</span>
+<span style="color: #ffa07a;"> * doubling the capacity each time the array needs to grow.</span>
+<span style="color: #ffa07a;"> */</span>
+    <span style="color: #00ffff;">private</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">ensureCapacity</span>() {
+        <span style="color: #00ffff;">if</span> (elements.length == size)
+            elements = Arrays.copyOf(elements, 2 * size + 1);
+    }
+}
+</pre>
 </div>
+<p>
+修复
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #98fb98;">Object</span> <span style="color: #87cefa;">pop</span>() {
+    <span style="color: #00ffff;">if</span> (size == 0)
+        <span style="color: #00ffff;">throw</span> <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">EmptyStackException</span>();
+    <span style="color: #98fb98;">Object</span> <span style="color: #eedd82;">result</span> = elements[--size];
+    elements[size] = <span style="color: #7fffd4;">null</span>; <span style="color: #ff4500;">// </span><span style="color: #ff4500;">Eliminate obsolete reference</span>
+    <span style="color: #00ffff;">return</span> result;
+}
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-sec-6-2" class="outline-3">
+<h3 id="sec-6-2">缓存　</h3>
+<div class="outline-text-3" id="text-6-2">
+<p>
+对象被放置到缓存中会被遗忘
+</p>
+<ol class="org-ol">
+<li>使用WeakHashMap
+</li>
+<li>使用过期时间
+</li>
+</ol>
+</div>
+</div>
+
+<div id="outline-container-sec-6-3" class="outline-3">
+<h3 id="sec-6-3">监听器和其他回调</h3>
+<div class="outline-text-3" id="text-6-3">
+<p>
+使用weak reference
+</p>
+</div>
+</div>
+</div>
+
 <div id="outline-container-sec-7" class="outline-2">
 <h2 id="sec-7">避免调用finialize方法</h2>
+<div class="outline-text-2" id="text-7">
+</div><div id="outline-container-sec-7-1" class="outline-3">
+<h3 id="sec-7-1">缺陷</h3>
+<div class="outline-text-3" id="text-7-1">
+<ol class="org-ol">
+<li>finalize方法的调用时间不确定，不要把关键的逻辑放在finalize中
+</li>
+<li>finalize方法的效率很差
+</li>
+</ol>
+</div>
+</div>
+
+<div id="outline-container-sec-7-2" class="outline-3">
+<h3 id="sec-7-2">用途</h3>
+<div class="outline-text-3" id="text-7-2">
+<ol class="org-ol">
+<li>额外的保护网
+</li>
+<li>回收native资源　
+</li>
+</ol>
+<p>
+即使手动编写了finialize方法，请确保调用super.finialize，并记录相关log
+</p>
+
+<p>
+<a href="common_method.html">Next:通用方法</a>　<a href="effj.html">Up:目录</a>
+</p>
+</div>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
