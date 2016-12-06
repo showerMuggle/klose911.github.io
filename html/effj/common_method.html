@@ -146,7 +146,13 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#sec-1">覆盖equals方法请遵守通用规定</a></li>
+<li><a href="#sec-1">覆盖equals方法请遵守通用规定</a>
+<ul>
+<li><a href="#sec-1-1">不需要覆盖equals</a></li>
+<li><a href="#sec-1-2">覆盖equals的通用约定</a></li>
+<li><a href="#sec-1-3">实现高质量equals方法的诀窍</a></li>
+</ul>
+</li>
 <li><a href="#sec-2">覆盖equals方法时永远覆盖hashcode方法</a></li>
 <li><a href="#sec-3">永远覆盖toString方法</a></li>
 <li><a href="#sec-4">谨慎覆盖clone方法</a></li>
@@ -156,13 +162,112 @@ for the JavaScript code in this tag.
 </div>
 <div id="outline-container-sec-1" class="outline-2">
 <h2 id="sec-1">覆盖equals方法请遵守通用规定</h2>
+<div class="outline-text-2" id="text-1">
+</div><div id="outline-container-sec-1-1" class="outline-3">
+<h3 id="sec-1-1">不需要覆盖equals</h3>
+<div class="outline-text-3" id="text-1-1">
+<ul class="org-ul">
+<li>类的每个实例本质上都是唯一的，不变的
+</li>
+<li>不用关心类是否提供了“逻辑相等（logical equality）“
+</li>
+<li>超类已经覆盖了equals，从超类继承过来的行为对于子类也是合适的。
+</li>
+<li>类是私有的或包级私有的，可以确定他的equals方法永远不会被调用
+</li>
+</ul>
 </div>
+</div>
+
+<div id="outline-container-sec-1-2" class="outline-3">
+<h3 id="sec-1-2">覆盖equals的通用约定</h3>
+<div class="outline-text-3" id="text-1-2">
+<p>
+如果类具有自己特有的“逻辑想等”概念，而且超类还没有覆盖equals以实现期望的行为，这时就需要覆盖equals方法。这通常属于“值类”的情形 
+</p>
+<ul class="org-ul">
+<li>自反性（reflexivity）：对于任何非空引用值 x，x.equals(x) 都应返回 true
+</li>
+<li>对称性（symmetry）：对于任何非空引用值 x 和 y，当且仅当 y.equals(x) 返回 true 时，x.equals(y) 才应返回 true
+</li>
+<li>传递性（transitivity）：对于任何非空引用值 x、y 和 z，如果 x.equals(y) 返回 true，并且 y.equals(z) 返回 true，那么 x.equals(z) 应返回 true
+</li>
+<li>一致性（consistency）：对于任何非空引用值 x 和 y，多次调用 x.equals(y) 始终返回 true 或始终返回 false，前提是对象上 equals 比较中所用的信息没有被修改
+</li>
+<li>非空性（Non-nullity）对于任何非空引用值 x，x.equals(null) 都应返回 false。
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-1-3" class="outline-3">
+<h3 id="sec-1-3">实现高质量equals方法的诀窍</h3>
+<div class="outline-text-3" id="text-1-3">
+<ol class="org-ol">
+<li>使用==操作符检查“参数是否为这个对象的引用”
+</li>
+<li>使用instanceof操作符检查“参数是否为正确的类型”
+</li>
+<li>把参数转换成正确的类型
+</li>
+<li>对于该类中的每个“关键”域，检查参数中的域是否与该对象中对应的域相匹配（为了获得最佳性能，应该先比较最有可能不一致的域，或者开销最低的域，最理想的情况是两个条件同时满足的域）
+</li>
+<li>当编写完equals方法后，应该问自己三个问题：它是否是对称的、传递的和一致的
+</li>
+<li>覆盖equals时总要覆盖hashCode
+</li>
+<li>不要企图让equals方法过于智能
+</li>
+<li>不要将equals声明中的Object对象替换为其他类型
+</li>
+</ol>
+</div>
+</div>
+</div>
+
 <div id="outline-container-sec-2" class="outline-2">
 <h2 id="sec-2">覆盖equals方法时永远覆盖hashcode方法</h2>
+<div class="outline-text-2" id="text-2">
+<p>
+在每个覆盖了equals方法的类中，也必须覆盖hashCode方法。如果不那样做的话，就会违反Object.hashCode的通用约定，从而导致该类无法结合所有基于散列的集合一起正常运作，这样的集合包括HashMap、HashSet和Hashtable
+</p>
+
+<p>
+正确的hashCode方法
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">A decent hashCode method - Page 48</span>
+<span style="color: #7fffd4;">@Override</span> <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">int</span> <span style="color: #87cefa;">hashCode</span>() {
+    <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">result</span> = 17;
+    result = 31  -  result + areaCode;
+    result = 31  -  result + prefix;
+    result = 31  -  result + lineNumber;
+    <span style="color: #00ffff;">return</span> result;
+}
+</pre>
 </div>
+<p>
+用移位和减法来代替乘法，可以得到更好的性能：31 - i == (i&lt;&lt;5)-i 
+</p>
+</div>
+</div>
+
 <div id="outline-container-sec-3" class="outline-2">
 <h2 id="sec-3">永远覆盖toString方法</h2>
+<div class="outline-text-2" id="text-3">
+<ul class="org-ul">
+<li>提供好的toString实现可以使类用起来更加舒适，当对象被传递给println、printf、字符串练操作符（+）以及assert或者被调试器打印出来时，toString方法会被自动调用
+</li>
+<li>toString方法应该返回对象中包含的所有值得关注的信息
+</li>
+<li>在文档中指定返回值的格式
+</li>
+</ul>
 </div>
+</div>
+
 <div id="outline-container-sec-4" class="outline-2">
 <h2 id="sec-4">谨慎覆盖clone方法</h2>
 </div>
