@@ -180,7 +180,14 @@ for the JavaScript code in this tag.
 </li>
 <li><a href="#sec-6">正确定义常量</a></li>
 <li><a href="#sec-7">不要使用标签类</a></li>
-<li><a href="#sec-8">用函数对象表达策略</a></li>
+<li><a href="#sec-8">用函数对象表达策略</a>
+<ul>
+<li><a href="#sec-8-1">函数对象</a></li>
+<li><a href="#sec-8-2">策略接口</a></li>
+<li><a href="#sec-8-3">内部匿名类</a></li>
+<li><a href="#sec-8-4">静态内部类</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
@@ -631,6 +638,124 @@ for the JavaScript code in this tag.
 
 <div id="outline-container-sec-8" class="outline-2">
 <h2 id="sec-8">用函数对象表达策略</h2>
+<div class="outline-text-2" id="text-8">
+<p>
+java没有提供函数指针，lambda表达式等方式来调用函数，而是使用“函数对象”来模拟函数指针
+</p>
+</div>
+<div id="outline-container-sec-8-1" class="outline-3">
+<h3 id="sec-8-1">函数对象</h3>
+<div class="outline-text-3" id="text-8-1">
+<p>
+通常情况下调用某个对象的方法是为了作用于这个对象。但是同样可以定义一个类，它有且仅有一个方法，这个方法是作用于传递给它的对象上，这种类就被称为“函数对象”
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">class</span> <span style="color: #98fb98;">StringLengthComparator</span>  { 
+    <span style="color: #00ffff;">private</span> <span style="color: #87cefa;">StringLengthComparator</span>() { }
+
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">StringLengthComparator</span> <span style="color: #eedd82;">INSTANCE</span> =
+        <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">StringLengthComparator</span>();
+
+    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">int</span> <span style="color: #87cefa;">compare</span>(<span style="color: #98fb98;">String</span> <span style="color: #eedd82;">s1</span>, <span style="color: #98fb98;">String</span> <span style="color: #eedd82;">s2</span>) {
+        <span style="color: #00ffff;">return</span> s1.length() - s2.length();
+    }
+}
+</pre>
+</div>
+<p>
+StringLengthComparator的对象引用就充当StringLengthComparator.compare这个方法的函数指针。换种说法StringLengthComparator是某种特定“字符串比较”策略的具体实现类
+</p>
+<ul class="org-ul">
+<li>函数对象应该是无状态的
+</li>
+<li>函数对象最好是单例的
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-8-2" class="outline-3">
+<h3 id="sec-8-2">策略接口</h3>
+<div class="outline-text-3" id="text-8-2">
+<p>
+提供给客户端调用的接口中需要一个类似函数指针的策略接口，而不是一个具体的函数对象类
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">Strategy interface</span>
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">interface</span> <span style="color: #98fb98;">Comparator</span>&lt;<span style="color: #98fb98;">T</span>&gt; {
+    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">int</span> <span style="color: #87cefa;">compare</span>(<span style="color: #98fb98;">T</span> <span style="color: #eedd82;">t1</span>, <span style="color: #98fb98;">T</span> <span style="color: #eedd82;">t2</span>);
+}
+</pre>
+</div>
+<p>
+客户端实现某种具体策略
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">class</span> <span style="color: #98fb98;">StringLengthComparator</span>  <span style="color: #00ffff;">implements</span> <span style="color: #98fb98;">Comparator</span>&lt;<span style="color: #98fb98;">String</span>&gt; { 
+    <span style="color: #00ffff;">private</span> <span style="color: #87cefa;">StringLengthComparator</span>() { }
+
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">StringLengthComparator</span> <span style="color: #eedd82;">INSTANCE</span> =
+        <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">StringLengthComparator</span>();
+
+    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">int</span> <span style="color: #87cefa;">compare</span>(<span style="color: #98fb98;">String</span> <span style="color: #eedd82;">s1</span>, <span style="color: #98fb98;">String</span> <span style="color: #eedd82;">s2</span>) {
+        <span style="color: #00ffff;">return</span> s1.length() - s2.length();
+    }
+}
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-sec-8-3" class="outline-3">
+<h3 id="sec-8-3">内部匿名类</h3>
+<div class="outline-text-3" id="text-8-3">
+<p>
+具体的策略类可以使用匿名内部类
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java">Arrays.sort(stringArray,<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">Comparator</span>&lt;<span style="color: #98fb98;">String</span>&gt;() {
+        <span style="color: #7fffd4;">@Override</span>
+        <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">int</span> <span style="color: #87cefa;">compare</span>(<span style="color: #98fb98;">String</span> <span style="color: #eedd82;">o1</span>, <span style="color: #98fb98;">String</span> <span style="color: #eedd82;">o2</span>) {
+            <span style="color: #00ffff;">return</span> 0;
+        }
+    });
+</pre>
+</div>
+<p>
+使用匿名类会导致每次调用都创建新的class对象和实例对象，如果频繁调用的话开销会比较大
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-8-4" class="outline-3">
+<h3 id="sec-8-4">静态内部类</h3>
+<div class="outline-text-3" id="text-8-4">
+<p>
+使用静态内部类来缓存频繁调用的具体策略对象，会有更好的性能
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">Exporting a concrete strategy</span>
+<span style="color: #00ffff;">class</span> <span style="color: #98fb98;">Host</span> {
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">StrLenCmp</span>
+        <span style="color: #00ffff;">implements</span> <span style="color: #98fb98;">Comparator</span>&lt;<span style="color: #98fb98;">String</span>&gt;, <span style="color: #98fb98;">Serializable</span> {
+        <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">int</span> <span style="color: #87cefa;">compare</span>(<span style="color: #98fb98;">String</span> <span style="color: #eedd82;">s1</span>, <span style="color: #98fb98;">String</span> <span style="color: #eedd82;">s2</span>) {
+            <span style="color: #00ffff;">return</span> s1.length() - s2.length();
+        }
+    }
+
+    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">Returned comparator is serializable</span>
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">Comparator</span>&lt;<span style="color: #98fb98;">String</span>&gt;
+        <span style="color: #eedd82;">STRING_LENGTH_COMPARATOR</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">StrLenCmp</span>();
+    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">Bulk of class omitted</span>
+}
+</pre>
+</div>
+</div>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">

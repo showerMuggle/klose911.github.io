@@ -278,3 +278,75 @@
   #+END_SRC
   
 * 用函数对象表达策略
+java没有提供函数指针，lambda表达式等方式来调用函数，而是使用“函数对象”来模拟函数指针
+** 函数对象
+通常情况下调用某个对象的方法是为了作用于这个对象。但是同样可以定义一个类，它有且仅有一个方法，这个方法是作用于传递给它的对象上，这种类就被称为“函数对象”
+#+BEGIN_SRC java
+  class StringLengthComparator  { 
+          private StringLengthComparator() { }
+
+          public static final StringLengthComparator INSTANCE =
+                  new StringLengthComparator();
+
+          public int compare(String s1, String s2) {
+                  return s1.length() - s2.length();
+          }
+  }
+#+END_SRC
+StringLengthComparator的对象引用就充当StringLengthComparator.compare这个方法的函数指针。换种说法StringLengthComparator是某种特定“字符串比较”策略的具体实现类
++ 函数对象应该是无状态的
++ 函数对象最好是单例的
+
+** 策略接口
+提供给客户端调用的接口中需要一个类似函数指针的策略接口，而不是一个具体的函数对象类
+   #+BEGIN_SRC java
+     // Strategy interface
+     public interface Comparator<T> {
+             public int compare(T t1, T t2);
+     }
+   #+END_SRC
+客户端实现某种具体策略
+#+BEGIN_SRC java
+    class StringLengthComparator  implements Comparator<String> { 
+            private StringLengthComparator() { }
+
+            public static final StringLengthComparator INSTANCE =
+                    new StringLengthComparator();
+
+            public int compare(String s1, String s2) {
+                    return s1.length() - s2.length();
+            }
+    }
+#+END_SRC
+** 内部匿名类
+具体的策略类可以使用匿名内部类
+#+BEGIN_SRC java
+  Arrays.sort(stringArray,new Comparator<String>() {
+                  @Override
+                  public int compare(String o1, String o2) {
+                          return 0;
+                  }
+          });
+#+END_SRC
+使用匿名类会导致每次调用都创建新的class对象和实例对象，如果频繁调用的话开销会比较大
+
+** 静态内部类
+使用静态内部类来缓存频繁调用的具体策略对象，会有更好的性能
+   #+BEGIN_SRC java
+     // Exporting a concrete strategy
+     class Host {
+             private static class StrLenCmp
+                     implements Comparator<String>, Serializable {
+                     public int compare(String s1, String s2) {
+                             return s1.length() - s2.length();
+                     }
+             }
+
+             // Returned comparator is serializable
+             public static final Comparator<String>
+                 STRING_LENGTH_COMPARATOR = new StrLenCmp();
+             // Bulk of class omitted
+     }
+   #+END_SRC
+
+* 优先考虑内部静态类
