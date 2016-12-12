@@ -5,5 +5,102 @@
 #+OPTIONS: num:nil timestamp:nil
 
 * 新代码不要再使用原生态类
+** 范型术语
+#+CAPTION: 范型术语
+#+ATTR_HTML: :border 1 :rules all :frame boader　
+| 术语             | 示例                             | 说明                                            |
+| 原生态类型       | List                             | 不带任何类型参数的List                          |
+| 参数化类型       | List<String>                     | 元素类型为String的List                          |
+| 实际类型参数     | String                           |                                                 |
+| 范型             | List<E>                          | 元素为E类型的List                               |
+| 无限制通配符类型 | List<?>                          | 元素为任意类型的List                            |
+| 有限制通配符类型 | List<? extends Number>           | 元素为任意类型但是继承Number类的List              |
+| 有限制类型参数   | List<E extends Number>           | 元素为某个继承Number类的List                       |
+| 递归类型限制     | List<T extends Comparable<T>>    | 元素为继承Comparable范型的List                 |
+| 范型方法         | static <E> List<E> asList(E[] a) | 参数：元素为Ｅ类型的数组，返回值：元素类型为E的List　   |
+| 类型令牌         | String.class                     |                                                 |
+
+** 范型的优势
++ 安全，提供了编译前检查
++ 方便，不用显示类型转换
+
+原生态类型唯一存在的目的：兼容性
+
+** List和List<Object>的区别
+原生态类型逃避了编译器类型检查
+   #+BEGIN_SRC java
+     public static void main(String[] args) {
+             List<String> strings = new ArrayList<String>();
+             // 使用原生态类型，只有在运行时候才会抛错
+             unsafeAdd(strings, new Integer(42));
+             String s = strings.get(0); // Compiler-generated cast
+     }
+
+     private static void unsafeAdd(List list, Object o) {
+             list.add(o);
+     }
+   #+END_SRC
+哪怕使用List<Object>都会进行编译期类型检查
+   #+BEGIN_SRC java
+     public static void main(String[] args) {
+             List<String> strings = new ArrayList<String>();
+     // unsafeAdd(List<Object>,Object) cannot be applied
+     // to (List<String>,Integer)
+     // unsafeAdd(strings, new Integer(42));
+             unsafeAdd(strings, new Integer(42));
+             String s = strings.get(0); // Compiler-generated cast
+     }
+
+     private static void unsafeAdd(List<Object> list, Object o) {
+             list.add(o);
+     }
+   #+END_SRC
+** 无限制通配符范型
+统计任意两个Set的相同元素
+   #+BEGIN_SRC java
+     // Use of raw type for unknown element type - don't do this!
+     static int numElementsInCommon(Set s1, Set s2) {
+             int result = 0;
+             for (Object o1 : s1)
+                     if (s2.contains(o1))
+                             result++;
+             return result;
+     }
+   #+END_SRC
+无限制通配符类型表示s1, s2可以存放任意类型的元素
+   #+BEGIN_SRC java
+     // Unbounded wildcard type - typesafe and flexible
+     static int numElementsInCommon(Set<?> s1, Set<?> s2) {
+             int result = 0;
+             for (Object o1 : s1)
+                     if (s2.contains(o1))
+                             result++;
+             return result;
+     }
+   #+END_SRC
+使用无限制通配符类型是为了安全：无法把任意非null的对象放入Collections<?>中，否则会有编译报错
+** 原生态类型的作用
+1. 类型令牌：List.class, String[].class, int.class是合法的，但是List<?>.class是非法的
+2. instance of: 运行期所有的范型标记会被去除，所以对于范型使用instance of是非法的
+
+推荐的做法：
+#+BEGIN_SRC java
+  // 为了使用instance of使用原生态类型
+  if (o instanceof Set) {
+          // 转换成无限制通配符类型
+          Set<?> m = (Set<?>) o;
+  //...  
+  }
+#+END_SRC
 
 * 消除非受检查警告
++ 要尽可能地消除每一个非受检警告，比如非受检强制转化警告、非受检方法调用警告、非受检普通数组创建警告，以及非受检转换警告
++ 如果无法消除警告，只有在可以证明引起警告的代码是类型安全的情况下用一个@SuppressWarnings("unchecked")注释来禁止这条警告
++ 始终在尽可能小的范围中使用SuppressWarnings注释
++ 每当使用SuppressWarnings注释时，都要添加一条注释，说明为什么这么做是安全的
+
+* List优先于数组
+
+* 优先考虑范型类型
+
+* 优先考虑范型方法

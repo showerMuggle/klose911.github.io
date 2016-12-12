@@ -146,18 +146,258 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#sec-1">新代码不要再使用原生态类</a></li>
+<li><a href="#sec-1">新代码不要再使用原生态类</a>
+<ul>
+<li><a href="#sec-1-1">范型术语</a></li>
+<li><a href="#sec-1-2">范型的优势</a></li>
+<li><a href="#sec-1-3">List和List&lt;Object&gt;的区别</a></li>
+<li><a href="#sec-1-4">无限制通配符范型</a></li>
+<li><a href="#sec-1-5">原生态类型的作用</a></li>
+</ul>
+</li>
 <li><a href="#sec-2">消除非受检查警告</a></li>
+<li><a href="#sec-3">List优先于数组</a></li>
+<li><a href="#sec-4">优先考虑范型类型</a></li>
+<li><a href="#sec-5">优先考虑范型方法</a></li>
 </ul>
 </div>
 </div>
 
 <div id="outline-container-sec-1" class="outline-2">
 <h2 id="sec-1">新代码不要再使用原生态类</h2>
+<div class="outline-text-2" id="text-1">
+</div><div id="outline-container-sec-1-1" class="outline-3">
+<h3 id="sec-1-1">范型术语</h3>
+<div class="outline-text-3" id="text-1-1">
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader　">
+<caption class="t-above"><span class="table-number">Table 1:</span> 范型术语</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">术语</td>
+<td class="left">示例</td>
+<td class="left">说明</td>
+</tr>
+
+<tr>
+<td class="left">原生态类型</td>
+<td class="left">List</td>
+<td class="left">不带任何类型参数的List</td>
+</tr>
+
+<tr>
+<td class="left">参数化类型</td>
+<td class="left">List&lt;String&gt;</td>
+<td class="left">元素类型为String的List</td>
+</tr>
+
+<tr>
+<td class="left">实际类型参数</td>
+<td class="left">String</td>
+<td class="left">&#xa0;</td>
+</tr>
+
+<tr>
+<td class="left">范型</td>
+<td class="left">List&lt;E&gt;</td>
+<td class="left">元素为E类型的List</td>
+</tr>
+
+<tr>
+<td class="left">无限制通配符类型</td>
+<td class="left">List&lt;?&gt;</td>
+<td class="left">元素为任意类型的List</td>
+</tr>
+
+<tr>
+<td class="left">有限制通配符类型</td>
+<td class="left">List&lt;? extends Number&gt;</td>
+<td class="left">元素为任意类型但是继承Number类的List</td>
+</tr>
+
+<tr>
+<td class="left">有限制类型参数</td>
+<td class="left">List&lt;E extends Number&gt;</td>
+<td class="left">元素为某个继承Number类的List</td>
+</tr>
+
+<tr>
+<td class="left">递归类型限制</td>
+<td class="left">List&lt;T extends Comparable&lt;T&gt;&gt;</td>
+<td class="left">元素为继承Comparable范型的List</td>
+</tr>
+
+<tr>
+<td class="left">范型方法</td>
+<td class="left">static &lt;E&gt; List&lt;E&gt; asList(E[] a)</td>
+<td class="left">参数：元素为Ｅ类型的数组，返回值：元素类型为E的List　</td>
+</tr>
+
+<tr>
+<td class="left">类型令牌</td>
+<td class="left">String.class</td>
+<td class="left">&#xa0;</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+
+<div id="outline-container-sec-1-2" class="outline-3">
+<h3 id="sec-1-2">范型的优势</h3>
+<div class="outline-text-3" id="text-1-2">
+<ul class="org-ul">
+<li>安全，提供了编译前检查
+</li>
+<li>方便，不用显示类型转换
+</li>
+</ul>
+
+<p>
+原生态类型唯一存在的目的：兼容性
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-1-3" class="outline-3">
+<h3 id="sec-1-3">List和List&lt;Object&gt;的区别</h3>
+<div class="outline-text-3" id="text-1-3">
+<p>
+原生态类型逃避了编译器类型检查
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">String</span>[] <span style="color: #eedd82;">args</span>) {
+    <span style="color: #98fb98;">List</span>&lt;<span style="color: #98fb98;">String</span>&gt; <span style="color: #eedd82;">strings</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">ArrayList</span>&lt;<span style="color: #98fb98;">String</span>&gt;();
+    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#20351;&#29992;&#21407;&#29983;&#24577;&#31867;&#22411;&#65292;&#21482;&#26377;&#22312;&#36816;&#34892;&#26102;&#20505;&#25165;&#20250;&#25243;&#38169;</span>
+    unsafeAdd(strings, <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">Integer</span>(42));
+    <span style="color: #98fb98;">String</span> <span style="color: #eedd82;">s</span> = strings.get(0); <span style="color: #ff4500;">// </span><span style="color: #ff4500;">Compiler-generated cast</span>
+}
+
+<span style="color: #00ffff;">private</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">unsafeAdd</span>(<span style="color: #98fb98;">List</span> <span style="color: #eedd82;">list</span>, <span style="color: #98fb98;">Object</span> <span style="color: #eedd82;">o</span>) {
+    list.add(o);
+}
+</pre>
+</div>
+<p>
+哪怕使用List&lt;Object&gt;都会进行编译期类型检查
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">String</span>[] <span style="color: #eedd82;">args</span>) {
+    <span style="color: #98fb98;">List</span>&lt;<span style="color: #98fb98;">String</span>&gt; <span style="color: #eedd82;">strings</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">ArrayList</span>&lt;<span style="color: #98fb98;">String</span>&gt;();
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">unsafeAdd(List&lt;Object&gt;,Object) cannot be applied</span>
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">to (List&lt;String&gt;,Integer)</span>
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">unsafeAdd(strings, new Integer(42));</span>
+    unsafeAdd(strings, <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">Integer</span>(42));
+    <span style="color: #98fb98;">String</span> <span style="color: #eedd82;">s</span> = strings.get(0); <span style="color: #ff4500;">// </span><span style="color: #ff4500;">Compiler-generated cast</span>
+}
+
+<span style="color: #00ffff;">private</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">unsafeAdd</span>(<span style="color: #98fb98;">List</span>&lt;<span style="color: #98fb98;">Object</span>&gt; <span style="color: #eedd82;">list</span>, <span style="color: #98fb98;">Object</span> <span style="color: #eedd82;">o</span>) {
+    list.add(o);
+}
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-sec-1-4" class="outline-3">
+<h3 id="sec-1-4">无限制通配符范型</h3>
+<div class="outline-text-3" id="text-1-4">
+<p>
+统计任意两个Set的相同元素
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">Use of raw type for unknown element type - don't do this!</span>
+<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">int</span> <span style="color: #87cefa;">numElementsInCommon</span>(<span style="color: #98fb98;">Set</span> <span style="color: #eedd82;">s1</span>, <span style="color: #98fb98;">Set</span> <span style="color: #eedd82;">s2</span>) {
+    <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">result</span> = 0;
+    <span style="color: #00ffff;">for</span> (<span style="color: #98fb98;">Object</span> <span style="color: #eedd82;">o1</span> : s1)
+        <span style="color: #00ffff;">if</span> (s2.contains(o1))
+            result++;
+    <span style="color: #00ffff;">return</span> result;
+}
+</pre>
+</div>
+<p>
+无限制通配符类型表示s1, s2可以存放任意类型的元素
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">Unbounded wildcard type - typesafe and flexible</span>
+<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">int</span> <span style="color: #87cefa;">numElementsInCommon</span>(<span style="color: #98fb98;">Set</span>&lt;?&gt; <span style="color: #eedd82;">s1</span>, <span style="color: #98fb98;">Set</span>&lt;?&gt; <span style="color: #eedd82;">s2</span>) {
+    <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">result</span> = 0;
+    <span style="color: #00ffff;">for</span> (<span style="color: #98fb98;">Object</span> <span style="color: #eedd82;">o1</span> : s1)
+        <span style="color: #00ffff;">if</span> (s2.contains(o1))
+            result++;
+    <span style="color: #00ffff;">return</span> result;
+}
+</pre>
+</div>
+<p>
+使用无限制通配符类型是为了安全：无法把任意非null的对象放入Collections&lt;?&gt;中，否则会有编译报错
+</p>
+</div>
+</div>
+<div id="outline-container-sec-1-5" class="outline-3">
+<h3 id="sec-1-5">原生态类型的作用</h3>
+<div class="outline-text-3" id="text-1-5">
+<ol class="org-ol">
+<li>类型令牌：List.class, String[].class, int.class是合法的，但是List&lt;?&gt;.class是非法的
+</li>
+<li>instance of: 运行期所有的范型标记会被去除，所以对于范型使用instance of是非法的
+</li>
+</ol>
+
+<p>
+推荐的做法：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#20026;&#20102;&#20351;&#29992;instance of&#20351;&#29992;&#21407;&#29983;&#24577;&#31867;&#22411;</span>
+<span style="color: #00ffff;">if</span> (o <span style="color: #00ffff;">instanceof</span> Set) {
+    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#36716;&#25442;&#25104;&#26080;&#38480;&#21046;&#36890;&#37197;&#31526;&#31867;&#22411;</span>
+    <span style="color: #98fb98;">Set</span>&lt;?&gt; <span style="color: #eedd82;">m</span> = (<span style="color: #98fb98;">Set</span>&lt;?&gt;) o;
+<span style="color: #ff4500;">//</span><span style="color: #ff4500;">...  </span>
+}
+</pre>
+</div>
+</div>
+</div>
 </div>
 
 <div id="outline-container-sec-2" class="outline-2">
 <h2 id="sec-2">消除非受检查警告</h2>
+<div class="outline-text-2" id="text-2">
+<ul class="org-ul">
+<li>要尽可能地消除每一个非受检警告，比如非受检强制转化警告、非受检方法调用警告、非受检普通数组创建警告，以及非受检转换警告
+</li>
+<li>如果无法消除警告，只有在可以证明引起警告的代码是类型安全的情况下用一个@SuppressWarnings("unchecked")注释来禁止这条警告
+</li>
+<li>始终在尽可能小的范围中使用SuppressWarnings注释
+</li>
+<li>每当使用SuppressWarnings注释时，都要添加一条注释，说明为什么这么做是安全的
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-3" class="outline-2">
+<h2 id="sec-3">List优先于数组</h2>
+</div>
+
+<div id="outline-container-sec-4" class="outline-2">
+<h2 id="sec-4">优先考虑范型类型</h2>
+</div>
+
+<div id="outline-container-sec-5" class="outline-2">
+<h2 id="sec-5">优先考虑范型方法</h2>
 </div>
 </div>
 <div id="postamble" class="status">
