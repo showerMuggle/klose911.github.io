@@ -156,9 +156,20 @@ for the JavaScript code in this tag.
 </ul>
 </li>
 <li><a href="#sec-2">消除非受检查警告</a></li>
-<li><a href="#sec-3">List优先于数组</a></li>
+<li><a href="#sec-3">列表优先于数组</a>
+<ul>
+<li><a href="#sec-3-1">数组和列表的区别</a></li>
+<li><a href="#sec-3-2">数组和列表不兼容</a></li>
+<li><a href="#sec-3-3">使用列表代替数组</a></li>
+</ul>
+</li>
 <li><a href="#sec-4">优先考虑范型类型</a></li>
-<li><a href="#sec-5">优先考虑范型方法</a></li>
+<li><a href="#sec-5">优先考虑范型方法</a>
+<ul>
+<li><a href="#sec-5-1">简单的范型方法</a></li>
+<li><a href="#sec-5-2">范型单例模式</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
@@ -389,15 +400,269 @@ for the JavaScript code in this tag.
 </div>
 
 <div id="outline-container-sec-3" class="outline-2">
-<h2 id="sec-3">List优先于数组</h2>
+<h2 id="sec-3">列表优先于数组</h2>
+<div class="outline-text-2" id="text-3">
+</div><div id="outline-container-sec-3-1" class="outline-3">
+<h3 id="sec-3-1">数组和列表的区别</h3>
+<div class="outline-text-3" id="text-3-1">
+<ul class="org-ul">
+<li>数组是协变的，范型是不可变的
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#36825;&#26159;&#34987;&#20801;&#35768;&#30340;</span>
+<span style="color: #98fb98;">Object</span>[] <span style="color: #eedd82;">objectArray</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">Long</span>[1];
+<span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#36816;&#34892;&#26102;&#20505;&#25243;&#20986;java.lang.ArrayStoreException</span>
+objectArray[0] = <span style="color: #ffa07a;">"hello world"</span>;
+
+<span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#32534;&#35793;&#19981;&#36890;&#36807;&#65306;Type mismatch: cannot convert from LinkedList&lt;Long&gt; to List&lt;Object&gt;</span>
+<span style="color: #98fb98;">List</span>&lt;<span style="color: #98fb98;">Object</span>&gt; <span style="color: #eedd82;">list</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">LinkedList</span>&lt;<span style="color: #98fb98;">Long</span>&gt;();
+</pre>
+</div>
+</li>
+<li>数组是具体化的，因此数组会在运行时才知道并检查他们的元素类型约束。泛型是通过擦除来实现的，因此泛型只在编译时强化类型信息，并在运行时擦除元素的类型信息
+</li>
+</ul>
+</div>
+</div>
+<div id="outline-container-sec-3-2" class="outline-3">
+<h3 id="sec-3-2">数组和列表不兼容</h3>
+<div class="outline-text-3" id="text-3-2">
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#20026;&#20160;&#20040;&#33539;&#22411;&#25968;&#32452;&#26159;&#38750;&#27861;&#30340;&#65292;&#20195;&#30721;&#31532;&#19968;&#34892;&#23601;&#20250;&#32534;&#35793;&#25253;&#38169;</span>
+<span style="color: #98fb98;">List</span>&lt;<span style="color: #98fb98;">String</span>&gt;[] <span style="color: #eedd82;">stringLists</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">List</span>&lt;<span style="color: #98fb98;">String</span>&gt;[1]; <span style="color: #ff4500;">// </span><span style="color: #ff4500;">(1)&#12288;&#22914;&#26524;&#36825;&#26159;&#21512;&#27861;&#30340;</span>
+<span style="color: #98fb98;">List</span>&lt;<span style="color: #98fb98;">Integer</span>&gt; <span style="color: #eedd82;">intList</span> = Arrays.asList(42); <span style="color: #ff4500;">// </span><span style="color: #ff4500;">(2)&#12288;</span>
+<span style="color: #98fb98;">Object</span>[] <span style="color: #eedd82;">objects</span> = stringLists; <span style="color: #ff4500;">// </span><span style="color: #ff4500;">(3)&#12288;&#25968;&#32452;&#26159;&#21327;&#21464;&#30340;&#65292;&#36825;&#26159;&#21512;&#27861;&#30340;</span>
+objects[0] = intList; <span style="color: #ff4500;">// </span><span style="color: #ff4500;">(4)&#12288;&#36825;&#20063;&#26159;&#21512;&#27861;&#30340;</span>
+<span style="color: #98fb98;">String</span> <span style="color: #eedd82;">s</span> = stringLists[0].get(0); <span style="color: #ff4500;">// </span><span style="color: #ff4500;">(5)&#12288;&#22914;&#26524;&#31532;&#19968;&#34892;&#26159;&#32534;&#35793;&#36890;&#36807;&#65292;&#21040;&#36825;&#37324;&#36816;&#34892;&#26102;&#25165;&#20250;&#25253;&#38169;</span>
+</pre>
+</div>
+<p>
+范型数组是非法的，比如E[],List&lt;E&gt;[],List&lt;String&gt;[]都是非法的
+</p>
+</div>
+</div>
+<div id="outline-container-sec-3-3" class="outline-3">
+<h3 id="sec-3-3">使用列表代替数组</h3>
+<div class="outline-text-3" id="text-3-3">
+<p>
+reduce方法没有范型，而且是线程不安全的
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">interface</span> <span style="color: #98fb98;">Function</span> {
+    <span style="color: #98fb98;">Object</span> <span style="color: #87cefa;">apply</span>(<span style="color: #98fb98;">Object</span> <span style="color: #eedd82;">arg1</span>, <span style="color: #98fb98;">Object</span> <span style="color: #eedd82;">arg2</span>);
+}
+
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">Reduction without generics, and with concurrency flaw!</span>
+<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">Object</span> <span style="color: #87cefa;">reduce</span>(<span style="color: #98fb98;">List</span> <span style="color: #eedd82;">list</span>, <span style="color: #98fb98;">Function</span> <span style="color: #eedd82;">f</span>, <span style="color: #98fb98;">Object</span> <span style="color: #eedd82;">initVal</span>) {
+    <span style="color: #00ffff;">synchronized</span>(list) {
+        <span style="color: #98fb98;">Object</span> <span style="color: #eedd82;">result</span> = initVal;
+        <span style="color: #00ffff;">for</span> (<span style="color: #98fb98;">Object</span> <span style="color: #eedd82;">o</span> : list)
+            result = f.apply(result, o);
+        <span style="color: #00ffff;">return</span> result;
+    }
+}
+</pre>
+</div>
+
+<p>
+下面代码会编译报错：list.toArray()的返回值是一个Object[] 
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">interface</span> <span style="color: #98fb98;">Function</span>&lt;<span style="color: #98fb98;">T</span>&gt; {
+    <span style="color: #98fb98;">T</span> <span style="color: #87cefa;">apply</span>(<span style="color: #98fb98;">T</span> <span style="color: #eedd82;">arg1</span>, <span style="color: #98fb98;">T</span> <span style="color: #eedd82;">arg2</span>);
+}
+
+<span style="color: #00ffff;">static</span> &lt;<span style="color: #98fb98;">E</span>&gt; <span style="color: #98fb98;">E</span> <span style="color: #87cefa;">reduce</span>(<span style="color: #98fb98;">List</span>&lt;<span style="color: #98fb98;">E</span>&gt; <span style="color: #eedd82;">list</span>, <span style="color: #98fb98;">Function</span>&lt;<span style="color: #98fb98;">E</span>&gt; <span style="color: #eedd82;">f</span>, <span style="color: #98fb98;">E</span> <span style="color: #eedd82;">initVal</span>) {
+    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">Naive generic version of reduction - won't compile!</span>
+    <span style="color: #98fb98;">E</span>[] <span style="color: #eedd82;">snapshot</span> = list.toArray(); <span style="color: #ff4500;">// </span><span style="color: #ff4500;">Locks list</span>
+    <span style="color: #98fb98;">E</span> <span style="color: #eedd82;">result</span> = initVal;
+    <span style="color: #00ffff;">for</span> (<span style="color: #98fb98;">E</span> <span style="color: #eedd82;">e</span> : snapshot)
+        result = f.apply(result, e);
+    <span style="color: #00ffff;">return</span> result;
+}
+</pre>
+</div>
+
+<ul class="org-ul">
+<li>手动转换类型
+</li>
+</ul>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #98fb98;">E</span>[] <span style="color: #eedd82;">snapshot</span> = (<span style="color: #98fb98;">E</span>[]) list.toArray();<span style="color: #ff4500;">//</span><span style="color: #ff4500;">Locks List</span>
+</pre>
+</div>
+
+<ul class="org-ul">
+<li>使用列表代替数组
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">List-based generic reduction</span>
+<span style="color: #00ffff;">static</span> &lt;<span style="color: #98fb98;">E</span>&gt; <span style="color: #98fb98;">E</span> <span style="color: #87cefa;">reduce</span>(<span style="color: #98fb98;">List</span>&lt;<span style="color: #98fb98;">E</span>&gt; <span style="color: #eedd82;">list</span>, <span style="color: #98fb98;">Function</span>&lt;<span style="color: #98fb98;">E</span>&gt; <span style="color: #eedd82;">f</span>, <span style="color: #98fb98;">E</span> <span style="color: #eedd82;">initVal</span>) {
+    <span style="color: #98fb98;">List</span>&lt;<span style="color: #98fb98;">E</span>&gt; <span style="color: #eedd82;">snapshot</span>;
+    <span style="color: #00ffff;">synchronized</span>(list) {
+        snapshot = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">ArrayList</span>&lt;<span style="color: #98fb98;">E</span>&gt;(list);
+    }
+    <span style="color: #98fb98;">E</span> <span style="color: #eedd82;">result</span> = initVal;
+    <span style="color: #00ffff;">for</span> (<span style="color: #98fb98;">E</span> <span style="color: #eedd82;">e</span> : snapshot)
+        result = f.apply(result, e);
+    <span style="color: #00ffff;">return</span> result;
+}
+</pre>
+</div>
+</li>
+</ul>
+</div>
+</div>
 </div>
 
 <div id="outline-container-sec-4" class="outline-2">
 <h2 id="sec-4">优先考虑范型类型</h2>
+<div class="outline-text-2" id="text-4">
+<p>
+无法初始化范型数组，数组在初始化的时候具体类型必须是确定的
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">Initial attempt to generify Stack = won&#8217;t compile!</span>
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">Stack</span>&lt;<span style="color: #98fb98;">E</span>&gt; {
+    <span style="color: #00ffff;">private</span> <span style="color: #98fb98;">E</span>[] <span style="color: #eedd82;">elements</span>;
+    <span style="color: #00ffff;">private</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">size</span> = 0;
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">DEFAULT_INITIAL_CAPACITY</span> = 16;
+    <span style="color: #00ffff;">public</span> <span style="color: #87cefa;">Stack</span>() {
+        <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#36825;&#37324;&#20250;&#32534;&#35793;&#25253;&#38169;&#65292;&#26080;&#27861;&#21021;&#22987;&#21270;&#33539;&#22411;&#25968;&#32452;</span>
+        elements = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">E</span>[DEFAULT_INITIAL_CAPACITY];
+    }
+    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">push</span>(<span style="color: #98fb98;">E</span> <span style="color: #eedd82;">e</span>) {
+        ensureCapacity();
+        elements[size++] = e;
+    }
+    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">E</span> <span style="color: #87cefa;">pop</span>() {
+        <span style="color: #00ffff;">if</span> (size==0)
+            <span style="color: #00ffff;">throw</span> <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">EmptyStackException</span>();
+        <span style="color: #98fb98;">E</span> <span style="color: #eedd82;">result</span> = elements[--size];
+        elements[size] = <span style="color: #7fffd4;">null</span>; <span style="color: #ff4500;">// </span><span style="color: #ff4500;">Eliminate obsolete reference</span>
+        <span style="color: #00ffff;">return</span> result;
+    }
+    ... <span style="color: #ff4500;">// </span><span style="color: #ff4500;">no changes in isEmpty or ensureCapacity</span>
+}
+</pre>
 </div>
 
+<ol class="org-ol">
+<li>初始化数组的时候类型转换
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ff4500;">//</span><span style="color: #ff4500;">warning: [unchecked] unchecked cast</span>
+elements = (<span style="color: #98fb98;">E</span>[]) <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">Object</span>[DEFAULT_INITIAL_CAPACITY];
+</pre>
+</div>
+</li>
+
+<li>把数组声明为Object[]，在取出元素后做类型转换
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">private</span> <span style="color: #98fb98;">Object</span>[] <span style="color: #eedd82;">elements</span>;
+
+<span style="color: #00ffff;">public</span> <span style="color: #98fb98;">E</span> <span style="color: #87cefa;">pop</span>() {
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">...;</span>
+    <span style="color: #98fb98;">E</span> <span style="color: #eedd82;">result</span> = (<span style="color: #98fb98;">E</span>) elements[--size];
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">...</span>
+    <span style="color: #00ffff;">return</span> result;
+}
+</pre>
+</div>
+</li>
+</ol>
+
+<p>
+第二种做法比较安全，但是更繁琐
+</p>
+</div>
+</div>
 <div id="outline-container-sec-5" class="outline-2">
 <h2 id="sec-5">优先考虑范型方法</h2>
+<div class="outline-text-2" id="text-5">
+</div><div id="outline-container-sec-5-1" class="outline-3">
+<h3 id="sec-5-1">简单的范型方法</h3>
+<div class="outline-text-3" id="text-5-1">
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">Generic method</span>
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> &lt;<span style="color: #98fb98;">E</span>&gt; <span style="color: #98fb98;">Set</span>&lt;<span style="color: #98fb98;">E</span>&gt; <span style="color: #87cefa;">union</span>(<span style="color: #98fb98;">Set</span>&lt;<span style="color: #98fb98;">E</span>&gt; <span style="color: #eedd82;">s1</span>, <span style="color: #98fb98;">Set</span>&lt;<span style="color: #98fb98;">E</span>&gt; <span style="color: #eedd82;">s2</span>) {
+    <span style="color: #98fb98;">Set</span>&lt;<span style="color: #98fb98;">E</span>&gt; <span style="color: #eedd82;">result</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">HashSet</span>&lt;<span style="color: #98fb98;">E</span>&gt;(s1);
+    result.addAll(s2);
+    <span style="color: #00ffff;">return</span> result;
+}
+
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">Simple program to exercise generic method</span>
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">String</span>[] <span style="color: #eedd82;">args</span>) {
+    <span style="color: #98fb98;">Set</span>&lt;<span style="color: #98fb98;">String</span>&gt; <span style="color: #eedd82;">guys</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">HashSet</span>&lt;<span style="color: #98fb98;">String</span>&gt;(
+        Arrays.asList(<span style="color: #ffa07a;">"Tom"</span>, <span style="color: #ffa07a;">"Dick"</span>, <span style="color: #ffa07a;">"Harry"</span>));
+    <span style="color: #98fb98;">Set</span>&lt;<span style="color: #98fb98;">String</span>&gt; <span style="color: #eedd82;">stooges</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">HashSet</span>&lt;<span style="color: #98fb98;">String</span>&gt;(
+        Arrays.asList(<span style="color: #ffa07a;">"Larry"</span>, <span style="color: #ffa07a;">"Moe"</span>, <span style="color: #ffa07a;">"Curly"</span>));
+    <span style="color: #98fb98;">Set</span>&lt;<span style="color: #98fb98;">String</span>&gt; <span style="color: #eedd82;">aflCio</span> = union(guys, stooges);
+    System.out.println(aflCio);
+}
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-sec-5-2" class="outline-3">
+<h3 id="sec-5-2">范型单例模式</h3>
+<div class="outline-text-3" id="text-5-2">
+<p>
+由于identityFunction本身是无状态的，而且范型会在运行时抹去类型信息，所以可以为任意的类提供一个相同的identityFunction
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">final</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">IdentityFunction</span> {
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">interface</span> <span style="color: #98fb98;">UnaryFunction</span>&lt;<span style="color: #98fb98;">T</span>&gt; {
+
+    <span style="color: #98fb98;">T</span> <span style="color: #87cefa;">apply</span>(<span style="color: #98fb98;">T</span> <span style="color: #eedd82;">arg</span>);
+    }
+
+    <span style="color: #00ffff;">private</span> <span style="color: #87cefa;">IdentityFunction</span>() {
+    }
+
+    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">Generic singleton factory pattern</span>
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">UnaryFunction</span>&lt;<span style="color: #98fb98;">Object</span>&gt; <span style="color: #eedd82;">IDENTITY_FUNCTION</span>
+        = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">UnaryFunction</span>&lt;<span style="color: #98fb98;">Object</span>&gt;() {
+    <span style="color: #7fffd4;">@Override</span>
+    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">Object</span> <span style="color: #87cefa;">apply</span>(<span style="color: #98fb98;">Object</span> <span style="color: #eedd82;">arg</span>) {
+        <span style="color: #00ffff;">return</span> arg;
+    }
+    };
+
+    <span style="color: #7fffd4;">@SuppressWarnings</span>(<span style="color: #ffa07a;">"unchecked"</span>)
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> &lt;<span style="color: #98fb98;">T</span>&gt; <span style="color: #98fb98;">UnaryFunction</span>&lt;<span style="color: #98fb98;">T</span>&gt; <span style="color: #87cefa;">identityFunction</span>() {
+    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">IDENTITY_FUNCTION is stateless and its type parameter is</span>
+    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">unbounded so it's safe to share one instance across all types.</span>
+    <span style="color: #00ffff;">return</span> (<span style="color: #98fb98;">UnaryFunction</span>&lt;<span style="color: #98fb98;">T</span>&gt;) IDENTITY_FUNCTION;
+    }
+
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">String</span>[] <span style="color: #eedd82;">args</span>) {
+    <span style="color: #98fb98;">String</span>[] <span style="color: #eedd82;">strings</span> = {<span style="color: #ffa07a;">"jute"</span>, <span style="color: #ffa07a;">"hemp"</span>, <span style="color: #ffa07a;">"nylon"</span>};
+    <span style="color: #98fb98;">UnaryFunction</span>&lt;<span style="color: #98fb98;">String</span>&gt; <span style="color: #eedd82;">sameString</span> = identityFunction();
+    <span style="color: #00ffff;">for</span> (<span style="color: #98fb98;">String</span> <span style="color: #eedd82;">s</span> : strings) {
+        System.out.println(sameString.apply(s));
+    }
+    <span style="color: #98fb98;">Number</span>[] <span style="color: #eedd82;">numbers</span> = {1, 2.0, 3L};
+    <span style="color: #98fb98;">UnaryFunction</span>&lt;<span style="color: #98fb98;">Number</span>&gt; <span style="color: #eedd82;">sameNumber</span> = identityFunction();
+    <span style="color: #00ffff;">for</span> (<span style="color: #98fb98;">Number</span> <span style="color: #eedd82;">n</span> : numbers) {
+        System.out.println(sameNumber.apply(n));
+    }
+    }
+}
+</pre>
+</div>
+</div>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
