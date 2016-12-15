@@ -147,11 +147,297 @@ for the JavaScript code in this tag.
 <div id="text-table-of-contents">
 <ul>
 <li><a href="#sec-1">指针</a></li>
+<li><a href="#sec-2">结构体</a>
+<ul>
+<li><a href="#sec-2-1">结构体字段</a></li>
+<li><a href="#sec-2-2">结构体指针</a></li>
+<li><a href="#sec-2-3">结构体文法</a></li>
+</ul>
+</li>
+<li><a href="#sec-3">数组</a></li>
+<li><a href="#sec-4">slice</a>
+<ul>
+<li><a href="#sec-4-1">slice切片</a></li>
+<li><a href="#sec-4-2">构造slice</a></li>
+<li><a href="#sec-4-3">nil slice</a></li>
+<li><a href="#sec-4-4">向slice添加元素</a></li>
+</ul>
+</li>
+<li><a href="#sec-5">range</a></li>
 </ul>
 </div>
 </div>
 <div id="outline-container-sec-1" class="outline-2">
 <h2 id="sec-1">指针</h2>
+<div class="outline-text-2" id="text-1">
+<p>
+指针保存了变量的内存地址
+</p>
+
+<p>
+类型 *T 是指向类型 T 的值的指针，其原始值是nil
+</p>
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">var</span> p *int
+</pre>
+</div>
+
+<p>
+&amp;符号会生成一个指向其作用对象的指针 
+</p>
+<div class="org-src-container">
+
+<pre class="src src-go">i := 42
+p = &amp;i
+</pre>
+</div>
+
+<p>
+*符号表示指针指向的底层的值,  这也就是通常所说的“间接引用”或“非直接引用”
+</p>
+<div class="org-src-container">
+
+<pre class="src src-go">fmt.<span style="color: #87cefa;">Println</span>(*p) <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#36890;&#36807;&#25351;&#38024; p &#35835;&#21462; i</span>
+*p = 21         <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#36890;&#36807;&#25351;&#38024; p &#35774;&#32622; i</span>
+</pre>
+</div>
+
+<p>
+注意：go没有指针算术运算！ 
+</p>
+</div>
+</div>
+<div id="outline-container-sec-2" class="outline-2">
+<h2 id="sec-2">结构体</h2>
+<div class="outline-text-2" id="text-2">
+<p>
+struct 就是一个字段的集合
+</p>
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">type</span> <span style="color: #98fb98;">Vertex</span> <span style="color: #00ffff;">struct</span> {
+        X int
+        Y int
+}
+
+<span style="color: #00ffff;">func</span> <span style="color: #87cefa;">main</span>() {
+        fmt.<span style="color: #87cefa;">Println</span>(<span style="color: #98fb98;">Vertex</span>{1, 2})
+}
+</pre>
+</div>
+</div>
+<div id="outline-container-sec-2-1" class="outline-3">
+<h3 id="sec-2-1">结构体字段</h3>
+<div class="outline-text-3" id="text-2-1">
+<p>
+结构体字段使用 . 来访问
+</p>
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">type</span> <span style="color: #98fb98;">Vertex</span> <span style="color: #00ffff;">struct</span> {
+        X int
+        Y int
+}
+
+<span style="color: #00ffff;">func</span> <span style="color: #87cefa;">main</span>() {
+        v := <span style="color: #98fb98;">Vertex</span>{1, 2}
+        v.X = 4
+        fmt.<span style="color: #87cefa;">Println</span>(v.X)
+}
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-sec-2-2" class="outline-3">
+<h3 id="sec-2-2">结构体指针</h3>
+<div class="outline-text-3" id="text-2-2">
+<p>
+结构体字段可以通过结构体指针来访问，通过指针间接的访问是透明的。
+</p>
+
+<p>
+注意：和C语言不一样，通过结构体指针访问字段依然用 . 不是用-&gt; 
+</p>
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">type</span> <span style="color: #98fb98;">Vertex</span> <span style="color: #00ffff;">struct</span> {
+        X int
+        Y int
+}
+
+<span style="color: #00ffff;">func</span> <span style="color: #87cefa;">main</span>() {
+        v := <span style="color: #98fb98;">Vertex</span>{1, 2}
+        p := &amp;v
+        p.X = 1e9
+        fmt.<span style="color: #87cefa;">Println</span>(v)
+}
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-sec-2-3" class="outline-3">
+<h3 id="sec-2-3">结构体文法</h3>
+<div class="outline-text-3" id="text-2-3">
+<p>
+通过结构体字段的值作为列表来定义一个结构体。使用 Name: 语法可以仅列出部分字段。特殊的前缀 &amp; 返回一个指向结构体的指针
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">type</span> <span style="color: #98fb98;">Vertex</span> <span style="color: #00ffff;">struct</span> {
+        X, Y int
+}
+
+<span style="color: #00ffff;">var</span> (
+        v1 = <span style="color: #98fb98;">Vertex</span>{1, 2}  <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#31867;&#22411;&#20026; Vertex</span>
+        v2 = <span style="color: #98fb98;">Vertex</span>{X: 1}  <span style="color: #ff4500;">// </span><span style="color: #ff4500;">Y:0 &#34987;&#30465;&#30053;</span>
+        v3 = <span style="color: #98fb98;">Vertex</span>{}      <span style="color: #ff4500;">// </span><span style="color: #ff4500;">X:0 &#21644; Y:0</span>
+        p  = &amp;<span style="color: #98fb98;">Vertex</span>{1, 2} <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#31867;&#22411;&#20026; *Vertex</span>
+)
+</pre>
+</div>
+</div>
+</div>
+</div>
+<div id="outline-container-sec-3" class="outline-2">
+<h2 id="sec-3">数组</h2>
+<div class="outline-text-2" id="text-3">
+<p>
+类型 [n]T 是一个有 n 个类型为 T 的值的数组
+</p>
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#23450;&#20041;&#21464;&#37327; a &#26159;&#19968;&#20010;&#26377;&#21313;&#20010;&#25972;&#25968;&#30340;&#25968;&#32452; </span>
+  <span style="color: #00ffff;">var</span> a [10]<span style="color: #98fb98;">int</span>
+</pre>
+</div>
+<p>
+数组的长度是其类型的一部分，因此数组不能改变大小! 
+</p>
+</div>
+</div>
+<div id="outline-container-sec-4" class="outline-2">
+<h2 id="sec-4">slice</h2>
+<div class="outline-text-2" id="text-4">
+<p>
+slice会指向一个列表的值，并且包含了长度信息
+</p>
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#19968;&#20010;&#20803;&#32032;&#31867;&#22411;&#20026; T &#30340; slice</span>
+<span style="color: #00ffff;">var</span> a []<span style="color: #98fb98;">T</span> s
+<span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#36820;&#22238; slice s &#30340;&#38271;&#24230;</span>
+<span style="color: #b0c4de;">len</span>(s)
+</pre>
+</div>
+<p>
+slice 可以包含任意的类型，包括另一个 slice 
+</p>
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">Create a tic-tac-toe board.</span>
+game := [][]<span style="color: #98fb98;">string</span>{
+        []<span style="color: #98fb98;">string</span>{<span style="color: #ffa07a;">"_"</span>, <span style="color: #ffa07a;">"_"</span>, <span style="color: #ffa07a;">"_"</span>},
+        []<span style="color: #98fb98;">string</span>{<span style="color: #ffa07a;">"_"</span>, <span style="color: #ffa07a;">"_"</span>, <span style="color: #ffa07a;">"_"</span>},
+        []<span style="color: #98fb98;">string</span>{<span style="color: #ffa07a;">"_"</span>, <span style="color: #ffa07a;">"_"</span>, <span style="color: #ffa07a;">"_"</span>},
+}
+
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">The players take turns.</span>
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">X _ X</span>
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">O _ _</span>
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">X _ O</span>
+game[0][0] = <span style="color: #ffa07a;">"X"</span>
+game[2][2] = <span style="color: #ffa07a;">"O"</span>
+game[2][0] = <span style="color: #ffa07a;">"X"</span>
+game[1][0] = <span style="color: #ffa07a;">"O"</span>
+game[0][2] = <span style="color: #ffa07a;">"X"</span>
+</pre>
+</div>
+</div>
+<div id="outline-container-sec-4-1" class="outline-3">
+<h3 id="sec-4-1">slice切片</h3>
+<div class="outline-text-3" id="text-4-1">
+<p>
+slice 可以重新切片，创建一个新的 slice 值指向相同的数组
+</p>
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#34920;&#31034;&#20174; lo &#21040; hi-1 &#30340; slice &#20803;&#32032;&#65292;&#21547;&#21069;&#31471;&#65292;&#19981;&#21253;&#21547;&#21518;&#31471;</span>
+s[lo:hi]
+
+<span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#26159;&#31354;&#30340;</span>
+s[lo:lo]
+
+<span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#21253;&#21547;s[lo]&#36825;&#20010;&#20803;&#32032;</span>
+s[lo: lo + 1]
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-sec-4-2" class="outline-3">
+<h3 id="sec-4-2">构造slice</h3>
+<div class="outline-text-3" id="text-4-2">
+<p>
+slice 由函数 make 创建。这会分配一个全是零值的数组并且返回一个 slice 指向这个数组：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #ff4500;">//</span><span style="color: #ff4500;">slice a&#30340;&#38271;&#24230;&#26159;5&#65292;cap&#26159;&#26080;&#38480;</span>
+a := <span style="color: #b0c4de;">make</span>([]<span style="color: #98fb98;">int</span>, 5)  <span style="color: #ff4500;">// </span><span style="color: #ff4500;">len(a)=5, cap(a)=5</span>
+
+<span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#20026;&#20102;&#25351;&#23450;&#23481;&#37327;&#65292;&#21487;&#20256;&#36882;&#31532;&#19977;&#20010;&#21442;&#25968;&#21040; make&#65306;</span>
+b := <span style="color: #b0c4de;">make</span>([]<span style="color: #98fb98;">int</span>, 0, 5) <span style="color: #ff4500;">// </span><span style="color: #ff4500;">len(b)=0, cap(b)=5</span>
+b = b[:<span style="color: #b0c4de;">cap</span>(b)] <span style="color: #ff4500;">// </span><span style="color: #ff4500;">len(b)=5, cap(b)=5</span>
+b = b[1:]      <span style="color: #ff4500;">// </span><span style="color: #ff4500;">len(b)=4, cap(b)=4</span>
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-sec-4-3" class="outline-3">
+<h3 id="sec-4-3">nil slice</h3>
+<div class="outline-text-3" id="text-4-3">
+<p>
+未初始化的slice 值是 nil ，一个 nil 的 slice 的长度和容量是 0
+</p>
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">var</span> z []<span style="color: #98fb98;">int</span>
+<span style="color: #ff4500;">//</span><span style="color: #ff4500;">[] 0 0</span>
+fmt.<span style="color: #87cefa;">Println</span>(z, <span style="color: #b0c4de;">len</span>(z), <span style="color: #b0c4de;">cap</span>(z))
+<span style="color: #ff4500;">//</span><span style="color: #ff4500;">nil!</span>
+<span style="color: #00ffff;">if</span> z == <span style="color: #7fffd4;">nil</span> {
+        fmt.<span style="color: #87cefa;">Println</span>(<span style="color: #ffa07a;">"nil!"</span>)
+}
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-sec-4-4" class="outline-3">
+<h3 id="sec-4-4">向slice添加元素</h3>
+<div class="outline-text-3" id="text-4-4">
+<p>
+内建函数 append ：向slice末尾添加元素
+</p>
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">func</span> <span style="color: #b0c4de;">append</span>(s []<span style="color: #98fb98;">T</span>, vs ...<span style="color: #98fb98;">T</span>) []<span style="color: #98fb98;">T</span>
+</pre>
+</div>
+<ul class="org-ul">
+<li>s 是一个元素类型为 T 的 slice ，其余类型为 T 的值将会附加到该 slice 的末尾
+</li>
+<li>返回是一个包含原 slice 所有元素加上新添加的元素的 slice
+</li>
+<li>如果 s 的底层数组太小，而不能容纳所有值时，会分配一个更大的数组。 返回的 slice 会指向这个新分配的数组
+</li>
+</ul>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-5" class="outline-2">
+<h2 id="sec-5">range</h2>
 </div>
 </div>
 <div id="postamble" class="status">

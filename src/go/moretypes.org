@@ -4,3 +4,160 @@
 #+HTML_LINK_HOME: go.html
 #+OPTIONS: num:nil timestamp:nil
 * 指针
+  指针保存了变量的内存地址
+  
+  类型 *T 是指向类型 T 的值的指针，其原始值是nil
+  #+BEGIN_SRC go
+  var p *int
+  #+END_SRC
+  
+  &符号会生成一个指向其作用对象的指针 
+  #+BEGIN_SRC go
+  i := 42
+  p = &i
+  #+END_SRC
+  
+  *符号表示指针指向的底层的值,  这也就是通常所说的“间接引用”或“非直接引用”
+  #+BEGIN_SRC go
+  fmt.Println(*p) // 通过指针 p 读取 i
+  ,*p = 21         // 通过指针 p 设置 i
+  #+END_SRC
+  
+  注意：go没有指针算术运算！ 
+* 结构体
+  struct 就是一个字段的集合
+  #+BEGIN_SRC go
+   type Vertex struct {
+           X int
+           Y int
+   }
+
+   func main() {
+           fmt.Println(Vertex{1, 2})
+   }
+  #+END_SRC
+** 结构体字段
+   结构体字段使用 . 来访问
+   #+BEGIN_SRC go
+  type Vertex struct {
+          X int
+          Y int
+  }
+
+  func main() {
+          v := Vertex{1, 2}
+          v.X = 4
+          fmt.Println(v.X)
+  }
+   #+END_SRC
+** 结构体指针
+   结构体字段可以通过结构体指针来访问，通过指针间接的访问是透明的。
+   
+   注意：和C语言不一样，通过结构体指针访问字段依然用 . 不是用-> 
+   #+BEGIN_SRC go
+  type Vertex struct {
+          X int
+          Y int
+  }
+
+  func main() {
+          v := Vertex{1, 2}
+          p := &v
+          p.X = 1e9
+          fmt.Println(v)
+  }
+   #+END_SRC
+** 结构体文法
+   通过结构体字段的值作为列表来定义一个结构体。使用 Name: 语法可以仅列出部分字段。特殊的前缀 & 返回一个指向结构体的指针
+   
+   #+BEGIN_SRC go
+  type Vertex struct {
+          X, Y int
+  }
+
+  var (
+          v1 = Vertex{1, 2}  // 类型为 Vertex
+          v2 = Vertex{X: 1}  // Y:0 被省略
+          v3 = Vertex{}      // X:0 和 Y:0
+          p  = &Vertex{1, 2} // 类型为 *Vertex
+  )
+   #+END_SRC
+* 数组
+  类型 [n]T 是一个有 n 个类型为 T 的值的数组
+  #+BEGIN_SRC go
+//定义变量 a 是一个有十个整数的数组 
+  var a [10]int
+  #+END_SRC
+  数组的长度是其类型的一部分，因此数组不能改变大小! 
+* slice
+  slice会指向一个列表的值，并且包含了长度信息
+  #+BEGIN_SRC go
+  //一个元素类型为 T 的 slice
+  var a []T s
+  //返回 slice s 的长度
+  len(s)
+  #+END_SRC
+  slice 可以包含任意的类型，包括另一个 slice 
+  #+BEGIN_SRC go
+    // Create a tic-tac-toe board.
+    game := [][]string{
+            []string{"_", "_", "_"},
+            []string{"_", "_", "_"},
+            []string{"_", "_", "_"},
+    }
+
+    // The players take turns.
+    // X _ X
+    // O _ _
+    // X _ O
+    game[0][0] = "X"
+    game[2][2] = "O"
+    game[2][0] = "X"
+    game[1][0] = "O"
+    game[0][2] = "X"
+  #+END_SRC
+** slice切片
+ slice 可以重新切片，创建一个新的 slice 值指向相同的数组
+ #+BEGIN_SRC go
+   //表示从 lo 到 hi-1 的 slice 元素，含前端，不包含后端
+   s[lo:hi]
+
+   //是空的
+   s[lo:lo]
+
+   //包含s[lo]这个元素
+   s[lo: lo + 1]
+ #+END_SRC
+** 构造slice
+ slice 由函数 make 创建。这会分配一个全是零值的数组并且返回一个 slice 指向这个数组：
+ #+BEGIN_SRC go
+   //slice a的长度是5，cap是无限
+   a := make([]int, 5)  // len(a)=5, cap(a)=5
+
+   //为了指定容量，可传递第三个参数到 make：
+   b := make([]int, 0, 5) // len(b)=0, cap(b)=5
+   b = b[:cap(b)] // len(b)=5, cap(b)=5
+   b = b[1:]      // len(b)=4, cap(b)=4
+ #+END_SRC
+** nil slice
+未初始化的slice 值是 nil ，一个 nil 的 slice 的长度和容量是 0
+#+BEGIN_SRC go
+  var z []int
+  //[] 0 0
+  fmt.Println(z, len(z), cap(z))
+  //nil!
+  if z == nil {
+          fmt.Println("nil!")
+  }
+#+END_SRC
+** 向slice添加元素
+内建函数 append ：向slice末尾添加元素
+#+BEGIN_SRC go
+  func append(s []T, vs ...T) []T
+#+END_SRC
++ s 是一个元素类型为 T 的 slice ，其余类型为 T 的值将会附加到该 slice 的末尾
++ 返回是一个包含原 slice 所有元素加上新添加的元素的 slice
++ 如果 s 的底层数组太小，而不能容纳所有值时，会分配一个更大的数组。 返回的 slice 会指向这个新分配的数组
+
+* range
+
