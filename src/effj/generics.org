@@ -286,3 +286,138 @@
          }
      }
    #+END_SRC
+* 利用通配符来提升灵活性
+普通范型的类型是不可变的
+** extends通配符
+  #+BEGIN_SRC java
+    // pushAll method without wildcard type - deficient!
+    public void pushAll(Iterable<E> src) {
+            for (E e : src)
+                    push(e);
+    }
+
+    //pushAll(Iterable<Number>) in Stack<Number>
+    // cannot be applied to (Iterable<Integer>)
+    // numberStack.pushAll(integers);
+    Stack<Number> numberStack = new Stack<Number>();
+    Iterable<Integer> integers = ... ;
+    numberStack.pushAll(integers);
+  #+END_SRC
+
+extends通配符：匹配某个类以及它的任意子类
+#+BEGIN_SRC java
+  // Wildcard type for parameter that serves as an E producer
+  public void pushAll(Iterable<? extends E> src) {
+          for (E e : src)
+                  push(e);
+  }
+#+END_SRC
+** super通配符
+   #+BEGIN_SRC java
+     // popAll method without wildcard type - deficient!
+     public void popAll(Collection<E> dst) {
+             while (!isEmpty())
+                     dst.add(pop());
+     }
+
+     //compile error! 
+     Stack<Number> numberStack = new Stack<Number>();
+     Collection<Object> objects = ... ;
+     numberStack.popAll(objects);
+   #+END_SRC
+
+super通配符：匹配某个类以及它的任意父类
+#+BEGIN_SRC java
+  // Wildcard type for parameter that serves as an E consumer
+  public void popAll(Collection<? super E> dst) {
+          while (!isEmpty())
+                  dst.add(pop());
+  }
+#+END_SRC
+** PECS
+producer- extends, consumer- super 
+
++ 生产者(产生范型的元素)-extends：pushAll(Iterable<? extends E> src)
++ 消费者(使用范型的元素)-super：popAll(Collection<? super E> dst)
++ 即是生产者又是消费者则使用普通范型：static <E> E reduce(... Function<E> f ...)
+
+不要在返回值上使用通配符范型，迫使使用接口的人必须考虑范型，设计良好的范型应该是透明的！
+
+** 递归匹配
+有时候类型参数必须和自身绑定的约束相匹配
+#+BEGIN_SRC java
+  public interface Comparable<T> {
+  int compareTo(T o);
+  }
+#+END_SRC
+只有能和自身类型进行大小比较的类才能用于max方法，换句话说这个类必须实现Comparable<T>接口。最后形成了T,Comaprable<T>的递归匹配
+#+BEGIN_SRC java
+  // Returns the maximum value in a list - uses recursive type bound
+  public static <T extends Comparable<T>> T max(List<T> list) {
+          Iterator<T> i = list.iterator();
+          T result = i.next();
+          while (i.hasNext()) {
+                  T t = i.next();
+                  if (t.compareTo(result) > 0)
+                          result = t;
+          }
+          return result;
+  }
+#+END_SRC
+
+*** 递归通配符匹配
+Comparable/Comparator永远都是消费者！
+    #+BEGIN_SRC java
+      public static <T extends Comparable<? super T>> T max(List<? extends T> list) {
+              //这里不能在使用Iterator<T>，不然会编译报错
+              Iterator<? extends T> i = list.iterator();
+              T result = i.next();
+              while (i.hasNext()) {
+                      T t = i.next();
+                      if (t.compareTo(result) > 0) {
+                              result = t;
+                      }
+              }
+              return result;
+      }
+    #+END_SRC
+
+* 优先考虑类型安全的异构容器
+在特定情况下可能出现一个容器需要存放不同类型的元素，比如说数据库的一条记录中各个字段，每个字段可能有不同的数据类型
+
+** 使用key,value构建异构容器
+使用Map存放：用一个键值对来表示一个元素，并且键和值之间有类型关系，键的范型跟值的class类型是相同的。让键参数化，而不是值参数化
+
+#+BEGIN_SRC java
+  //使用map的key来做范型，value的class类型就是key
+  private final Map<Class<?>, Object> favorites
+        = new ConcurrentHashMap<>();
+
+  public <T> void putFavorite(Class<T> type, T instance) {
+          if (type == null) {
+                  throw new NullPointerException("Type is null");
+          }
+          favorites.put(type, instance);
+  }
+
+  public <T> T getFavorite(Class<T> type) {
+          return type.cast(favorites.get(type));
+  }
+
+  // Typesafe heterogeneous container pattern - client
+  public static void main(String[] args) {
+          Favorites f = new Favorites();
+          f.putFavorite(String.class, "Java");
+          f.putFavorite(Integer.class, 0xcafebabe);
+          f.putFavorite(Class.class, Favorites.class);
+          String favoriteString = f.getFavorite(String.class);
+          int favoriteInteger = f.getFavorite(Integer.class);
+          Class<?> favoriteClass = f.getFavorite(Class.class);
+          //Java cafebabe klose.effj.generics.Favorites
+          System.out.printf("%s %x %s%n", favoriteString,
+                            favoriteInteger, favoriteClass.getName());
+  }
+      
+#+END_SRC
+
+[[file:enum_annotation.org][Next：枚举和注解 ]][[file:class_interface.org][ Previous：类和接口]]  [[file:effj.org][Home：目录]]
