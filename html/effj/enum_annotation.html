@@ -146,13 +146,753 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#sec-1">用enum代替int常量</a></li>
+<li><a href="#sec-1">用enum代替int常量</a>
+<ul>
+<li><a href="#sec-1-1">int枚举模式</a></li>
+<li><a href="#sec-1-2">枚举</a>
+<ul>
+<li><a href="#sec-1-2-1">枚举的优势</a></li>
+</ul>
+</li>
+<li><a href="#sec-1-3">枚举模式</a>
+<ul>
+<li><a href="#sec-1-3-1">添加成员和方法</a></li>
+<li><a href="#sec-1-3-2">添加抽象方法</a></li>
+<li><a href="#sec-1-3-3">fromString</a></li>
+<li><a href="#sec-1-3-4">策略枚举</a></li>
+<li><a href="#sec-1-3-5">使用枚举进行switch</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#sec-2">用实例中的成员代替序数</a></li>
+<li><a href="#sec-3">用EnumSet代替位域</a></li>
+<li><a href="#sec-4">用EnumMap代替序数索引</a>
+<ul>
+<li><a href="#sec-4-1">嵌套enumMap</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
 
 <div id="outline-container-sec-1" class="outline-2">
 <h2 id="sec-1">用enum代替int常量</h2>
+<div class="outline-text-2" id="text-1">
+</div><div id="outline-container-sec-1-1" class="outline-3">
+<h3 id="sec-1-1">int枚举模式</h3>
+<div class="outline-text-3" id="text-1-1">
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">APP_START</span>=1;
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">APP_PAUSE</span>=0;
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">APP_STOP</span> =2;
+
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">PLAY_START</span>=1;
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">PLAY_PAUSE</span>=0;
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">PLAY_STOP</span> =2;
+</pre>
+</div>
+<ul class="org-ul">
+<li>类型安全：如果将AAP_传到需要PLAY_的方法中，编译器不会出现警告，甚至允许int i =(APP_START - PLAY_START) / PLAY_START
+</li>
+<li>使用方便：如果修改一个int常量的值，会引起客户端使用代码的重新编译。把int常量打印出来得到的只是数字，很难和真正的变量名关联起来
+</li>
+</ul>
+
+<p>
+如果用的是String常量，这样的变体被称作String枚举模式。虽然可以解决打印字符串的问题，但是由于需要经常比较字符串，所以性能糟糕。更严重的是客户端代码往往会把这样的常量硬编码到代码里面，而一旦字符串常量发生变化，会导致客户端逻辑出错
+</p>
+</div>
+</div>
+<div id="outline-container-sec-1-2" class="outline-3">
+<h3 id="sec-1-2">枚举</h3>
+<div class="outline-text-3" id="text-1-2">
+<p>
+通过共有的静态final域为每个枚举常量导出实例的类。枚举是单例的泛型化，本质上是单元素的枚举
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">enum</span> <span style="color: #98fb98;">Apple</span> {
+    <span style="color: #eedd82;">FUJI</span>, <span style="color: #eedd82;">PIPPIN</span>, <span style="color: #eedd82;">GRANNY_SMITH</span>
+}
+
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">enum</span> <span style="color: #98fb98;">Orange</span> {
+    <span style="color: #eedd82;">NAVEL</span>, <span style="color: #eedd82;">TEMPLE</span>, <span style="color: #eedd82;">BLOOD</span>
+}
+</pre>
+</div>
+</div>
+<div id="outline-container-sec-1-2-1" class="outline-4">
+<h4 id="sec-1-2-1">枚举的优势</h4>
+<div class="outline-text-4" id="text-1-2-1">
+<ol class="org-ol">
+<li>枚举类型拥有自己的命名空间，可以允许同名常量
+</li>
+<li>增加和重排枚举类型中常量，而无需重新编译客户端（新增常量自然无法使用）
+</li>
+<li>toString可以获取常量的字面值
+</li>
+<li>提供了所有的Object的方法的高级实现，实现了Comparable和Serializable接口，并针对枚举类型的可任意改变性设计了序列化方式
+</li>
+<li>枚举可任意添加方法和成员
+</li>
+</ol>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-1-3" class="outline-3">
+<h3 id="sec-1-3">枚举模式</h3>
+<div class="outline-text-3" id="text-1-3">
+</div><div id="outline-container-sec-1-3-1" class="outline-4">
+<h4 id="sec-1-3-1">添加成员和方法</h4>
+<div class="outline-text-4" id="text-1-3-1">
+<p>
+为九大行星添加重量和半径常量成员，并提供方法来使用这些数据计算重力
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">enum</span> <span style="color: #98fb98;">Planet</span> {
+    <span style="color: #eedd82;">MERCURY</span>(3.302e+23, 2.439e6),
+    <span style="color: #eedd82;">VENUS</span>(4.869e+24, 6.052e6),
+    <span style="color: #eedd82;">EARTH</span>(5.975e+24, 6.378e6),
+    <span style="color: #eedd82;">MARS</span>(6.419e+23, 3.393e6),
+    <span style="color: #eedd82;">JUPITER</span>(1.899e+27, 7.149e7),
+    <span style="color: #eedd82;">SATURN</span>(5.685e+26, 6.027e7),
+    <span style="color: #eedd82;">URANUS</span>(8.683e+25, 2.556e7),
+    <span style="color: #eedd82;">NEPTUNE</span>(1.024e+26, 2.477e7);
+
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">mass</span>; <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#21315;&#20811;</span>
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">radius</span>; <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#31859;</span>
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">surfaceGravity</span>;
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">G</span> = 6.67300E-11;
+
+    <span style="color: #00ffff;">private</span> <span style="color: #eedd82;">Planet</span>(<span style="color: #98fb98;">double</span> <span style="color: #eedd82;">mass</span>, <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">radius</span>) {
+        <span style="color: #00ffff;">this</span>.mass = mass;
+        <span style="color: #00ffff;">this</span>.radius = radius;
+        surfaceGravity = G * mass / (radius * radius);
+    }
+
+    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">mass</span>() {
+        <span style="color: #00ffff;">return</span> mass;
+    }
+
+    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">radius</span>() {
+        <span style="color: #00ffff;">return</span> radius;
+    }
+
+    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">surfaceGravity</span>() {
+        <span style="color: #00ffff;">return</span> surfaceGravity;
+    }
+
+    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">surfaceWeight</span>(<span style="color: #98fb98;">double</span> <span style="color: #eedd82;">mass</span>) {
+        <span style="color: #00ffff;">return</span> mass * surfaceGravity;
+    }    
+}
+</pre>
+</div>
+<p>
+计算在各个星球的重量，客户端代码调用了枚举的方法，还打印出了枚举的常量字面值
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">String</span>[] <span style="color: #eedd82;">args</span>) {
+    <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">earthWeight</span> = Double.parseDouble(<span style="color: #ffa07a;">"175"</span>);
+    <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">mass</span> = earthWeight / <span style="color: #7fffd4;">Planet</span>.EARTH.surfaceGravity();
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">Weight on MERCURY is 66.133672</span>
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">Weight on VENUS is 158.383926</span>
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">Weight on EARTH is 175.000000</span>
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">Weight on MARS is 66.430699</span>
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">Weight on JUPITER is 442.693902</span>
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">Weight on SATURN is 186.464970</span>
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">Weight on URANUS is 158.349709</span>
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">Weight on NEPTUNE is 198.846116</span>
+    <span style="color: #00ffff;">for</span> (<span style="color: #98fb98;">Planet</span> <span style="color: #eedd82;">p</span> : Planet.values()) {
+        System.out.printf(<span style="color: #ffa07a;">"Weight on %s is %f%n"</span>, p, p.surfaceWeight(mass));
+    }
+}
+</pre>
+</div>
+<p>
+设计枚举和设计类的原则是相同的：可见性最低，可变性最小
+</p>
+<ul class="org-ul">
+<li>所有的成员都应该是final private
+</li>
+<li>如果可能就不提供public的方法
+</li>
+<li>如果需要被外部使用才做成顶层类
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-1-3-2" class="outline-4">
+<h4 id="sec-1-3-2">添加抽象方法</h4>
+<div class="outline-text-4" id="text-1-3-2">
+<p>
+提供一个方法来执行四大基本计算常量所表示的算术运算
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">enum</span> <span style="color: #98fb98;">UglyOperation</span> {
+    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">Enum type that switches on its own value - questionable</span>
+    <span style="color: #eedd82;">PLUS</span>, <span style="color: #eedd82;">MINUS</span>, <span style="color: #eedd82;">TIMES</span>, <span style="color: #eedd82;">DIVIDE</span>;
+    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">Do the arithmetic op represented by this constant</span>
+    <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">apply</span>(<span style="color: #98fb98;">double</span> <span style="color: #eedd82;">x</span>, <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">y</span>) {
+        <span style="color: #00ffff;">switch</span> (<span style="color: #00ffff;">this</span>) {
+        <span style="color: #00ffff;">case</span> PLUS:
+            <span style="color: #00ffff;">return</span> x + y;
+        <span style="color: #00ffff;">case</span> MINUS:
+            <span style="color: #00ffff;">return</span> x - y;
+        <span style="color: #00ffff;">case</span> TIMES:
+            <span style="color: #00ffff;">return</span> x * y;
+        <span style="color: #00ffff;">case</span> DIVIDE:
+            <span style="color: #00ffff;">return</span> x / y;
+        }
+        <span style="color: #00ffff;">throw</span> <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">AssertionError</span>(<span style="color: #ffa07a;">"Unknown op: "</span> + <span style="color: #00ffff;">this</span>);
+    }
+}
+</pre>
+</div>
+<ol class="org-ol">
+<li>没有throw语句就不能进行编译，然而实际上不可能执行到这里
+</li>
+<li>增加了新的枚举常量，却忘记给switch增加相应的条件，仍然可以编译，但在试图运用新的运算的时候就会运行失败
+</li>
+</ol>
+
+<p>
+在枚举类中声明一个抽象方法，这样在添加新的常量时候就必须实现这个方法
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">enum</span> <span style="color: #98fb98;">Operation</span> {
+    <span style="color: #eedd82;">PLUS</span>(<span style="color: #ffa07a;">"+"</span>) {
+    <span style="color: #7fffd4;">@Override</span>
+    <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">apply</span>(<span style="color: #98fb98;">double</span> <span style="color: #eedd82;">x</span>, <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">y</span>) {
+        <span style="color: #00ffff;">return</span> x + y;
+    }
+    },
+    MINUS(<span style="color: #ffa07a;">"-"</span>) {
+    <span style="color: #7fffd4;">@Override</span>
+    <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">apply</span>(<span style="color: #98fb98;">double</span> <span style="color: #eedd82;">x</span>, <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">y</span>) {
+        <span style="color: #00ffff;">return</span> x - y;
+    }
+    },
+    TIMES(<span style="color: #ffa07a;">"*"</span>) {
+    <span style="color: #7fffd4;">@Override</span>
+    <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">apply</span>(<span style="color: #98fb98;">double</span> <span style="color: #eedd82;">x</span>, <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">y</span>) {
+        <span style="color: #00ffff;">return</span> x * y;
+    }
+    },
+    DIVIDE(<span style="color: #ffa07a;">"/"</span>) {
+    <span style="color: #7fffd4;">@Override</span>
+    <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">apply</span>(<span style="color: #98fb98;">double</span> <span style="color: #eedd82;">x</span>, <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">y</span>) {
+        <span style="color: #00ffff;">return</span> x / y;
+    }
+    };
+
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">String</span> <span style="color: #eedd82;">symbol</span>;
+
+    <span style="color: #00ffff;">abstract</span> <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">apply</span>(<span style="color: #98fb98;">double</span> <span style="color: #eedd82;">x</span>, <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">y</span>);
+
+    <span style="color: #00ffff;">private</span> <span style="color: #eedd82;">Operation</span>(<span style="color: #98fb98;">String</span> <span style="color: #eedd82;">symbol</span>) {
+    <span style="color: #00ffff;">this</span>.symbol = symbol;
+    }
+
+    <span style="color: #7fffd4;">@Override</span>
+    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">String</span> <span style="color: #eedd82;">toString</span>() {
+    <span style="color: #00ffff;">return</span> symbol;
+    }
+}
+</pre>
+</div>
+
+<p>
+覆盖的toString方法也使得客户端代码输出更漂亮
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">String</span>[] <span style="color: #eedd82;">args</span>) {
+    <span style="color: #98fb98;">String</span>[] <span style="color: #eedd82;">arg</span> = {<span style="color: #ffa07a;">"2"</span>, <span style="color: #ffa07a;">"4"</span>};
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">2.000000 + 4.000000 = 6.000000</span>
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">2.000000 - 4.000000 = -2.000000</span>
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">2.000000 * 4.000000 = 8.000000</span>
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">2.000000 / 4.000000 = 0.500000</span>
+    <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">x</span> = Double.parseDouble(arg[0]);
+    <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">y</span> = Double.parseDouble(arg[1]);
+    <span style="color: #00ffff;">for</span> (<span style="color: #98fb98;">Operation</span> <span style="color: #eedd82;">op</span> : Operation.values()) {
+        System.out.printf(<span style="color: #ffa07a;">"%f %s %f = %f%n"</span>, x, op, y, op.apply(x, y));
+    }
+}
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-1-3-3" class="outline-4">
+<h4 id="sec-1-3-3">fromString</h4>
+<div class="outline-text-4" id="text-1-3-3">
+<p>
+枚举类型有一个自动产生的valueOf方法，将常量的字面值转成对应的枚举
+</p>
+
+<p>
+如果在枚举类型中覆盖toString，需要考虑编写一个formString方法，将toString输出的字符串转回相应的枚举
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">Implementing a fromString method on an enum type</span>
+<span style="color: #00ffff;">private</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">Map</span>&lt;<span style="color: #98fb98;">String</span>, <span style="color: #98fb98;">Operation</span>&gt; <span style="color: #eedd82;">stringToEnum</span> =
+    <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">HashMap</span>&lt;<span style="color: #98fb98;">String</span>, <span style="color: #98fb98;">Operation</span>&gt;();
+
+<span style="color: #00ffff;">static</span> { <span style="color: #ff4500;">// </span><span style="color: #ff4500;">Initialize map from constant name to enum constant</span>
+    <span style="color: #00ffff;">for</span> (<span style="color: #98fb98;">Operation</span> <span style="color: #eedd82;">op</span> : values())
+        stringToEnum.put(op.toString(), op);
+}
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">Returns Operation for string, or null if string is invalid</span>
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">Operation</span> <span style="color: #87cefa;">fromString</span>(<span style="color: #98fb98;">String</span> <span style="color: #eedd82;">symbol</span>) {
+    <span style="color: #00ffff;">return</span> stringToEnum.get(symbol);
+}
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-1-3-4" class="outline-4">
+<h4 id="sec-1-3-4">策略枚举</h4>
+<div class="outline-text-4" id="text-1-3-4">
+<p>
+根据某工人的基本工资以及当天的工作时间，来计算它当天的薪酬。在5个工作日中，超过正常8小时的工作时间都会产生加班工资；在双休日中，所有工作都产生加班工资
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">enum</span> <span style="color: #98fb98;">DangerPayrollDay</span> {
+
+    <span style="color: #eedd82;">MONDAY</span>, <span style="color: #eedd82;">TUESDAY</span>, <span style="color: #eedd82;">WEDNESDAY</span>, <span style="color: #eedd82;">THURSDAY</span>, <span style="color: #eedd82;">FRIDAY</span>,
+    <span style="color: #eedd82;">SATURDAY</span>, <span style="color: #eedd82;">SUNDAY</span>;
+
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">HOURS_PER_SHIFT</span> = 8;
+
+    <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">pay</span>(<span style="color: #98fb98;">double</span> <span style="color: #eedd82;">hourseWorked</span>, <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">payRate</span>) {
+        <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">basePay</span> = hourseWorked * payRate;
+        <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">overtimePay</span>;
+        <span style="color: #00ffff;">switch</span> (<span style="color: #00ffff;">this</span>) {
+        <span style="color: #00ffff;">case</span> SATURDAY:
+        <span style="color: #00ffff;">case</span> SUNDAY:
+            overtimePay = hourseWorked * payRate / 2;
+            <span style="color: #00ffff;">break</span>;
+        <span style="color: #00ffff;">default</span>:
+            overtimePay = hourseWorked &lt;= HOURS_PER_SHIFT ? 
+                0 : (hourseWorked - HOURS_PER_SHIFT) * payRate / 2;
+            <span style="color: #00ffff;">break</span>;
+        }
+        <span style="color: #00ffff;">return</span> basePay + overtimePay;
+    }
+}
+</pre>
+</div>
+<p>
+这段代码很简单，但是非常脆弱。假设将一个元素添加到枚举中，如一个特殊的假期（国庆节等），但忘了给switch语句添加相应的case，就会计算出错
+</p>
+
+<p>
+为每一天实现计算工资方法
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">enum</span> <span style="color: #98fb98;">UglyPayrollDay</span> {
+    <span style="color: #eedd82;">MONDAY</span>() {
+        <span style="color: #7fffd4;">@Override</span>
+            <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">overtimePay</span>(<span style="color: #98fb98;">double</span> <span style="color: #eedd82;">hoursWorked</span>, <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">payRate</span>) {
+            <span style="color: #00ffff;">return</span> weekdayPay(hoursWorked, payRate);
+        }
+    },
+    TUESDAY {
+        <span style="color: #7fffd4;">@Override</span>
+            <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">overtimePay</span>(<span style="color: #98fb98;">double</span> <span style="color: #eedd82;">hoursWorked</span>, <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">payRate</span>) {
+            <span style="color: #00ffff;">return</span> weekdayPay(hoursWorked, payRate);
+        }
+    },
+    WEDNESDAY {
+        <span style="color: #7fffd4;">@Override</span>
+            <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">overtimePay</span>(<span style="color: #98fb98;">double</span> <span style="color: #eedd82;">hoursWorked</span>, <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">payRate</span>) {
+            <span style="color: #00ffff;">return</span> weekdayPay(hoursWorked, payRate);
+        }
+    },
+    THURSDAY {
+        <span style="color: #7fffd4;">@Override</span>
+            <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">overtimePay</span>(<span style="color: #98fb98;">double</span> <span style="color: #eedd82;">hoursWorked</span>, <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">payRate</span>) {
+            <span style="color: #00ffff;">return</span> weekdayPay(hoursWorked, payRate);
+        }
+    },
+    FRIDAY {
+        <span style="color: #7fffd4;">@Override</span>
+            <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">overtimePay</span>(<span style="color: #98fb98;">double</span> <span style="color: #eedd82;">hoursWorked</span>, <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">payRate</span>) {
+            <span style="color: #00ffff;">return</span> weekdayPay(hoursWorked, payRate);
+        }
+    },
+    SATURDAY {
+        <span style="color: #7fffd4;">@Override</span>
+            <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">overtimePay</span>(<span style="color: #98fb98;">double</span> <span style="color: #eedd82;">hoursWorked</span>, <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">payRate</span>) {
+            <span style="color: #00ffff;">return</span> weekendPay(hoursWorked, payRate);
+        }
+    },
+    SUNDAY {
+        <span style="color: #7fffd4;">@Override</span>
+            <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">overtimePay</span>(<span style="color: #98fb98;">double</span> <span style="color: #eedd82;">hoursWorked</span>, <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">payRate</span>) {
+            <span style="color: #00ffff;">return</span> weekendPay(hoursWorked, payRate);
+        }
+    };
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">HOURS_PER_SHIFT</span> = 8;<span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#27491;&#24120;&#24037;&#20316;&#26102;&#25968;</span>
+
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#25277;&#35937;&#20986;&#21152;&#29677;&#24037;&#36164;&#35745;&#31639;</span>
+    <span style="color: #00ffff;">abstract</span> <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">overtimePay</span>(<span style="color: #98fb98;">double</span> <span style="color: #eedd82;">hoursWorked</span>, <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">payRate</span>);
+
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#35745;&#31639;&#24037;&#36164;</span>
+    <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">pay</span>(<span style="color: #98fb98;">double</span> <span style="color: #eedd82;">hoursWorked</span>, <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">payRate</span>) {
+        <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">basePay</span> = hoursWorked * payRate;<span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#20844;&#29992;</span>
+        <span style="color: #00ffff;">return</span> basePay + overtimePay(hoursWorked, payRate);
+    }
+
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#21452;&#20241;&#26085;&#21152;&#29677;&#24037;&#36164;&#31639;&#27861;</span>
+    <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">weekendPay</span>(<span style="color: #98fb98;">double</span> <span style="color: #eedd82;">hoursWorked</span>, <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">payRate</span>) {
+        <span style="color: #00ffff;">return</span> hoursWorked * payRate / 2;
+    }
+
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#27491;&#24120;&#24037;&#20316;&#26085;&#21152;&#29677;&#24037;&#36164;</span>
+    <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">weekdayPay</span>(<span style="color: #98fb98;">double</span> <span style="color: #eedd82;">hoursWorked</span>, <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">payRate</span>) {
+        <span style="color: #00ffff;">return</span> hoursWorked &lt;= HOURS_PER_SHIFT ? 0
+            : (hoursWorked - HOURS_PER_SHIFT) * payRate / 2;
+    }
+}
+</pre>
+</div>
+<p>
+这段代码很难看，有很多常量实现pay方法都是重复的，而且每增加新的一天，就可能新的额外重复代码
+</p>
+
+<p>
+添加一个私有的枚举类型，用它作为计算工资的策略属性。计算加班工资的方法被实现在这个策略枚举内，在原来的枚举类型每次添加新天常量，只需要声明使用哪种策略类型
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">enum</span> <span style="color: #98fb98;">StrategyPayrollDay</span> {
+    <span style="color: #eedd82;">MONDAY</span>(<span style="color: #7fffd4;">PayType</span>.WEEKDAY), <span style="color: #eedd82;">TUESDAY</span>(<span style="color: #7fffd4;">PayType</span>.WEEKDAY),
+    <span style="color: #eedd82;">WEDNESDAY</span>(<span style="color: #7fffd4;">PayType</span>.WEEKDAY), <span style="color: #eedd82;">THURSDAY</span>(<span style="color: #7fffd4;">PayType</span>.WEEKDAY),
+    <span style="color: #eedd82;">FRIDAY</span>(<span style="color: #7fffd4;">PayType</span>.WEEKDAY),
+    <span style="color: #eedd82;">SATURDAY</span>(<span style="color: #7fffd4;">PayType</span>.WEEKEND), <span style="color: #eedd82;">SUNDAY</span>(<span style="color: #7fffd4;">PayType</span>.WEEKEND);
+
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">PayType</span> <span style="color: #eedd82;">payType</span>;
+
+    <span style="color: #00ffff;">private</span> <span style="color: #eedd82;">StrategyPayrollDay</span>(<span style="color: #98fb98;">PayType</span> <span style="color: #eedd82;">payType</span>) {
+        <span style="color: #00ffff;">this</span>.payType = payType;
+    }
+
+    <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">pay</span>(<span style="color: #98fb98;">double</span> <span style="color: #eedd82;">hoursWorked</span>, <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">payRate</span>) {
+        <span style="color: #00ffff;">return</span> payType.pay(hoursWorked, payRate);
+    }
+
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">The strategy enum type</span>
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">enum</span> <span style="color: #98fb98;">PayType</span> {
+        <span style="color: #eedd82;">WEEKDAY</span> {
+            <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">overtimePay</span>(<span style="color: #98fb98;">double</span> <span style="color: #eedd82;">hours</span>, <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">payRate</span>) {
+                <span style="color: #00ffff;">return</span> hours &lt;= HOURS_PER_SHIFT ? 0
+                    : (hours - HOURS_PER_SHIFT) * payRate / 2;
+            }
+        },
+        WEEKEND {
+            <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">overtimePay</span>(<span style="color: #98fb98;">double</span> <span style="color: #eedd82;">hours</span>, <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">payRate</span>) {
+                <span style="color: #00ffff;">return</span> hours * payRate / 2;
+            }
+        };
+        <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">HOURS_PER_SHIFT</span> = 8;
+
+        <span style="color: #00ffff;">abstract</span> <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">overtimePay</span>(<span style="color: #98fb98;">double</span> <span style="color: #eedd82;">hrs</span>, <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">payRate</span>);
+
+        <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">pay</span>(<span style="color: #98fb98;">double</span> <span style="color: #eedd82;">hoursWorked</span>, <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">payRate</span>) {
+            <span style="color: #98fb98;">double</span> <span style="color: #eedd82;">basePay</span> = hoursWorked * payRate;
+            <span style="color: #00ffff;">return</span> basePay + overtimePay(hoursWorked, payRate);
+        }
+    }
+}
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-1-3-5" class="outline-4">
+<h4 id="sec-1-3-5">使用枚举进行switch</h4>
+<div class="outline-text-4" id="text-1-3-5">
+<p>
+如果想要在枚举外面的类中为不同的枚举常量增加不同的行为，可以把枚举用在switch语句中
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">private</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">Operation</span> <span style="color: #87cefa;">inverse</span>(<span style="color: #98fb98;">Operation</span> <span style="color: #eedd82;">op</span>) {
+    <span style="color: #00ffff;">switch</span> (op) {
+    <span style="color: #00ffff;">case</span> PLUS:
+        <span style="color: #00ffff;">return</span> <span style="color: #7fffd4;">Operation</span>.MINNUS;
+    <span style="color: #00ffff;">case</span> MINNUS:
+        <span style="color: #00ffff;">return</span> <span style="color: #7fffd4;">Operation</span>.PLUS;
+    <span style="color: #00ffff;">case</span> TIMES:
+        <span style="color: #00ffff;">return</span> <span style="color: #7fffd4;">Operation</span>.DIVIDE;
+    <span style="color: #00ffff;">case</span> DIVIDE:
+        <span style="color: #00ffff;">return</span> <span style="color: #7fffd4;">Operation</span>.TIMES;
+    <span style="color: #00ffff;">default</span>:
+        <span style="color: #00ffff;">throw</span> <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">AssertionError</span>(<span style="color: #ffa07a;">"Unkown op: "</span> + op);
+    }
+}
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2" class="outline-2">
+<h2 id="sec-2">用实例中的成员代替序数</h2>
+<div class="outline-text-2" id="text-2">
+<p>
+使用ordinal()方法能够获得实例在枚举的顺序，从0开始
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">Abuse of ordinal to derive an associated value - DON'T DO THIS</span>
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">enum</span> <span style="color: #98fb98;">Ensemble</span> {
+    <span style="color: #eedd82;">DUET</span>, <span style="color: #eedd82;">TRIO</span>, <span style="color: #eedd82;">QUARTET</span>, <span style="color: #eedd82;">QUINTET</span>, <span style="color: #eedd82;">SEPTET</span>, <span style="color: #eedd82;">OCTET</span>, <span style="color: #eedd82;">NONET</span>, <span style="color: #eedd82;">DECTET</span>;
+
+    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">numberOfMusicians</span>() {
+        <span style="color: #00ffff;">return</span> ordinal() + 1;
+    }
+}
+</pre>
+</div>
+<p>
+如果把变量重新排序，就可能导致numberOfMusicians方法出错
+</p>
+
+<p>
+解决方法：为枚举常量添加int成员
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">Enum with integer data stored in an instance field</span>
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">enum</span> <span style="color: #98fb98;">Ensemble</span> {
+    <span style="color: #eedd82;">SOLO</span>(1), <span style="color: #eedd82;">DUET</span>(2), <span style="color: #eedd82;">TRIO</span>(3), <span style="color: #eedd82;">QUARTET</span>(4), <span style="color: #eedd82;">QUINTET</span>(5),
+    <span style="color: #eedd82;">SEXTET</span>(6), <span style="color: #eedd82;">SEPTET</span>(7), <span style="color: #eedd82;">OCTET</span>(8), <span style="color: #eedd82;">DOUBLE_QUARTET</span>(8),
+    <span style="color: #eedd82;">NONET</span>(9), <span style="color: #eedd82;">DECTET</span>(10), <span style="color: #eedd82;">TRIPLE_QUARTET</span>(12);
+
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">numberOfMusicians</span>;
+
+    <span style="color: #00ffff;">private</span> <span style="color: #eedd82;">Ensemble</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">size</span>) {
+        <span style="color: #00ffff;">this</span>.numberOfMusicians = size;
+    }
+
+    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">numberOfMusicians</span>() {
+        <span style="color: #00ffff;">return</span> numberOfMusicians;
+    }
+}
+</pre>
+</div>
+<p>
+大多数情况不应该调用ordinal方法，这个方法是为了给特殊的类如EnumSet,EnumMap而提供
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-3" class="outline-2">
+<h2 id="sec-3">用EnumSet代替位域</h2>
+<div class="outline-text-2" id="text-3">
+<p>
+当常量被用于位运算的时候，通常这些常量会被声明为int常量，并且赋值成2的n次幂
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">Bit field enumeration constants - OBSOLETE!</span>
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">Text</span> {
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">STYLE_BOLD</span> = 1 &lt;&lt; 0; <span style="color: #ff4500;">// </span><span style="color: #ff4500;">1</span>
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">STYLE_ITALIC</span> = 1 &lt;&lt; 1; <span style="color: #ff4500;">// </span><span style="color: #ff4500;">2</span>
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">STYLE_UNDERLINE</span> = 1 &lt;&lt; 2; <span style="color: #ff4500;">// </span><span style="color: #ff4500;">4</span>
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">STYLE_STRIKETHROUGH</span>= 1 &lt;&lt; 3; <span style="color: #ff4500;">// </span><span style="color: #ff4500;">8</span>
+
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">Parameter is bitwise OR of zero or more STYLE_ constants</span>
+    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">applyStyles</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">styles</span>) {
+<span style="color: #ff4500;">//</span><span style="color: #ff4500;">...</span>
+    }
+}
+</pre>
+</div>
+<p>
+客户端调用
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java">text.applyStyles(STYLE_BOLD | STYLE_ITALIC);
+</pre>
+</div>
+
+<p>
+使用EnumSet代替int常量
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">EnumSet - a modern replacement for bit fields</span>
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">Text</span> {
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">enum</span> <span style="color: #98fb98;">Style</span> {
+    <span style="color: #eedd82;">BOLD</span>, <span style="color: #eedd82;">ITALIC</span>, <span style="color: #eedd82;">UNDERLINE</span>, <span style="color: #eedd82;">STRIKETHROUGH</span>
+    }
+
+    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">Any Set could be passed in, but EnumSet is clearly best</span>
+    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">applyStyles</span>(<span style="color: #98fb98;">Set</span>&lt;<span style="color: #98fb98;">Style</span>&gt; <span style="color: #eedd82;">styles</span>) {
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">... </span>
+    }
+}
+</pre>
+</div>
+
+<p>
+简洁明白的客户端代码
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java">text.applyStyles(EnumSet.of(<span style="color: #7fffd4;">Text</span>.<span style="color: #7fffd4;">Style</span>.BOLD, <span style="color: #7fffd4;">Text</span>.<span style="color: #7fffd4;">Style</span>.ITALIC));
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-4" class="outline-2">
+<h2 id="sec-4">用EnumMap代替序数索引</h2>
+<div class="outline-text-2" id="text-4">
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">Herb</span> {
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">enum</span> <span style="color: #98fb98;">Type</span> { <span style="color: #eedd82;">ANNUAL</span>, <span style="color: #eedd82;">PERENNIAL</span>, <span style="color: #eedd82;">BIENNIAL</span> }
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">String</span> <span style="color: #eedd82;">name</span>;
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">Type</span> <span style="color: #eedd82;">type</span>;
+
+    <span style="color: #00ffff;">public</span> <span style="color: #87cefa;">Herb</span>(<span style="color: #98fb98;">String</span> <span style="color: #eedd82;">name</span>, <span style="color: #98fb98;">Type</span> <span style="color: #eedd82;">type</span>) {
+        <span style="color: #00ffff;">this</span>.name = name;
+        <span style="color: #00ffff;">this</span>.type = type;
+    }
+
+    <span style="color: #7fffd4;">@Override</span> <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">String</span> <span style="color: #87cefa;">toString</span>() {
+        <span style="color: #00ffff;">return</span> name;
+    }
+}
+</pre>
+</div>
+
+<p>
+使用enum的ordinal值作为数组的下标
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">Using ordinal() to index an array - DON'T DO THIS!</span>
+<span style="color: #98fb98;">Herb</span>[] <span style="color: #eedd82;">garden</span> = {<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">Herb</span>(<span style="color: #ffa07a;">"Basil"</span>, <span style="color: #7fffd4;">Type</span>.ANNUAL), 
+         <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">Herb</span>(<span style="color: #ffa07a;">"Scallion"</span>, <span style="color: #7fffd4;">Type</span>.PERENNIAL), <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">Herb</span>(<span style="color: #ffa07a;">"Dill"</span>, <span style="color: #7fffd4;">Type</span>.BIENNIAL)};
+
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">Indexed by Herb.Type.ordinal()</span>
+<span style="color: #98fb98;">Set</span>&lt;<span style="color: #98fb98;">Herb</span>&gt;[] <span style="color: #eedd82;">herbsByType</span> =
+    (<span style="color: #98fb98;">Set</span>&lt;<span style="color: #98fb98;">Herb</span>&gt;[]) <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">Set</span>[<span style="color: #7fffd4;">Herb</span>.Type.values().length];
+
+<span style="color: #00ffff;">for</span> (<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">i</span> = 0; i &lt; herbsByType.<span style="color: #98fb98;">length</span>; i++) {
+    herbsByType[i] = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">HashSet</span>&lt;&gt;();
+}
+
+<span style="color: #00ffff;">for</span> (<span style="color: #98fb98;">Herb</span> <span style="color: #eedd82;">h</span> : garden) {
+    herbsByType[h.type.ordinal()].add(h);
+}
+
+<span style="color: #ff4500;">//</span><span style="color: #ff4500;">ANNUAL: [Basil]</span>
+<span style="color: #ff4500;">//</span><span style="color: #ff4500;">PERENNIAL: [Scallion]</span>
+<span style="color: #ff4500;">//</span><span style="color: #ff4500;">BIENNIAL: [Dill]</span>
+<span style="color: #00ffff;">for</span> (<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">i</span> = 0; i &lt; herbsByType.<span style="color: #98fb98;">length</span>; i++) {
+    System.out.printf(<span style="color: #ffa07a;">"%s: %s%n"</span>,
+              <span style="color: #7fffd4;">Herb</span>.Type.values()[i], herbsByType[i]);
+}
+</pre>
+</div>
+<p>
+使用int作为数组的下标是很危险的，没有枚举类型安全检查，一旦使用错误的int数值，运行时候就会有IndexoutOfArrayException。其次数组和范型并不兼容，不追求效率的情况下应该避免使用数组
+</p>
+
+<p>
+解决方法：使用enumMap代替Set&lt;Herb&gt;[] 
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">Using an EnumMap to associate data with an enum</span>
+<span style="color: #98fb98;">Herb</span>[] <span style="color: #eedd82;">garden</span> = {<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">Herb</span>(<span style="color: #ffa07a;">"Basil"</span>, <span style="color: #7fffd4;">Type</span>.ANNUAL),
+         <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">Herb</span>(<span style="color: #ffa07a;">"Scallion"</span>, <span style="color: #7fffd4;">Type</span>.PERENNIAL), <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">Herb</span>(<span style="color: #ffa07a;">"Dill"</span>, <span style="color: #7fffd4;">Type</span>.BIENNIAL)};
+<span style="color: #98fb98;">Map</span>&lt;<span style="color: #7fffd4;">Herb</span>.<span style="color: #98fb98;">Type</span>, <span style="color: #98fb98;">Set</span>&lt;<span style="color: #98fb98;">Herb</span>&gt;&gt; <span style="color: #eedd82;">herbsByType</span> =
+    <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">EnumMap</span>&lt;&gt;(<span style="color: #7fffd4;">Herb</span>.Type.<span style="color: #00ffff;">class</span>);
+
+<span style="color: #00ffff;">for</span> (<span style="color: #7fffd4;">Herb</span>.<span style="color: #98fb98;">Type</span> <span style="color: #eedd82;">t</span> : <span style="color: #7fffd4;">Herb</span>.Type.values()) {
+    herbsByType.put(t, <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">HashSet</span>&lt;&gt;());
+}
+
+<span style="color: #00ffff;">for</span> (<span style="color: #98fb98;">Herb</span> <span style="color: #eedd82;">h</span> : garden) {
+    herbsByType.get(h.type).add(h);
+}
+
+System.out.println(herbsByType);
+</pre>
+</div>
+</div>
+
+<div id="outline-container-sec-4-1" class="outline-3">
+<h3 id="sec-4-1">嵌套enumMap</h3>
+<div class="outline-text-3" id="text-4-1">
+<p>
+更复杂的情况可能会用到嵌套的enumMap
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">enum</span> <span style="color: #98fb98;">Phase</span> {
+    <span style="color: #eedd82;">SOLID</span>, <span style="color: #eedd82;">LIQUID</span>, <span style="color: #eedd82;">GAS</span>;
+
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">enum</span> <span style="color: #98fb98;">Transition</span> {
+        <span style="color: #eedd82;">MELT</span>(SOLID, LIQUID), <span style="color: #eedd82;">FREEZE</span>(LIQUID, SOLID),
+        <span style="color: #eedd82;">BOIL</span>(LIQUID, GAS),
+        <span style="color: #eedd82;">CONDENSE</span>(GAS, LIQUID),
+        <span style="color: #eedd82;">SUBLIME</span>(SOLID, GAS), <span style="color: #eedd82;">DEPOSIT</span>(GAS, SOLID);
+        <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">Phase</span> <span style="color: #eedd82;">src</span>;
+        <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">Phase</span> <span style="color: #eedd82;">dst</span>;
+
+        <span style="color: #eedd82;">Transition</span>(<span style="color: #98fb98;">Phase</span> <span style="color: #eedd82;">src</span>, <span style="color: #98fb98;">Phase</span> <span style="color: #eedd82;">dst</span>) {
+            <span style="color: #00ffff;">this</span>.src = src;
+            <span style="color: #00ffff;">this</span>.dst = dst;
+        }
+
+        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">Initialize the phase transition map</span>
+        <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">Map</span>&lt;<span style="color: #98fb98;">Phase</span>, <span style="color: #98fb98;">Map</span>&lt;<span style="color: #98fb98;">Phase</span>, <span style="color: #98fb98;">Transition</span>&gt;&gt; <span style="color: #eedd82;">m</span> =
+            <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">EnumMap</span>&lt;&gt;(Phase.<span style="color: #00ffff;">class</span>);
+
+        <span style="color: #00ffff;">static</span> {
+            <span style="color: #00ffff;">for</span> (<span style="color: #98fb98;">Phase</span> <span style="color: #eedd82;">p</span> : Phase.values()) {
+                m.put(p, <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">EnumMap</span>&lt;&gt;(Phase.<span style="color: #00ffff;">class</span>));
+            }
+            <span style="color: #00ffff;">for</span> (<span style="color: #98fb98;">Transition</span> <span style="color: #eedd82;">trans</span> : Transition.values()) {
+                m.get(trans.src).put(trans.dst, trans);
+            }
+        }
+
+        <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">Transition</span> <span style="color: #eedd82;">from</span>(<span style="color: #98fb98;">Phase</span> <span style="color: #eedd82;">src</span>, <span style="color: #98fb98;">Phase</span> <span style="color: #eedd82;">dst</span>) {
+            <span style="color: #00ffff;">return</span> m.get(src).get(dst);
+        }
+    }
+}
+</pre>
+</div>
+<p>
+总之不要调用ordinal方法
+</p>
+</div>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
