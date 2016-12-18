@@ -549,3 +549,125 @@
      }
    #+END_SRC
 总之不要调用ordinal方法
+* 用接口模拟可扩展枚举
+大多数情况下可扩展的枚举并不是一个好的设计，因此Java无法编写可扩展的枚举类型
++ 很难区分哪些枚举常量是父类型，哪些枚举常量是子类型
++ 无法很好地对所有父类型和子类型的常量做枚举
++ 扩展通常会使设计和使用变得复杂
+
+但是某些特定情况下需要扩展，比如使用定义的枚举常量的用户需要增加自己的枚举常量　
+** 通过接口模拟可扩展枚举类型
++ 声明枚举常量要实现的接口
+#+BEGIN_SRC java
+  public interface Operation {
+          double apply(double x, double y);
+  }
+#+END_SRC
++ 提供基本的枚举常量给客户端使用
+#+BEGIN_SRC java
+  // Emulated extensible enum using an interface
+  public enum BasicOperation implements IOperation {
+          PLUS("+") {
+                  @Override
+                          public double apply(double x, double y) {
+                          return x + y;
+                  }
+          },
+          MINUS("-") {
+                  @Override
+                          public double apply(double x, double y) {
+                          return x - y;
+                  }
+          },
+          TIMES("*") {
+                  @Override
+                          public double apply(double x, double y) {
+                          return x * y;
+                  }
+          },
+          DIVIDE("/") {
+                  @Override
+                          public double apply(double x, double y) {
+                          return x / y;
+                  }
+
+          };
+
+          private final String symbol;
+          BasicOperation(String symbol) {
+                  this.symbol = symbol;
+          }
+
+          @Override
+          public String toString() {
+                  return symbol;
+          }
+  }
+#+END_SRC
++ 客户端通过实现接口的方式提供扩展的枚举，基本枚举和扩展枚举都可以统一作为IOperation的实现传递
+#+BEGIN_SRC java
+  // Emulated extension enum
+  public enum ExtendedOperation implements IOperation {
+          EXP("^") {
+                  @Override
+                          public double apply(double x, double y) {
+                          return Math.pow(x, y);
+                  }
+          },
+          REMAINDER("%") {
+                  @Override
+                          public double apply(double x, double y) {
+                          return x % y;
+                  }
+          };
+          private final String symbol;
+
+          private ExtendedOperation(String symbol) {
+                  this.symbol = symbol;
+          }
+
+          @Override
+          public String toString() {
+                  return symbol;
+          }
+  }
+#+END_SRC
+*** 传递整个扩展枚举类型
+1. 通过范型<T extends Enum<T> & IOperation>
+#+BEGIN_SRC java
+  private static <T extends Enum<T> & IOperation> void test(
+          Class<T> opSet, double x, double y) {
+          for (IOperation op : opSet.getEnumConstants()) {
+                  System.out.printf("%f %s %f = %f%n",
+                                    x, op, y, op.apply(x, y));
+          }
+  }
+
+  public static void main(String[] args) {
+          double x = 5.0;
+          double y = 3.0;
+          //5.000000 ^ 3.000000 = 125.000000
+          //5.000000 % 3.000000 = 2.000000
+          test(ExtendedOperation.class, x, y);
+  }
+#+END_SRC
+2. 使用Collection<? extends Operation>　
+   #+BEGIN_SRC java
+     private static void test(Collection<? extends IOperation> opSet,
+                              double x, double y) {
+             opSet.forEach((op) -> {
+                             System.out.printf("%f %s %f = %f%n",
+                                               x, op, y, op.apply(x, y));
+                     });
+     }
+
+     public static void main(String[] args) {
+             double x = 5.0;
+             double y = 3.0;
+             //5.000000 ^ 3.000000 = 125.000000
+             //5.000000 % 3.000000 = 2.000000       
+             test(Arrays.asList(ExtendedOperation.values()), x, y);
+     }
+   #+END_SRC
+
+使用接口模拟可扩展的枚举的缺点是有部分重复代码，如果重复代码太多，可以考虑抽取工具类
