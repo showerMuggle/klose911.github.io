@@ -9,26 +9,199 @@ Docker 运行容器前需要本地存在对应的镜像，如果镜像不存在�
 使用 docker pull 命令来从仓库获取所需要的镜像（默认是 Docker Hub 公共注册服务器中的仓库）
 #+BEGIN_SRC sh
   $ sudo docker pull ubuntu:12.04
-  Pulling repository ubuntu
-  ab8e2728644c: Pulling dependent layers
-  511136ea3c5a: Download complete
-  5f0ffaa9455e: Download complete
-  a300658979be: Download complete
-  904483ae0c30: Download complete
-  ffdaafd1ca50: Download complete
-  d047ae21eeaf: Download complete
 #+END_SRC
 
 指定镜像仓库下载
 #+BEGIN_SRC sh
   $ sudo docker pull dl.dockerpool.com:5000/ubuntu:12.04
-  Pulling dl.dockerpool.com:5000/ubuntu
-  ab8e2728644c: Pulling dependent layers
-  511136ea3c5a: Download complete
-  5f0ffaa9455e: Download complete
-  a300658979be: Download complete
-  904483ae0c30: Download complete
-  ffdaafd1ca50: Download complete
-  d047ae21eeaf: Download complete
 #+END_SRC
+* 运行
+使用 docker run命令从一个镜像文件启动容器
+#+BEGIN_SRC sh
+  $ sudo docker run -t -i ubuntu:latest /bin/bash
+#+END_SRC
+
 * 列出
+使用 docker images 显示本地已有的镜像
+#+BEGIN_SRC sh
+  $ sudo docker images
+
+  REPOSITORY          TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
+  ubuntu              latest              08881219da4a        4 days ago          129 MB
+#+END_SRC
+在列出信息中，可以看到几个字段信息
++ 来自于哪个仓库，比如 ubuntu
++ 镜像的标记，比如latest，标记来自同一个仓库的不同镜像，如果不指定默认是latest
++ 它的 ID 号（唯一），标识了镜像
++ 创建时间
++ 镜像大小
+
+* 创建
+创建镜像有很多方法，用户可以从 Docker Hub 获取已有镜像并更新，也可以利用本地文件系统创建一个
+
+** 修改已有镜像 
+启动下载的镜像
+#+BEGIN_SRC bash
+$ sudo docker run -t -i training/sinatra /bin/bash
+
+root@77ab4a6c9919:/#
+#+END_SRC
+
+在容器中添加 json 和 gem 两个应用
+#+BEGIN_SRC bash
+  root@77ab4a6c9919:/#  gem install json
+#+END_SRC
+
+提交修改
+#+BEGIN_SRC bash
+$ sudo docker commit -m "Added json gem" -a "Docker Newbee" aeef5cb06dfeds ouruser/sinatra:v2
+
+976e334f05f71d7093df9fb0d337786c832c125e8d947d4cdb1b6aeef5cb06da
+#+END_SRC
+
+使用 docker images 来查看新创建的镜像
+#+BEGIN_SRC bash
+  $ docker images
+
+  REPOSITORY          TAG                 IMAGE ID            CREATED              VIRTUAL SIZE
+  ouruser/sinatra     latest              976e334f05f7        About a minute ago   447 MB
+  ubuntu              latest              08881219da4a        4 days ago           129 MB
+  training/sinatra    latest              f0f4ab557f95        2.534651 years ago   447 MB
+#+END_SRC
+
+使用新的镜像来启动容器
+#+BEGIN_SRC bash
+  $ sudo docker run -t -i ouruser/sinatra /bin/bash
+
+  root@a666dd918d6e:/# 
+#+END_SRC
+
+使用 docker commit 来扩展一个镜像比较简单，但是不方便在一个团队中分享
+** 利用 Dockerfile 来创建镜像
+新建一个目录和一个 Dockerfile
+#+BEGIN_SRC bash
+  $ mkdir klose
+  $ cd klose
+  $ touch Dockerfile
+#+END_SRC
+
+编写Dockerfile，其中的每一条指令都是创建镜像的一层
++ 使用#来注释
++ FROM 指令告诉 Docker 使用哪个镜像作为基础
++ 接着是维护者的信息
++ RUN开头的指令会在创建中运行，比如安装一个软件包
+#+BEGIN_SRC sh
+# This is a comment
+FROM ubuntu:latest
+MAINTAINER Docker Klose <klose911@gmail.com>
+RUN apt-get -qq update
+RUN apt-get -qqy install ruby ruby-dev
+RUN gem install sinatra
+#+END_SRC
+
+使用 docker build 来生成镜像
+
+可以看到 build 进程要做的第一件事情就是上传这个 Dockerfile 内容，因为所有的操作都要依据 Dockerfile 来进行。 然后，Dockfile 中的指令被一条一条的执行。每一步都创建了一个新的容器，在容器中执行指令并提交修改（就跟之前介绍过的 docker commit 一样）。当所有的指令都执行完毕之后，返回了最终的镜像 id。所有的中间步骤所产生的容器都被删除和清理了
+#+BEGIN_SRC sh
+  $ sudo docker build -t="ouruser/klose:v2" .
+
+Sending build context to Docker daemon 2.048 kB
+Sending build context to Docker daemon
+Step 0 : FROM ubuntu
+ ---> 08881219da4a
+Step 1 : MAINTAINER Docker Newbee <klose911@gmail.com>
+ ---> Running in 800e3d022e21
+ ---> d402138ffe49
+Removing intermediate container 800e3d022e21
+Step 2 : RUN apt-get -qq update
+ ---> Running in 56f49baef39c
+#+END_SRC
+
++ ADD 命令复制本地文件到镜像
++ EXPOSE 命令来向外部开放端口
++ CMD 命令来描述容器启动后运行的程序等
+  #+BEGIN_SRC sh
+    # put my local web site in myApp folder to /var/www
+    ADD myApp /var/www
+    # expose httpd port
+    EXPOSE 80
+    # the command to run
+    CMD ["/usr/sbin/apachectl", "-D", "FOREGROUND"]
+  #+END_SRC
+
+** 从本地文件系统导入
+本地文件系统导入一个镜像，可以使用 openvz（容器虚拟化的先锋技术）的模板来创建
+
+先下载了一个 ubuntu-14.04 的镜像，然后用命令导入
+#+BEGIN_SRC sh
+  $ sudo cat ubuntu-14.04-x86_64-minimal.tar.gz  |docker import - ubuntu:14.04
+#+END_SRC
+
+** 上传镜像
+通过 docker push 命令，把自己创建的镜像上传到仓库中来共享
+#+BEGIN_SRC sh
+  $ sudo docker push ouruser/klose
+#+END_SRC
+
+** 修改tag
+用 docker tag 命令来修改镜像的标签
+
+#+BEGIN_SRC sh
+$ sudo docker images 
+
+REPOSITORY          TAG                 IMAGE ID            CREATED              VIRTUAL SIZE
+ouruser/sinatra     latest              976e334f05f7        About an hour ago    447 MB
+ubuntu              latest              08881219da4a        4 days ago           129 MB
+training/sinatra    latest              f0f4ab557f95        2.534800 years ago   447 MB
+
+$ sudo docker tag 976e334f05f7 ouruser/sinatra:devel 
+
+$ sudo docker images 
+
+REPOSITORY          TAG                 IMAGE ID            CREATED              VIRTUAL SIZE
+ouruser/sinatra     latest              976e334f05f7        About an hour ago    447 MB
+ouruser/sinatra     devel               976e334f05f7        About an hour ago    447 MB
+ubuntu              latest              08881219da4a        4 days ago           129 MB
+training/sinatra    latest              f0f4ab557f95        2.534802 years ago   447 MB
+#+END_SRC
+
+* 导出和载入
+
+** 导出镜像文件
+使用 docker save 命令把镜像导出到本地文件
+#+BEGIN_SRC sh
+  $ sudo docker save -o ubuntu_latest.tar ubuntu:latest
+#+END_SRC
+
+** 载入导出的文件
+使用 docker load 从导出的本地文件中再导入到本地镜像库
+#+BEGIN_SRC sh
+  $ sudo docker load --input ubuntu_latest.tar
+#+END_SRC
+
+* 移除
+使用 docker rmi 命令移除镜像，注意： docker rm是移除容器
+#+BEGIN_SRC sh
+  $ sudo docker rmi training/sinatra
+
+  Error response from daemon: Conflict, cannot delete f0f4ab557f95 because the container a666dd918d6e is using it, use -f to force
+  FATA[0000] Error: failed to remove one or more images
+
+  $ sudo docker rm a666dd918d6e
+
+  a666dd918d6e
+
+  $ sudo docker rmi training/sinatra
+
+  Untagged: training/sinatra:latest
+  Deleted: 5bc342fa0b91cabf65246837015197eecfa24b2213ed6a51a8974ae250fedd8d
+  Deleted: ed0fffdcdae5eb2c3a55549857a8be7fc8bc4241fb19ad714364cbfd7a56b22f
+  Deleted: 5c58979d73ae448df5af1d8142436d81116187a7633082650549c52c3a2418f0
+#+END_SRC
+
+* 实现原理
+每个镜像都由很多层次构成，Docker 使用 Union FS 将这些不同的层结合到一个镜像中去
+
+通常 Union FS 有两个用途, 一方面可以实现不借助 LVM、RAID 将多个 disk 挂到同一个目录下, 另一个更常用的就是将一个只读的分支和一个可写的分支联合在一起，Live CD 正是基于此方法可以允许在镜像不变的基础上允许用户在其上进行一些写操作。 Docker 在 AUFS 上构建的容器也是利用了类似的原理
+
+[[file:container.org][Next：容器]]  [[file:install.org][Previous：安装]]  [[file:docker.org][Home：目录]]
