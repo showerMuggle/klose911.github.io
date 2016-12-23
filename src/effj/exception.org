@@ -129,3 +129,62 @@ Error一般都是JVM保留的，所以不应该再继承Error。对于非受检E
      }
    #+END_SRC
 * 每个方法抛出的异常都要有文档
++ 每个受检查的异常都必须单独使用@throws标记，并且准确地描述每个异常的抛出条件
++ 使用@throws标签记录下尽可能多的未受捡异常，但不要使用throws关键字将未受检的异常包含在方法的声明
++ 如果一个类中的许多方法处于同样的原因而抛出同一个异常，可以在该类的文档注释中对这个异常进行描述
++ 永远不要使用类似throws Exception这样的声明
+* 异常中需要包含能查找失败原因的详细信息
++ 异常的toString方法应该尽可能多地返回有关失败原因的信息
++ 为了查找失败原因，异常的细节信息应该包含所有“对该异常有贡献”的参数和属性的值
+
+
+** 使用包含足够多信息的构造器代替只有一个字符串的构造器
+这个IndexOutOfBoundException构造器包含了数组下标的下界，上届，以及触发异常的下标，可以快速方便地定位出问题
+   #+BEGIN_SRC java
+     /**
+      ,* Construct an IndexOutOfBoundsException.
+      ,*
+      ,* @param lowerBound the lowest legal index value.
+      ,* @param upperBound the highest legal index value plus one.
+      ,* @param index
+      the actual index value.
+     ,*/
+     public IndexOutOfBoundsException(int lowerBound, int upperBound,
+                                      int index) {
+     // Generate a detail message that captures the failure
+             super("Lower bound: "
+                   + lowerBound +
+                   ", Upper bound: " + upperBound +
+                   ", Index: "
+                   + index);
+     // Save failure information for programmatic access
+             this.lowerBound = lowerBound;
+             this.upperBound = upperBound;
+             this.index = index;
+     }
+   #+END_SRC
+
+* 努力使失败保持原子性
+失败原子性：抛出异常后应该使对象保持在这个方法被调用之前的状态
+1. 设计一个不可变对象
+2. 调整处理过程的顺序，先校验再修改，任何可能会失败的部分都在对象状态被修改之前
+   #+BEGIN_SRC java
+     public Object pop() {
+             if (size == 0)
+                     throw new EmptyStackException();
+             Object result = elements[--size];
+             elements[size] = null;
+             return result;
+     }
+   #+END_SRC
+
+3. 在对象的一份临时拷贝上操作，当操作完成后再用临时拷贝中的结果代替对象的内容
+4. 编写恢复代码
+
+但并非所有情况都可以保持原子性，比如多线程情况下触发的ConcurrentModificationException就无法回退。但大多数情况应该尝试尽量保持失败原子性，即使无法保证也必须在文档中清晰指明
+
+* 不要忽略异常
++ 捕捉到异常但不处理会使异常机制失去意义，反而可能会掩盖某些必须修改的错误
++ 极端情况下的某些特殊异常即使可以忽略，也应该在文档中清楚阐述可以忽略的理由
+
+[[file:concurrency.org][Next：同步]]   [[file:enum_annotation.org][Previous：枚举和注解]]    [[file:effj.org][Home：目录]]

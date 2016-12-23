@@ -168,6 +168,13 @@ for the JavaScript code in this tag.
 </ul>
 </li>
 <li><a href="#sec-6">每个方法抛出的异常都要有文档</a></li>
+<li><a href="#sec-7">异常中需要包含能查找失败原因的详细信息</a>
+<ul>
+<li><a href="#sec-7-1">使用包含足够多信息的构造器代替只有一个字符串的构造器</a></li>
+</ul>
+</li>
+<li><a href="#sec-8">努力使失败保持原子性</a></li>
+<li><a href="#sec-9">不要忽略异常</a></li>
 </ul>
 </div>
 </div>
@@ -429,6 +436,115 @@ Error一般都是JVM保留的，所以不应该再继承Error。对于非受检E
 </div>
 <div id="outline-container-sec-6" class="outline-2">
 <h2 id="sec-6">每个方法抛出的异常都要有文档</h2>
+<div class="outline-text-2" id="text-6">
+<ul class="org-ul">
+<li>每个受检查的异常都必须单独使用@throws标记，并且准确地描述每个异常的抛出条件
+</li>
+<li>使用@throws标签记录下尽可能多的未受捡异常，但不要使用throws关键字将未受检的异常包含在方法的声明
+</li>
+<li>如果一个类中的许多方法处于同样的原因而抛出同一个异常，可以在该类的文档注释中对这个异常进行描述
+</li>
+<li>永远不要使用类似throws Exception这样的声明
+</li>
+</ul>
+</div>
+</div>
+<div id="outline-container-sec-7" class="outline-2">
+<h2 id="sec-7">异常中需要包含能查找失败原因的详细信息</h2>
+<div class="outline-text-2" id="text-7">
+<ul class="org-ul">
+<li>异常的toString方法应该尽可能多地返回有关失败原因的信息
+</li>
+<li>为了查找失败原因，异常的细节信息应该包含所有“对该异常有贡献”的参数和属性的值
+</li>
+</ul>
+</div>
+
+
+<div id="outline-container-sec-7-1" class="outline-3">
+<h3 id="sec-7-1">使用包含足够多信息的构造器代替只有一个字符串的构造器</h3>
+<div class="outline-text-3" id="text-7-1">
+<p>
+这个IndexOutOfBoundException构造器包含了数组下标的下界，上届，以及触发异常的下标，可以快速方便地定位出问题
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;"> * Construct an IndexOutOfBoundsException.</span>
+<span style="color: #ffa07a;"> *</span>
+<span style="color: #ffa07a;"> * </span><span style="color: #7fffd4;">@param</span><span style="color: #ffa07a;"> lowerBound the lowest legal index value.</span>
+<span style="color: #ffa07a;"> * </span><span style="color: #7fffd4;">@param</span><span style="color: #ffa07a;"> upperBound the highest legal index value plus one.</span>
+<span style="color: #ffa07a;"> * </span><span style="color: #7fffd4;">@param</span><span style="color: #ffa07a;"> index</span>
+<span style="color: #ffa07a;"> the actual index value.</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #00ffff;">public</span> <span style="color: #87cefa;">IndexOutOfBoundsException</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">lowerBound</span>, <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">upperBound</span>,
+                 <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">index</span>) {
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">Generate a detail message that captures the failure</span>
+    <span style="color: #00ffff;">super</span>(<span style="color: #ffa07a;">"Lower bound: "</span>
+          + lowerBound +
+          <span style="color: #ffa07a;">", Upper bound: "</span> + upperBound +
+          <span style="color: #ffa07a;">", Index: "</span>
+          + index);
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">Save failure information for programmatic access</span>
+    <span style="color: #00ffff;">this</span>.lowerBound = lowerBound;
+    <span style="color: #00ffff;">this</span>.upperBound = upperBound;
+    <span style="color: #00ffff;">this</span>.index = index;
+}
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-8" class="outline-2">
+<h2 id="sec-8">努力使失败保持原子性</h2>
+<div class="outline-text-2" id="text-8">
+<p>
+失败原子性：抛出异常后应该使对象保持在这个方法被调用之前的状态
+</p>
+<ol class="org-ol">
+<li>设计一个不可变对象
+</li>
+<li>调整处理过程的顺序，先校验再修改，任何可能会失败的部分都在对象状态被修改之前
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #98fb98;">Object</span> <span style="color: #87cefa;">pop</span>() {
+    <span style="color: #00ffff;">if</span> (size == 0)
+        <span style="color: #00ffff;">throw</span> <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">EmptyStackException</span>();
+    <span style="color: #98fb98;">Object</span> <span style="color: #eedd82;">result</span> = elements[--size];
+    elements[size] = <span style="color: #7fffd4;">null</span>;
+    <span style="color: #00ffff;">return</span> result;
+}
+</pre>
+</div>
+</li>
+
+<li>在对象的一份临时拷贝上操作，当操作完成后再用临时拷贝中的结果代替对象的内容
+</li>
+<li>编写恢复代码
+</li>
+</ol>
+
+<p>
+但并非所有情况都可以保持原子性，比如多线程情况下触发的ConcurrentModificationException就无法回退。但大多数情况应该尝试尽量保持失败原子性，即使无法保证也必须在文档中清晰指明
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-9" class="outline-2">
+<h2 id="sec-9">不要忽略异常</h2>
+<div class="outline-text-2" id="text-9">
+<ul class="org-ul">
+<li>捕捉到异常但不处理会使异常机制失去意义，反而可能会掩盖某些必须修改的错误
+</li>
+<li>极端情况下的某些特殊异常即使可以忽略，也应该在文档中清楚阐述可以忽略的理由
+</li>
+</ul>
+
+<p>
+<a href="concurrency.html">Next：同步</a>   <a href="enum_annotation.html">Previous：枚举和注解</a>    <a href="effj.html">Home：目录</a>
+</p>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
