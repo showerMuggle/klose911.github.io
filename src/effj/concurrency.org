@@ -4,3 +4,358 @@
 #+HTML_LINK_HOME: effj.html
 #+OPTIONS: num:nil timestamp:nil ^:nil *:nil
 * 访问共享的可变数据必须同步
+同步不仅是为了互斥，更是为了抱证修改的可见性
+
+下面程序可能永远不会停止!
+#+BEGIN_SRC java
+  // Broken! - How long would you expect this program to run?
+  public class BrokenStopThread {
+
+          private static boolean stopRequested = false;
+
+          public static void main(String[] args)
+                  throws InterruptedException {
+                  Thread backgroundThread = new Thread(() -> {
+                                  int i = 0;
+                                  while (!stopRequested) {
+                                          i++;
+                                  }
+                          });
+                  backgroundThread.start();
+                  TimeUnit.SECONDS.sleep(1);
+                  stopRequested = true;
+          }
+  }
+#+END_SRC
+
+JVM可能会对循环进行优化。在缺少同步的情况下，一个线程修改了变量，其他线程或许永远无法读到修改后的值
+#+BEGIN_SRC java
+  while (!done)
+          i++;
+  //JVM优化成
+  if (!done)
+          while (true)
+                  i++;
+#+END_SRC
+
+修复方法：使用synchronized方法代替变量
+#+BEGIN_SRC java
+  // Properly synchronized cooperative thread termination
+  public class StopThread {
+
+          private static boolean stopRequested = false;
+
+          private static synchronized void requestStop() {
+                  stopRequested = true;
+          }
+
+          private static synchronized boolean stopRequested() {
+                  return stopRequested;
+          }
+
+          public static void main(String[] args)
+                  throws InterruptedException {
+                  Thread backgroundThread = new Thread(() -> {
+                                  int i = 0;
+                                  while (!stopRequested()) {
+                                          i++;
+                                  }
+                          });
+                  backgroundThread.start();
+                  TimeUnit.SECONDS.sleep(1);
+                  requestStop();
+          }
+  }
+#+END_SRC
+
+更好的解决方法:使用volatile变量
+#+BEGIN_SRC java
+  // Cooperative thread termination with a volatile field
+  public class VolatileStopThread {
+          private static volatile boolean stopRequested = false;
+
+          public static void main(String[] args)
+                  throws InterruptedException {
+                  Thread backgroundThread = new Thread(() -> {
+                                  int i = 0;
+                                  while (!stopRequested) {
+                                          i++;
+                                  }
+                          });
+                  backgroundThread.start();
+                  TimeUnit.SECONDS.sleep(1);
+                  stopRequested = true;
+          }
+  }
+#+END_SRC
+
+然而volatile只保证了可见性，并没有保证互斥性，下面代码尽管在多线程环境下运行不会报错，但是结果很可能是错误的
+#+BEGIN_SRC java
+  // Broken - requires synchronization!
+  private static volatile int nextSerialNumber = 0;
+  public static int generateSerialNumber() {
+          return nextSerialNumber++;
+  }
+#+END_SRC
+
+除了为generteSerialNumber添加synchronized关键字之外，可以使用Atomic变量代替volatile 
+#+BEGIN_SRC java
+  private static final AtomicLong nextSerialNum = new AtomicLong();
+  public static long generateSerialNumber() {
+          return nextSerialNum.getAndIncrement();
+  }
+#+END_SRC
+** 共享总结
++ 为了在线程之间进行可靠地通信，也为了互斥访问，同步是必要的
++ 如果读和写操作没有都被同步，同步就不会起作用，当多个线程共享可变数据的时候，每个读或者写数据的线程都必须执行同步
++ 避免同步最好的办法：使用不可变对象把修改限制在单个线程中，然后通过volatile让所有线程可见
++ volatile保证了可见性，但并没有保证互斥性
++ 安全发布：把变量保存到static成员，变量声明为volatile，变量声明为final，变量保存到同步集合内等
+
+* 避免过度同步
+
+** 难以预料的错误
+编写Set的wrapper类
+#+BEGIN_SRC java
+  public class ForwardingSet<E> implements Set<E> {
+          private final Set<E> s;
+
+          public ForwardingSet(Set<E> s) {
+                  this.s = s;
+          }
+
+          @Override
+          public int size() {
+                  return s.size();
+          }
+
+          @Override
+          public boolean isEmpty() {
+                  return s.isEmpty();
+          }
+
+          @Override
+          public boolean contains(Object o) {
+                  return s.contains(o);
+          }
+
+          @Override
+          public Iterator<E> iterator() {
+                  return s.iterator();
+          }
+
+          @Override
+          public Object[] toArray() {
+                  return s.toArray();
+          }
+
+          @Override
+          public <T> T[] toArray(T[] a) {
+                  return s.toArray(a);
+          }
+
+          @Override
+          public boolean add(E e) {
+                  return s.add(e);
+          }
+
+          @Override
+          public boolean remove(Object o) {
+                  return s.remove(o);
+          }
+
+          @Override
+          public boolean containsAll(Collection<?> c) {
+                  return s.containsAll(c);
+          }
+
+          @Override
+          public boolean addAll(Collection<? extends E> c) {
+                  return s.addAll(c);
+          }
+
+          @Override
+          public boolean retainAll(Collection<?> c) {
+                  return s.retainAll(c);
+          }
+
+          @Override
+          public boolean removeAll(Collection<?> c) {
+                  return s.removeAll(c);
+          }
+
+          @Override
+          public void clear() {
+                  s.clear();
+          }
+
+  }
+#+END_SRC
+
+定义观察者接口：当元素被添加时候，触发这个接口实现类中的added方法
+#+BEGIN_SRC java
+  public interface SetObserver<E> {
+          // Invoked when an element is added to the observable set
+          void added(
+                  BrokenObservableSet<E> set, E element);
+  }
+#+END_SRC
+
+扩展ForwardingSet：添加观察者接口列表，并在添加元素的时候触发这个观察者的added方法
+#+BEGIN_SRC java
+  public class BrokenObservableSet<E> extends ForwardingSet<E>{
+
+          public BrokenObservableSet(Set<E> set) {
+                  super(set);
+          }
+
+          private final List<SetObserver<E>> observers =
+                  new ArrayList<>();
+
+          public void addObserver(SetObserver<E> observer) {
+                  synchronized (observers) {
+                          observers.add(observer);
+                  }
+          }
+
+          public boolean removeObserver(SetObserver<E> observer) {
+                  synchronized (observers) {
+                          return observers.remove(observer);
+                  }
+          }
+
+          private void notifyElementAdded(E element) {
+                  synchronized (observers) {
+  //在同步代码块中调用的是客户化的方法，这会导致意外的错误!!!
+                          for (SetObserver<E> observer : observers) {
+                                  observer.added(this, element);
+                          }
+                  }
+          }
+
+          @Override
+          public boolean add(E element) {
+                  boolean added = super.add(element);
+                  if (added) {
+                          notifyElementAdded(element);
+                  }
+                  return added;
+          }
+
+          @Override
+          public boolean addAll(Collection<? extends E> c) {
+                  boolean result = false;
+                  // calls notifyElementAdded
+                  for (E element : c) {
+                          result |= add(element); 
+                  }
+                  return result;
+          }
+  }
+#+END_SRC
+
+添加元素到BrokenObservableSet的时候，会触发遍历observers列表，而一旦同时删除这个列表的某个元素，后果抛出ConcurrentModificationException
+#+BEGIN_SRC java
+  public static void main(String[] args) {
+          BrokenObservableSet<Integer> set
+                  = new BrokenObservableSet<>(new HashSet<>());
+  //        set.addObserver(new SetObserver<Integer>() {
+  //            @Override
+  //            public void added(BrokenObservableSet<Integer> s, Integer e) {
+  //                System.out.println(e);
+  //            }
+  //        });
+
+          set.addObserver(new SetObserver<Integer>() {
+                          @Override
+                          public void added(BrokenObservableSet<Integer> s, Integer e) {
+                                  System.out.println(e);
+                                  if (e == 23) {
+                                          s.removeObserver(this);
+                                  }
+                          }
+                  });
+
+          for (int i = 0; i < 100; i++) {
+                  set.add(i);
+          }
+  }
+#+END_SRC
+
+下面代码比抛出异常错误更严重：新启动的线程会要求对observers加锁，而BrokenObservableSet已经获得这个列表的锁，同时BrokenObservableSet还在等待新启动线程返回，这就导致了死锁！
+#+BEGIN_SRC java
+  // Observer that uses a background thread needlessly
+  set.addObserver(new SetObserver<Integer>() {
+                  public void added(final ObservableSet<Integer> s, Integer e) {
+                          System.out.println(e);
+                          if (e == 23) {
+                                  ExecutorService executor =
+                                          Executors.newSingleThreadExecutor();
+                                  final SetObserver<Integer> observer = this;
+                                  try {
+                                          executor.submit(new Runnable() {
+                                                          public void run() {
+                                                                  s.removeObserver(observer);
+                                                          }
+                                                  }).get();
+                                  } catch (ExecutionException ex) {
+                                          throw new AssertionError(ex.getCause());
+                                  } catch (InterruptedException ex) {
+                                          throw new AssertionError(ex.getCause());
+                                  } finally {
+                                          executor.shutdown();
+                                  }
+                          }
+                  }
+          });
+#+END_SRC
+
+解决方法：同步代码只是对观察者列表进行拷贝，客户端代码移除到同步块之外
+#+BEGIN_SRC java
+  // Alien method moved outside of synchronized block - open calls
+  private void notifyElementAdded(E element) {
+          List<SetObserver<E>> snapshot = null;
+          synchronized(observers) {
+                  snapshot = new ArrayList<SetObserver<E>>(observers);
+          }
+
+          snapshot.forEach((observer) -> {
+                          observer.added(this, element);
+                  });
+  }
+#+END_SRC
+
+更好的解决办法：使用同步列表CopyOnWriteArrayList
+#+BEGIN_SRC java
+  private final List<SetObserver<E>> observers = new CopyOnWriteArrayList<>();
+
+  public void addObserver(SetObserver<E> observer) {
+          observers.add(observer);
+  }
+
+  public boolean removeObserver(SetObserver<E> observer) {
+          return observers.remove(observer);
+  }
+
+  private void notifyElementAdded(E element) {
+          observers.forEach((observer) -> {
+                          observer.added(this, element);
+                  });
+  }
+#+END_SRC
+总之：在一个被同步的方法或者代码块中，永远不要调用客户端允许覆盖的方法或者使用一个客户端可以继承的对象
+
+** 效率低下
++ 设计可变类时候，要考虑是否会被多线程环境使用。如果是的化，则在内部实现同步，尽量禁止客户端修改同步机制。反之在文档中明确写清楚并不是线程的，让使用者去做额外同步
++ 对于某个类的static成员，如果可能在多线程环境中被修改，必须考虑同步
+
+* 并发工具优先于wait和notify
+** 并发工具
+1. Executor框架：Executor和Task优先于线程
+2. 并发集合：并发集合中不可能排除并发活动；对它加锁没有什么作用，只会使程序速度变慢
+3. 同步器
+
+对于间歇式的定时，始终应该优先使用System.nanoTime而不是System.currentTimeMills，System.nanoTime更加准确也更加精确，不受系统的实时时钟的调整所影响
+
+即使使用wait, 也应该使用notifyAll，而不是notify
+* 线程安全性需要文档化
