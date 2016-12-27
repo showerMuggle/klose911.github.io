@@ -1,0 +1,153 @@
+#+TITLE: 网络配置
+#+HTML_HEAD: <link rel="stylesheet" type="text/css" href="css/main.css" />
+#+HTML_LINK_UP: storage.html   
+#+HTML_LINK_HOME: docker.html
+#+OPTIONS: num:nil timestamp:nil ^:nil *:nil
+* 外部访问容器
+容器中可以运行一些网络应用，要让外部也可以访问这些应用，可以通过 -P 或 -p 参数来指定端口映射
+** 端口映射
+*** 随机端口映射
+当使用 -P 标记时，Docker 会随机映射一个 30000~49900 的端口到内部容器开放的网络端口。使用 docker ps 可以看到，本地主机的 32768被映射到了容器的 5000 端口。此时访问本机的 32768 端口即可访问容器内 web 应用提供的界面
+#+BEGIN_SRC sh
+  $ sudo docker run -d -P training/webapp python app.py
+  a73ae670ed1ca525524071774fd8e04d7363c5967c1e1d132f55593aaa3d7a47
+
+  $ sudo docker ps -l
+  CONTAINER ID        IMAGE               COMMAND             CREATED             STATUS              PORTS                     NAMES
+  a73ae670ed1c        training/webapp     "python app.py"     30 seconds ago      Up 30 seconds       0.0.0.0:32768->5000/tcp   desperate_darwin
+
+  $ curl http://127.0.0.1:32768
+  Hello world!
+#+END_SRC
+
+通过 docker logs 命令来查看应用的信息
+#+BEGIN_SRC sh
+   $ sudo docker logs -f desperate_darwin
+
+  ,* Running on http://0.0.0.0:5000/ (Press CTRL+C to quit)
+  192.168.0.1 - - [27/Dec/2016 09:32:09] "GET / HTTP/1.0" 200 -
+  192.168.0.1 - - [27/Dec/2016 09:32:22] "GET / HTTP/1.1" 200 -
+#+END_SRC
+-p可以指定要映射的端口，并且，在一个指定端口上只可以绑定一个容器
+*** 映射所有接口地址
+使用 hostPort:containerPort 格式本地的 5000 端口映射到容器的 5000 端口
+#+BEGIN_SRC sh
+  $ sudo docker run -d -p 5000:5000 training/webapp python app.py
+#+END_SRC
+*** 映射到指定地址的指定端口
+使用 ip:hostPort:containerPort 格式指定映射使用一个特定地址，比如 localhost 地址 127.0.0.1
+#+BEGIN_SRC sh
+  $ sudo docker run -d -p 127.0.0.1:5000:5000 training/webapp python app.py
+#+END_SRC
+*** 映射到指定地址的任意端口
+使用 ip::containerPort 绑定 localhost 的任意端口到容器的 5000 端口，本地主机会自动分配一个端口
+#+BEGIN_SRC sh
+  $ sudo docker run -d -p 127.0.0.1::5000 training/webapp python app.py
+#+END_SRC
+使用 udp 标记来指定 udp 端口
+#+BEGIN_SRC sh
+  $ sudo docker run -d -p 127.0.0.1:5000:5000/udp training/webapp python app.py
+#+END_SRC
+** 查看映射端口配置 
+使用 docker port 来查看当前映射的端口配置，也可以查看到绑定的地址
+#+BEGIN_SRC sh
+  $ sudo docker port desperate_darwin
+
+  5000/tcp -> 0.0.0.0:32768
+#+END_SRC
+
++ 容器有自己的内部网络和 ip 地址
++ -p 标记可以多次使用来绑定多个端口
+#+BEGIN_SRC sh
+  $ sudo docker run -d -p 5000:5000  -p 3000:80 training/webapp python app.py
+#+END_SRC
+
+* 容器互联
+容器的连接（linking）系统是另一种跟容器中应用交互的方式。在源和接收容器之间创建一个隧道，接收容器可以看到源容器指定的信息
+
+** 自定义容器命名 
+连接系统依据容器的名称来执行。因此，首先需要自定义一个好记的容器命名。
+
+自定义命名容器有2个好处：
+1. 自定义的命名，比较好记
+2. 当要连接其他容器时候，可以作为一个有用的参考点，比如连接web容器到db容器
+
+使用 --name 标记可以为容器自定义命名 
+#+BEGIN_SRC sh
+  $ sudo docker run -d -P --name web training/webapp python app.py
+
+  d569dc2917cf3c35f9e461311522cd708481eefc1190e728a8e6cb756d9d4816
+#+END_SRC
+
+使用 docker inspect 来查看容器的名字
+#+BEGIN_SRC sh
+  $ sudo docker inspect -f "{{ .Name }}" d569dc2917cf
+
+  /web
+#+END_SRC
+注意：容器的名称是唯一的。如果已经命名了一个叫 web 的容器，当你要再次使用 web 这个名称的时候，需要先用docker rm 来删除之前创建的同名容器!
+
+在执行 docker run 的时候如果添加 --rm 标记，则容器在终止后会立刻删除。但--rm 和 -d 参数不能同时使用
+
+** 互联
+使用 --link 参数可以让容器之间安全地进行交互
+
++ 创建一个新的数据库容器
+#+BEGIN_SRC sh
+  $ sudo docker run -d --name db training/postgres
+#+END_SRC
+
++ 删除之前的web容器
+#+BEGIN_SRC sh
+  $ sudo docker rm -f web
+#+END_SRC
+
++ 创建一个新的 web 容器，并将它连接到 db 容器。--link 参数的格式为 --link name:alias，其中 name 是要链接的容器的名称，alias 是这个连接的别名
+#+BEGIN_SRC sh
+  $ sudo docker run -d -P --name web --link db:db training/webapp python app.py
+#+END_SRC
+
+** 信息共享
+Docker 在两个互联的容器之间创建了一个安全隧道，而且不用映射它们的端口到宿主主机上。在启动 db 容器的时候并没有使用 -p 和 -P 标记，从而避免了暴露数据库端口到外部网络上
+
+2 种方式为容器公开连接信息：
++ 环境变量：其中 DB_ 开头的环境变量是供 web 容器连接 db 容器使用，前缀采用大写的连接别名
+#+BEGIN_SRC sh
+  $ sudo docker run --rm --name web2 --link db:db training/webapp env
+
+  PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+  HOSTNAME=f145072b25cb
+  DB_PORT=tcp://192.168.0.2:5432
+  DB_PORT_5432_TCP=tcp://192.168.0.2:5432
+  DB_PORT_5432_TCP_ADDR=192.168.0.2
+  DB_PORT_5432_TCP_PORT=5432
+  DB_PORT_5432_TCP_PROTO=tcp
+  DB_NAME=/web2/db
+  DB_ENV_PG_VERSION=9.3
+  HOME=/root
+#+END_SRC
++ 更新 /etc/hosts 文件：添加 host 信息到父容器的 /etc/hosts 的文件
+  #+BEGIN_SRC bash
+    $ sudo docker run -t -i --rm --link db:db training/webapp /bin/bash
+
+    root@e995eabd30e5:/opt/webapp#cat /etc/hosts
+    ......
+    192.168.0.2     db 28d0b9f7b085
+    192.168.0.4     e995eabd30e5
+    .....
+  #+END_SRC
+
+在web容器中ping db容器
+#+BEGIN_SRC bash
+  root@e995eabd30e5:/opt/webapp# ping db
+
+  PING db (192.168.0.2) 56(84) bytes of data.
+  64 bytes from db (192.168.0.2): icmp_seq=1 ttl=64 time=0.112 ms
+  64 bytes from db (192.168.0.2): icmp_seq=2 ttl=64 time=0.077 ms
+  64 bytes from db (192.168.0.2): icmp_seq=3 ttl=64 time=0.084 ms
+  ^C
+  --- db ping statistics ---
+  3 packets transmitted, 3 received, 0% packet loss, time 1998ms
+  rtt min/avg/max/mdev = 0.077/0.091/0.112/0.015 ms
+
+#+END_SRC
