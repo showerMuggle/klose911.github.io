@@ -146,12 +146,228 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#sec-1">局部变量的作用域最小化</a></li>
+<li><a href="#sec-1">局部变量的作用域最小化</a>
+<ul>
+<li><a href="#sec-1-1">循环</a></li>
+</ul>
+</li>
+<li><a href="#sec-2">优先使用for-each循环</a>
+<ul>
+<li><a href="#sec-2-1">无法使用for-each循环</a>
+<ul>
+<li><a href="#sec-2-1-1">函数式遍历</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#sec-3">熟悉和使用类库</a></li>
 </ul>
 </div>
 </div>
 <div id="outline-container-sec-1" class="outline-2">
 <h2 id="sec-1">局部变量的作用域最小化</h2>
+<div class="outline-text-2" id="text-1">
+<ul class="org-ul">
+<li>在第一次使用它的地方才声明
+</li>
+<li>除了try-catch结构要求外，每个局部变量的声明都应该包含一个初始化的表达式
+</li>
+<li>使方法小而集中，每个方法包含较少的局部变量
+</li>
+</ul>
+</div>
+
+<div id="outline-container-sec-1-1" class="outline-3">
+<h3 id="sec-1-1">循环</h3>
+<div class="outline-text-3" id="text-1-1">
+<p>
+while循环往往在外面申明变量，容易产生拼写错误
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #98fb98;">Iterator</span>&lt;<span style="color: #98fb98;">Element</span>&gt; <span style="color: #eedd82;">i</span> = c.iterator();
+<span style="color: #00ffff;">while</span> (i.hasNext()) {
+    doSomething(i.next());
+}
+
+<span style="color: #98fb98;">Iterator</span>&lt;<span style="color: #98fb98;">Element</span>&gt; <span style="color: #eedd82;">i2</span> = c2.iterator();
+<span style="color: #00ffff;">while</span> (i.hasNext()) {<span style="color: #ff4500;">// </span><span style="color: #ff4500;">BUG!</span>
+    doSomethingElse(i2.next());
+}
+</pre>
+</div>
+
+<p>
+for循环的变量作用域在循环体中
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">No for-each loop or generics before release 1.5</span>
+<span style="color: #00ffff;">for</span> (<span style="color: #98fb98;">Iterator</span> <span style="color: #eedd82;">i</span> = c.iterator(); i.hasNext(); ) {
+    doSomething((<span style="color: #98fb98;">Element</span>) i.next());
+}
+
+<span style="color: #00ffff;">for</span> (<span style="color: #98fb98;">Iterator</span> <span style="color: #eedd82;">i</span> = c2.iterator(); i.hasNext(); ) {
+    doSomethingElse((<span style="color: #98fb98;">Element</span>) i.next());
+}
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2" class="outline-2">
+<h2 id="sec-2">优先使用for-each循环</h2>
+<div class="outline-text-2" id="text-2">
+<p>
+抛出异常的原因在于：花色的next方法被调用太多次了。每一次点数循环，花色的next方法应该只被调用一次
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">Can you spot the bug?</span>
+<span style="color: #00ffff;">private</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">enum</span> <span style="color: #98fb98;">Suit</span> {
+    <span style="color: #eedd82;">CLUB</span>, <span style="color: #eedd82;">DIAMOND</span>, <span style="color: #eedd82;">HEART</span>, <span style="color: #eedd82;">SPADE</span>
+}
+<span style="color: #00ffff;">private</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">enum</span> <span style="color: #98fb98;">Rank</span> {
+    <span style="color: #eedd82;">ACE</span>, <span style="color: #eedd82;">DEUCE</span>, <span style="color: #eedd82;">THREE</span>, <span style="color: #eedd82;">FOUR</span>, <span style="color: #eedd82;">FIVE</span>, <span style="color: #eedd82;">SIX</span>, <span style="color: #eedd82;">SEVEN</span>, <span style="color: #eedd82;">EIGHT</span>,
+    <span style="color: #eedd82;">NINE</span>, <span style="color: #eedd82;">TEN</span>, <span style="color: #eedd82;">JACK</span>, <span style="color: #eedd82;">QUEEN</span>, <span style="color: #eedd82;">KING</span>
+}
+
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">String</span>[] <span style="color: #eedd82;">args</span>) {
+    <span style="color: #98fb98;">Collection</span>&lt;<span style="color: #98fb98;">Suit</span>&gt; <span style="color: #eedd82;">suits</span> = Arrays.asList(Suit.values());
+    <span style="color: #98fb98;">Collection</span>&lt;<span style="color: #98fb98;">Rank</span>&gt; <span style="color: #eedd82;">ranks</span> = Arrays.asList(Rank.values());
+    <span style="color: #98fb98;">List</span>&lt;<span style="color: #98fb98;">Card</span>&gt; <span style="color: #eedd82;">deck</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">ArrayList</span>&lt;&gt;();
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">Exception in thread "main" java.util.NoSuchElementException</span>
+    <span style="color: #00ffff;">for</span> (<span style="color: #98fb98;">Iterator</span>&lt;<span style="color: #98fb98;">Suit</span>&gt; <span style="color: #eedd82;">i</span> = suits.iterator();
+         i.hasNext();) {
+        <span style="color: #00ffff;">for</span> (<span style="color: #98fb98;">Iterator</span>&lt;<span style="color: #98fb98;">Rank</span>&gt; <span style="color: #eedd82;">j</span> = ranks.iterator();
+             j.hasNext();) {
+            deck.add(
+                <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#27599;&#27425;&#33719;&#24471;&#19979;&#19968;&#20010;&#28857;&#25968;&#65292;&#37117;&#20250;&#21516;&#26102;&#33719;&#24471;&#19979;&#19968;&#20010;&#33457;&#33394;&#65292;&#36825;&#26679;&#24456;&#24555;&#23601;&#29992;&#23436;&#20102;&#33457;&#33394;&#65292;&#25243;&#20986;&#24322;&#24120;</span>
+                <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">Card</span>(i.next(), j.next()));
+        }
+    }
+}
+
+<span style="color: #00ffff;">private</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">Card</span>{
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">Suit</span> <span style="color: #eedd82;">suit</span>; 
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">Rank</span> <span style="color: #eedd82;">rank</span>; 
+    <span style="color: #00ffff;">private</span> <span style="color: #87cefa;">Card</span>(<span style="color: #98fb98;">Suit</span> <span style="color: #eedd82;">suit</span>, <span style="color: #98fb98;">Rank</span> <span style="color: #eedd82;">rank</span>) {
+        <span style="color: #00ffff;">this</span>.suit = suit;
+        <span style="color: #00ffff;">this</span>.rank = rank;
+    }
+
+}
+</pre>
+</div>
+
+<p>
+下面代码有着同样的错误，但却不会抛出异常，然而结果是错误的
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">Same bug, different symptom!</span>
+<span style="color: #00ffff;">enum</span> <span style="color: #98fb98;">Face</span> { <span style="color: #eedd82;">ONE</span>, <span style="color: #eedd82;">TWO</span>, <span style="color: #eedd82;">THREE</span>, <span style="color: #eedd82;">FOUR</span>, <span style="color: #eedd82;">FIVE</span>, <span style="color: #eedd82;">SIX</span> }
+
+<span style="color: #98fb98;">Collection</span>&lt;<span style="color: #98fb98;">Face</span>&gt; <span style="color: #eedd82;">faces</span> = Arrays.asList(Face.values());
+<span style="color: #00ffff;">for</span> (<span style="color: #98fb98;">Iterator</span>&lt;<span style="color: #98fb98;">Face</span>&gt; <span style="color: #eedd82;">i</span> = faces.iterator(); i.hasNext(); )
+    <span style="color: #00ffff;">for</span> (<span style="color: #98fb98;">Iterator</span>&lt;<span style="color: #98fb98;">Face</span>&gt; <span style="color: #eedd82;">j</span> = faces.iterator(); j.hasNext(); )
+        System.out.println(i.next() + <span style="color: #ffa07a;">" "</span> + j.next());
+</pre>
+</div>
+
+<p>
+丑陋的修复
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">Fixed, but ugly - you can do better!</span>
+<span style="color: #00ffff;">for</span> (<span style="color: #98fb98;">Iterator</span>&lt;<span style="color: #98fb98;">Suit</span>&gt; <span style="color: #eedd82;">i</span> = suits.iterator(); i.hasNext(); ) {
+    <span style="color: #98fb98;">Suit</span> <span style="color: #eedd82;">suit</span> = i.next();
+    <span style="color: #00ffff;">for</span> (<span style="color: #98fb98;">Iterator</span>&lt;<span style="color: #98fb98;">Rank</span>&gt; <span style="color: #eedd82;">j</span> = ranks.iterator(); j.hasNext(); )
+        decks.add(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">Card</span>(suit, j.next()));
+}
+</pre>
+</div>
+
+<p>
+优雅地使用for-each循环
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">Preferred idiom for nested iteration on collections and arrays</span>
+<span style="color: #00ffff;">for</span> (<span style="color: #98fb98;">Suit</span> <span style="color: #eedd82;">suit</span> : suits) {
+    <span style="color: #00ffff;">for</span> (<span style="color: #98fb98;">Rank</span> <span style="color: #eedd82;">rank</span> : ranks) {
+        decks.add(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">Card</span>(suit, rank));
+    }
+}
+</pre>
+</div>
+
+<ul class="org-ul">
+<li>相比传统的for循环，for-each循环在可读性和预防BUG方面有着无可比拟的优势，并且没有性能损失
+</li>
+<li>for-each循环不但能遍历数组和集合，任何实现了Iterable的类都可以被遍历
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">interface</span> <span style="color: #98fb98;">Iterable</span>&lt;<span style="color: #98fb98;">E</span>&gt; {
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">Returns an iterator over the elements in this iterable</span>
+    <span style="color: #98fb98;">Iterator</span>&lt;<span style="color: #98fb98;">E</span>&gt; <span style="color: #87cefa;">iterator</span>();
+}
+</pre>
+</div>
+</li>
+</ul>
+</div>
+
+<div id="outline-container-sec-2-1" class="outline-3">
+<h3 id="sec-2-1">无法使用for-each循环</h3>
+<div class="outline-text-3" id="text-2-1">
+<ol class="org-ol">
+<li>过滤：遍历集合并删除选定元素
+</li>
+<li>转换：遍历列表或数组，并取代它部分或者全部的元素值
+</li>
+<li>平行迭代：如果需要并行的遍历多个集合，就需要显示的控制迭代器或者索引变量
+</li>
+</ol>
+</div>
+
+<div id="outline-container-sec-2-1-1" class="outline-4">
+<h4 id="sec-2-1-1">函数式遍历</h4>
+<div class="outline-text-4" id="text-2-1-1">
+<p>
+Java8引入函数式编程后，可以使用函数式遍历
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java">suits.forEach((suit) -&gt; {
+        ranks.forEach((rank) -&gt; {
+                decks.add(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">Card</span>(suit, rank));
+            });
+    });
+
+decks.forEach((c) -&gt; {
+        System.out.println(c);
+    });
+</pre>
+</div>
+
+<ol class="org-ol">
+<li>过滤：filter返回一个删除了选定元素的集合拷贝
+</li>
+<li>转换：map返回转换完毕的集合拷贝，reduce进行集合聚合
+</li>
+<li>平行迭代：递归代替迭代
+</li>
+</ol>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-3" class="outline-2">
+<h2 id="sec-3">熟悉和使用类库</h2>
 </div>
 </div>
 <div id="postamble" class="status">

@@ -4,3 +4,136 @@
 #+HTML_LINK_HOME: effj.html
 #+OPTIONS: num:nil timestamp:nil ^:nil *:nil
 * 局部变量的作用域最小化
++ 在第一次使用它的地方才声明
++ 除了try-catch结构要求外，每个局部变量的声明都应该包含一个初始化的表达式
++ 使方法小而集中，每个方法包含较少的局部变量
+
+** 循环
+while循环往往在外面申明变量，容易产生拼写错误
+#+BEGIN_SRC java
+  Iterator<Element> i = c.iterator();
+  while (i.hasNext()) {
+          doSomething(i.next());
+  }
+
+  Iterator<Element> i2 = c2.iterator();
+  while (i.hasNext()) {// BUG!
+          doSomethingElse(i2.next());
+  }
+#+END_SRC
+
+for循环的变量作用域在循环体中
+#+BEGIN_SRC java
+  // No for-each loop or generics before release 1.5
+  for (Iterator i = c.iterator(); i.hasNext(); ) {
+          doSomething((Element) i.next());
+  }
+
+  for (Iterator i = c2.iterator(); i.hasNext(); ) {
+          doSomethingElse((Element) i.next());
+  }
+#+END_SRC
+
+* 优先使用for-each循环
+抛出异常的原因在于：花色的next方法被调用太多次了。每一次点数循环，花色的next方法应该只被调用一次
+   #+BEGIN_SRC java
+     // Can you spot the bug?
+     private static enum Suit {
+             CLUB, DIAMOND, HEART, SPADE
+     }
+     private static enum Rank {
+             ACE, DEUCE, THREE, FOUR, FIVE, SIX, SEVEN, EIGHT,
+             NINE, TEN, JACK, QUEEN, KING
+     }
+
+     public static void main(String[] args) {
+             Collection<Suit> suits = Arrays.asList(Suit.values());
+             Collection<Rank> ranks = Arrays.asList(Rank.values());
+             List<Card> deck = new ArrayList<>();
+             //Exception in thread "main" java.util.NoSuchElementException
+             for (Iterator<Suit> i = suits.iterator();
+                  i.hasNext();) {
+                     for (Iterator<Rank> j = ranks.iterator();
+                          j.hasNext();) {
+                             deck.add(
+                                     //每次获得下一个点数，都会同时获得下一个花色，这样很快就用完了花色，抛出异常
+                                     new Card(i.next(), j.next()));
+                     }
+             }
+     }
+
+     private static final class Card{
+             private final Suit suit; 
+             private final Rank rank; 
+             private Card(Suit suit, Rank rank) {
+                     this.suit = suit;
+                     this.rank = rank;
+             }
+
+     }
+   #+END_SRC
+
+下面代码有着同样的错误，但却不会抛出异常，然而结果是错误的
+#+BEGIN_SRC java
+  // Same bug, different symptom!
+  enum Face { ONE, TWO, THREE, FOUR, FIVE, SIX }
+
+  Collection<Face> faces = Arrays.asList(Face.values());
+  for (Iterator<Face> i = faces.iterator(); i.hasNext(); )
+          for (Iterator<Face> j = faces.iterator(); j.hasNext(); )
+                  System.out.println(i.next() + " " + j.next());
+#+END_SRC
+
+丑陋的修复
+#+BEGIN_SRC java
+  // Fixed, but ugly - you can do better!
+  for (Iterator<Suit> i = suits.iterator(); i.hasNext(); ) {
+          Suit suit = i.next();
+          for (Iterator<Rank> j = ranks.iterator(); j.hasNext(); )
+                  decks.add(new Card(suit, j.next()));
+  }
+#+END_SRC
+
+优雅地使用for-each循环
+#+BEGIN_SRC java
+  // Preferred idiom for nested iteration on collections and arrays
+  for (Suit suit : suits) {
+          for (Rank rank : ranks) {
+                  decks.add(new Card(suit, rank));
+          }
+  }
+#+END_SRC
+
++ 相比传统的for循环，for-each循环在可读性和预防BUG方面有着无可比拟的优势，并且没有性能损失
++ for-each循环不但能遍历数组和集合，任何实现了Iterable的类都可以被遍历
+  #+BEGIN_SRC java
+    public interface Iterable<E> {
+    // Returns an iterator over the elements in this iterable
+            Iterator<E> iterator();
+    }
+  #+END_SRC
+
+** 无法使用for-each循环
+1. 过滤：遍历集合并删除选定元素
+2. 转换：遍历列表或数组，并取代它部分或者全部的元素值
+3. 平行迭代：如果需要并行的遍历多个集合，就需要显示的控制迭代器或者索引变量
+
+*** 函数式遍历
+Java8引入函数式编程后，可以使用函数式遍历
+#+BEGIN_SRC java
+  suits.forEach((suit) -> {
+                  ranks.forEach((rank) -> {
+                                  decks.add(new Card(suit, rank));
+                          });
+          });
+
+  decks.forEach((c) -> {
+                  System.out.println(c);
+          });
+#+END_SRC
+
+1. 过滤：filter返回一个删除了选定元素的集合拷贝
+2. 转换：map返回转换完毕的集合拷贝，reduce进行集合聚合
+3. 平行迭代：递归代替迭代
+
+* 熟悉和使用类库
