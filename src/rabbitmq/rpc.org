@@ -1,0 +1,36 @@
+#+TITLE: 远程调用
+#+HTML_HEAD: <link rel="stylesheet" type="text/css" href="css/main.css" />
+#+HTML_LINK_UP: topic.html   
+#+HTML_LINK_HOME: rabbitmq.html
+#+OPTIONS: num:nil timestamp:nil ^:nil *:nil
+
+* 客户端接口
+# #+CAPTION: remote procedure call 
+# [[./pic/rpc.png]]
+
+# *** Client Interface 
+#     #+BEGIN_SRC python
+#       fibonacci_rpc = FibonacciRpcClient()
+#       #expose a method named call which sends an RPC request and blocks until the answer is received:
+#       result = fibonacci_rpc.call(4)
+#       print("fib(4) is %r" % result)
+#     #+END_SRC
+# *** Callback queue
+# **** client sends a request message and server replies with a response message
+#     #+BEGIN_SRC python
+#       result = channel.queue_declare(exclusive=True)
+#       callback_queue = result.method.queue
+
+#       channel.basic_publish(exchange='',
+#                             routing_key='rpc_queue',
+#                             properties=pika.BasicProperties(
+#                                   reply_to = callback_queue,
+#                                   ), # the client receives the response message from 'callback_queue' 
+#                             body=request)
+#     #+END_SRC
+# *** Correlation id
+# **** create a single callback queue per client
+# ***** set a unique id value for every request
+# ***** receive a message from callback queue, check whether correlation id of response matchs the request. If the correlation id unkown, saftely discard the response 
+# ****** the RPC server die just after sending us the answer, but before sending an acknowledgment message for the request. If that happens, the restarted RPC server will process the request again. how to handle repeate message is very important!!!! 
+
