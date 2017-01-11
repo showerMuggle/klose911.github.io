@@ -2,7 +2,7 @@
 #+HTML_HEAD: <link rel="stylesheet" type="text/css" href="css/main.css" />
 #+HTML_LINK_UP: methods.html   
 #+HTML_LINK_HOME: effj.html
-#+OPTIONS: num:nil timestamp:nil ^:nil *:nil
+#+OPTIONS: num:nil timestamp:nil *:nil
 * 局部变量的作用域最小化
 + 在第一次使用它的地方才声明
 + 除了try-catch结构要求外，每个局部变量的声明都应该包含一个初始化的表达式
@@ -137,3 +137,182 @@ Java8引入函数式编程后，可以使用函数式遍历
 3. 平行迭代：递归代替迭代
 
 * 熟悉和使用类库
++ 通过使用标准类库，可以充分利用这些编写标准类库的专家的知识，以及在你之前的其他人的使用经验。
++ 在每个重要的发行版本中，都会有许多新的特性被加入到类库中，与这些新特性保持同步是值得的
+
+* 如果需要精确地答案，请避免使用float和double
+float和double用来做浮点二进制计算的，以牺牲精度来换取快速，只适合于科学和工程计算
+
+** 货币计算
+float和double尤其不适合货币计算
+#+BEGIN_SRC java
+  //0.610000001
+  System.out.println(1.03 - .42);
+  //0.0999999998
+  System.out.println(1.00 - 9 * .10);
+
+  double funds = 1.00;
+  int itemsBought = 0;
+  for (double price = .10; funds >= price; price += .10) {
+          funds -= price;
+          itemsBought++;
+  }
+  //3 items bought.
+  //Change: $0.39999999
+  System.out.println(itemsBought + " items bought.");
+  System.out.println("Change: $" + funds);
+#+END_SRC
+
+使用BigDecimal代替
+#+BEGIN_SRC java
+  final BigDecimal TEN_CENTS = new BigDecimal(".10");
+  int itemsBought = 0;
+  BigDecimal funds = new BigDecimal("1.00");
+  for (BigDecimal price = TEN_CENTS;
+       funds.compareTo(price) >= 0;
+       price = price.add(TEN_CENTS)) {
+          itemsBought++;
+          funds = funds.subtract(price);
+  }
+          
+  //4 items bought.
+  //Money left: $0.00
+  System.out.println(itemsBought + " items bought.");
+  System.out.println("Money left over: $" + funds);
+#+END_SRC
+
+尽管BigDecimal很精确，但是不方便，也很慢。所以有些时候可以用int或long来表示分替代BigDecimal
+#+BEGIN_SRC java
+  int itemsBought = 0;
+  int funds = 100;
+  for (int price = 10; funds >= price; price += 10) {
+          itemsBought++;
+          funds -= price;
+  }
+  //4 items bought. 
+  //Money left over: 0 cents
+  System.out.println(itemsBought + " items bought.");
+  System.out.println("Money left over: " + funds + " cents");
+#+END_SRC
+如果整数不超过9位十进制数字，可以使用int。如果不超过18位，可以使用long。超过18位使用BigDecimal
+
+* 基本类型优先于装箱基本类型
+
+
+** 基本类型只有值，装箱基本类型还具有对象引用
+装箱基本类型运用==操作符几乎总是错误的
+
+first和second的引用不一样的，所以用==比较的结果总是false
+   #+BEGIN_SRC java
+     // Broken comparator - can you spot the flaw?
+     Comparator<Integer> naturalOrder = new Comparator<>() {
+                     public int compare(Integer first, Integer second) {
+                             return first < second ? -1 : (first == second ? 0 : 1);
+                     }
+             };
+   #+END_SRC
+
+使用自动装箱修复错误
+#+BEGIN_SRC java
+  Comparator<Integer> naturalOrder = new Comparator<Integer>() {
+                  public int compare(Integer first, Integer second) {
+                          int f = first;
+  // Auto-unboxing
+                          int s = second; // Auto-unboxing
+                          return f < s ? -1 : (f == s ? 0 : 1); // No unboxing
+                  }
+          };
+#+END_SRC
+
+** 基本类型只有功能完备的值，而每个装箱基本类型还有非功能值null
+下面代码会抛出空指针异常
+   #+BEGIN_SRC java
+     public class Unbelievable {
+             static Integer i;
+             public static void main(String[] args) {
+                     if (i == 42)
+                             System.out.println("Unbelievable");
+             }
+     }
+   #+END_SRC
+
+** 基本类型通常比装箱基本类型更节省时间和空间
+   多次的自动装箱会产生大量的临时对象，浪费大量的空间和时间
+   #+BEGIN_SRC java
+     // Hideously slow program! Can you spot the object creation?
+     public static void main(String[] args) {
+             Long sum = 0L;
+             for (long i = 0; i < Integer.MAX_VALUE; i++) {
+                     sum += i;
+             }
+             System.out.println(sum);
+     }
+   #+END_SRC
+
+** 何时使用装箱基本类型
++ 作为集合中的元素的键和值，无法将基本类型放在集合内
++ 范型中必须使用装箱基本类型作为类型参数
++ 在进行反射的方法调用时，必须使用装箱基本类型
+
+* 如果其他类型更合适，则尽量避免使用字符串
+字符串不适合代替其他的值类型
++ 字符串不适合代替枚举类型
++ 字符串不适合代替聚集类型，使用一个静态成员类来取代
+  #+BEGIN_SRC java
+    // Inappropriate use of string as aggregate type
+    String compoundKey = className + "#" + i.next();
+  #+END_SRC
++ 字符串不适合代替能力表
+客户端有可能使用同一个字符串，来表示不同的值
+  #+BEGIN_SRC java
+    // Broken - inappropriate use of string as capability!
+    public class ThreadLocal {
+            private ThreadLocal() { } // Noninstantiable
+
+            // Sets the current thread's value for the named variable.
+            public static void set(String key, Object value);
+
+            // Returns the current thread's value for the named variable.
+            public static Object get(String key);
+    }
+  #+END_SRC
+使用静态类来代替字符串
+#+BEGIN_SRC java
+  public class ThreadLocal {
+          private ThreadLocal() { } // Noninstantiable
+          public static class Key { // (Capability)
+                  Key() { }
+          }
+
+
+          // Generates a unique, unforgeable key
+          public static Key getKey() {
+                  return new Key();
+          }
+          
+          public static void set(Key key, Object value);
+          public static Object get(Key key);
+  }
+#+END_SRC
+再进一步可以用ThreadLocal的实例对象引用来代替静态类Key，换句话说每次客户端都产生一个新的ThreadLocal对象来作为Key
+#+BEGIN_SRC java
+  public final class ThreadLocal {
+          public ThreadLocal() { }
+          public void set(Object value);
+          public Object get();
+  }
+#+END_SRC
+最后用范型来完成类型安全
+#+BEGIN_SRC java
+  public final class ThreadLocal<T> {
+          public ThreadLocal() { }
+          public void set(T value);
+          public T get();
+  }
+#+END_SRC
+如果要用String来表示能力的时候，请考虑使用更安全更优雅的java.util.ThreadLocal
+
+* 当心字符串连接的性能
++ 连接n个字符串而重复使用'+'，则需要 n^2 的时间复杂度
++ 为了获得更好的性能，请使用StringBuilder替代String
++ 如果考虑线程安全性，请使用StringBuffer代码StringBuilder
