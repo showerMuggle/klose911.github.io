@@ -5,7 +5,7 @@
  */
 package klose.effj.capability;
 
-public abstract class BrokenThreadLocalWithString {
+public class BrokenThreadLocalWithString {
 
     private BrokenThreadLocalWithString() {
     } // Noninstantiable
