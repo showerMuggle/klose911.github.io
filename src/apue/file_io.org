@@ -3,5 +3,91 @@
 #+HTML_LINK_UP: standard.html   
 #+HTML_LINK_HOME: apue.html
 #+OPTIONS: num:nil timestamp:nil ^:nil *:nil
+大多数UNIX文件I/O只需用到5个函数：open、read、write、lseek以及close。这些函数经常被称之为不带缓存的I/O，指的是每个read和write都调用内核中的一个系统调用。然后说明不同缓存器长度对read和write函数的影响
+
+接着将通过传送给open函数的参数来讨论原子操作这个概念，以及在多个进程间如何共享文件，并涉及内核的有关数据结构
+
+最后将说明dup、fcntl和ioctl函数
 
 * 文件描述符
+  对于内核而言，所有打开文件都由文件描述符引用。文件描述符是一个非负整数。当打开一个现存文件或创建一个新文件时，内核向进程返回一个文件描述符。当读、写一个文件时，用open或creat返回的文件描述符标识该文件，将其作为参数传送给read或write
+
+文件描述符的范围是0~OPEN_MAX
+  
+** shell 
++ 文件描述符0与进程的标准输入相结合
++ 文件描述符1与标准输出相结合
++ 文件描述符2与标准出错输出相结合
+  
+** 常量定义
+   在<unistd.h>中定义以下常量来标识标准文件描述符
++ STDIN_FILENO:  0
++ STDOUT_FILENO: 1
++ STDERR_FILENO: 2
+  
+** 设备文件
+   标准输入、标准输出和标准出错对应的设备文件注册在目录/dev中，文件名分别为stdin.stdout,stderr。它们实际上分别是指向/proc/self/fd/0,/proc/self/fd/1,/proc/self/fd/2的软链接
+   #+BEGIN_SRC sh
+     $ cd /dev/
+     /dev $ ls -l std*
+
+     lrwxrwxrwx 1 root root 15 Jan 20  2017 stderr -> /proc/self/fd/2
+     lrwxrwxrwx 1 root root 15 Jan 20  2017 stdin -> /proc/self/fd/0
+     lrwxrwxrwx 1 root root 15 Jan 20  2017 stdout -> /proc/self/fd/1
+   #+END_SRC
+   
+   虚拟目录/proc/self/fd中记录了当前进程所打开的文件描述符。可以看到在xfce4-terminal中，实际文件描述符指向/dev/pts/虚拟字符设备
+   #+BEGIN_SRC sh
+  /proc/self/fd $ ls -l
+
+  total 0
+  lrwx------ 1 klose klose 64 Jan 19 21:54 0 -> /dev/pts/0
+  lrwx------ 1 klose klose 64 Jan 19 21:54 1 -> /dev/pts/0
+  lrwx------ 1 klose klose 64 Jan 19 21:54 2 -> /dev/pts/0
+  lrwx------ 1 klose klose 64 Jan 19 22:20 255 -> /dev/pts/0
+   #+END_SRC
+对于守护进程，　0、1、2都是链接到/dev/null的，这说明守护进程不会跟任何的接口进行交互！
+
+* open函数
+open函数以oflag指定的方式打开字符串filename指定的文件，成功后返回filename对应的文件描述符，失败时返回-1，并设置errno指代失败原因
+  #+BEGIN_SRC C
+    #include <fcntl.h>
+
+    /*　
+      打开文件
+       
+      filename: 文件名
+      oflag: 打开选项，例如O_RDWR | O_APPEND
+
+      mode_t: 可选择参数，当oflag包含O_CREAT的时候，表示创建文件的权限
+
+      成功时返回对应的文件描述符
+      失败时返回-1，并设置errorno指代失败原因
+    ,*/
+    int open(const char *filename, int oflag, .../* mode_t mode */);
+
+  #+END_SRC
+
+** oflag参数
+oflag参数必须指定且只指定下面中的一个
+1. O_RDONLY：只读打开
+2. O_WRONLY：只写打开
+3. O_RDWR：读、写打开
+
+可选参数：
++ O_APPEND：每次写时都加到文件的尾端
++ O_CREAT：若此文件不存在则创建它，使用此选择项时，需同时说明第三个参数mode用其说明该新文件的权限
++ O_EXCL：如果同时指定了O_CREAT，而文件已经存在则出错。用来测试一个文件是否存在，如果不存在则创建此文件成为一个原子操作
++ O_TRUNC：如果此文件存在，而且为只读或只写成功打开，否则将其长度截短为0
++ O_NOCTTY：如果pathname指的是终端设备，则不将此设备分配作为此进程的控制终端
++ O_NONBLOCK：如果pathname指的是一个FIFO、一个块特殊文件或一个字符特殊文件，则此选择项为此文件的本次打开操作和后续的I/O操作设置非阻塞方式
++ O_SYNC：使每次write都等到物理I/O操作完成
+
+这些常数定义在<fcntl.h>头文件中
+
+** 文件名截短　
++ 若_POSIX_NO_TRUNC有效，则在整个路径名超过PATH_MAX，或路径名中的任一文件名超过NAME_MAX时，返回出错ENAMETOOLONG
++ 反之，文件名会被截断到最大字符数
+
+** 返回的文件描述符
+由open返回的文件描述符一定是最小的未用描述符数字。这一点被很多应用程序用来在标准输入、标准输出或标准出错输出上打开一个新的文件。例如，一个应用程序可以先关闭标准输出(通常是文件描述符1)，然后打开另一个文件，该文件一定会在文件描述符1上打开 
