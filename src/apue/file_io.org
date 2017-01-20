@@ -11,8 +11,8 @@
 
 * 文件描述符
   对于内核而言，所有打开文件都由文件描述符引用。文件描述符是一个非负整数。当打开一个现存文件或创建一个新文件时，内核向进程返回一个文件描述符。当读、写一个文件时，用open或creat返回的文件描述符标识该文件，将其作为参数传送给read或write
-
-文件描述符的范围是0~OPEN_MAX
+  
+  文件描述符的范围是0~OPEN_MAX
   
 ** shell 
 + 文件描述符0与进程的标准输入相结合
@@ -46,14 +46,13 @@
   lrwx------ 1 klose klose 64 Jan 19 21:54 2 -> /dev/pts/0
   lrwx------ 1 klose klose 64 Jan 19 22:20 255 -> /dev/pts/0
    #+END_SRC
-对于守护进程，　0、1、2都是链接到/dev/null的，这说明守护进程不会跟任何的接口进行交互！
-
+   对于守护进程，　0、1、2都是链接到/dev/null的，这说明守护进程不会跟任何的接口进行交互！
+   
 * open函数
-open函数以oflag指定的方式打开字符串filename指定的文件，成功后返回filename对应的文件描述符，失败时返回-1，并设置errno指代失败原因
+  以oflag指定的方式打开字符串filename指定的文件
   #+BEGIN_SRC C
     #include <fcntl.h>
-
-    /*　
+    /** 　
       打开文件
        
       filename: 文件名
@@ -62,18 +61,17 @@ open函数以oflag指定的方式打开字符串filename指定的文件，成功
       mode_t: 可选择参数，当oflag包含O_CREAT的时候，表示创建文件的权限
 
       成功时返回对应的文件描述符
-      失败时返回-1，并设置errorno指代失败原因
-    ,*/
+      失败时返回-1，并设置errorno指代失败原因  
+     ,*/
     int open(const char *filename, int oflag, .../* mode_t mode */);
-
   #+END_SRC
-
+  
 ** oflag参数
-oflag参数必须指定且只指定下面中的一个
+   oflag参数必须指定且只指定下面中的一个
 1. O_RDONLY：只读打开
 2. O_WRONLY：只写打开
 3. O_RDWR：读、写打开
-
+   
 可选参数：
 + O_APPEND：每次写时都加到文件的尾端
 + O_CREAT：若此文件不存在则创建它，使用此选择项时，需同时说明第三个参数mode用其说明该新文件的权限
@@ -82,12 +80,189 @@ oflag参数必须指定且只指定下面中的一个
 + O_NOCTTY：如果pathname指的是终端设备，则不将此设备分配作为此进程的控制终端
 + O_NONBLOCK：如果pathname指的是一个FIFO、一个块特殊文件或一个字符特殊文件，则此选择项为此文件的本次打开操作和后续的I/O操作设置非阻塞方式
 + O_SYNC：使每次write都等到物理I/O操作完成
-
+  
 这些常数定义在<fcntl.h>头文件中
 
 ** 文件名截短　
 + 若_POSIX_NO_TRUNC有效，则在整个路径名超过PATH_MAX，或路径名中的任一文件名超过NAME_MAX时，返回出错ENAMETOOLONG
 + 反之，文件名会被截断到最大字符数
-
+  
 ** 返回的文件描述符
-由open返回的文件描述符一定是最小的未用描述符数字。这一点被很多应用程序用来在标准输入、标准输出或标准出错输出上打开一个新的文件。例如，一个应用程序可以先关闭标准输出(通常是文件描述符1)，然后打开另一个文件，该文件一定会在文件描述符1上打开 
+   由open返回的文件描述符一定是最小的未用描述符数字。这一点被很多应用程序用来在标准输入、标准输出或标准出错输出上打开一个新的文件。例如，一个应用程序可以先关闭标准输出(通常是文件描述符1)，然后打开另一个文件，该文件一定会在文件描述符1上打开 
+* creat函数
+  创建一个新的文件
+  #+BEGIN_SRC C
+    #include <sys/types.h>
+    #include <sys/stat.h>
+    #include <fcntl.h>
+
+    /**
+       以只写形式打开一个新的文件
+
+       filename：文件名
+       mode：文件权限
+       
+       若成功返回打开的文件描述符
+       若出错返回-1
+      */
+    int creat(const char *filename, mode_t mode);
+  #+END_SRC
+  以只写方式创建并打开一个新文件，如果文件已存在，则文件被截短为0。事实上creat函数等价于下面的open调用
+  #+BEGIN_SRC C
+  open("filename", O_WRONLY | O_TRUNC | O_CREAT,mode);
+  #+END_SRC
+  creat的一个不足之处是以只写方式打开所创建的文件。当初如果要创建一个临时文件，并要先写该文件，然后又读该文件，则必须先调用creat,close,然后再调用open。最新的open可以这样做
+  #+BEGIN_SRC C
+  open("filename", O_RDWR | O_TRUNC | O_CREAT,mode);
+  #+END_SRC
+* close函数
+关闭一个打开文件，如果成功返回0，如果失败返回-1 
+#+BEGIN_SRC C
+  #include <unistd.h>
+  /**
+   关闭文件
+
+   filedes：文件描述符
+
+   成功返回0
+   失败返回-1
+  */
+  int close(int filedes);  
+#+END_SRC
+关闭文件的时候如果进程在此文件上加有记录锁，则将释放所有记录锁。
+
+关闭进程会关闭所有打开的文件描述符，所以close函数往往不会被显示调用
+* lseek函数
+设置文件指针的位置
+#+BEGIN_SRC C
+  #include <unistd.h>
+  /**
+     设置文件指针的位置
+
+     filedes：文件描述符
+     offset：文件位置偏移量，单位是字节数
+     whence：从哪里开始计算偏移量
+
+     成功时返回0
+     失败时返回-1，并设置errorno
+  ,*/
+  off_t lseek(int filedes, off_t offset, int whence);
+#+END_SRC
+** off_t 
+off_t通常定义为一个word的长度，32位机器是long类型，4个byte长度
+** 参数
+对参数offset的解释与参数whence的值有关:
++ 若whence是SEEK_SET，则将该文件的位移量设置为距文件开始处offset个字节。offset为非负
++ 若whence是SEEK_CUR，则将该文件的位移量设置为其当前值加offset。offset可为正或负
++ 若whence是SEEK_END，则将该文件的位移量设置为文件长度加offset。offset可为正或负
+
+** 返回值
++ 成功时将返回相对于文件开始处的偏移量(可能是负数)
++ 失败返回-1，并设置errno
+
+因为lseek可以返回负数，所以判断lseek是否执行成功，最好用返回值是否为-1来进行判断
+*** 测试是否支持文件偏移
+在文件是FIFO、管道或者套接字时，lseek将失败并设置errno为ESPIPE(Illegal seek)
+    #+BEGIN_SRC C
+      #include <sys/types.h>
+      #include <unistd.h>
+      #include <stdio.h> 
+      #include <stdlib.h>
+
+      int main(void) 
+      {
+              if(lseek(STDIN_FILENO, 0, SEEK_CUR) == -1) 
+                      printf("can not seek \n");
+              else 
+                      printf("seek OK \n"); 
+
+              exit(EXIT_SUCCESS);
+
+      }
+    #+END_SRC
+
+*** 文件空洞
+文件位移量可以大于文件的当前长度,在这种情况下,对该文件的下一次写将延长该文件，并在文件中构成一个空调,这一点是允许的。位于文件中但没有写过的字节都被读为0
+
+#+BEGIN_SRC C
+  #include <sys/types.h>
+  #include <sys/stat.h>
+  #include <fcntl.h>
+  #include "apue.h"
+
+
+  char buf1[] = "abcdefghij";
+  char buf2[] = "ABCDEFGHIJ";
+
+  int main(void) 
+  {
+          int fd; 
+
+          if((fd = creat("file.hole", FILE_MODE)) < 0) 
+                  err_sys("creat error");
+      
+          if(write(fd, buf1, 10) != 10) 
+                  err_sys("buf1 write error"); 
+          /* offset now 10*/
+          if(lseek(fd, 40, SEEK_SET) == -1)
+                  err_sys("seek error"); 
+          /* offset now 40 */
+          if(write(fd, buf2, 10) != 10) 
+                  err_sys("buf2 write error"); 
+          /* offset now 50 */
+      
+          exit(0);
+  }
+#+END_SRC
+
+* read函数
+从打开文件中读取数据到缓存区中
+
+如果成功读取，在返回前当前文件的偏移量会加上读取的真实字节数
+#+BEGIN_SRC C
+  #include <unistd.h>
+
+  /**
+     从filedes文件的当前位置读取nbytes字节到缓存区buf中
+
+     filedes：文件描述符
+     buf：缓存区指针
+     nbytes：读取的字节数目
+
+     返回值：正数表示读取的真实字节数
+     　　　　0表示读取到EOF
+            -1表示出错，并设置errorno
+  ,*/
+  ssize_t read(int filedes, void *buf, size_t nbytes);
+#+END_SRC
+
+有多种情况可使实际读到的字节数少于要求读字节数：
++ 读普通文件时，在读到要求字节数之前已到达了文件尾端。例如若在到达文件尾端之前还有30个字节，而要求读100个字节，则read返回30。下一次再调用read，它将返回0(文件尾端)
++ 当从终端设备读时，通常一次最多读一行
++ 当从网络读时，网络中的缓冲机构可能造成返回值小于所要求读的字节数
++ 某些面向记录的设备，例如磁带，一次最多返回一个记录
+
+* write函数
+向打开的文件写数据
+
+对于普通文件写操作从文件的当前位移量处开始。如果在打开该文件时指定了O_APPEND选择项，则在每次写操作之前，将文件位移量设置在文件的当前结尾处。在一次成功写之后，该文件位移量增加实际写的字节数
+#+BEGIN_SRC C
+  #include <unistd.h>
+  /**
+     按指定的字节数nbytes从buf处取数据，输出到文件filedes的当前位置处，如果已经到文件末
+  尾,将增加文件长度并在最后添加EOF标志
+
+     filedes：文件描述符
+     buf：字符缓存区指针
+     nbytes：写入数据字节数
+
+     返回值:　为正数时表示真实写入的字节数,
+             出错返回-1，同时errno被设置
+   ,*/
+  ssize_t write(int filedes, const void *buf, size_t nbytes);
+#+END_SRC
+write出错的常见原因是:
++ 磁盘已写满
++ 超过了对一个给定进程的文件长度限制
+
+* I/O的效率

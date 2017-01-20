@@ -160,6 +160,23 @@ for the JavaScript code in this tag.
 <li><a href="#sec-2-3">返回的文件描述符</a></li>
 </ul>
 </li>
+<li><a href="#sec-3">creat函数</a></li>
+<li><a href="#sec-4">close函数</a></li>
+<li><a href="#sec-5">lseek函数</a>
+<ul>
+<li><a href="#sec-5-1">off_t</a></li>
+<li><a href="#sec-5-2">参数</a></li>
+<li><a href="#sec-5-3">返回值</a>
+<ul>
+<li><a href="#sec-5-3-1">测试是否支持文件偏移</a></li>
+<li><a href="#sec-5-3-2">文件空洞</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#sec-6">read函数</a></li>
+<li><a href="#sec-7">write函数</a></li>
+<li><a href="#sec-8">I/O的效率</a></li>
 </ul>
 </div>
 </div>
@@ -260,13 +277,12 @@ lrwx------ 1 klose klose 64 Jan 19 22:20 255 -&gt; /dev/pts/0
 <h2 id="sec-2">open函数</h2>
 <div class="outline-text-2" id="text-2">
 <p>
-open函数以oflag指定的方式打开字符串filename指定的文件，成功后返回filename对应的文件描述符，失败时返回-1，并设置errno指代失败原因
+以oflag指定的方式打开字符串filename指定的文件
 </p>
 <div class="org-src-container">
 
 <pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;fcntl.h&gt;</span>
-
-<span style="color: #ff4500;">/*</span><span style="color: #ff4500;">&#12288;</span>
+<span style="color: #ff4500;">/** </span><span style="color: #ff4500;">&#12288;</span>
 <span style="color: #ff4500;">  &#25171;&#24320;&#25991;&#20214;</span>
 
 <span style="color: #ff4500;">  filename: &#25991;&#20214;&#21517;</span>
@@ -275,8 +291,8 @@ open函数以oflag指定的方式打开字符串filename指定的文件，成功
 <span style="color: #ff4500;">  mode_t: &#21487;&#36873;&#25321;&#21442;&#25968;&#65292;&#24403;oflag&#21253;&#21547;O_CREAT&#30340;&#26102;&#20505;&#65292;&#34920;&#31034;&#21019;&#24314;&#25991;&#20214;&#30340;&#26435;&#38480;</span>
 
 <span style="color: #ff4500;">  &#25104;&#21151;&#26102;&#36820;&#22238;&#23545;&#24212;&#30340;&#25991;&#20214;&#25551;&#36848;&#31526;</span>
-<span style="color: #ff4500;">  &#22833;&#36133;&#26102;&#36820;&#22238;-1&#65292;&#24182;&#35774;&#32622;errorno&#25351;&#20195;&#22833;&#36133;&#21407;&#22240;</span>
-<span style="color: #ff4500;">*/</span>
+<span style="color: #ff4500;">  &#22833;&#36133;&#26102;&#36820;&#22238;-1&#65292;&#24182;&#35774;&#32622;errorno&#25351;&#20195;&#22833;&#36133;&#21407;&#22240;  </span>
+<span style="color: #ff4500;"> </span><span style="color: #ff4500;">*/</span>
 <span style="color: #98fb98;">int</span> <span style="color: #87cefa;">open</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">filename</span>, <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">oflag</span>, ...<span style="color: #ff4500;">/* </span><span style="color: #ff4500;">mode_t mode </span><span style="color: #ff4500;">*/</span>);
 </pre>
 </div>
@@ -343,6 +359,298 @@ oflag参数必须指定且只指定下面中的一个
 </p>
 </div>
 </div>
+</div>
+<div id="outline-container-sec-3" class="outline-2">
+<h2 id="sec-3">creat函数</h2>
+<div class="outline-text-2" id="text-3">
+<p>
+创建一个新的文件
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/stat.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;fcntl.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#20197;&#21482;&#20889;&#24418;&#24335;&#25171;&#24320;&#19968;&#20010;&#26032;&#30340;&#25991;&#20214;</span>
+
+<span style="color: #ffa07a;">   filename&#65306;&#25991;&#20214;&#21517;</span>
+<span style="color: #ffa07a;">   mode&#65306;&#25991;&#20214;&#26435;&#38480;</span>
+
+<span style="color: #ffa07a;">   &#33509;&#25104;&#21151;&#36820;&#22238;&#25171;&#24320;&#30340;&#25991;&#20214;&#25551;&#36848;&#31526;</span>
+<span style="color: #ffa07a;">   &#33509;&#20986;&#38169;&#36820;&#22238;-1</span>
+<span style="color: #ffa07a;">  */</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">creat</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">filename</span>, <span style="color: #98fb98;">mode_t</span> <span style="color: #eedd82;">mode</span>);
+</pre>
+</div>
+<p>
+以只写方式创建并打开一个新文件，如果文件已存在，则文件被截短为0。事实上creat函数等价于下面的open调用
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C">open(<span style="color: #ffa07a;">"filename"</span>, O_WRONLY | O_TRUNC | O_CREAT,mode);
+</pre>
+</div>
+<p>
+creat的一个不足之处是以只写方式打开所创建的文件。当初如果要创建一个临时文件，并要先写该文件，然后又读该文件，则必须先调用creat,close,然后再调用open。最新的open可以这样做
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C">open(<span style="color: #ffa07a;">"filename"</span>, O_RDWR | O_TRUNC | O_CREAT,mode);
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-sec-4" class="outline-2">
+<h2 id="sec-4">close函数</h2>
+<div class="outline-text-2" id="text-4">
+<p>
+关闭一个打开文件，如果成功返回0，如果失败返回-1 
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;unistd.h&gt;</span>
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;"> &#20851;&#38381;&#25991;&#20214;</span>
+
+<span style="color: #ffa07a;"> filedes&#65306;&#25991;&#20214;&#25551;&#36848;&#31526;</span>
+
+<span style="color: #ffa07a;"> &#25104;&#21151;&#36820;&#22238;0</span>
+<span style="color: #ffa07a;"> &#22833;&#36133;&#36820;&#22238;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">close</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">filedes</span>);
+</pre>
+</div>
+<p>
+关闭文件的时候如果进程在此文件上加有记录锁，则将释放所有记录锁。
+</p>
+
+<p>
+关闭进程会关闭所有打开的文件描述符，所以close函数往往不会被显示调用
+</p>
+</div>
+</div>
+<div id="outline-container-sec-5" class="outline-2">
+<h2 id="sec-5">lseek函数</h2>
+<div class="outline-text-2" id="text-5">
+<p>
+设置文件指针的位置
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;unistd.h&gt;</span>
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#35774;&#32622;&#25991;&#20214;&#25351;&#38024;&#30340;&#20301;&#32622;</span>
+
+<span style="color: #ffa07a;">   filedes&#65306;&#25991;&#20214;&#25551;&#36848;&#31526;</span>
+<span style="color: #ffa07a;">   offset&#65306;&#25991;&#20214;&#20301;&#32622;&#20559;&#31227;&#37327;&#65292;&#21333;&#20301;&#26159;&#23383;&#33410;&#25968;</span>
+<span style="color: #ffa07a;">   whence&#65306;&#20174;&#21738;&#37324;&#24320;&#22987;&#35745;&#31639;&#20559;&#31227;&#37327;</span>
+
+<span style="color: #ffa07a;">   &#25104;&#21151;&#26102;&#36820;&#22238;0</span>
+<span style="color: #ffa07a;">   &#22833;&#36133;&#26102;&#36820;&#22238;-1&#65292;&#24182;&#35774;&#32622;errorno</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">off_t</span> <span style="color: #87cefa;">lseek</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">filedes</span>, <span style="color: #98fb98;">off_t</span> <span style="color: #eedd82;">offset</span>, <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">whence</span>);
+</pre>
+</div>
+</div>
+<div id="outline-container-sec-5-1" class="outline-3">
+<h3 id="sec-5-1">off_t</h3>
+<div class="outline-text-3" id="text-5-1">
+<p>
+off_t通常定义为一个word的长度，32位机器是long类型，4个byte长度
+</p>
+</div>
+</div>
+<div id="outline-container-sec-5-2" class="outline-3">
+<h3 id="sec-5-2">参数</h3>
+<div class="outline-text-3" id="text-5-2">
+<p>
+对参数offset的解释与参数whence的值有关:
+</p>
+<ul class="org-ul">
+<li>若whence是SEEK_SET，则将该文件的位移量设置为距文件开始处offset个字节。offset为非负
+</li>
+<li>若whence是SEEK_CUR，则将该文件的位移量设置为其当前值加offset。offset可为正或负
+</li>
+<li>若whence是SEEK_END，则将该文件的位移量设置为文件长度加offset。offset可为正或负
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-5-3" class="outline-3">
+<h3 id="sec-5-3">返回值</h3>
+<div class="outline-text-3" id="text-5-3">
+<ul class="org-ul">
+<li>成功时将返回相对于文件开始处的偏移量(可能是负数)
+</li>
+<li>失败返回-1，并设置errno
+</li>
+</ul>
+
+<p>
+因为lseek可以返回负数，所以判断lseek是否执行成功，最好用返回值是否为-1来进行判断
+</p>
+</div>
+<div id="outline-container-sec-5-3-1" class="outline-4">
+<h4 id="sec-5-3-1">测试是否支持文件偏移</h4>
+<div class="outline-text-4" id="text-5-3-1">
+<p>
+在文件是FIFO、管道或者套接字时，lseek将失败并设置errno为ESPIPE(Illegal seek)
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;unistd.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;stdio.h&gt;</span> 
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;stdlib.h&gt;</span>
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">void</span>) 
+{
+    <span style="color: #00ffff;">if</span>(lseek(STDIN_FILENO, 0, SEEK_CUR) == -1) 
+        printf(<span style="color: #ffa07a;">"can not seek \n"</span>);
+    <span style="color: #00ffff;">else</span> 
+        printf(<span style="color: #ffa07a;">"seek OK \n"</span>); 
+
+    exit(EXIT_SUCCESS);
+
+}
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-5-3-2" class="outline-4">
+<h4 id="sec-5-3-2">文件空洞</h4>
+<div class="outline-text-4" id="text-5-3-2">
+<p>
+文件位移量可以大于文件的当前长度,在这种情况下,对该文件的下一次写将延长该文件，并在文件中构成一个空调,这一点是允许的。位于文件中但没有写过的字节都被读为0
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/stat.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;fcntl.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+
+
+<span style="color: #98fb98;">char</span> <span style="color: #eedd82;">buf1</span>[] = <span style="color: #ffa07a;">"abcdefghij"</span>;
+<span style="color: #98fb98;">char</span> <span style="color: #eedd82;">buf2</span>[] = <span style="color: #ffa07a;">"ABCDEFGHIJ"</span>;
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">void</span>) 
+{
+    <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">fd</span>; 
+
+    <span style="color: #00ffff;">if</span>((fd = creat(<span style="color: #ffa07a;">"file.hole"</span>, FILE_MODE)) &lt; 0) 
+        err_sys(<span style="color: #ffa07a;">"creat error"</span>);
+
+    <span style="color: #00ffff;">if</span>(write(fd, buf1, 10) != 10) 
+        err_sys(<span style="color: #ffa07a;">"buf1 write error"</span>); 
+    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">offset now 10</span><span style="color: #ff4500;">*/</span>
+    <span style="color: #00ffff;">if</span>(lseek(fd, 40, SEEK_SET) == -1)
+        err_sys(<span style="color: #ffa07a;">"seek error"</span>); 
+    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">offset now 40 </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #00ffff;">if</span>(write(fd, buf2, 10) != 10) 
+        err_sys(<span style="color: #ffa07a;">"buf2 write error"</span>); 
+    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">offset now 50 </span><span style="color: #ff4500;">*/</span>
+
+    exit(0);
+}
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-6" class="outline-2">
+<h2 id="sec-6">read函数</h2>
+<div class="outline-text-2" id="text-6">
+<p>
+从打开文件中读取数据到缓存区中
+</p>
+
+<p>
+如果成功读取，在返回前当前文件的偏移量会加上读取的真实字节数
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;unistd.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#20174;filedes&#25991;&#20214;&#30340;&#24403;&#21069;&#20301;&#32622;&#35835;&#21462;nbytes&#23383;&#33410;&#21040;&#32531;&#23384;&#21306;buf&#20013;</span>
+
+<span style="color: #ffa07a;">   filedes&#65306;&#25991;&#20214;&#25551;&#36848;&#31526;</span>
+<span style="color: #ffa07a;">   buf&#65306;&#32531;&#23384;&#21306;&#25351;&#38024;</span>
+<span style="color: #ffa07a;">   nbytes&#65306;&#35835;&#21462;&#30340;&#23383;&#33410;&#25968;&#30446;</span>
+
+<span style="color: #ffa07a;">   &#36820;&#22238;&#20540;&#65306;&#27491;&#25968;&#34920;&#31034;&#35835;&#21462;&#30340;&#30495;&#23454;&#23383;&#33410;&#25968;</span>
+<span style="color: #ffa07a;">   &#12288;&#12288;&#12288;&#12288;0&#34920;&#31034;&#35835;&#21462;&#21040;EOF</span>
+<span style="color: #ffa07a;">      -1&#34920;&#31034;&#20986;&#38169;&#65292;&#24182;&#35774;&#32622;errorno</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">ssize_t</span> <span style="color: #87cefa;">read</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">filedes</span>, <span style="color: #98fb98;">void</span> *<span style="color: #eedd82;">buf</span>, <span style="color: #98fb98;">size_t</span> <span style="color: #eedd82;">nbytes</span>);
+</pre>
+</div>
+
+<p>
+有多种情况可使实际读到的字节数少于要求读字节数：
+</p>
+<ul class="org-ul">
+<li>读普通文件时，在读到要求字节数之前已到达了文件尾端。例如若在到达文件尾端之前还有30个字节，而要求读100个字节，则read返回30。下一次再调用read，它将返回0(文件尾端)
+</li>
+<li>当从终端设备读时，通常一次最多读一行
+</li>
+<li>当从网络读时，网络中的缓冲机构可能造成返回值小于所要求读的字节数
+</li>
+<li>某些面向记录的设备，例如磁带，一次最多返回一个记录
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-7" class="outline-2">
+<h2 id="sec-7">write函数</h2>
+<div class="outline-text-2" id="text-7">
+<p>
+向打开的文件写数据
+</p>
+
+<p>
+对于普通文件写操作从文件的当前位移量处开始。如果在打开该文件时指定了O_APPEND选择项，则在每次写操作之前，将文件位移量设置在文件的当前结尾处。在一次成功写之后，该文件位移量增加实际写的字节数
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;unistd.h&gt;</span>
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#25353;&#25351;&#23450;&#30340;&#23383;&#33410;&#25968;nbytes&#20174;buf&#22788;&#21462;&#25968;&#25454;&#65292;&#36755;&#20986;&#21040;&#25991;&#20214;filedes&#30340;&#24403;&#21069;&#20301;&#32622;&#22788;&#65292;&#22914;&#26524;&#24050;&#32463;&#21040;&#25991;&#20214;&#26411;</span>
+<span style="color: #ffa07a;">&#23614;,&#23558;&#22686;&#21152;&#25991;&#20214;&#38271;&#24230;&#24182;&#22312;&#26368;&#21518;&#28155;&#21152;EOF&#26631;&#24535;</span>
+
+<span style="color: #ffa07a;">   filedes&#65306;&#25991;&#20214;&#25551;&#36848;&#31526;</span>
+<span style="color: #ffa07a;">   buf&#65306;&#23383;&#31526;&#32531;&#23384;&#21306;&#25351;&#38024;</span>
+<span style="color: #ffa07a;">   nbytes&#65306;&#20889;&#20837;&#25968;&#25454;&#23383;&#33410;&#25968;</span>
+
+<span style="color: #ffa07a;">   &#36820;&#22238;&#20540;:&#12288;&#20026;&#27491;&#25968;&#26102;&#34920;&#31034;&#30495;&#23454;&#20889;&#20837;&#30340;&#23383;&#33410;&#25968;,</span>
+<span style="color: #ffa07a;">       &#20986;&#38169;&#36820;&#22238;-1&#65292;&#21516;&#26102;errno&#34987;&#35774;&#32622;</span>
+<span style="color: #ffa07a;"> */</span>
+<span style="color: #98fb98;">ssize_t</span> <span style="color: #87cefa;">write</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">filedes</span>, <span style="color: #00ffff;">const</span> <span style="color: #98fb98;">void</span> *<span style="color: #eedd82;">buf</span>, <span style="color: #98fb98;">size_t</span> <span style="color: #eedd82;">nbytes</span>);
+</pre>
+</div>
+<p>
+write出错的常见原因是:
+</p>
+<ul class="org-ul">
+<li>磁盘已写满
+</li>
+<li>超过了对一个给定进程的文件长度限制
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-8" class="outline-2">
+<h2 id="sec-8">I/O的效率</h2>
 </div>
 </div>
 <div id="postamble" class="status">
