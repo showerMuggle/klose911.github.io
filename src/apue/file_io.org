@@ -266,3 +266,251 @@ write出错的常见原因是:
 + 超过了对一个给定进程的文件长度限制
 
 * I/O的效率
+  将标准输入复制到标准输出
+  #+BEGIN_SRC C
+    #include <fcntl.h>
+    #include "apue.h"
+
+    #define BUFFSIZE 8192
+
+    int main(void)
+    {
+            
+            int n;
+            char buf[BUFFSIZE];
+            
+            while( (n = read(STDIN_FILENO, buf, BUFFZIZE)) > 0)
+                    if(write(STDOUT_FILENO, buf, n) != n)
+                            err_sys("write error");
+            
+            if(n < 0) 
+                    err_sys("read error");
+            exit(0);
+
+    }
+  #+END_SRC
+  表3-1显示了用18种不同的缓存长度,读1468802字节文件所得到的结果，其标准输出则被重新定向到/dev/null上。此测试所用的文件系统是伯克利快速文件系统，其块长为8192字节。系统CPU时间的最小值开始出现在BUFFSIZE为8192处，继续增加缓存长度对此时间并无影响
+  #+CAPTION: 用不同缓存长度进行读操作的时间结果
+  #+ATTR_HTML: :border 1 :rules all :frame boader　
+  | BUFFSIZE | 用户CPU(秒) | 系统CPU(秒) | 时钟时间(秒) | 循环次数 |
+  |        1 |        23.8 |       397.9 |        423.4 |  1468802 |
+  |        2 |        12.3 |       202.0 |        215.2 |   734401 |
+  |        4 |         6.1 |       100.6 |        107.2 |   367201 |
+  |        8 |         3.0 |        50.7 |         54.0 |   183601 |
+  |       16 |         1.5 |        25.3 |         27.0 |    91801 |
+  |       32 |         0.7 |        12.8 |         13.7 |    45901 |
+  |       64 |         0.3 |         6.6 |          7.0 |    22951 |
+  |      128 |         0.2 |         3.3 |          3.6 |    11476 |
+  |      256 |         0.1 |         1.8 |          1.9 |     5738 |
+  |      512 |         0.0 |         1.0 |          1.1 |     2869 |
+  |     1024 |         0.0 |         0.6 |          0.6 |     1435 |
+  |     2048 |         0.0 |         0.4 |          0.4 |      718 |
+  |     4096 |         0.0 |         0.4 |          0.4 |      359 |
+  |     8192 |         0.0 |         0.3 |          0.3 |      180 |
+  |    16384 |         0.0 |         0.3 |          0.3 |       90 |
+  |    32768 |         0.0 |         0.3 |          0.3 |       45 |
+  |    65536 |         0.0 |         0.3 |          0.3 |       23 |
+  |   131072 |         0.0 |         0.3 |          0.3 |       12 |
+  
+* 文件共享
+  unix支持多个进程共享文件。在介绍dup函数之前，需要先说明这种共享，为此先说明内核用于所有I/O的数据结构
+  
+** 内核数据结构
+   图3-1显示了进程有两个不同的打开文件：一个文件打开为标准输入(文件描述符 0)，另一个打开为标准输出(文件描述符为 1)
+   #+ATTR_HTML: image :width 1000px 
+   [[./pic/kernel.png]]
+   
+*** 进程表
+    每个进程在进程表中都有一个记录项，每个记录项中有一张打开文件描述符表，可将其视为一个矢量，每个描述符占用一项。与每个文件描述符相关联的是：
++ 文件描述符标志
++ 指向一个文件表项的指针
+  
+*** 文件表
+    
+    内核为所有打开文件维持一张文件表。每个文件表项包含：
++ 文件状态标志(读、写、增写、同步、非阻塞等)
++ 当前文件位移量
++ 指向该文件v节点表项的指针
+  
+*** v节点表
+    每个打开文件(或设备)都有一个v节点结构。v节点包含了文件类型和对此文件进行各种操作的函数的指针信息。对于大多数文件，v节点还包含了该文件的i节点(索引节点)。这些信息是在打开文件时从盘上读入内存的，所以所有关于文件的信息都是快速可供使用的。例如i节点包含了文件的所有者、文件长度、文件所在的设备、指向文件在盘上所使用的实际数据块的指针等等
+    
+** 文件共享
+   两个独立进程各自打开了同一文件，则如图3-2中所示的安排。
+   
+   假定第一个进程使该文件在文件描述符3上打开，而另一个进程则使此文件在文件描述符4上打开。打开此文件的每个进程都得到一个文件表项，因为每个进程都有自己对这个文件的位移量。但是对一个给定的文件往往只有一个v节点表项
+   #+ATTR_HTML: image :width 1000px 
+   [[./pic/file_sharing.png]]
+   
++ 在完成每个write后，在文件表项中的当前文件位移量即增加所写的字节数。如果这使当前文件位移量超过了当前文件长度，则在i节点表项中的当前文件长度被设置为当前文件位移量
++ 如果用O_APPEND标志打开了一个文件，则相应标志也被设置到文件表项的文件状态标志中。每次对这种具有添写标志的文件执行写操作时，在文件表项中的当前文件位移量首先被设置为i节点表项中的文件长度。这就使得每次写的数据都添加到文件的当前尾端处
++ lseek函数只修改文件表项中的当前文件位移量，没有进行任何I/O操作
++ 若一个文件用lseek被定位到文件当前的尾端，则文件表项中的当前文件位移量被设置为i节点表项中的当前文件长度
++ 可能有多个文件描述符项指向同一文件表项。讨论dup函数时就能看到这一点。在fork后也发生同样的情况，此时父、子进程对于每一个打开的文件描述符共享同一个文件表项
++ 文件描述符标志和文件状态标志在作用范围方面的区别：前者只用于一个进程的一个描述符，而后者则适用于指向该给定文件表项的任何进程中的所有描述符
+  
+* 原子操作 
+原子操作指的是由多步组成的操作。如果该操作原子地执行，则或者执行完所有步，或者一步也不执行。不可能只执行所有步的一个子集 
+* dup函数
+  复制一个现存的文件描述符
+  #+BEGIN_SRC C
+    #include <unistd.h>
+    /**
+       复制文件描述符
+       
+       filesdes：被复制的文件描述符
+
+       返回：成功时，当前可用文件描述符中的最小值
+       　　　失败时候-1　
+    ,*/
+    int dup(int filedes);
+    /**
+       用filedes2参数指定新描述符的数值
+       
+       filedes：被复制的文件描述符
+       filedse2：复制的文件描述符
+
+       返回：成功时候返回filedes2，如果filedes2已经打开，则先关闭。如果filedes=filedes2，直接返回，不需关闭
+       　　　失败返回-1   
+    ,*/
+    int dup2(int filedes, int filedes2);
+  #+END_SRC
+  这些函数返回的新文件描述符与参数filedes共享同一个文件表项。图3-3显示了这种情况
+  #+ATTR_HTML: image :width 1000px 
+  [[./pic/dup.png]]
+  两个描述符指向同一文件表项，所以它们共享同一文件状态标志(读、写、添写等)以及同一当前文件位移量
+  
+* fnctl函数
+  改变已经打开文件的性质
+  
+  #+BEGIN_SRC C
+  #include <sys/types.h>
+  #include <unistd.h>
+  #include <fcntl.h>
+
+  /**
+     改变已经打开文件的性质
+
+     filedes：文件描述符
+     cmd：功能
+     args：可选参数
+
+     　 返回值：成功依赖于cmd
+     失败-1
+  ,*/
+  int fcntl(int filedes, int cmd, .../* int arg*/);
+  #+END_SRC
+  
+** 功能
+   根据cmd的不同值，fnctl可以进行不同的操作
+*** 复制一个现存的描述符
+F_DUPFD：复制文件描述符filedes，新文件描述符作为函数值返回。它是尚未打开的各描述符中大于或等于第三个参数值(取为整型值)中各值的最小值。新描述符与filedes共享同一文件表项。但是新描述符有它自己的一套文件描述符标志，其FD_CLOEXEC文件描述符标志被清除
+
+dup等价于
+#+BEGIN_SRC C
+  fcntl (filedes, F_DUPFD, 0);
+#+END_SRC
+
+dup2等价于
+#+BEGIN_SRC C
+  close(filedes 2);
+  fcntl(filedes, F_DUPFD, filedes2);
+#+END_SRC
+dup2是一个原子操作，而close及fcntl则包括两个函数调用。有可能在close和fcntl之间插入执行信号捕获函数，它可能修改文件描述符
+
+*** 获得/设置文件描述符标记
++ F_GETFD：获取文件描述符的标志(FD_CLOEXEC，用于指出执行exec(3)调用时是否关闭此文件)
++ F_SETFD：对于filedes设置文件描述符标志。新标志值按第三个参数(取为整型值)设置
+*** 获得/设置文件状态标志
++ F_GETFL：获取文件描述符的状态标志
++ F_SETFL：设置文件描述符的状态标志，将文件状态标志设置为第三个参数的值(取为整型值)
+  
+#+CAPTION: fcntl的文件状态标志
+#+ATTR_HTML: :border 1 :rules all :frame boader
+| 文件状态标志 | 说明 |
+| O_RDONLY | 只读打开 |
+| O_WRONLY | 只写打开 |
+| O_RDWR | 读/写打开 |
+| O_APPEND | 写时都添加至文件尾 |
+| O_NONBLOCK | 非阻塞方式 |
+| O_SYNC | 等待写完成 |
+| O_ASYNC | 异步I/O | 
+
+*** 获得/设置异步I/O有权
++ F_GETOWN：获得当前接收SIGIO和SIGURG信号的进程ID或进程组ID
++ F_SETOWN：设置接收SIGIO和SIGURG信号的进程ID或进程组ID。正的arg指定一个进程ID，负的arg表示等于arg绝对值的一个进程组ID
+*** 获得/设置记录锁
++ F_GETLK
++ F_SETLK
++ F_SETLKW
+** 返回值
+fcntl的返回值与命令有关。如果出错所有命令都返回-1。如果成功则返回某个其他值。下列三个命令有特定返回值:
++ F_DUPFD：返回新的文件描述符
++ F_GETFD/F_GETFL：返回相应标志
++ F_GETOWN：返回一个正的进程ID或负的进程组ID
+
+** 实例
+*** 对于指定的描述符打印文件标志
+   #+BEGIN_SRC C
+     #include <sys/types.h>
+     #include <fcntl.h>
+     #include "apue.h"
+
+     int main(int argc, char *argv[]) 
+     {
+             int val;
+
+             if(argc != 2) 
+                     err_quit("usage: fileStatusFlag <descriptor#>");
+             if( (val = fcntl(atoi(argv[1]), F_GETFL, 0)) < 0) 
+                     err_sys("fcntl error for %d", atoi(argv[1])); 
+
+             int accmode = val & O_ACCMODE; 
+             switch(accmode) {
+             case O_RDONLY: 
+                     printf("read only");
+                     break; 
+             case O_WRONLY: 
+                     printf("write only");
+                     break; 
+             case O_RDWR: 
+                     printf("read write"); 
+                     break; 
+             default: 
+                     err_dump("unknown access mode"); 
+             }
+
+             if(val & O_APPEND) 
+                     printf(", append");
+             if(val & O_NONBLOCK) 
+                     printf(", nonblocking"); 
+     #if !defined(_POSIX_SOURCE) && defined(O_SYNC) 
+             if(val & O_SYNC) 
+                     printf(", synchronous writes"); 
+     #endif
+             //putchar("\n");
+             printf("\n");
+             exit(0);
+     }
+   #+END_SRC
+*** 对一个文件描述符打开一个或多个文件状态标志
+在修改文件描述符标志或文件状态标志时必须谨慎，先要取得现在的标志值，然后按照希望修改它，最后设置新标志值。不能只是执行F_SETFD或F_SETFL命令，这样会关闭以前设置的标志位
+    #+BEGIN_SRC C
+      #include <fcntl.h> 
+      #include "apue.h" 
+
+
+      void set_fl(int fd, int flags) 
+      {
+              int val; 
+
+              if( (val = fcntl(fd, F_GETFL, 0)) < 0) 
+                      err_sys("fcntl F_GETFL error"); 
+
+              val |= flags; 
+
+              if(fcntl(fd, F_SETFL, val) < 0) 
+                      err_sys("fcntl F_SETFL error");
+
+      }
+    #+END_SRC

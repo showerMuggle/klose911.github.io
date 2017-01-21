@@ -27,7 +27,16 @@
          :publishing-function org-publish-attachment
          )
 
-        ("apue" :components ("apue-notes" "apue-static"))
+	;; picture
+        ("apue-pic"
+         :base-directory "~/Documents/programming/html/klose911.github.io/src/apue/pic"  ;; Change this to your local dir
+         :base-extension "png\\|jpg\\|gif"
+         :publishing-directory "~/Documents/programming/html/klose911.github.io/html/apue/pic"
+         :recursive t
+         :publishing-function org-publish-attachment
+         )
+	
+        ("apue" :components ("apue-notes" "apue-static" "apue-pic"))
         )
       )
 
