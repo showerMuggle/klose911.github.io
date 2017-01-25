@@ -32,7 +32,10 @@
         )
       )
 
-(defun go-publish nil
+(defun go-publish (no-cache)
   "Publish go"
-  (interactive)
-  (org-publish "go" nil))
+  (interactive "sno-cache?[y/n] ")
+  (if (or (string= no-cache "y")
+          (string= no-cache "Y"))
+      (org-publish "go" t)
+    (org-publish "go" nil)))

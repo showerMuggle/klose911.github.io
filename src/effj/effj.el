@@ -32,7 +32,10 @@
         )
       )
 
-(defun effj-publish nil
+(defun effj-publish (no-cache)
   "Publish effj"
-  (interactive)
-  (org-publish "effj" nil))
+  (interactive "sno-cache?[y/n] ")
+  (if (or (string= no-cache "y")
+          (string= no-cache "Y"))
+      (org-publish "effj" t)
+    (org-publish "effj" nil)))

@@ -41,7 +41,10 @@
         )
       )
 
-(defun apue-publish nil
+(defun apue-publish (no-cache)
   "Publish apue"
-  (interactive)
-  (org-publish "apue" nil))
+  (interactive "sno-cache?[y/n] ")
+  (if (or (string= no-cache "y")
+          (string= no-cache "Y"))
+      (org-publish "apue" t)
+    (org-publish "apue" nil)))

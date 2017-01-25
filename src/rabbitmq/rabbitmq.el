@@ -40,7 +40,10 @@
         )
       )
 
-(defun rabbitmq-publish nil
+(defun rabbitmq-publish (no-cache)
   "Publish rabbitmq"
-  (interactive)
-  (org-publish "rabbitmq" nil))
+  (interactive "sno-cache?[y/n] ")
+  (if (or (string= no-cache "y")
+          (string= no-cache "Y"))
+      (org-publish "rabbitmq" t)
+    (org-publish "rabbitmq" nil)))

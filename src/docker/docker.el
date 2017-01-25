@@ -40,7 +40,10 @@
         )
       )
 
-(defun docker-publish nil
+(defun docker-publish (no-cache)
   "Publish docker"
-  (interactive)
-  (org-publish "docker" nil))
+  (interactive "sno-cache?[y/n] ")
+  (if (or (string= no-cache "y")
+          (string= no-cache "Y"))
+      (org-publish "docker" t)
+    (org-publish "docker" nil)))

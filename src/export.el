@@ -41,7 +41,10 @@
         )
       )
 
-(defun note-publish nil
-  "Publish notes"
-  (interactive)
-  (org-publish "note" nil))
+(defun note-publish (no-cache)
+  "Publish note"
+  (interactive "sno-cache?[y/n] ")
+  (if (or (string= no-cache "y")
+          (string= no-cache "Y"))
+      (org-publish "note" t)
+    (org-publish "note" nil)))

@@ -32,7 +32,10 @@
         )
       )
 
-(defun redis-publish nil
+(defun redis-publish (no-cache)
   "Publish redis"
-  (interactive)
-  (org-publish "redis" nil))
+  (interactive "sno-cache?[y/n] ")
+  (if (or (string= no-cache "y")
+          (string= no-cache "Y"))
+      (org-publish "redis" t)
+    (org-publish "redis" nil)))
