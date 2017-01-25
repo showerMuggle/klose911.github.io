@@ -15,6 +15,7 @@
          :html-head "<link rel=\"stylesheet\"
                        href=\"css/main.css\" type=\"text/css\"/>"
          :html-preamble t
+	 :html-postamble klose-html-postamble
 	 :htmlized-source t
          )
 
