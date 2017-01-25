@@ -2,7 +2,7 @@
 #+HTML_HEAD: <link rel="stylesheet" type="text/css" href="css/main.css" />
 #+HTML_LINK_UP: methods.html   
 #+HTML_LINK_HOME: effj.html
-#+OPTIONS: num:nil timestamp:nil *:nil
+#+OPTIONS: num:nil timestamp:nil *:nil ^:nil
 * 局部变量的作用域最小化
 + 在第一次使用它的地方才声明
 + 除了try-catch结构要求外，每个局部变量的声明都应该包含一个初始化的表达式
@@ -198,8 +198,8 @@ float和double尤其不适合货币计算
 
 * 基本类型优先于装箱基本类型
 
-
-** 基本类型只有值，装箱基本类型还具有对象引用
+** 基本类型的优点
+*** 基本类型只有值，装箱基本类型还具有对象引用
 装箱基本类型运用==操作符几乎总是错误的
 
 first和second的引用不一样的，所以用==比较的结果总是false
@@ -224,7 +224,7 @@ first和second的引用不一样的，所以用==比较的结果总是false
           };
 #+END_SRC
 
-** 基本类型只有功能完备的值，而每个装箱基本类型还有非功能值null
+*** 基本类型只有功能完备的值，而每个装箱基本类型还有非功能值null
 下面代码会抛出空指针异常
    #+BEGIN_SRC java
      public class Unbelievable {
@@ -236,7 +236,7 @@ first和second的引用不一样的，所以用==比较的结果总是false
      }
    #+END_SRC
 
-** 基本类型通常比装箱基本类型更节省时间和空间
+*** 基本类型通常比装箱基本类型更节省时间和空间
    多次的自动装箱会产生大量的临时对象，浪费大量的空间和时间
    #+BEGIN_SRC java
      // Hideously slow program! Can you spot the object creation?
@@ -316,3 +316,123 @@ first和second的引用不一样的，所以用==比较的结果总是false
 + 连接n个字符串而重复使用'+'，则需要 n^2 的时间复杂度
 + 为了获得更好的性能，请使用StringBuilder替代String
 + 如果考虑线程安全性，请使用StringBuffer代码StringBuilder
+
+* 通过接口引用对象
+如果有合适的接口类型存在，那么对于参数、返回值、变量和域来说，就应该使用接口类型来进行声明
+
+** 接口会使程序更灵活
+   #+BEGIN_SRC java
+     // Good - uses interface as type
+     List<Subscriber> subscribers = new Vector<Subscriber>();
+   #+END_SRC
+
+   #+BEGIN_SRC java
+     // Bad - uses class as type!
+     Vector<Subscriber> subscribers = new Vector<Subscriber>();
+   #+END_SRC
+接口允许替换实现，而不改变API的签名，这给优化性能，增加功能提供了方便性
+
+** 没有合适的接口
+如果没有合适的接口存在，完全可以用类而不是接口来引用对象
++ 值类，比如String, BigDecimal
++ 框架的基础类，比如java.util.TimerTask，但这些类往往是抽象类
++ 需要子类的某些public方法
+
+* 接口优先于反射机制
+反射机制通过Class对象能够获得Constructor、Method、Field等实例，调用这些实例上的方法可以进行底层类的初始化、调用底层类的方法、并访问底层类中的域 
+
+** 反射机制的缺陷
++ 丧失了编译时类型检查的好处。包括异常检查
++ 执行反射访问所需要的代码非常笨拙和冗长
++ 性能损失，反射方法调用比普通方法慢了许多
+
+普通应用程序在运行时不应该以反射方式访问对象。反射只应该被用于为了能够和编译期还未知的类一起工作
+
+** 有限制地使用反射
+定义接口，利用反射来创建接口的实例对象，调用接口地方法
+
+#+BEGIN_SRC java
+  public class CreateInstanceWithReflection {
+          // Reflective instantiation with interface access
+
+          public static void main(String[] args) {
+                  // Translate the class name into a Class object
+                  Class<?> cl = null;
+                  try {
+                          cl = Class.forName(args[0]);
+                  } catch (ClassNotFoundException e) {
+                          System.err.println("Class not found.");
+                          System.exit(1);
+                  }
+          
+                  // Instantiate the class
+                  Set<String> s = null;
+                  try {
+                          s = (Set<String>) cl.newInstance();
+                  } catch (IllegalAccessException e) {
+                          System.err.println("Class not accessible.");
+                          System.exit(1);
+                  } catch (InstantiationException e) {
+                          System.err.println("Class not instantiable.");
+                          System.exit(1);
+                  }
+          
+                  // Exercise the set
+                  s.addAll(Arrays.asList(args).subList(1, args.length));
+                  System.out.println(s);
+          }
+  }
+#+END_SRC
+
+如果动态传入HashSet则按照hashcode排序来保存输出，而TreeSet是按照字母顺序来保存和输出
+#+BEGIN_SRC sh
+  $ java CreateInstanceWithReflection java.util.HashSet hello world klose joy
+
+  [world, joy, klose, hello]
+
+  $ java CreateInstanceWithReflection java.util.TreeSet hello world klose joy
+
+  [hello, joy, klose world] 
+#+END_SRC
+有限制地使用反射机制，虽然也要付出少许代价，却能获得许多好处，如果有可能，就应该仅仅使用反射机制来实例化对象
+
+* 谨慎地使用本地方法
+本地方法允许调用C或者C++编写的程序代码
+
+** 用途
++ 提供了“访问特定于平台的机制”的能力
++ 提供了访问遗留代码库的能力
++ 编写应用程序中注重性能的部分，以提高系统的性能。但是使用本地方法来提高性能的做法方法不值得提倡！
+
+** 缺点
++ 不安全，特别是存在内存管理的问题
++ 操作系统相关，不可移植
++ 可读性差，代码冗长
+
+* 谨慎地进行优化
+1. 不要进行优化
+2. （仅针对专家）还是不要进行优化
+
+总之：在还没有绝对清晰的未优化方案之前，请不要进行优化
+** 建议
++ 努力编写好的程序而不是快的程序
++ 努力避免那些限制性能的设计决策：例如数据模型，接口通信协议等
++ 考虑API设计决策的性能后果：比如使用可变类会导致无穷的拷贝
++ 为获得好的性能而对API进行包装，是非常不好的做法：糟糕的接口设计会一直困扰维护，修改，演进
++ 每次试图做优化之前和之后，要使用profile工具对性能进行测量
++ 再多的底层优化也无法弥补算法的选择不当
+
+* 遵守普遍接受的命名惯例
+   #+CAPTION: 命名惯例
+   #+ATTR_HTML: :border 1 :rules all :frame boader　
+| 类型       | 示例                                    |
+| 包         | com.google.inject, org.joda.time.format |
+| 类和接口   | FutureTask, LinkedHashMap, HttpServlet  |
+| 方法       | ensureCapacity, getCrc                  |
+| 常量成员   | MIN_VALUE, NEGATIVE_INFINITY            |
+| 方法内变量 | i, xref, houseNumber                    |
+| 类型参数   | T, E, K, V, X, T1, T2                   |
+
+[[file:methods.org][Previous：方法]]
+
+[[file:effj.org][Home：目录]]
