@@ -190,7 +190,11 @@ for the JavaScript code in this tag.
 </ul>
 </li>
 <li><a href="#sec-10">原子操作</a></li>
-<li><a href="#sec-11">dup函数</a></li>
+<li><a href="#sec-11">dup函数</a>
+<ul>
+<li><a href="#sec-11-1">/dev/fd</a></li>
+</ul>
+</li>
 <li><a href="#sec-12">fnctl函数</a>
 <ul>
 <li><a href="#sec-12-1">功能</a>
@@ -209,6 +213,11 @@ for the JavaScript code in this tag.
 <li><a href="#sec-12-3-2">对一个文件描述符打开一个或多个文件状态标志</a></li>
 </ul>
 </li>
+</ul>
+</li>
+<li><a href="#sec-13">ioctl函数</a>
+<ul>
+<li><a href="#sec-13-1">请求类型</a></li>
 </ul>
 </li>
 </ul>
@@ -394,6 +403,7 @@ oflag参数必须指定且只指定下面中的一个
 </div>
 </div>
 </div>
+
 <div id="outline-container-sec-3" class="outline-2">
 <h2 id="sec-3">creat函数</h2>
 <div class="outline-text-2" id="text-3">
@@ -1030,6 +1040,40 @@ unix支持多个进程共享文件。在介绍dup函数之前，需要先说明�
 两个描述符指向同一文件表项，所以它们共享同一文件状态标志(读、写、添写等)以及同一当前文件位移量
 </p>
 </div>
+<div id="outline-container-sec-11-1" class="outline-3">
+<h3 id="sec-11-1">/dev/fd</h3>
+<div class="outline-text-3" id="text-11-1">
+<p>
+比较新的系统都提供名为/dev/fd的目录，其目录项是名为0、1、2等的文件。打开文件/dev/fd/n等效于复制描述符n 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-C">fd = open(<span style="color: #ffa07a;">"/dev/fd/0"</span>, mode);
+</pre>
+</div>
+<p>
+大多数系统忽略所指定的mode，而另外一些则要求mode是所涉及的文件(在这里则是标准输入)原先打开时所使用的mode的子集。因为上面的打开等效于:
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C">fd = dup(0);
+</pre>
+</div>
+<p>
+/dev/fd文件主要由shell使用，这允许程序以对待其他路径名一样的方式使用路径名参数来处理标准输入和标准输出
+</p>
+
+<p>
+以下命令：先读file1，再读标准输入，再读file3，最后打印全部
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ cat file1 /dev/fd/0 file3 | lpr
+</pre>
+</div>
+</div>
+</div>
 </div>
 
 <div id="outline-container-sec-12" class="outline-2">
@@ -1294,6 +1338,113 @@ fcntl的返回值与命令有关。如果出错所有命令都返回-1。如果�
 </pre>
 </div>
 </div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-13" class="outline-2">
+<h2 id="sec-13">ioctl函数</h2>
+<div class="outline-text-2" id="text-13">
+<p>
+ioctl函数是I/O操作的杂物箱，不能用本章中其他函数表示的I/O操作通常都能用ioctl表示。终端I/O是ioctl的最大使用者
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;unistd.h&gt;</span>  <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">SVR4 </span><span style="color: #ff4500;">*/</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/ioctl.h&gt;</span> <span style="color: #ff4500;">/*</span><span style="color: #ff4500;">4.3+BSD</span><span style="color: #ff4500;">*/</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#25191;&#34892;&#21508;&#31181;&#30828;&#20214;&#35774;&#22791;&#30456;&#20851;&#30340;IO&#25805;&#20316;</span>
+
+<span style="color: #ffa07a;">   fieldes&#65306;&#25991;&#20214;&#25551;&#36848;&#31526;</span>
+<span style="color: #ffa07a;">   request&#65306;&#35831;&#27714;&#31867;&#22411;&#65292;&#24635;&#26159;&#22836;&#25991;&#20214;&#20013;&#30340;# define&#24120;&#37327;</span>
+<span style="color: #ffa07a;">   &#31532;&#19977;&#20010;&#21487;&#36873;&#21442;&#25968;&#19968;&#33324;&#21482;&#26377;&#19968;&#20010;&#25351;&#21521;&#21464;&#37327;&#25110;&#32467;&#26500;&#30340;&#25351;&#38024;&#65292;&#29992;&#26469;&#34920;&#31034;&#35774;&#22791;</span>
+
+<span style="color: #ffa07a;">   &#36820;&#22238;&#20540;&#65306;&#33509;&#20986;&#38169;&#21017;&#20026;-1&#65292;&#33509;&#25104;&#21151;&#21017;&#20026;&#20854;&#20182;&#20540;</span>
+<span style="color: #ffa07a;"> */</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">ioctl</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">filedes</span>, <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">request</span>,...);
+</pre>
+</div>
+<p>
+在此原型中，表示的只是ioctl函数本身所要求的头文件，通常还要求另外的设备专用头文件。例如终端ioctl都需要头文件&lt;termios.h&gt;
+</p>
+</div>
+<div id="outline-container-sec-13-1" class="outline-3">
+<h3 id="sec-13-1">请求类型</h3>
+<div class="outline-text-3" id="text-13-1">
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader　">
+<caption class="t-above"><span class="table-number">Table 3:</span> ioctl请求类型</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="right" />
+</colgroup>
+<thead>
+<tr>
+<th scope="col" class="left">类型</th>
+<th scope="col" class="left">常数名</th>
+<th scope="col" class="left">头文件</th>
+<th scope="col" class="right">ioctl数</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="left">盘标号</td>
+<td class="left">DIOxxx</td>
+<td class="left">&lt;disklabel.h&gt;</td>
+<td class="right">10</td>
+</tr>
+
+<tr>
+<td class="left">文件I/O</td>
+<td class="left">FIOxxx</td>
+<td class="left">&lt;ioctl.h&gt;</td>
+<td class="right">7</td>
+</tr>
+
+<tr>
+<td class="left">磁带I/O</td>
+<td class="left">MTIOxxx</td>
+<td class="left">&lt;mtio.h&gt;</td>
+<td class="right">4</td>
+</tr>
+
+<tr>
+<td class="left">套接口I/O</td>
+<td class="left">SIOxxx</td>
+<td class="left">&lt;ioctl.h&gt;</td>
+<td class="right">25</td>
+</tr>
+
+<tr>
+<td class="left">终端I/O</td>
+<td class="left">TIOxxx</td>
+<td class="left">&lt;ioctl.h&gt;</td>
+<td class="right">35</td>
+</tr>
+</tbody>
+</table>
+<p>
+磁带操作可以在磁带上写一个文件结束标志，反绕磁带，越过指定个数的文件或记录等等。存取和设置终端，伪终端，使用流系统，以及网络socket操作都将使用ioctl
+</p>
+
+<p>
+<a href="file_directory.html">Next：文件和目录</a>
+</p>
+
+<p>
+<a href="standard.html">Previous：Unix标准和实现</a>
+</p>
+
+<p>
+<a href="apue.html">Home：目录</a>
+</p>
 </div>
 </div>
 </div>

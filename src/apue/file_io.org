@@ -89,6 +89,7 @@
   
 ** 返回的文件描述符
    由open返回的文件描述符一定是最小的未用描述符数字。这一点被很多应用程序用来在标准输入、标准输出或标准出错输出上打开一个新的文件。例如，一个应用程序可以先关闭标准输出(通常是文件描述符1)，然后打开另一个文件，该文件一定会在文件描述符1上打开 
+
 * creat函数
   创建一个新的文件
   #+BEGIN_SRC C
@@ -379,7 +380,23 @@ write出错的常见原因是:
   #+ATTR_HTML: image :width 90%
   [[./pic/dup.png]]
   两个描述符指向同一文件表项，所以它们共享同一文件状态标志(读、写、添写等)以及同一当前文件位移量
-  
+** /dev/fd 
+比较新的系统都提供名为/dev/fd的目录，其目录项是名为0、1、2等的文件。打开文件/dev/fd/n等效于复制描述符n 
+
+#+BEGIN_SRC C
+  fd = open("/dev/fd/0", mode);
+#+END_SRC
+大多数系统忽略所指定的mode，而另外一些则要求mode是所涉及的文件(在这里则是标准输入)原先打开时所使用的mode的子集。因为上面的打开等效于:
+#+BEGIN_SRC C
+  fd = dup(0);
+#+END_SRC  
+/dev/fd文件主要由shell使用，这允许程序以对待其他路径名一样的方式使用路径名参数来处理标准输入和标准输出
+
+以下命令：先读file1，再读标准输入，再读file3，最后打印全部
+#+BEGIN_SRC sh
+  $ cat file1 /dev/fd/0 file3 | lpr
+#+END_SRC
+
 * fnctl函数
   改变已经打开文件的性质
   
@@ -514,3 +531,40 @@ fcntl的返回值与命令有关。如果出错所有命令都返回-1。如果�
 
       }
     #+END_SRC
+
+* ioctl函数
+ioctl函数是I/O操作的杂物箱，不能用本章中其他函数表示的I/O操作通常都能用ioctl表示。终端I/O是ioctl的最大使用者
+
+#+BEGIN_SRC C
+  #include <unistd.h>  /* SVR4 */
+  #include <sys/ioctl.h> /*4.3+BSD*/
+
+  /**
+     执行各种硬件设备相关的IO操作
+     
+     fieldes：文件描述符
+     request：请求类型，总是头文件中的# define常量
+     第三个可选参数一般只有一个指向变量或结构的指针，用来表示设备
+
+     返回值：若出错则为-1，若成功则为其他值
+   ,*/
+  int ioctl(int filedes, int request,...);
+#+END_SRC
+在此原型中，表示的只是ioctl函数本身所要求的头文件，通常还要求另外的设备专用头文件。例如终端ioctl都需要头文件<termios.h>
+** 请求类型
+   #+CAPTION: ioctl请求类型
+   #+ATTR_HTML: :border 1 :rules all :frame boader　
+| 类型    | 常数名 | 头文件     | ioctl数 |
+|-----------+---------+---------------+---------|
+| 盘标号 | DIOxxx  | <disklabel.h> |      10 |
+| 文件I/O | FIOxxx  | <ioctl.h>     |       7 |
+| 磁带I/O | MTIOxxx | <mtio.h>      |       4 |
+| 套接口I/O | SIOxxx  | <ioctl.h>     |      25 |
+| 终端I/O | TIOxxx  | <ioctl.h>     |      35 |
+磁带操作可以在磁带上写一个文件结束标志，反绕磁带，越过指定个数的文件或记录等等。存取和设置终端，伪终端，使用流系统，以及网络socket操作都将使用ioctl
+
+[[file:file_directory.org][Next：文件和目录]]
+
+[[file:standard.org][Previous：Unix标准和实现]]
+
+[[file:apue.org][Home：目录]]
