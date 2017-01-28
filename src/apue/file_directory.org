@@ -4,4 +4,215 @@
 #+HTML_LINK_HOME: apue.html
 #+OPTIONS: num:nil timestamp:nil ^:nil *:nil
 
+首先从stat函数开始逐个说明stat结构的每一个成员以了解文件的所有属性，然后将说明修改这些属性的各个函数(更改所有者,更改许可权等)，接着更详细地察看UNIX文件系统的结构以及符号连接，最后介绍对目录进行操作的各个函数并且开发了一个以降序遍历目录层次结构的函数
+
 * stat、fstat和lstat函数
+  获取一个文件的详细信息可以使用stat函数组：
+  #+BEGIN_SRC C
+  #include <sys/types.h>
+  #include <sys/stat.h>
+
+  /**
+     根据文件路径名获取文件的详细信息
+
+     pathname：文件路径名
+     buf：指向文件信息结构体stat变量的指针
+
+     返回：正确返回0，出错返回-1
+  ,*/
+  int stat(const char* pathname, struct stat* buf);
+
+  /**
+     根据文件描述符获取文件的详细信息
+
+     filedes：文件描述符号
+     buf：指向文件信息结构体stat变量的指针
+
+     返回：正确返回0，出错返回-1
+  ,*/
+  int fstat(int filedes, struct stat* buf);  
+
+
+  /**
+     返回链接文件的有关信息,而不是由该链接引用的文件的信息
+
+     pathname：文件路径名
+     buf：指向文件信息结构体stat变量的指针
+
+     返回：正确返回0，出错返回-1
+  ,*/
+  int lstat(const char* pathname, struct stat* buf);
+  #+END_SRC
+  使用stat函数最多的可能是ls -l命令，用其可以获得有关一个文件的所有信息
+** stat结构
+   stat结构给出了Unix下文件(目录)各种属性的相关信息
+   #+BEGIN_SRC C
+  struct stat  
+  {  
+          mode_t st_mode; //文件的类型和权限  
+          ino_t st_ino; //inode的节点号  
+          dev_t st_dev; //设备号  
+          dev_t st_rdev; //特殊设备号  
+          nlink_t st_nlink; //连接数  
+          uid_t st_uid; //文件所有者  
+          gid_t st_gid; //文件所属组  
+          off_t st_st_size; //文件的字节数  
+          time_t st_atime; //文件的最后存取时间  
+          time_t mtime; //文件的最后修改时间  
+          time_t ctime; //文件权限的最后修改时间  
+          long st_blksize; //最佳的IO块长度  
+          long st_blocks; //512字节的块数  
+  };  
+   #+END_SRC
+* 文件类型 
+1. 普通文件
+2. 目录
+3. 字符特殊设备：某些类型的设备，终端等
+4. 块特殊设备：磁盘设备
+5. FIFO管道：进程间的通信
+6. Socket套接字：主要是进程间的网络通信，也可以是同一台机器不同进程间通信
+7. 符号链接：文件指向另一个文件
+** 文件类型测试宏
+   #+CAPTION: <sys/stat.h>中的文件类型宏
+   #+ATTR_HTML: :border 1 :rules all :frame boader　
+   | 宏         | 文件类型     |
+   | S_ISREG()  | 普通文件     |
+   | S_ISDIR()  | 目录文件     |
+   | S_ISCHR()  | 字符特殊文件 |
+   | S_ISBLK()  | 块特殊文件   |
+   | S_ISFIFO() | 管道或FIFO   |
+   | S_ISLNK()  | 符号连接     |
+   | S_ISSOCK() | 套接字       |
+   
+   文件类型信息包含在stat解构的st_mode成员内，以其为参数调用以下宏进行测试，如果返回为真则说明是此种文件类型
+   #+BEGIN_SRC C
+  #include <sys/types.h>
+  #include <sys/stat.h> 
+  #include "apue.h" 
+
+  int main(int argc, char *argv[]) 
+  {
+          int i; 
+          struct stat buf; 
+          char *ptr; 
+
+          for(i = 1; i < argc; ++i) { 
+                  printf("%s: ", argv[i]);
+                  if(lstat(argv[i], &buf) < 0) {
+                          err_ret("lstat error"); 
+                          continue; 
+                  }
+                  if(S_ISREG(buf.st_mode))
+                          ptr = "regular"; 
+                  else if(S_ISDIR(buf.st_mode)) 
+                          ptr = "directory"; 
+                  else if(S_ISCHR(buf.st_mode)) 
+                          ptr = "character special"; 
+                  else if(S_ISBLK(buf.st_mode)) 
+                          ptr = "block special"; 
+                  else if(S_ISFIFO(buf.st_mode)) 
+                          ptr = "fifo"; 
+  #ifdef S_ISLNK 
+                  else if(S_ISLNK(buf.st_mode)) 
+                          ptr = "symbolic link"; 
+  #endif 
+  #ifdef S_ISSOCK
+                  else if(S_ISSOCK(buf.st_mode)) 
+                          ptr = "socket"; 
+  #endif 
+                  else 
+                          ptr = "** unknown mode **";
+
+                  printf("%s\n", ptr); 
+          }
+
+          exit(0);
+  }
+   #+END_SRC
+   
+   测试文件类型
+   #+BEGIN_SRC sh
+  $ ./filetype ./filetype.c ./filetype.o ./ /dev/sda1 /dev/tty1 /dev/log /dev/fd/0
+
+  ./filetype.c: regular
+  ./filetype.o: regular
+  ./: directory
+  /dev/sda1: block special
+  /dev/tty1: character special
+  /dev/log: socket
+  /dev/fd/0: symbolic link
+   #+END_SRC
+* 文件权限
+** 进程相关的用户和组ID
+   #+CAPTION:    与一个进程相关联的用户ID和组ID 
+   #+ATTR_HTML: :border 1 :rules all :frame boader
+   | ID类型                       | 含义               |
+   |----------------------------------+------------------------|
+   | 实际用户ID, 实际组ID | 我们实际上是谁 |
+   |----------------------------------+------------------------|
+   | 有效用户ID，有效组ID，添加组ID | 用于文件存取许可权检查 |
+   |----------------------------------+------------------------|
+   | 保存设置-用户-ID，保存-设置-组ID | 由exec函数保存         |
+   
++ 实际用户ID和实际组ID这两个字段在登录时取自口令文件中的登录项。通常在一个登录会话期间这些值并不改变，但是超级用户进程有方法改变它们
++ 有效用户ID，有效组ID以及添加组ID决定了文件访问权
++ 保存的设置-用户-ID和设置-组-ID在执行一个程序时包含了有效用户ID和有效组ID的副本
+  
+通常有效用户ID等于实际用户ID，有效组ID等于实际组ID
+** 设置-用户-ID和设置-组-ID
+   每个文件有一个所有者和组所有者。所有者由stat结构中的st_uid表示，组所有者则由st_gid成员表示。 
+   
+   当执行一个程序文件时，进程的有效用户ID通常就是实际用户ID，有效组ID通常是实际组ID。但是可以在st_mode中设置一个特殊标志，其定义是“当执行此文件时，将进程的有效用户ID设置为文件的所有者(st_uid)”。与此相类似，在文件方式字中可以设置另一位,它使得执行此文件的进程的有效组ID设置为文件的组所有者(st_gid)。这两位被称之为设置-用户-ID(set-user-ID)位和设置-组-ID(set-group-ID)位。这两位可用常数S_ISUID和S_ISGID测试
+   
+** 文件存取许可权
+   Unix对文件定义了三组用户权限，分别对应为属主用户(user)、组用户(group)、其它用户(other)，每组用户各有自己对此文件的读、写、执行权限。权限值以八进制的形式表示,也记录在stat结构的st_mode字段中
+
+   #+CAPTION:    9个存取许可权位
+   #+ATTR_HTML: :border 1 :rules all :frame boader
+   | st_mode mask | 意义       |
+   |--------------+--------------|
+   | S_IRUSR      | 用户读    |
+   | S_IWUSR      | 用户写    |
+   | S_IXUSR      | 用户执行 |
+   |--------------+--------------|
+   | S_IRGRP      | 组读       |
+   | S_IWGRP      | 组写       |
+   | S_IXGRP      | 组执行    |
+   |--------------+--------------|
+   | S_IROTH      | 其他用户读 |
+   | S_IWOTH      | 其他用户写 |
+   | S_IXOTH      | 其他用户执行 |
+
+*** 存取权限规则
++ 用名字打开任一类型的文件时，对该名字中包含的每一个目录，包括它可能隐含的当前工作目录都应具有执行许可权。
++ 对于一个文件的读许可权决定了是否能够打开该文件进行读操作。这对应于open函数的O_RDONLY和O_RDWR标志
++ 对于一个文件的写许可权决定了我们是否能够打开该文件进行写操作。这对应于open函数的O_WRONLY和O_RDWR标志
++ 为了在open函数中对一个文件指定O_TRUNC标志，必须对该文件具有写许可权
++ 为了在一个目录中创建一个新文件，必须对该目录具有写许可权和执行许可权
++ 为了删除一个文件，必须对包含该文件的目录具有写许可权和执行许可权。对该文件本身则不需要有读、写许可权
++ 如果用6个exec函数中的任何一个执行某个文件，都必须对该文件具有执行许可权
+
+*** 存取权限测试
+适当的存取许可权位指的是： 
++ 若进程为读而打开该文件，则相应读位应为1
++ 若进程为写而打开该文件，则相应写位应为1
++ 若进程将执行该文件，则相应执行位应为1
+ 
+进程每次打开、创建或删除一个文件时，内核就进行文件存取许可权测试，而这种测试可能涉及文件的所有者(st_uid和st_gid)，进程的有效ID(有效用户ID和有效组ID)以及进程的添加组ID(若支持的话)。两个所有者ID是文件的性质，而有效ID和添加组ID则是进程的性质。内核进行的测试是:
+1. 若进程的有效用户ID是0(超级用户)，则允许存取。这给予了超级用户对文件系统进行处理的最充分的自由
+2. 若进程的有效用户ID等于文件的所有者ID(也就是该进程拥有此文件):
+   + 若适当的所有者存取许可权位被设置，则允许存取
+   + 否则拒绝存取 
+3. 若进程的有效组ID或进程的添加组ID之一等于文件的组ID:
+   + 若适当的组存取许可权位被设置，则允许存取
+   + 否则拒绝存取 
+4. 若适当的其他用户存取许可权位被设置，则允许存取，否则拒绝存取
+
+*** 新文件和目录的所有权
+创建新文件和目录的用户ID被设置为进程的有效用户ID
+
+关于组ID，POSIX.1允许选择下列之一作为新文件和目录的组ID： 
+1. 新文件的组ID可以是进程的有效组ID
+2. 新文件的组ID可以是它所在目录的组ID
+
+
