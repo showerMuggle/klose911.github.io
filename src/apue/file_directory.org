@@ -73,6 +73,7 @@
 6. Socket套接字：主要是进程间的网络通信，也可以是同一台机器不同进程间通信
 7. 符号链接：文件指向另一个文件
 ** 文件类型测试宏
+   
    #+CAPTION: <sys/stat.h>中的文件类型宏
    #+ATTR_HTML: :border 1 :rules all :frame boader　
    | 宏         | 文件类型     |
@@ -166,9 +167,9 @@
    
 ** 文件存取许可权
    Unix对文件定义了三组用户权限，分别对应为属主用户(user)、组用户(group)、其它用户(other)，每组用户各有自己对此文件的读、写、执行权限。权限值以八进制的形式表示,也记录在stat结构的st_mode字段中
-
-   #+CAPTION:    9个存取许可权位
-   #+ATTR_HTML: :border 1 :rules all :frame boader
+   
+   #+CAPTION: 9个存取许可权位
+   #+ATTR_HTML: :border 1 :frame boader
    | st_mode mask | 意义       |
    |--------------+--------------|
    | S_IRUSR      | 用户读    |
@@ -182,7 +183,7 @@
    | S_IROTH      | 其他用户读 |
    | S_IWOTH      | 其他用户写 |
    | S_IXOTH      | 其他用户执行 |
-
+   
 *** 存取权限规则
 + 用名字打开任一类型的文件时，对该名字中包含的每一个目录，包括它可能隐含的当前工作目录都应具有执行许可权。
 + 对于一个文件的读许可权决定了是否能够打开该文件进行读操作。这对应于open函数的O_RDONLY和O_RDWR标志
@@ -191,13 +192,13 @@
 + 为了在一个目录中创建一个新文件，必须对该目录具有写许可权和执行许可权
 + 为了删除一个文件，必须对包含该文件的目录具有写许可权和执行许可权。对该文件本身则不需要有读、写许可权
 + 如果用6个exec函数中的任何一个执行某个文件，都必须对该文件具有执行许可权
-
+  
 *** 存取权限测试
-适当的存取许可权位指的是： 
+    适当的存取许可权位指的是： 
 + 若进程为读而打开该文件，则相应读位应为1
 + 若进程为写而打开该文件，则相应写位应为1
 + 若进程将执行该文件，则相应执行位应为1
- 
+  
 进程每次打开、创建或删除一个文件时，内核就进行文件存取许可权测试，而这种测试可能涉及文件的所有者(st_uid和st_gid)，进程的有效ID(有效用户ID和有效组ID)以及进程的添加组ID(若支持的话)。两个所有者ID是文件的性质，而有效ID和添加组ID则是进程的性质。内核进行的测试是:
 1. 若进程的有效用户ID是0(超级用户)，则允许存取。这给予了超级用户对文件系统进行处理的最充分的自由
 2. 若进程的有效用户ID等于文件的所有者ID(也就是该进程拥有此文件):
@@ -207,12 +208,243 @@
    + 若适当的组存取许可权位被设置，则允许存取
    + 否则拒绝存取 
 4. 若适当的其他用户存取许可权位被设置，则允许存取，否则拒绝存取
-
+   
 *** 新文件和目录的所有权
-创建新文件和目录的用户ID被设置为进程的有效用户ID
-
-关于组ID，POSIX.1允许选择下列之一作为新文件和目录的组ID： 
+    创建新文件和目录的用户ID被设置为进程的有效用户ID
+    
+    关于组ID，POSIX.1允许选择下列之一作为新文件和目录的组ID： 
 1. 新文件的组ID可以是进程的有效组ID
 2. 新文件的组ID可以是它所在目录的组ID
+   
+   
+** access函数
+   access函数：按实际用户ID和实际组ID测试存取权限
+   #+BEGIN_SRC C
+  #include <unistd.h>
+  /**
+     按实际用户ID和实际组ID进行存取许可权测试
+
+     pathname：文件名路径
+     mode: 存取权限
+
+     return: 若拥有权限则为0，无权限或出错则为-1，根据errorno进行判断
+   ,*/
+  int access(const char *pathname, int mode);
+   #+END_SRC
+   
+*** mode参数
+    #+CAPTION: access函数中的mode常数，取自<unistd.h>
+    #+ATTR_HTML: :border 1 :rules all :frame boader
+    | mode | 说明             |
+    |------+------------------|
+    | R_OK | 测试读许可权     |
+    | W_OK | 测试写许可权     |
+    | X_OK | 测试执行许可权   |
+    | F_OK | 测试文件是否存在 |
+    
+*** access函数实例
+    #+BEGIN_SRC C
+      #include <sys/types.h>
+      #include <fcntl.h>
+      #include "apue.h"
+
+      int main(int argc, char *argv[]) 
+      {
+              if(argc != 2) 
+                      err_quit("usage: a.out <pathname>"); 
+          
+              if(access(argv[1], R_OK) < 0) 
+                      err_ret("access error for %s", argv[1]); 
+              else 
+                      printf("read access OK\n");
+
+              if(open(argv[1], O_RDONLY) < 0) 
+                      err_ret("open error for %s", argv[1]); 
+              else 
+                      printf("open for reading OK\n");
+          
+              exit(0);
+      }
+    #+END_SRC
+    
+** umask函数
+   umask函数为进程设置文件方式创建mask值。当该进程结束时，mask值仍保持原来系统中的值不变
+   #+BEGIN_SRC C
+  #include <sys/stat.h>
+  #include <sys/type.h>
+
+  /**
+     为进程设置文件方式创建屏蔽字,并返回以前的值
+
+     cmask：设置进程的mask值，由表4-4中的9个常数(S_IRUSR,S_IWUSR等)逐位“或”构成的
+
+     return：返回当前进程的mask值，无出错返回
+   ,*/
+  mode_t umask(mode_t cmask);
+   #+END_SRC
+   从创建文件时指定的权限中减掉umask中指定的权限。比如进程创建文件时指定的用户权限是:777(rwxrwxrwx)，而指定的umask指定的值是022，则该进程创建的文件的权限就是755(rwxr-xr-x)
+   
+*** umask实例
+    创建第一个时umask值为0，创建第二个时umask值禁止所有组和其他存取许可权。结果是第一个文件的权限是rw-rw-rw-，第二个权限是rw- --- ---
+    #+BEGIN_SRC C
+      #include <sys/types.h>
+      #include <sys/stat.h>
+      #include <fcntl.h>
+      #include "apue.h"
+
+      int main(void)
+      {
+              umask(0); //foo的权限是666
+              if(creat("foo", S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) < 0)
+                      err_sys("creat error for foo");
+
+              umask(S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+              //bar的权限是600
+              if(creat("bar", S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) < 0)
+                      err_sys("creat error for bar");
+
+              exit(0);
+        
+      }
+    #+END_SRC
+    
+** chmod和fchmod函数
+   chmod/fchmod函数：改变文件访问权限
+   #+BEGIN_SRC C
+  #include <sys/stat.h>
+  #include <sys/types.h>
+
+  /**
+     根据文件路径名改变文件存取权限
+     
+     filename：文件路径名
+     mode_t：文件存取权限
+
+     return：若成功则为0，若出错则为-1
+  ,*/
+  int chmod(const char *filename, mode_t mode);
+
+  /**
+     根据文件描述符改变文件存取权限
+     
+     filedes：文件描述符
+     mode_t：文件存取权限
+
+     return：若成功则为0，若出错则为-1
+  ,*/
+  int fchmod(int filedes, mode_t mode);
+   #+END_SRC
+   
+*** mode参数
+参数mode：根据表4-6中所示常数的位运算获得
+    #+CAPTION: chmod函数的mode常数，取自<sys/stat.h>
+    #+ATTR_HTML: :border 1 :frame boader
+    | mode    | 说明                   |
+    |---------+--------------------------|
+    | S_ISUID | 执行时设置-用户-ID |
+    | S_ISGID | 执行时设置-组-ID   |
+    | S_ISVTX | 保存正文             |
+    |---------+--------------------------|
+    | S_IRWXU | 用户(所有者)读、写和执行 |
+    | S_IRUSR | 用户(所有者)读     |
+    | S_IWUSR | 用户(所有者)写     |
+    | S_IXUSR | 用户(所有者)执行  |
+    |---------+--------------------------|
+    | S_IRWXG | 组读、写和执行    |
+    | S_IRGRP | 组读                   |
+    | S_IWGRP | 组写                   |
+    | S_IXGRP | 组执行                |
+    |---------+--------------------------|
+    | S_IRWXO | 其他读、写和执行 |
+    | S_IROTH | 其他读                |
+    | S_IWOTH | 其他写                |
+    | S_IXOTH | 其他执行             |
+
+**** S_ISVTX
+如果一个可执行程序文件的这一位被设置了，在该程序第一次执行并结束时，该程序正文的一个文本被保存在交换区。(程序的正文部分是机器指令部分)，这使得下次执行该程序时能较快地将其装入内存区。其原因是：在交换区，该文件是被连续存放的，而在一般的UNIX文件系统中，文件的各数据块很可能是随机存放的。现今较新的UNIX系统大多数都具有虚存系统以及快速文件系统，所以不再需要使用这种技术
+
+*** chmod实例
+根据foo的当前状态设置其许可权。为此先调用stat获得其当前许可权，然后修改它。显式地打开了设置-组-ID位、关闭了组-执行位。最后直接修改bar的权限
+    #+BEGIN_SRC C
+      #include <sys/types.h>
+      #include <sys/stat.h>
+      #include "apue.h"
+
+      int main(void)
+      {
+              struct stat statbuf;
+
+              if(stat("foo", &statbuf) < 0)
+                      err_sys("stat error for foo");
+        
+              /* turn on set-group-ID and turn off group-execute */
+              if(chmod("foo", (statbuf.st_mode & ~S_IXGRP) | S_ISGID) < 0)
+                      err_sys("chmod error for foo");
+
+              /*set absolute mode to "rw-r--r--"*/
+              if(chmod("bar", S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH) < 0)
+                      err_sys("chmod error for bar");
+
+              exit(0);
+        
+      }
+    #+END_SRC
++ ls命令将组-执行许可权表示为l
++ chmod函数更新的只是i节点最近一次被更改的时间，而ls-l列出的是最后修改文件内容的时间
+
+*** 自动忽略某些权限常数
+1. 如果我们试图设置普通文件的S_ISVTX，而且又没有超级用户优先权，那么mode中的粘住位自动被关闭。这意味着只有超级用户才能设置普通文件的粘住位。这样做的理由是可以防止不怀好意的用户设置粘住位，并试图以此方式填满交换区
+2. 新创建文件的组ID可能不是调用进程所属的组。特别地如果新文件的组ID不等于进程的有效组ID或者进程添加组ID中的一个，以及进程没有超级用户优先数，那么设置-组-ID位自动被关闭。这就防止了用户创建一个设置-组-ID文件，而该文件是由并非该用户所属的组拥有的
 
 
+** chown, fchown和lchown函数
+chown函数组：更改文件的用户ID和组ID
+#+BEGIN_SRC C
+  #include <sys/types.h>
+  #include <unistd.h>
+
+  /**
+     根据文件路径名更改用户ID和组ID
+
+     pathname：文件路径名
+     owner：用户ID
+     group：组ID
+
+     return：若成功则为0，若出错则为-1
+  ,*/
+  int chown(const char* pathname, uid_t owner, gid_t group);
+
+  /**
+     根据打开的文件描述符更改用户ID和组ID
+
+     filedes：文件描述符
+     owner：用户ID
+     group：组ID
+
+     return：若成功则为0，若出错则为-1
+  ,*/
+  int fchown(int filedes, uid_t owner, gid_t group);
+
+  /**
+     修改链接文件本身的更改用户ID和组ID，而不是所指向的文件
+
+     pathname：文件路径名
+     owner：用户ID
+     group：组ID
+
+     return：若成功则为0，若出错则为-1
+  ,*/
+  int lchown(const char* pathname, uid_t owner, gid_t group);
+
+#+END_SRC
+
+*** chown限制
+若_POSIX_CHOWN_RESTRICTED系统配置常量对指定的文件起作用，则
+1. 只有超级用户进程能更改该文件的用户ID
+2. 若满足下列条件，一个非超级用户进程可以更改该文件的组ID:
+   + 进程拥有此文件(其有效用户ID等于该文件的用户ID)
+   + 参数owner等于文件的用户ID，参数group等于进程的有效组ID或进程的添加组ID之一
+
+也就是说当_POSIX_CHOWN_RESTRICTED有效时，不能更改其他用户的文件的用户ID。你可以更改你所拥用的文件的组ID，但只能改到你所属于的组
+
+如果这些函数由非超级用户进程调用，则在成功返回时，该文件的设置-用户-ID位和设置-组-ID位都被清除

@@ -167,6 +167,33 @@ for the JavaScript code in this tag.
 <li><a href="#sec-3-3-3">新文件和目录的所有权</a></li>
 </ul>
 </li>
+<li><a href="#sec-3-4">access函数</a>
+<ul>
+<li><a href="#sec-3-4-1">mode参数</a></li>
+<li><a href="#sec-3-4-2">access函数实例</a></li>
+</ul>
+</li>
+<li><a href="#sec-3-5">umask函数</a>
+<ul>
+<li><a href="#sec-3-5-1">umask实例</a></li>
+</ul>
+</li>
+<li><a href="#sec-3-6">chmod和fchmod函数</a>
+<ul>
+<li><a href="#sec-3-6-1">mode参数</a>
+<ul>
+<li><a href="#sec-3-6-1-1">S_ISVTX</a></li>
+</ul>
+</li>
+<li><a href="#sec-3-6-2">chmod实例</a></li>
+<li><a href="#sec-3-6-3">自动忽略某些权限常数</a></li>
+</ul>
+</li>
+<li><a href="#sec-3-7">chown, fchown和lchown函数</a>
+<ul>
+<li><a href="#sec-3-7-1">chown限制</a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -469,7 +496,7 @@ stat结构给出了Unix下文件(目录)各种属性的相关信息
 Unix对文件定义了三组用户权限，分别对应为属主用户(user)、组用户(group)、其它用户(other)，每组用户各有自己对此文件的读、写、执行权限。权限值以八进制的形式表示,也记录在stat结构的st_mode字段中
 </p>
 
-<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<table border="1" cellspacing="0" cellpadding="6" rules="groups" frame="boader">
 <caption class="t-above"><span class="table-number">Table 3:</span> 9个存取许可权位</caption>
 
 <colgroup>
@@ -615,6 +642,440 @@ Unix对文件定义了三组用户权限，分别对应为属主用户(user)、�
 <li>新文件的组ID可以是它所在目录的组ID
 </li>
 </ol>
+</div>
+</div>
+</div>
+
+
+<div id="outline-container-sec-3-4" class="outline-3">
+<h3 id="sec-3-4">access函数</h3>
+<div class="outline-text-3" id="text-3-4">
+<p>
+access函数：按实际用户ID和实际组ID测试存取权限
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;unistd.h&gt;</span>
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#25353;&#23454;&#38469;&#29992;&#25143;ID&#21644;&#23454;&#38469;&#32452;ID&#36827;&#34892;&#23384;&#21462;&#35768;&#21487;&#26435;&#27979;&#35797;</span>
+
+<span style="color: #ffa07a;">   pathname&#65306;&#25991;&#20214;&#21517;&#36335;&#24452;</span>
+<span style="color: #ffa07a;">   mode: &#23384;&#21462;&#26435;&#38480;</span>
+
+<span style="color: #ffa07a;">   return: &#33509;&#25317;&#26377;&#26435;&#38480;&#21017;&#20026;0&#65292;&#26080;&#26435;&#38480;&#25110;&#20986;&#38169;&#21017;&#20026;-1&#65292;&#26681;&#25454;errorno&#36827;&#34892;&#21028;&#26029;</span>
+<span style="color: #ffa07a;"> */</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">access</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">pathname</span>, <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">mode</span>);
+</pre>
+</div>
+</div>
+
+<div id="outline-container-sec-3-4-1" class="outline-4">
+<h4 id="sec-3-4-1">mode参数</h4>
+<div class="outline-text-4" id="text-3-4-1">
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 4:</span> access函数中的mode常数，取自&lt;unistd.h&gt;</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<thead>
+<tr>
+<th scope="col" class="left">mode</th>
+<th scope="col" class="left">说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="left">R_OK</td>
+<td class="left">测试读许可权</td>
+</tr>
+
+<tr>
+<td class="left">W_OK</td>
+<td class="left">测试写许可权</td>
+</tr>
+
+<tr>
+<td class="left">X_OK</td>
+<td class="left">测试执行许可权</td>
+</tr>
+
+<tr>
+<td class="left">F_OK</td>
+<td class="left">测试文件是否存在</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+
+<div id="outline-container-sec-3-4-2" class="outline-4">
+<h4 id="sec-3-4-2">access函数实例</h4>
+<div class="outline-text-4" id="text-3-4-2">
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;fcntl.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">argc</span>, <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">argv</span>[]) 
+{
+    <span style="color: #00ffff;">if</span>(argc != 2) 
+        err_quit(<span style="color: #ffa07a;">"usage: a.out &lt;pathname&gt;"</span>); 
+
+    <span style="color: #00ffff;">if</span>(access(argv[1], R_OK) &lt; 0) 
+        err_ret(<span style="color: #ffa07a;">"access error for %s"</span>, argv[1]); 
+    <span style="color: #00ffff;">else</span> 
+        printf(<span style="color: #ffa07a;">"read access OK\n"</span>);
+
+    <span style="color: #00ffff;">if</span>(open(argv[1], O_RDONLY) &lt; 0) 
+        err_ret(<span style="color: #ffa07a;">"open error for %s"</span>, argv[1]); 
+    <span style="color: #00ffff;">else</span> 
+        printf(<span style="color: #ffa07a;">"open for reading OK\n"</span>);
+
+    exit(0);
+}
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-3-5" class="outline-3">
+<h3 id="sec-3-5">umask函数</h3>
+<div class="outline-text-3" id="text-3-5">
+<p>
+umask函数为进程设置文件方式创建mask值。当该进程结束时，mask值仍保持原来系统中的值不变
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/stat.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/type.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#20026;&#36827;&#31243;&#35774;&#32622;&#25991;&#20214;&#26041;&#24335;&#21019;&#24314;&#23631;&#34109;&#23383;,&#24182;&#36820;&#22238;&#20197;&#21069;&#30340;&#20540;</span>
+
+<span style="color: #ffa07a;">   cmask&#65306;&#35774;&#32622;&#36827;&#31243;&#30340;mask&#20540;&#65292;&#30001;&#34920;4-4&#20013;&#30340;9&#20010;&#24120;&#25968;(S_IRUSR,S_IWUSR&#31561;)&#36880;&#20301;&#8220;&#25110;&#8221;&#26500;&#25104;&#30340;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#36820;&#22238;&#24403;&#21069;&#36827;&#31243;&#30340;mask&#20540;&#65292;&#26080;&#20986;&#38169;&#36820;&#22238;</span>
+<span style="color: #ffa07a;"> */</span>
+<span style="color: #98fb98;">mode_t</span> <span style="color: #87cefa;">umask</span>(<span style="color: #98fb98;">mode_t</span> <span style="color: #eedd82;">cmask</span>);
+</pre>
+</div>
+<p>
+从创建文件时指定的权限中减掉umask中指定的权限。比如进程创建文件时指定的用户权限是:777(rwxrwxrwx)，而指定的umask指定的值是022，则该进程创建的文件的权限就是755(rwxr-xr-x)
+</p>
+</div>
+
+<div id="outline-container-sec-3-5-1" class="outline-4">
+<h4 id="sec-3-5-1">umask实例</h4>
+<div class="outline-text-4" id="text-3-5-1">
+<p>
+创建第一个时umask值为0，创建第二个时umask值禁止所有组和其他存取许可权。结果是第一个文件的权限是rw-rw-rw-，第二个权限是rw- &#x2014; &#x2014;
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/stat.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;fcntl.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">void</span>)
+{
+    umask(0); <span style="color: #ff4500;">//</span><span style="color: #ff4500;">foo&#30340;&#26435;&#38480;&#26159;666</span>
+    <span style="color: #00ffff;">if</span>(creat(<span style="color: #ffa07a;">"foo"</span>, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) &lt; 0)
+        err_sys(<span style="color: #ffa07a;">"creat error for foo"</span>);
+
+    umask(S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">bar&#30340;&#26435;&#38480;&#26159;600</span>
+    <span style="color: #00ffff;">if</span>(creat(<span style="color: #ffa07a;">"bar"</span>, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) &lt; 0)
+        err_sys(<span style="color: #ffa07a;">"creat error for bar"</span>);
+
+    exit(0);
+
+}
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-3-6" class="outline-3">
+<h3 id="sec-3-6">chmod和fchmod函数</h3>
+<div class="outline-text-3" id="text-3-6">
+<p>
+chmod/fchmod函数：改变文件访问权限
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/stat.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#26681;&#25454;&#25991;&#20214;&#36335;&#24452;&#21517;&#25913;&#21464;&#25991;&#20214;&#23384;&#21462;&#26435;&#38480;</span>
+
+<span style="color: #ffa07a;">   filename&#65306;&#25991;&#20214;&#36335;&#24452;&#21517;</span>
+<span style="color: #ffa07a;">   mode_t&#65306;&#25991;&#20214;&#23384;&#21462;&#26435;&#38480;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;0&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">chmod</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">filename</span>, <span style="color: #98fb98;">mode_t</span> <span style="color: #eedd82;">mode</span>);
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#26681;&#25454;&#25991;&#20214;&#25551;&#36848;&#31526;&#25913;&#21464;&#25991;&#20214;&#23384;&#21462;&#26435;&#38480;</span>
+
+<span style="color: #ffa07a;">   filedes&#65306;&#25991;&#20214;&#25551;&#36848;&#31526;</span>
+<span style="color: #ffa07a;">   mode_t&#65306;&#25991;&#20214;&#23384;&#21462;&#26435;&#38480;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;0&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">fchmod</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">filedes</span>, <span style="color: #98fb98;">mode_t</span> <span style="color: #eedd82;">mode</span>);
+</pre>
+</div>
+</div>
+
+<div id="outline-container-sec-3-6-1" class="outline-4">
+<h4 id="sec-3-6-1">mode参数</h4>
+<div class="outline-text-4" id="text-3-6-1">
+<p>
+参数mode：根据表4-6中所示常数的位运算获得
+</p>
+<table border="1" cellspacing="0" cellpadding="6" rules="groups" frame="boader">
+<caption class="t-above"><span class="table-number">Table 5:</span> chmod函数的mode常数，取自&lt;sys/stat.h&gt;</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<thead>
+<tr>
+<th scope="col" class="left">mode</th>
+<th scope="col" class="left">说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="left">S_ISUID</td>
+<td class="left">执行时设置-用户-ID</td>
+</tr>
+
+<tr>
+<td class="left">S_ISGID</td>
+<td class="left">执行时设置-组-ID</td>
+</tr>
+
+<tr>
+<td class="left">S_ISVTX</td>
+<td class="left">保存正文</td>
+</tr>
+</tbody>
+<tbody>
+<tr>
+<td class="left">S_IRWXU</td>
+<td class="left">用户(所有者)读、写和执行</td>
+</tr>
+
+<tr>
+<td class="left">S_IRUSR</td>
+<td class="left">用户(所有者)读</td>
+</tr>
+
+<tr>
+<td class="left">S_IWUSR</td>
+<td class="left">用户(所有者)写</td>
+</tr>
+
+<tr>
+<td class="left">S_IXUSR</td>
+<td class="left">用户(所有者)执行</td>
+</tr>
+</tbody>
+<tbody>
+<tr>
+<td class="left">S_IRWXG</td>
+<td class="left">组读、写和执行</td>
+</tr>
+
+<tr>
+<td class="left">S_IRGRP</td>
+<td class="left">组读</td>
+</tr>
+
+<tr>
+<td class="left">S_IWGRP</td>
+<td class="left">组写</td>
+</tr>
+
+<tr>
+<td class="left">S_IXGRP</td>
+<td class="left">组执行</td>
+</tr>
+</tbody>
+<tbody>
+<tr>
+<td class="left">S_IRWXO</td>
+<td class="left">其他读、写和执行</td>
+</tr>
+
+<tr>
+<td class="left">S_IROTH</td>
+<td class="left">其他读</td>
+</tr>
+
+<tr>
+<td class="left">S_IWOTH</td>
+<td class="left">其他写</td>
+</tr>
+
+<tr>
+<td class="left">S_IXOTH</td>
+<td class="left">其他执行</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<div id="outline-container-sec-3-6-1-1" class="outline-5">
+<h5 id="sec-3-6-1-1">S_ISVTX</h5>
+<div class="outline-text-5" id="text-3-6-1-1">
+<p>
+如果一个可执行程序文件的这一位被设置了，在该程序第一次执行并结束时，该程序正文的一个文本被保存在交换区。(程序的正文部分是机器指令部分)，这使得下次执行该程序时能较快地将其装入内存区。其原因是：在交换区，该文件是被连续存放的，而在一般的UNIX文件系统中，文件的各数据块很可能是随机存放的。现今较新的UNIX系统大多数都具有虚存系统以及快速文件系统，所以不再需要使用这种技术
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-3-6-2" class="outline-4">
+<h4 id="sec-3-6-2">chmod实例</h4>
+<div class="outline-text-4" id="text-3-6-2">
+<p>
+根据foo的当前状态设置其许可权。为此先调用stat获得其当前许可权，然后修改它。显式地打开了设置-组-ID位、关闭了组-执行位。最后直接修改bar的权限
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/stat.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">void</span>)
+{
+    <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">stat</span> <span style="color: #eedd82;">statbuf</span>;
+
+    <span style="color: #00ffff;">if</span>(stat(<span style="color: #ffa07a;">"foo"</span>, &amp;statbuf) &lt; 0)
+        err_sys(<span style="color: #ffa07a;">"stat error for foo"</span>);
+
+    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">turn on set-group-ID and turn off group-execute </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #00ffff;">if</span>(chmod(<span style="color: #ffa07a;">"foo"</span>, (statbuf.st_mode &amp; ~S_IXGRP) | S_ISGID) &lt; 0)
+        err_sys(<span style="color: #ffa07a;">"chmod error for foo"</span>);
+
+    <span style="color: #ff4500;">/*</span><span style="color: #ff4500;">set absolute mode to "rw-r--r--"</span><span style="color: #ff4500;">*/</span>
+    <span style="color: #00ffff;">if</span>(chmod(<span style="color: #ffa07a;">"bar"</span>, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH) &lt; 0)
+        err_sys(<span style="color: #ffa07a;">"chmod error for bar"</span>);
+
+    exit(0);
+
+}
+</pre>
+</div>
+<ul class="org-ul">
+<li>ls命令将组-执行许可权表示为l
+</li>
+<li>chmod函数更新的只是i节点最近一次被更改的时间，而ls-l列出的是最后修改文件内容的时间
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-3-6-3" class="outline-4">
+<h4 id="sec-3-6-3">自动忽略某些权限常数</h4>
+<div class="outline-text-4" id="text-3-6-3">
+<ol class="org-ol">
+<li>如果我们试图设置普通文件的S_ISVTX，而且又没有超级用户优先权，那么mode中的粘住位自动被关闭。这意味着只有超级用户才能设置普通文件的粘住位。这样做的理由是可以防止不怀好意的用户设置粘住位，并试图以此方式填满交换区
+</li>
+<li>新创建文件的组ID可能不是调用进程所属的组。特别地如果新文件的组ID不等于进程的有效组ID或者进程添加组ID中的一个，以及进程没有超级用户优先数，那么设置-组-ID位自动被关闭。这就防止了用户创建一个设置-组-ID文件，而该文件是由并非该用户所属的组拥有的
+</li>
+</ol>
+</div>
+</div>
+</div>
+
+
+<div id="outline-container-sec-3-7" class="outline-3">
+<h3 id="sec-3-7">chown, fchown和lchown函数</h3>
+<div class="outline-text-3" id="text-3-7">
+<p>
+chown函数组：更改文件的用户ID和组ID
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;unistd.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#26681;&#25454;&#25991;&#20214;&#36335;&#24452;&#21517;&#26356;&#25913;&#29992;&#25143;ID&#21644;&#32452;ID</span>
+
+<span style="color: #ffa07a;">   pathname&#65306;&#25991;&#20214;&#36335;&#24452;&#21517;</span>
+<span style="color: #ffa07a;">   owner&#65306;&#29992;&#25143;ID</span>
+<span style="color: #ffa07a;">   group&#65306;&#32452;ID</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;0&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">chown</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span>* <span style="color: #eedd82;">pathname</span>, <span style="color: #98fb98;">uid_t</span> <span style="color: #eedd82;">owner</span>, <span style="color: #98fb98;">gid_t</span> <span style="color: #eedd82;">group</span>);
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#26681;&#25454;&#25171;&#24320;&#30340;&#25991;&#20214;&#25551;&#36848;&#31526;&#26356;&#25913;&#29992;&#25143;ID&#21644;&#32452;ID</span>
+
+<span style="color: #ffa07a;">   filedes&#65306;&#25991;&#20214;&#25551;&#36848;&#31526;</span>
+<span style="color: #ffa07a;">   owner&#65306;&#29992;&#25143;ID</span>
+<span style="color: #ffa07a;">   group&#65306;&#32452;ID</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;0&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">fchown</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">filedes</span>, <span style="color: #98fb98;">uid_t</span> <span style="color: #eedd82;">owner</span>, <span style="color: #98fb98;">gid_t</span> <span style="color: #eedd82;">group</span>);
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#20462;&#25913;&#38142;&#25509;&#25991;&#20214;&#26412;&#36523;&#30340;&#26356;&#25913;&#29992;&#25143;ID&#21644;&#32452;ID&#65292;&#32780;&#19981;&#26159;&#25152;&#25351;&#21521;&#30340;&#25991;&#20214;</span>
+
+<span style="color: #ffa07a;">   pathname&#65306;&#25991;&#20214;&#36335;&#24452;&#21517;</span>
+<span style="color: #ffa07a;">   owner&#65306;&#29992;&#25143;ID</span>
+<span style="color: #ffa07a;">   group&#65306;&#32452;ID</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;0&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">lchown</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span>* <span style="color: #eedd82;">pathname</span>, <span style="color: #98fb98;">uid_t</span> <span style="color: #eedd82;">owner</span>, <span style="color: #98fb98;">gid_t</span> <span style="color: #eedd82;">group</span>);
+</pre>
+</div>
+</div>
+
+<div id="outline-container-sec-3-7-1" class="outline-4">
+<h4 id="sec-3-7-1">chown限制</h4>
+<div class="outline-text-4" id="text-3-7-1">
+<p>
+若_POSIX_CHOWN_RESTRICTED系统配置常量对指定的文件起作用，则
+</p>
+<ol class="org-ol">
+<li>只有超级用户进程能更改该文件的用户ID
+</li>
+<li>若满足下列条件，一个非超级用户进程可以更改该文件的组ID:
+<ul class="org-ul">
+<li>进程拥有此文件(其有效用户ID等于该文件的用户ID)
+</li>
+<li>参数owner等于文件的用户ID，参数group等于进程的有效组ID或进程的添加组ID之一
+</li>
+</ul>
+</li>
+</ol>
+
+<p>
+也就是说当_POSIX_CHOWN_RESTRICTED有效时，不能更改其他用户的文件的用户ID。你可以更改你所拥用的文件的组ID，但只能改到你所属于的组
+</p>
+
+<p>
+如果这些函数由非超级用户进程调用，则在成功返回时，该文件的设置-用户-ID位和设置-组-ID位都被清除
+</p>
 </div>
 </div>
 </div>
