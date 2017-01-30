@@ -196,6 +196,45 @@ for the JavaScript code in this tag.
 </li>
 </ul>
 </li>
+<li><a href="#sec-4">文件长度</a>
+<ul>
+<li><a href="#sec-4-1">st_blksize和st_blocks</a></li>
+<li><a href="#sec-4-2">文件空洞</a></li>
+<li><a href="#sec-4-3">truncate和ftruncate函数</a></li>
+</ul>
+</li>
+<li><a href="#sec-5">文件系统</a>
+<ul>
+<li><a href="#sec-5-1">i节点</a></li>
+<li><a href="#sec-5-2">目录项</a></li>
+<li><a href="#sec-5-3">数据块</a></li>
+<li><a href="#sec-5-4">连接</a>
+<ul>
+<li><a href="#sec-5-4-1">硬连接</a></li>
+<li><a href="#sec-5-4-2">符号连接</a></li>
+<li><a href="#sec-5-4-3">目录连接</a></li>
+</ul>
+</li>
+<li><a href="#sec-5-5">link函数</a></li>
+<li><a href="#sec-5-6">unlink函数</a>
+<ul>
+<li><a href="#sec-5-6-1">删除文件</a></li>
+<li><a href="#sec-5-6-2">unlink实例</a></li>
+</ul>
+</li>
+<li><a href="#sec-5-7">remove函数</a></li>
+<li><a href="#sec-5-8">rename函数</a></li>
+<li><a href="#sec-5-9">符号连接</a>
+<ul>
+<li><a href="#sec-5-9-1">函数对符号连接的处理</a></li>
+<li><a href="#sec-5-9-2">符号连接循环</a></li>
+</ul>
+</li>
+<li><a href="#sec-5-10">symlink函数</a></li>
+<li><a href="#sec-5-11">readlink函数</a></li>
+</ul>
+</li>
+<li><a href="#sec-6">文件的时间</a></li>
 </ul>
 </div>
 </div>
@@ -1079,6 +1118,729 @@ chown函数组：更改文件的用户ID和组ID
 </div>
 </div>
 </div>
+</div>
+
+<div id="outline-container-sec-4" class="outline-2">
+<h2 id="sec-4">文件长度</h2>
+<div class="outline-text-2" id="text-4">
+<p>
+stat结构的成员st_size包含了以字节为单位的该文件的长度。此字段只对普通文件、目录文件和符号连接有意义
+</p>
+<ul class="org-ul">
+<li>普通文件：其文件长度可以是0，在读这种文件时，将得到文件结束指示
+</li>
+<li>目录：文件长度通常是16或512的整倍数
+</li>
+<li>符号连接：文件长度是被链接文件名的实际字节数
+</li>
+</ul>
+<p>
+例如：ant -&gt; apache-ant-1.9.7/，其文件长度17就是路径名apache-ant-1.9.7的长度
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ ls -l 
+lrwxrwxrwx  1 klose klose   17 Nov 20 21:14 ant -&gt; apache-ant-1.9.7/
+</pre>
+</div>
+<p>
+注意：因为符号连接文件长度总是由st_size指示，所以符号连接并不包含通常C语言用作名字结尾的null字符 
+</p>
+</div>
+
+<div id="outline-container-sec-4-1" class="outline-3">
+<h3 id="sec-4-1">st_blksize和st_blocks</h3>
+<div class="outline-text-3" id="text-4-1">
+<ul class="org-ul">
+<li>st_blksize：对文件I/O较好的块长度
+</li>
+<li>st_blocks：所分配的实际st_blksize大小的字节块数
+</li>
+</ul>
+
+<p>
+st_blksize表示读操作时读一个文件所需的最少时间量。为了效率的缘故，标准I/O库也试图一次读、写st_blksize个字节
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-4-2" class="outline-3">
+<h3 id="sec-4-2">文件空洞</h3>
+<div class="outline-text-3" id="text-4-2">
+<p>
+空洞是所设置的偏移量超过文件尾端并写入数据后造成的
+</p>
+
+<p>
+空洞并不会占用实际的磁盘空间，因此使用du则只会显示使用了多少字节块，但是使用ls查看文件大小时会计算空洞的大小
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ ls -l file.hole
+
+<span style="color: #ff4500;">#</span><span style="color: #ff4500;">ls&#26174;&#31034;&#23454;&#38469;&#25991;&#20214;&#38271;&#24230;&#26159;4000010&#23383;&#33410;</span>
+-rw-r--r-- 1 klose klose 4000010 Jan 30 20:41 file.hole
+
+$ du ./file.hole
+
+<span style="color: #ff4500;">#</span><span style="color: #ff4500;">du&#26174;&#31034;&#20102;&#23454;&#38469;&#19978;&#25991;&#20214;&#21482;&#21344;&#20102;12&#20010;1024&#23383;&#33410;&#22359;</span>
+12      ./file.hole
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-4-3" class="outline-3">
+<h3 id="sec-4-3">truncate和ftruncate函数</h3>
+<div class="outline-text-3" id="text-4-3">
+<p>
+truncate函数组：以指定长度截短文件
+</p>
+
+<p>
+len为0等价于使用O_TRUNC标记调用open函数，在打开文件时将文件的内容清空
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;unistd.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#20197;&#25351;&#23450;&#38271;&#24230;&#25130;&#30701;&#25991;&#20214;&#12288;</span>
+
+<span style="color: #ffa07a;">   pathname&#65306;&#25991;&#20214;&#36335;&#24452;&#21517;</span>
+<span style="color: #ffa07a;">   len&#65306;&#25351;&#23450;&#38271;&#24230;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;0&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffa07a;"> */</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">truncate</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span>* <span style="color: #eedd82;">pathname</span>, <span style="color: #98fb98;">off_t</span> <span style="color: #eedd82;">len</span>);
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#20197;&#25351;&#23450;&#38271;&#24230;&#25130;&#30701;&#25991;&#20214;&#12288;</span>
+
+<span style="color: #ffa07a;">   filedes&#65306;&#25991;&#20214;&#25551;&#36848;&#31526;</span>
+<span style="color: #ffa07a;">   len&#65306;&#25351;&#23450;&#38271;&#24230;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;0&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffa07a;"> */</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">ftruncate</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">filedes</span>, <span style="color: #98fb98;">off_t</span> <span style="color: #eedd82;">len</span>);
+</pre>
+</div>
+<ul class="org-ul">
+<li>如果该文件以前的长度大于len，则超过len以外的数据就不再能存取
+</li>
+<li>如果以前的长度短于length，则其后果与系统有关。比如某个实现的处理是扩展该文件，则在以前的文件尾端和新的文件尾端之间的数据将读作0(也就是在文件中创建了一个空洞)
+</li>
+</ul>
+</div>
+</div>
+</div>
+
+
+<div id="outline-container-sec-5" class="outline-2">
+<h2 id="sec-5">文件系统</h2>
+<div class="outline-text-2" id="text-5">
+<p>
+Unix/Linux系统下可以使用多种文件系统实现，如基于BSD的Unix文件系统（UFS），EXT，传统的V文件系统等。这些文件系统都不影响下面的描述　
+</p>
+
+<p>
+一个磁盘分成一个或多个分区，见图4-1，每个分区可以包含一个文件系统
+</p>
+
+<div class="figure">
+<p><img src="./pic/fs-1.png" alt="fs-1.png" width="90%" />
+</p>
+</div>
+
+<p>
+如果在忽略自举块和超级块情况下更仔细地观察文件系统，则可以得到图4-2中所示的情况
+</p>
+
+<div class="figure">
+<p><img src="./pic/fs-2.jpg" alt="fs-2.jpg" width="90%" />
+</p>
+</div>
+</div>
+<div id="outline-container-sec-5-1" class="outline-3">
+<h3 id="sec-5-1">i节点</h3>
+<div class="outline-text-3" id="text-5-1">
+<p>
+i节点：包含有关文件的大部分信息，比如文件类型，文件访问权限位，文件长度和指向文件数据块的指针等。stat结构中的大多数信息都取自i节点
+</p>
+
+<p>
+每个文件只有一个i节点
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-5-2" class="outline-3">
+<h3 id="sec-5-2">目录项</h3>
+<div class="outline-text-3" id="text-5-2">
+<p>
+目录项：文件名和i节点编号数，i节点编号数的数据类型是ino_t。
+</p>
+
+<p>
+因为目录项中的i节点编号数指向同一文件系统中的i节点，所以不能使一个目录项指向另一个文件系统的i节点。这就是为什么ln(1)命令不能跨越文件系统的原因
+</p>
+
+<p>
+当在同一个分区内为一个文件更名时，该文件的实际内容并未移动，只需构造一个指向现存i节点的新目录项，并删除老的目录项。例如将文件/usr/lib/foo更名为/usr/foo，如果目录/usr/lib和/usr在同一文件系统上，则文件foo的内容无需移动。这就是mv(1)命令的通常操作方式
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-5-3" class="outline-3">
+<h3 id="sec-5-3">数据块</h3>
+<div class="outline-text-3" id="text-5-3">
+<p>
+数据块：用来记录文件的实际内容，它在磁盘上的位置由i结点来指示
+</p>
+
+<p>
+它的大小可以为1，2，4K字节
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-5-4" class="outline-3">
+<h3 id="sec-5-4">连接</h3>
+<div class="outline-text-3" id="text-5-4">
+</div><div id="outline-container-sec-5-4-1" class="outline-4">
+<h4 id="sec-5-4-1">硬连接</h4>
+<div class="outline-text-4" id="text-5-4-1">
+<p>
+在图4-2中有两个目录项指向同一i节点。每个i节点中都有一个连接计数，其值是指向该i节点的目录项数。这种连接被称为硬连接。
+</p>
+
+<p>
+只有当连接计数减少为0时，才可删除该文件(也就是可以释放该文件占用的数据块)。这就是为什么解除对一个文件的连接操作并不总是意味着释放该文件占用的磁盘块的原因。也就是为什么删除一个目录项的函数被称之为unlink而不是delete的原因。
+</p>
+
+<p>
+在stat结构中，连接计数包含在st_nlink成员中，其基本系统数据类型是nlink_t
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-5-4-2" class="outline-4">
+<h4 id="sec-5-4-2">符号连接</h4>
+<div class="outline-text-4" id="text-5-4-2">
+<p>
+该文件的实际内容(在数据块中)包含了该符号连接所指向的文件的名字
+</p>
+
+<p>
+比如lib-&gt;urs/lib：该目录项中的文件名是lib，而在该文件中包含了7个数据字节usr/lib。该i节点中的文件类型是S_IFLNK，于是系统知道这是一个符号连接 
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-5-4-3" class="outline-4">
+<h4 id="sec-5-4-3">目录连接</h4>
+<div class="outline-text-4" id="text-5-4-3">
+<p>
+创建新的目录testdir
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ mkdir testdir
+</pre>
+</div>
+<p>
+图4-3显示了其结果：
+</p>
+
+<div class="figure">
+<p><img src="./pic/inodes.png" alt="inodes.png" width="90%" />
+</p>
+</div>
+<ul class="org-ul">
+<li>编号为2549的i节点，其类型字段表示它是一个目录。连接计数为2：任何一个叶子目录(不包含任何其他目录)其连接计数总是2，数值2来自于命名该目录(testdir)的目录项以及在该目录中的..项
+</li>
+
+<li>编号为1267的i节点，其类型字段表示它是一个目录。连接计数则大于或等于3：一个是命名它的目录项(在图4-3中没有表示出来)，第二个是在该目录中的.项，第三个是在其子目录testdir中的..项
+</li>
+</ul>
+
+<p>
+注意：在工作目录中的每个子目录都使该工作目录的连接计数增1
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-5-5" class="outline-3">
+<h3 id="sec-5-5">link函数</h3>
+<div class="outline-text-3" id="text-5-5">
+<p>
+link函数：创建一个向现存文件目录项
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;unistd.h&gt;</span>
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#21019;&#24314;&#19968;&#20010;&#25351;&#21521;&#29616;&#23384;&#25991;&#20214;&#30340;&#30446;&#24405;&#39033;</span>
+
+<span style="color: #ffa07a;">   existingpath&#65306;&#24050;&#32463;&#23384;&#22312;&#30340;&#25991;&#20214;&#36335;&#24452;&#21517;</span>
+<span style="color: #ffa07a;">   newpath&#65306;&#36830;&#25509;&#21518;&#30340;&#25991;&#20214;&#36335;&#24452;&#21517;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;0&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffa07a;"> */</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">link</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span>* <span style="color: #eedd82;">existingpath</span>, <span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span>* <span style="color: #eedd82;">newpath</span>);
+</pre>
+</div>
+<p>
+创建一个新目录项newpath，它引用现存文件existingpath，如若newpath已经存在，则返回出错
+</p>
+
+<p>
+创建新目录项以及增加连接计数应当是个原子操作！
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-5-6" class="outline-3">
+<h3 id="sec-5-6">unlink函数</h3>
+<div class="outline-text-3" id="text-5-6">
+<p>
+unlink函数：删除一个现存的目录项
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;unistd.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#21024;&#38500;&#19968;&#20010;&#29616;&#23384;&#30340;&#30446;&#24405;&#39033;</span>
+
+<span style="color: #ffa07a;">   pathname&#65306;&#25991;&#20214;&#25110;&#32773;&#30446;&#24405;&#36335;&#24452;&#21517;&#12288;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;0&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">unlink</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span>* <span style="color: #eedd82;">pathname</span>);
+</pre>
+</div>
+<p>
+删除目录项，并将由pathname所引用的文件的连接计数减1，如果出错，则不对该文件作任何更改
+</p>
+
+<p>
+为了解除对文件的连接,必须对包含该目录项的目录具有写和执行许可权
+</p>
+
+<p>
+如果pathname是符号连接，那么unlink涉及的是符号连接而不是由该连接所引用的文件
+</p>
+
+<p>
+超级用户可以调用带参数pathname的unlink指定一个目录，但是通常不使用这种方式，而使用函数rmdir 
+</p>
+</div>
+<div id="outline-container-sec-5-6-1" class="outline-4">
+<h4 id="sec-5-6-1">删除文件</h4>
+<div class="outline-text-4" id="text-5-6-1">
+<p>
+如果文件还有其他连接，则仍可通过其他连接存取该文件的数据。只有当连接计数达到0时并且没有进程打开该文件，文件的内容才可被删除
+</p>
+
+<p>
+关闭一个文件时内核首先检查使该文件打开的进程计数，如果该计数达到0，然后内核检查其连接计数，如果这也是0，那么就删除该文件的内容
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-5-6-2" class="outline-4">
+<h4 id="sec-5-6-2">unlink实例</h4>
+<div class="outline-text-4" id="text-5-6-2">
+<p>
+打开一个文件，然后unlink它。执行该程序的进程然后睡眠15秒钟，接着就终止
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/stat.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;fcntl.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">void</span>)
+{
+    <span style="color: #00ffff;">if</span>(open(<span style="color: #ffa07a;">"tempfile"</span>, O_RDWR) &lt; 0)
+        err_sys(<span style="color: #ffa07a;">"open error"</span>);
+
+    <span style="color: #00ffff;">if</span>(unlink(<span style="color: #ffa07a;">"tempfile"</span>) &lt; 0)
+        err_sys(<span style="color: #ffa07a;">"unlink error"</span>);
+    printf(<span style="color: #ffa07a;">"file unlinked\n"</span>);
+
+    sleep(15);
+    printf(<span style="color: #ffa07a;">"done\n"</span>);
+
+    exit(0);
+
+}
+</pre>
+</div>
+<p>
+测试代码：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ echo <span style="color: #ffa07a;">"hello world "</span> &gt; tempfile
+
+$ ls -l tempfile
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">1&#34920;&#31034;&#26377;1&#20010;&#30446;&#24405;&#39033;&#30446;&#25351;&#21521;tempfile</span>
+-rw-r--r-- 1 klose klose 13 Jan 30 22:53 tempfile
+
+$ ./unlinkExample
+
+file unlinked
+<span style="color: #00ffff;">done</span>
+
+$ ls -l tempfile
+
+ls: cannot access <span style="color: #ffa07a;">'tempfile'</span>: No such file or directory
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-5-7" class="outline-3">
+<h3 id="sec-5-7">remove函数</h3>
+<div class="outline-text-3" id="text-5-7">
+<p>
+remove函数：对于文件remove与unlink一样，对于目录remove与rmdir一样
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;stdio.h&gt;</span>
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#23545;&#20110;&#25991;&#20214;remove&#19982;unlink&#19968;&#26679;&#65292;&#23545;&#20110;&#30446;&#24405;remove&#19982;rmdir&#19968;&#26679;</span>
+
+<span style="color: #ffa07a;">   pathname&#65306;&#25991;&#20214;&#25110;&#30446;&#24405;&#36335;&#24452;&#21517;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;0&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">remove</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span>* <span style="color: #eedd82;">pathname</span>);
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-5-8" class="outline-3">
+<h3 id="sec-5-8">rename函数</h3>
+<div class="outline-text-3" id="text-5-8">
+<p>
+rename函数：修改文件或者目录名字
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;stdio.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#20462;&#25913;&#25991;&#20214;&#25110;&#32773;&#30446;&#24405;&#21517;&#23383;</span>
+
+<span style="color: #ffa07a;">   oldname&#65306;&#26087;&#30340;&#25991;&#20214;&#25110;&#30446;&#24405;&#36335;&#24452;&#21517;</span>
+<span style="color: #ffa07a;">   newname&#65306;&#26032;&#30340;&#24681;&#35265;&#25110;&#30446;&#24405;&#36335;&#24452;&#21517;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;0&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">rename</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span>* <span style="color: #eedd82;">oldname</span>, <span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span>* <span style="color: #eedd82;">newname</span>);
+</pre>
+</div>
+<ul class="org-ul">
+<li>如果oldname是一个文件而不是目录，那么为该文件更名。在这种情况下如果newname已存在，则它不能引用一个目录。如果newname已存在而且不是一个目录，则先将该目录项删除然后将oldname更名为newname。对包含oldname的目录以及包含newname的目录，调用进程必须具有写许可权，因为将更改这两个目录
+</li>
+<li>如若oldname是一个目录，那么为该目录更名。如果newname已存在，则它必须引用一个目录，而且该目录应当是空目录(空目录指的是该目录中只有.和..项)。如果newname存在(而且是一个空目录)，则先将其删除，然后将oldname更名为newname。另外，当为一个目录更名时，newname不能包含oldname作为其路径前缀。例如，不能将/usr/foo更名为/usr/foo/testdir，因为老名字(/usr/foo)是新名字的路径前缀，因而不能将其删除
+</li>
+<li>作为一个特例，如果oldname和newname引用同一文件，则函数不做任何更改而成功返回
+</li>
+</ul>
+
+<p>
+若newname已经存在，则调用进程需要对其有写许可权。另外调用进程将删除oldname目录项，并可能要创建newname目录项，所以它需要对包含oldname及包含newname的目录具有写和执行许可权
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-5-9" class="outline-3">
+<h3 id="sec-5-9">符号连接</h3>
+<div class="outline-text-3" id="text-5-9">
+<p>
+符号连接是对一个文件的间接指针，而硬连接直接指向文件的i节点
+</p>
+
+<p>
+引进符号连接的原因是为了避免硬连接的一些限制：
+</p>
+<ul class="org-ul">
+<li>硬连接通常要求连接和文件位于同一文件系统中
+</li>
+<li>只有超级用户才能创建到目录的硬连接
+</li>
+</ul>
+
+<p>
+对符号连接以及它指向什么没有文件系统限制，任何用户都可创建指向目录的符号连接。符号连接一般用于将一个文件或整个目录结构移到系统中其他某个位置
+</p>
+</div>
+
+<div id="outline-container-sec-5-9-1" class="outline-4">
+<h4 id="sec-5-9-1">函数对符号连接的处理</h4>
+<div class="outline-text-4" id="text-5-9-1">
+<ul class="org-ul">
+<li>跟随：则该函数的路径名参数引用由符号连接指向的文件
+</li>
+<li>不跟随：处理该符号连接路径名本身而不是由符号连接引用的文件 
+</li>
+</ul>
+
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader　">
+<caption class="t-above"><span class="table-number">Table 6:</span> 各个函数对符号连接的处理</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">函数</td>
+<td class="left">不跟随符号连接</td>
+<td class="left">跟随符号连接</td>
+</tr>
+
+<tr>
+<td class="left">access</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+</tr>
+
+<tr>
+<td class="left">chdir</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+</tr>
+
+<tr>
+<td class="left">chmod</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+</tr>
+
+<tr>
+<td class="left">chown</td>
+<td class="left">•</td>
+<td class="left">•</td>
+</tr>
+
+<tr>
+<td class="left">creat</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+</tr>
+
+<tr>
+<td class="left">exec</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+</tr>
+
+<tr>
+<td class="left">lchown</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+</tr>
+
+<tr>
+<td class="left">link</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+</tr>
+
+<tr>
+<td class="left">lstat</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+</tr>
+
+<tr>
+<td class="left">mkdir</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+</tr>
+
+<tr>
+<td class="left">mkfifo</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+</tr>
+
+<tr>
+<td class="left">mknod</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+</tr>
+
+<tr>
+<td class="left">open</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+</tr>
+
+<tr>
+<td class="left">opendir</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+</tr>
+
+<tr>
+<td class="left">pathconf</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+</tr>
+
+<tr>
+<td class="left">readlink</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+</tr>
+
+<tr>
+<td class="left">remove</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+</tr>
+
+<tr>
+<td class="left">rename</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+</tr>
+
+<tr>
+<td class="left">stat</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+</tr>
+
+<tr>
+<td class="left">truncate</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+</tr>
+
+<tr>
+<td class="left">unlink</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+
+
+<div id="outline-container-sec-5-9-2" class="outline-4">
+<h4 id="sec-5-9-2">符号连接循环</h4>
+<div class="outline-text-4" id="text-5-9-2">
+<p>
+使用符号连接可能在文件系统中引入循环。大多数查找路径名的函数在这种情况发生时都返回值为ELOOP的errno
+</p>
+
+<p>
+创建了一个目录foo，它包含了一个名为a的文件以及一个指向foo的符号连接
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">$<span style="color: #eedd82;">mkdir</span> foo <span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#21019;&#24314;&#19968;&#20010;&#26032;&#30446;&#24405;</span>
+
+$<span style="color: #eedd82;">touch</span> foo/a <span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#21019;&#24314;0&#38271;&#25991;&#20214;</span>
+
+$<span style="color: #eedd82;">ln</span> - s ../foo foo/testdir <span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#21019;&#24314;&#19968;&#31526;&#21495;&#36830;&#25509;</span>
+
+$<span style="color: #eedd82;">ls</span> -1 foo
+
+total 1
+-rw-rw-r-- 1 stevens 0 Dec6 06:06 a
+lrwxrwxrwx 1 stevens 6 Dec6 06:06 testdir -&gt; ../foo
+</pre>
+</div>
+<p>
+如果遍历目录不考虑这种情况，那么从foo到/foo/testdir则又会回到foo
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-5-10" class="outline-3">
+<h3 id="sec-5-10">symlink函数</h3>
+<div class="outline-text-3" id="text-5-10">
+<p>
+symlink函数：创建一个符号连接
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span><span style="color: #ffa07a;">&lt;unistd.h&gt;</span>
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#21019;&#24314;&#19968;&#20010;&#31526;&#21495;&#36830;&#25509;</span>
+
+<span style="color: #ffa07a;">   actualpath&#65306;&#34987;&#24341;&#29992;&#25991;&#20214;&#36335;&#24452;&#21517;</span>
+<span style="color: #ffa07a;">   sympath&#65306;&#31526;&#21495;&#36830;&#25509;&#25991;&#20214;&#36335;&#24452;&#21517;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;0&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">symlink</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span>* <span style="color: #eedd82;">actualpath</span>, <span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span>* <span style="color: #eedd82;">sympath</span>);
+</pre>
+</div>
+<p>
+创建了一个指向actualpath的新目录项sympath，在创建此符号连接时，并不要求actualpath已经存在，并且actualpath和sympath并不需要位于同一文件系统中
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-5-11" class="outline-3">
+<h3 id="sec-5-11">readlink函数</h3>
+<div class="outline-text-3" id="text-5-11">
+<p>
+readlink函数：因为open函数跟随符号连接，所以需要有一种方法打开该连接本身文件，而readlink函数就提供了这个功能
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;unistd.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#35835;&#21462;&#19968;&#20010;&#31526;&#21495;&#38142;&#25509;&#65292;&#23427;&#19981;&#20250;&#36319;&#38543;&#31526;&#21495;&#38142;&#25509;&#25351;&#21521;&#30340;&#25991;&#20214;&#65292;&#36820;&#22238;&#30340;&#26159;&#31526;&#21495;&#38142;&#25509;&#26412;&#36523;&#30340;&#20449;&#24687;&#65292;&#21363;&#25351;&#21521;&#30340;&#25991;&#20214;&#30340;&#21517;&#23383;</span>
+
+<span style="color: #ffa07a;">   pathname&#65306;&#31526;&#21495;&#38142;&#25509;&#25991;&#20214;&#36335;&#24452;&#21517;</span>
+<span style="color: #ffa07a;">   buf&#65306;&#20445;&#23384;&#25351;&#21521;&#25991;&#20214;&#21517;&#23383;&#30340;&#32531;&#23384;&#21306;</span>
+<span style="color: #ffa07a;">   bufsize&#65306;&#32531;&#23384;&#21306;&#22823;&#23567;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;&#35835;&#30340;&#23383;&#33410;&#25968;&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">readlink</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span>* <span style="color: #eedd82;">pathname</span>, <span style="color: #98fb98;">char</span>* <span style="color: #eedd82;">buf</span>, <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">bufsize</span>);
+</pre>
+</div>
+<p>
+此函数组合了open，read和close的所有操作
+</p>
+
+<p>
+注意：在buf中返回的符号连接的内容不以null字符终止！
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-6" class="outline-2">
+<h2 id="sec-6">文件的时间</h2>
 </div>
 </div>
 <div id="postamble" class="status">

@@ -73,7 +73,6 @@
 6. Socket套接字：主要是进程间的网络通信，也可以是同一台机器不同进程间通信
 7. 符号链接：文件指向另一个文件
 ** 文件类型测试宏
-   
    #+CAPTION: <sys/stat.h>中的文件类型宏
    #+ATTR_HTML: :border 1 :rules all :frame boader　
    | 宏         | 文件类型     |
@@ -395,8 +394,8 @@
 *** 自动忽略某些权限常数
 1. 如果我们试图设置普通文件的S_ISVTX，而且又没有超级用户优先权，那么mode中的粘住位自动被关闭。这意味着只有超级用户才能设置普通文件的粘住位。这样做的理由是可以防止不怀好意的用户设置粘住位，并试图以此方式填满交换区
 2. 新创建文件的组ID可能不是调用进程所属的组。特别地如果新文件的组ID不等于进程的有效组ID或者进程添加组ID中的一个，以及进程没有超级用户优先数，那么设置-组-ID位自动被关闭。这就防止了用户创建一个设置-组-ID文件，而该文件是由并非该用户所属的组拥有的
-
-
+   
+   
 ** chown, fchown和lchown函数
 chown函数组：更改文件的用户ID和组ID
 #+BEGIN_SRC C
@@ -448,3 +447,346 @@ chown函数组：更改文件的用户ID和组ID
 也就是说当_POSIX_CHOWN_RESTRICTED有效时，不能更改其他用户的文件的用户ID。你可以更改你所拥用的文件的组ID，但只能改到你所属于的组
 
 如果这些函数由非超级用户进程调用，则在成功返回时，该文件的设置-用户-ID位和设置-组-ID位都被清除
+
+* 文件长度
+  stat结构的成员st_size包含了以字节为单位的该文件的长度。此字段只对普通文件、目录文件和符号连接有意义
++ 普通文件：其文件长度可以是0，在读这种文件时，将得到文件结束指示
++ 目录：文件长度通常是16或512的整倍数
++ 符号连接：文件长度是被链接文件名的实际字节数
+例如：ant -> apache-ant-1.9.7/，其文件长度17就是路径名apache-ant-1.9.7的长度
+#+BEGIN_SRC sh
+  $ ls -l 
+  lrwxrwxrwx  1 klose klose   17 Nov 20 21:14 ant -> apache-ant-1.9.7/
+#+END_SRC
+注意：因为符号连接文件长度总是由st_size指示，所以符号连接并不包含通常C语言用作名字结尾的null字符 
+
+** st_blksize和st_blocks
++ st_blksize：对文件I/O较好的块长度
++ st_blocks：所分配的实际st_blksize大小的字节块数
+  
+st_blksize表示读操作时读一个文件所需的最少时间量。为了效率的缘故，标准I/O库也试图一次读、写st_blksize个字节
+
+** 文件空洞
+   空洞是所设置的偏移量超过文件尾端并写入数据后造成的
+   
+   空洞并不会占用实际的磁盘空间，因此使用du则只会显示使用了多少字节块，但是使用ls查看文件大小时会计算空洞的大小
+   #+BEGIN_SRC sh
+  $ ls -l file.hole
+
+  #ls显示实际文件长度是4000010字节
+  -rw-r--r-- 1 klose klose 4000010 Jan 30 20:41 file.hole
+
+  $ du ./file.hole
+
+  #du显示了实际上文件只占了12个1024字节块
+  12      ./file.hole
+   #+END_SRC
+   
+** truncate和ftruncate函数
+   truncate函数组：以指定长度截短文件
+   
+   len为0等价于使用O_TRUNC标记调用open函数，在打开文件时将文件的内容清空
+   #+BEGIN_SRC C
+  #include <sys/types.h>
+  #include <unistd.h>
+
+  /**
+     以指定长度截短文件　
+
+     pathname：文件路径名
+     len：指定长度
+
+     return：若成功则为0，若出错则为-1
+   ,*/
+  int truncate(const char* pathname, off_t len);
+
+  /**
+     以指定长度截短文件　
+
+     filedes：文件描述符
+     len：指定长度
+
+     return：若成功则为0，若出错则为-1
+   ,*/
+  int ftruncate(int filedes, off_t len);
+   #+END_SRC
++ 如果该文件以前的长度大于len，则超过len以外的数据就不再能存取
++ 如果以前的长度短于length，则其后果与系统有关。比如某个实现的处理是扩展该文件，则在以前的文件尾端和新的文件尾端之间的数据将读作0(也就是在文件中创建了一个空洞)
+  
+  
+* 文件系统
+  Unix/Linux系统下可以使用多种文件系统实现，如基于BSD的Unix文件系统（UFS），EXT，传统的V文件系统等。这些文件系统都不影响下面的描述　
+  
+  一个磁盘分成一个或多个分区，见图4-1，每个分区可以包含一个文件系统
+  #+ATTR_HTML: image :width 90% 
+  [[./pic/fs-1.png]]
+  
+  如果在忽略自举块和超级块情况下更仔细地观察文件系统，则可以得到图4-2中所示的情况
+  #+ATTR_HTML: image :width 90% 
+  [[./pic/fs-2.jpg]]
+** i节点
+   i节点：包含有关文件的大部分信息，比如文件类型，文件访问权限位，文件长度和指向文件数据块的指针等。stat结构中的大多数信息都取自i节点
+   
+   每个文件只有一个i节点
+   
+** 目录项
+   目录项：文件名和i节点编号数，i节点编号数的数据类型是ino_t。
+   
+   因为目录项中的i节点编号数指向同一文件系统中的i节点，所以不能使一个目录项指向另一个文件系统的i节点。这就是为什么ln(1)命令不能跨越文件系统的原因
+   
+   当在同一个分区内为一个文件更名时，该文件的实际内容并未移动，只需构造一个指向现存i节点的新目录项，并删除老的目录项。例如将文件/usr/lib/foo更名为/usr/foo，如果目录/usr/lib和/usr在同一文件系统上，则文件foo的内容无需移动。这就是mv(1)命令的通常操作方式
+   
+** 数据块
+   数据块：用来记录文件的实际内容，它在磁盘上的位置由i结点来指示
+   
+   它的大小可以为1，2，4K字节
+   
+** 连接
+   
+*** 硬连接
+    在图4-2中有两个目录项指向同一i节点。每个i节点中都有一个连接计数，其值是指向该i节点的目录项数。这种连接被称为硬连接。
+    
+    只有当连接计数减少为0时，才可删除该文件(也就是可以释放该文件占用的数据块)。这就是为什么解除对一个文件的连接操作并不总是意味着释放该文件占用的磁盘块的原因。也就是为什么删除一个目录项的函数被称之为unlink而不是delete的原因。
+    
+    在stat结构中，连接计数包含在st_nlink成员中，其基本系统数据类型是nlink_t
+    
+*** 符号连接
+    该文件的实际内容(在数据块中)包含了该符号连接所指向的文件的名字
+    
+    比如lib->urs/lib：该目录项中的文件名是lib，而在该文件中包含了7个数据字节usr/lib。该i节点中的文件类型是S_IFLNK，于是系统知道这是一个符号连接 
+    
+*** 目录连接
+    创建新的目录testdir
+    #+BEGIN_SRC sh
+      $ mkdir testdir
+    #+END_SRC
+    图4-3显示了其结果：
+    #+ATTR_HTML: image :width 90% 
+    [[./pic/inodes.png]]
++ 编号为2549的i节点，其类型字段表示它是一个目录。连接计数为2：任何一个叶子目录(不包含任何其他目录)其连接计数总是2，数值2来自于命名该目录(testdir)的目录项以及在该目录中的..项
+  
++ 编号为1267的i节点，其类型字段表示它是一个目录。连接计数则大于或等于3：一个是命名它的目录项(在图4-3中没有表示出来)，第二个是在该目录中的.项，第三个是在其子目录testdir中的..项
+  
+注意：在工作目录中的每个子目录都使该工作目录的连接计数增1
+
+** link函数
+   link函数：创建一个向现存文件目录项
+   
+   #+BEGIN_SRC C
+  #include <unistd.h>
+  /**
+     创建一个指向现存文件的目录项
+
+     existingpath：已经存在的文件路径名
+     newpath：连接后的文件路径名
+
+     return：若成功则为0，若出错则为-1
+   ,*/
+  int link(const char* existingpath, const char* newpath);
+   #+END_SRC
+   创建一个新目录项newpath，它引用现存文件existingpath，如若newpath已经存在，则返回出错
+   
+   创建新目录项以及增加连接计数应当是个原子操作！
+   
+** unlink函数
+   unlink函数：删除一个现存的目录项
+   #+BEGIN_SRC C
+     #include <unistd.h>
+
+     /**
+        删除一个现存的目录项
+
+        pathname：文件或者目录路径名　
+
+        return：若成功则为0，若出错则为-1
+     ,*/
+     int unlink(const char* pathname);
+   #+END_SRC
+   删除目录项，并将由pathname所引用的文件的连接计数减1，如果出错，则不对该文件作任何更改
+   
+   为了解除对文件的连接,必须对包含该目录项的目录具有写和执行许可权
+   
+   如果pathname是符号连接，那么unlink涉及的是符号连接而不是由该连接所引用的文件
+   
+   超级用户可以调用带参数pathname的unlink指定一个目录，但是通常不使用这种方式，而使用函数rmdir 
+*** 删除文件
+    如果文件还有其他连接，则仍可通过其他连接存取该文件的数据。只有当连接计数达到0时并且没有进程打开该文件，文件的内容才可被删除
+    
+    关闭一个文件时内核首先检查使该文件打开的进程计数，如果该计数达到0，然后内核检查其连接计数，如果这也是0，那么就删除该文件的内容
+    
+*** unlink实例
+    打开一个文件，然后unlink它。执行该程序的进程然后睡眠15秒钟，接着就终止
+    #+BEGIN_SRC C
+      #include <sys/types.h>
+      #include <sys/stat.h>
+      #include <fcntl.h>
+      #include "apue.h"
+
+      int main(void)
+      {
+              if(open("tempfile", O_RDWR) < 0)
+                      err_sys("open error");
+
+              if(unlink("tempfile") < 0)
+                      err_sys("unlink error");
+              printf("file unlinked\n");
+
+              sleep(15);
+              printf("done\n");
+
+              exit(0);
+        
+      }
+    #+END_SRC
+    测试代码：
+    #+BEGIN_SRC sh
+  $ echo "hello world " > tempfile
+
+  $ ls -l tempfile
+  # 1表示有1个目录项目指向tempfile
+  -rw-r--r-- 1 klose klose 13 Jan 30 22:53 tempfile
+
+  $ ./unlinkExample
+
+  file unlinked
+  done
+
+  $ ls -l tempfile
+
+  ls: cannot access 'tempfile': No such file or directory
+    #+END_SRC
+    
+** remove函数
+   remove函数：对于文件remove与unlink一样，对于目录remove与rmdir一样
+   #+BEGIN_SRC C
+  #include <stdio.h>
+  /**
+     对于文件remove与unlink一样，对于目录remove与rmdir一样
+
+     pathname：文件或目录路径名
+     
+     return：若成功则为0，若出错则为-1
+  ,*/
+  int remove(const char* pathname);
+
+   #+END_SRC
+   
+** rename函数
+   rename函数：修改文件或者目录名字
+   #+BEGIN_SRC C
+  #include <stdio.h>
+
+  /**
+     修改文件或者目录名字
+
+     oldname：旧的文件或目录路径名
+     newname：新的恩见或目录路径名
+
+     return：若成功则为0，若出错则为-1
+  ,*/
+  int rename(const char* oldname, const char* newname);
+   #+END_SRC
++ 如果oldname是一个文件而不是目录，那么为该文件更名。在这种情况下如果newname已存在，则它不能引用一个目录。如果newname已存在而且不是一个目录，则先将该目录项删除然后将oldname更名为newname。对包含oldname的目录以及包含newname的目录，调用进程必须具有写许可权，因为将更改这两个目录
++ 如若oldname是一个目录，那么为该目录更名。如果newname已存在，则它必须引用一个目录，而且该目录应当是空目录(空目录指的是该目录中只有.和..项)。如果newname存在(而且是一个空目录)，则先将其删除，然后将oldname更名为newname。另外，当为一个目录更名时，newname不能包含oldname作为其路径前缀。例如，不能将/usr/foo更名为/usr/foo/testdir，因为老名字(/usr/foo)是新名字的路径前缀，因而不能将其删除
++ 作为一个特例，如果oldname和newname引用同一文件，则函数不做任何更改而成功返回
+  
+若newname已经存在，则调用进程需要对其有写许可权。另外调用进程将删除oldname目录项，并可能要创建newname目录项，所以它需要对包含oldname及包含newname的目录具有写和执行许可权
+
+** 符号连接
+   符号连接是对一个文件的间接指针，而硬连接直接指向文件的i节点
+   
+   引进符号连接的原因是为了避免硬连接的一些限制：
++ 硬连接通常要求连接和文件位于同一文件系统中
++ 只有超级用户才能创建到目录的硬连接
+  
+对符号连接以及它指向什么没有文件系统限制，任何用户都可创建指向目录的符号连接。符号连接一般用于将一个文件或整个目录结构移到系统中其他某个位置
+
+*** 函数对符号连接的处理
++ 跟随：则该函数的路径名参数引用由符号连接指向的文件
++ 不跟随：处理该符号连接路径名本身而不是由符号连接引用的文件 
+
+  
+  #+CAPTION: 各个函数对符号连接的处理
+  #+ATTR_HTML: :border 1 :rules all :frame boader　
+  | 函数   | 不跟随符号连接 | 跟随符号连接 |
+  | access   |                | •            |
+  | chdir    |                | •            |
+  | chmod    |                | •            |
+  | chown    | •              | •            |
+  | creat    |                | •            |
+  | exec     |                | •            |
+  | lchown   | •              |              |
+  | link     |                | •            |
+  | lstat    | •              |              |
+  | mkdir    |                | •            |
+  | mkfifo   |                | •            |
+  | mknod    |                | •            |
+  | open     |                | •            |
+  | opendir  |                | •            |
+  | pathconf |                | •            |
+  | readlink | •              |              |
+  | remove   | •              |              |
+  | rename   | •              |              |
+  | stat     |                | •            |
+  | truncate |                | •            |
+  | unlink   | •              |              |
+  
+  
+*** 符号连接循环
+    使用符号连接可能在文件系统中引入循环。大多数查找路径名的函数在这种情况发生时都返回值为ELOOP的errno
+    
+    创建了一个目录foo，它包含了一个名为a的文件以及一个指向foo的符号连接
+    #+BEGIN_SRC sh
+  $mkdir foo #创建一个新目录
+
+  $touch foo/a #创建0长文件
+
+  $ln - s ../foo foo/testdir #创建一符号连接
+
+  $ls -1 foo
+
+  total 1
+  -rw-rw-r-- 1 stevens 0 Dec6 06:06 a
+  lrwxrwxrwx 1 stevens 6 Dec6 06:06 testdir -> ../foo
+    #+END_SRC
+    如果遍历目录不考虑这种情况，那么从foo到/foo/testdir则又会回到foo
+    
+** symlink函数
+   symlink函数：创建一个符号连接
+   #+BEGIN_SRC C
+  #include<unistd.h>
+  /**
+     创建一个符号连接
+
+     actualpath：被引用文件路径名
+     sympath：符号连接文件路径名
+
+     return：若成功则为0，若出错则为-1
+  ,*/
+  int symlink(const char* actualpath, const char* sympath);
+   #+END_SRC
+   创建了一个指向actualpath的新目录项sympath，在创建此符号连接时，并不要求actualpath已经存在，并且actualpath和sympath并不需要位于同一文件系统中
+   
+** readlink函数
+   readlink函数：因为open函数跟随符号连接，所以需要有一种方法打开该连接本身文件，而readlink函数就提供了这个功能
+   
+   #+BEGIN_SRC C
+  #include <unistd.h>
+
+  /**
+     读取一个符号链接，它不会跟随符号链接指向的文件，返回的是符号链接本身的信息，即指向的文件的名字
+
+     pathname：符号链接文件路径名
+     buf：保存指向文件名字的缓存区
+     bufsize：缓存区大小
+
+     return：若成功则为读的字节数，若出错则为-1
+     
+  ,*/
+  int readlink(const char* pathname, char* buf, int bufsize);
+   #+END_SRC
+   此函数组合了open，read和close的所有操作
+   
+   注意：在buf中返回的符号连接的内容不以null字符终止！
+   
+* 文件的时间
