@@ -251,7 +251,7 @@ for the JavaScript code in this tag.
 <li><a href="#sec-7-2">rmdir函数</a></li>
 <li><a href="#sec-7-3">读取目录</a>
 <ul>
-<li><a href="#sec-7-3-1">数据结构</a></li>
+<li><a href="#sec-7-3-1">DIR和dirent结构</a></li>
 <li><a href="#sec-7-3-2">目录流操作函数</a></li>
 <li><a href="#sec-7-3-3">遍历文件层次结构</a></li>
 </ul>
@@ -2579,7 +2579,7 @@ utimebuf结构：两个时间值是日历时间，也就是自1970年1月1日00:
 </li>
 </ol>
 <p>
-2.如果times是非空指针，则存取时间和修改时间被设置为times所指向的结构中的值。为了执行此操作只具有写权限是不够的，比续满足下列两个条件之一：
+2.如果times是非空指针，则存取时间和修改时间被设置为times所指向的结构中的值。为了执行此操作只具有写权限是不够的，必须满足下列两个条件之一：
 </p>
 <ul class="org-ul">
 <li>此时进程的有效用户ID必须等于该文件的所有者ID
@@ -2727,18 +2727,18 @@ rmdir函数：删除目录
 </p>
 
 <p>
-目录的实现依赖于不同的实现，早期系统可能每个目录项的文件名是14个字节，i节点编号是2个字节，而现代的系统文件名可以更长。
-这就意味着读目录的程序与系统相关。为了简化这种情况，UNIX现在包含了一套与读目录有关的例程，它们是POSIX.1的一部分
+目录的实现依赖于不同的实现，早期系统可能每个目录项的文件名是14个字节，i节点编号是2个字节，而现代的系统文件名可以更长。这就意味着读目录的程序与系统相关。为了简化这种情况，UNIX现在包含了一套与读目录有关的例程，它们是POSIX.1的一部分
 </p>
 </div>
 
 <div id="outline-container-sec-7-3-1" class="outline-4">
-<h4 id="sec-7-3-1">数据结构</h4>
+<h4 id="sec-7-3-1">DIR和dirent结构</h4>
 <div class="outline-text-4" id="text-7-3-1">
-<p>
-目录流DIR结构是一个内部结构，其作用类似于FILE，由标准I/O库维护 
-目录项结构dirent与实现有关，必须包含2个字段：i结点编号和文件/目录名
-</p>
+<ul class="org-ul">
+<li>目录流DIR结构是一个内部结构，其作用类似于FILE，由标准I/O库维护
+</li>
+
+<li>目录项结构dirent与实现有关，必须包含2个字段：i结点编号和文件/目录名
 <div class="org-src-container">
 
 <pre class="src src-C"><span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">__dirstream</span>
@@ -2763,18 +2763,22 @@ rmdir函数：删除目录
 }
 </pre>
 </div>
+</li>
+</ul>
 </div>
 </div>
 
 <div id="outline-container-sec-7-3-2" class="outline-4">
 <h4 id="sec-7-3-2">目录流操作函数</h4>
 <div class="outline-text-4" id="text-7-3-2">
-<p>
-opendir：把目录内容放到目录流，使第一个readdir读目录中的第一个目录项
-readdir：读取一个目录项，目录流指针指向下一个目录项
-rewinddir：重置目录流指针到第一个目录项目
-closedir：关闭目录流指针
-</p>
+<ul class="org-ul">
+<li>opendir：把目录内容放到目录流，使第一个readdir读目录中的第一个目录项
+</li>
+<li>readdir：读取一个目录项，目录流指针指向下一个目录项
+</li>
+<li>rewinddir：重置目录流指针到第一个目录项目
+</li>
+<li>closedir：关闭目录流指针
 
 <div class="org-src-container">
 
@@ -2818,6 +2822,8 @@ DIR *opendir(<span style="color: #00ffff;">const</span> <span style="color: #98f
 <span style="color: #98fb98;">int</span> <span style="color: #87cefa;">closedir</span>(<span style="color: #98fb98;">DIR</span> *<span style="color: #eedd82;">dp</span>);
 </pre>
 </div>
+</li>
+</ul>
 </div>
 </div>
 
@@ -2825,7 +2831,11 @@ DIR *opendir(<span style="color: #00ffff;">const</span> <span style="color: #98f
 <h4 id="sec-7-3-3">遍历文件层次结构</h4>
 <div class="outline-text-4" id="text-7-3-3">
 <p>
-声明函数指针类型Myfunc，接受３个参数，返回int
+根据起点目录路径名开始递归降序遍历文件层次结构
+</p>
+
+<p>
+MyFunc：函数指针类型，接受3个参数，返回int
 </p>
 <div class="org-src-container">
 
@@ -2856,7 +2866,7 @@ DIR *opendir(<span style="color: #00ffff;">const</span> <span style="color: #98f
 </div>
 
 <p>
-遍历某个目录，把目录流中各个目录项相关数据传递给func函数指针进行处理
+dopath函数：遍历某个目录，把目录流中各个目录项相关数据传递给func函数指针进行处理
 </p>
 <div class="org-src-container">
 
@@ -2914,7 +2924,7 @@ DIR *opendir(<span style="color: #00ffff;">const</span> <span style="color: #98f
 </div>
 
 <p>
-根据目录项类型，文件类型的不同，出错类型进行不同操作
+myfunc函数：根据目录项类型，文件类型的不同，出错类型对目录项进行不同操作
 </p>
 <ol class="org-ol">
 <li>文件：相应文件类型的数目增加1
@@ -2923,7 +2933,7 @@ DIR *opendir(<span style="color: #00ffff;">const</span> <span style="color: #98f
 </li>
 <li>无法读取目录项：相应错误类型数目增加1
 </li>
-<li>无法读取stat：相应错误类型数目增加1
+<li>无法读取文件stat：相应错误类型数目增加1
 </li>
 </ol>
 <div class="org-src-container">
@@ -2967,7 +2977,7 @@ DIR *opendir(<span style="color: #00ffff;">const</span> <span style="color: #98f
 </div>
 
 <p>
-保护性拷贝输入的目录路径名，开始遍历
+myftw函数：保护性拷贝输入的目录路径名，开始遍历
 </p>
 <div class="org-src-container">
 
@@ -2985,7 +2995,7 @@ DIR *opendir(<span style="color: #00ffff;">const</span> <span style="color: #98f
 </div>
 
 <p>
-主函数入口：输入作为要遍历的目录路径名，遍历完毕后输出对应统计结果
+main函数：输入作为要遍历的目录路径名，遍历完毕后输出对应统计结果
 </p>
 <div class="org-src-container">
 
