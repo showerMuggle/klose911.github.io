@@ -256,7 +256,22 @@ for the JavaScript code in this tag.
 <li><a href="#sec-7-3-3">遍历文件层次结构</a></li>
 </ul>
 </li>
-<li><a href="#sec-7-4">chdir，fchdir函数</a></li>
+<li><a href="#sec-7-4">chdir，fchdir函数</a>
+<ul>
+<li><a href="#sec-7-4-1">chdir实例</a></li>
+</ul>
+</li>
+<li><a href="#sec-7-5">getpwd函数</a>
+<ul>
+<li><a href="#sec-7-5-1">getpwd实例</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#sec-8">设备文件</a>
+<ul>
+<li><a href="#sec-8-1">打印设备号</a></li>
+<li><a href="#sec-8-2">sync，fsync函数</a></li>
 </ul>
 </li>
 </ul>
@@ -3036,6 +3051,292 @@ main函数：输入作为要遍历的目录路径名，遍历完毕后输出对�
 
 <div id="outline-container-sec-7-4" class="outline-3">
 <h3 id="sec-7-4">chdir，fchdir函数</h3>
+<div class="outline-text-3" id="text-7-4">
+<p>
+每个进程都有一个当前工作目录，此目录是搜索所有相对路径名的起点。当用户登录到UNIX系统时，其当前工作目录通常是口令文件 
+(/etc/passwd)中该用户登录项的第6个字段(起始目录)。当前工作目录是进程的一个属性，起始目录则是登录名的一个属性 
+</p>
+
+<p>
+chdir函数组：更改当前进程的工作目录
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;unistd.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#26681;&#25454;&#30446;&#24405;&#36335;&#24452;&#21517;&#26356;&#25913;&#24403;&#21069;&#24037;&#20316;&#30446;&#24405;</span>
+
+<span style="color: #ffa07a;">   pathname&#65306;&#26356;&#25913;&#21518;&#30340;&#24403;&#21069;&#24037;&#20316;&#30446;&#24405;&#36335;&#24452;&#21517;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#36820;&#22238;0&#65292;&#33509;&#20986;&#38169;&#36820;&#22238;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">chdir</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">pathname</span>);
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#26681;&#25454;&#25991;&#20214;&#25551;&#36848;&#31526;&#26356;&#25913;&#24403;&#21069;&#24037;&#20316;&#30446;&#24405;</span>
+
+<span style="color: #ffa07a;">   pathname&#65306;&#26032;&#30340;&#24403;&#21069;&#24037;&#20316;&#30446;&#24405;&#30340;&#25991;&#20214;&#25551;&#36848;&#31526;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#36820;&#22238;0&#65292;&#33509;&#20986;&#38169;&#36820;&#22238;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">fchdir</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">filedes</span>);
+</pre>
+</div>
+</div>
+
+<div id="outline-container-sec-7-4-1" class="outline-4">
+<h4 id="sec-7-4-1">chdir实例</h4>
+<div class="outline-text-4" id="text-7-4-1">
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">void</span>)
+{
+    <span style="color: #00ffff;">if</span> (chdir(<span style="color: #ffa07a;">"/tmp"</span>) &lt; 0)
+        err_sys(<span style="color: #ffa07a;">"chdir failed"</span>);
+    printf(<span style="color: #ffa07a;">"chdir to /tmp succeeded\n"</span>);
+    exit(0);
+}
+</pre>
+</div>
+
+<p>
+测试代码：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ pwd
+/home/klose/Documents/programming/c/apue
+
+$ ./src/file_directory/chdirExample
+chdir to /tmp succeeded
+
+$ pwd
+/home/klose/Documents/programming/c/apue
+</pre>
+</div>
+<p>
+执行chdirExample程序的shell的当前工作目录并没有改变，这是因为当前工作目录是一个进程的属性，所以它只影响调用chdirExample进程本身，而不影响其他进程。因此cd命令的执行程序必须直接包含在shell程序中！ 
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-7-5" class="outline-3">
+<h3 id="sec-7-5">getpwd函数</h3>
+<div class="outline-text-3" id="text-7-5">
+<p>
+内核保持有当前工作目录的信息，所以可以取其当前值。不幸的是，内核为每个进程只保存其当前工作目录的i节点编号以及设备标识，但并不保存该目录的完整路径名
+</p>
+
+<p>
+getpwd函数：获取当前工作目录的绝对路径名
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;unistd.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#25226;&#24403;&#21069;&#24037;&#20316;&#30446;&#24405;&#32477;&#23545;&#36335;&#24452;&#21517;+null&#23383;&#31526;&#25918;&#32622;&#21040;buf&#20013;</span>
+
+<span style="color: #ffa07a;">   buf&#65306;&#25918;&#32622;&#24403;&#21069;&#24037;&#20316;&#30446;&#24405;&#32477;&#23545;&#36335;&#24452;&#21517;&#30340;&#32531;&#23384;</span>
+<span style="color: #ffa07a;">   size&#65306;buf&#32531;&#23384;&#22823;&#23567;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#20026;buf&#65292;&#33509;&#20986;&#38169;&#20026;NULL</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">char</span> *<span style="color: #87cefa;">getcwd</span>(<span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">buf</span>, <span style="color: #98fb98;">size_t</span> <span style="color: #eedd82;">size</span>);
+</pre>
+</div>
+<p>
+getpwd从当前工作目录开始，找到其上一级的目录，然后读其目录项，直到该目录项中的i节点编号数与工作目录i节点编号数相同，这样地就找到了其对应的文件。按照这种方法，逐层上移，直到遇到根，由此获得当前工作目录的绝对路径名
+</p>
+</div>
+
+<div id="outline-container-sec-7-5-1" class="outline-4">
+<h4 id="sec-7-5-1">getpwd实例</h4>
+<div class="outline-text-4" id="text-7-5-1">
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">void</span>)
+{
+    <span style="color: #98fb98;">char</span>    *<span style="color: #eedd82;">ptr</span>;
+    <span style="color: #98fb98;">int</span>     <span style="color: #eedd82;">size</span>;
+
+    <span style="color: #00ffff;">if</span> (chdir(<span style="color: #ffa07a;">"/home/klose/Applications/maven/"</span>) &lt; 0)
+        err_sys(<span style="color: #ffa07a;">"chdir failed"</span>);
+
+    ptr = path_alloc(&amp;size);    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">our own function </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #00ffff;">if</span> (getcwd(ptr, size) == <span style="color: #7fffd4;">NULL</span>)
+        err_sys(<span style="color: #ffa07a;">"getcwd failed"</span>);
+
+    printf(<span style="color: #ffa07a;">"cwd = %s\n"</span>, ptr);
+    exit(0);
+}
+</pre>
+</div>
+<p>
+测试代码：更改当前工作目录为某个连接目录，然后使用getpwd打印当前工作目录
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C">$ pwd
+/home/klose/Documents/programming/c/apue
+
+$ ./src/file_directory/getpwdExample 
+cwd = /home/klose/Applications/apache-maven-3.3.9
+</pre>
+</div>
+<p>
+注意：chdir会跟随符号连接，而getpwd函数并不支持符号连接！
+</p>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-8" class="outline-2">
+<h2 id="sec-8">设备文件</h2>
+<div class="outline-text-2" id="text-8">
+<p>
+stat结构中的st_dev和st_rdev这两个字段用来表示设备，规则如下:
+</p>
+<ul class="org-ul">
+<li>每个文件系统都由其主、次设备号，设备号所用的数据类型是dev_t
+</li>
+<li>使用两个宏major和minor来存取主、次设备号。这意味着无需关心这两个数是如何存放在dev_t对象中
+</li>
+<li>系统中每个文件名的st_dev值是文件系统的设备号
+</li>
+<li>只有字符特殊文件和块特殊文件才有st_rdev值是该实际硬件设备的设备号
+</li>
+</ul>
+</div>
+
+<div id="outline-container-sec-8-1" class="outline-3">
+<h3 id="sec-8-1">打印设备号</h3>
+<div class="outline-text-3" id="text-8-1">
+<p>
+打印普通文件的st_dev，硬盘设备和终端设备的st_rdev
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/stat.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">argc</span>, <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">argv</span>[])
+{
+    <span style="color: #98fb98;">int</span>         <span style="color: #eedd82;">i</span>;
+    <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">stat</span> <span style="color: #eedd82;">buf</span>;
+
+    <span style="color: #00ffff;">for</span> (i = 1; i &lt; argc; i++) {
+        printf(<span style="color: #ffa07a;">"%s: "</span>, argv[i]);
+        <span style="color: #00ffff;">if</span> (stat(argv[i], &amp;buf) &lt; 0) {
+            err_ret(<span style="color: #ffa07a;">"stat error"</span>);
+            <span style="color: #00ffff;">continue</span>;
+        }
+
+        printf(<span style="color: #ffa07a;">"dev = %d/%d"</span>, major(buf.st_dev),  minor(buf.st_dev));
+
+        <span style="color: #00ffff;">if</span> (S_ISCHR(buf.st_mode) || S_ISBLK(buf.st_mode)) {
+            printf(<span style="color: #ffa07a;">" (%s) rdev = %d/%d"</span>,
+                   (S_ISCHR(buf.st_mode)) ? <span style="color: #ffa07a;">"character"</span> : <span style="color: #ffa07a;">"block"</span>,
+                   major(buf.st_rdev), minor(buf.st_rdev));
+        }
+        printf(<span style="color: #ffa07a;">"\n"</span>);
+    }
+
+    exit(0);
+}
+</pre>
+</div>
+
+<p>
+测试代码
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ ./src/file_directory/printDev /home/klose/
+/home/klose/: dev = 8/6
+
+$ ./src/file_directory/printDev /dev/sda
+/dev/sda: dev = 0/6 (block) rdev = 8/0
+
+$ ./src/file_directory/printDev /dev/sda2 
+/dev/sda2: dev = 0/6 (block) rdev = 8/2
+
+ $ ./src/file_directory/printDev /dev/tty
+/dev/tty: dev = 0/6 (character) rdev = 5/0
+
+$ ./src/file_directory/printDev /dev/tty2
+/dev/tty2: dev = 0/6 (character) rdev = 4/2
+
+./src/file_directory/printDev /dev/pts/2
+/dev/pts/2: dev = 0/12 (character) rdev = 136/2
+</pre>
+</div>
+<p>
+由此可见st_dev对与任何文件而言都是文件系统的设备主次号，对于磁盘和终端等设备文件而言st_rdev包含真正设备主次号
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-8-2" class="outline-3">
+<h3 id="sec-8-2">sync，fsync函数</h3>
+<div class="outline-text-3" id="text-8-2">
+<p>
+延迟写：UNIX实现在内核中设有缓冲存储器，大多数磁盘I/O都通过缓存进行。当将数据写到文件上时，通常该数据先由内核复制到缓存中，如果该缓存尚未写满则并不将其排入输出队列，而是等待其写满或者当内核需要重用该缓存以便存放其他磁盘块数据时，再将该缓存排入输出队列，然后待其到达队首时才进行实际的I/O操作
+</p>
+
+<p>
+延迟写减少了磁盘读写次数，但是却降低了文件内容的更新速度，使得欲写到文件中的数据在一段时间内并没有写到磁盘上。当系统发生故障时，这种延迟可能造成文件更新内容的丢失
+</p>
+
+<p>
+为了保证磁盘上实际文件系统与缓存中内容的一致性，UNIX系统提供了sync和fsync两个系统调用函数
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;unistd.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#26356;&#26032;&#20869;&#26680;&#32531;&#20914;&#21306;&#20869;&#23481;&#21040;&#30913;&#30424;&#19978;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;0&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">void</span> <span style="color: #87cefa;">sync</span>(<span style="color: #98fb98;">void</span>);
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#30452;&#25509;&#26356;&#26032;&#29305;&#23450;&#25991;&#20214;&#25551;&#36848;&#31526;&#25351;&#21521;&#30340;&#25991;&#20214;&#30340;&#30913;&#30424;&#19978;&#30340;&#20869;&#23481;</span>
+
+<span style="color: #ffa07a;">   filedes&#65306;&#25991;&#20214;&#25551;&#36848;&#31526;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;0&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">fsync</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">filedes</span>);
+</pre>
+</div>
+
+<p>
+注意：fsync是执行完毕后确保文件在磁盘上的内容是最新的(比较适合实现数据库commit操作)，而如果使用O_SYNC选项打开文件，那每次write操作都会直接更新文件磁盘上的内容
+</p>
+
+<p>
+<a href="stdio.html">Next：标准I/O</a>
+</p>
+
+<p>
+<a href="file_io.html">Previous：文件I/O</a>
+</p>
+
+<p>
+<a href="apue.html">Home：目录</a>
+</p>
+</div>
 </div>
 </div>
 </div>
