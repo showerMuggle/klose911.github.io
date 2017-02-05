@@ -22,13 +22,22 @@
         ;; These are static files (images, pdf, etc)
         ("redis-static"
          :base-directory "~/Documents/programming/html/klose911.github.io/src/css" ;; Change this to your local dir
-         :base-extension "css\\|js\\|png\\|jpg\\|gif"
+         :base-extension "css"
          :publishing-directory "~/Documents/programming/html/klose911.github.io/html/redis/css"
          :recursive t
          :publishing-function org-publish-attachment
          )
 
-        ("redis" :components ("redis-notes" "redis-static"))
+	;; picture
+        ("redis-pic"
+         :base-directory "~/Documents/programming/html/klose911.github.io/src/redis/pic"  ;; Change this to your local dir
+         :base-extension "png\\|jpg\\|gif"
+         :publishing-directory "~/Documents/programming/html/klose911.github.io/html/redis/pic"
+         :recursive t
+         :publishing-function org-publish-attachment
+         )
+	
+        ("redis" :components ("redis-notes" "redis-static" "redis-pic"))
         )
       )
 
