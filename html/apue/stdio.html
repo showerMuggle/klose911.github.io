@@ -134,6 +134,48 @@ for the JavaScript code in this tag.
  }
 /*]]>*///-->
 </script>
+<script type="text/javascript" src="http://orgmode.org/mathjax/MathJax.js"></script>
+<script type="text/javascript">
+<!--/*--><![CDATA[/*><!--*/
+    MathJax.Hub.Config({
+        // Only one of the two following lines, depending on user settings
+        // First allows browser-native MathML display, second forces HTML/CSS
+        //  config: ["MMLorHTML.js"], jax: ["input/TeX"],
+            jax: ["input/TeX", "output/HTML-CSS"],
+        extensions: ["tex2jax.js","TeX/AMSmath.js","TeX/AMSsymbols.js",
+                     "TeX/noUndefined.js"],
+        tex2jax: {
+            inlineMath: [ ["\\(","\\)"] ],
+            displayMath: [ ['$$','$$'], ["\\[","\\]"], ["\\begin{displaymath}","\\end{displaymath}"] ],
+            skipTags: ["script","noscript","style","textarea","pre","code"],
+            ignoreClass: "tex2jax_ignore",
+            processEscapes: false,
+            processEnvironments: true,
+            preview: "TeX"
+        },
+        showProcessingMessages: true,
+        displayAlign: "center",
+        displayIndent: "2em",
+
+        "HTML-CSS": {
+             scale: 100,
+             availableFonts: ["STIX","TeX"],
+             preferredFont: "TeX",
+             webFont: "TeX",
+             imageFont: "TeX",
+             showMathMenu: true,
+        },
+        MMLorHTML: {
+             prefer: {
+                 MSIE:    "MML",
+                 Firefox: "MML",
+                 Opera:   "HTML",
+                 other:   "HTML"
+             }
+        }
+    });
+/*]]>*///-->
+</script>
 </head>
 <body>
 <div id="org-div-home-and-up">
@@ -164,7 +206,32 @@ for the JavaScript code in this tag.
 </li>
 <li><a href="#sec-2">流操作</a>
 <ul>
-<li><a href="#sec-2-1">打开流</a></li>
+<li><a href="#sec-2-1">打开流</a>
+<ul>
+<li><a href="#sec-2-1-1">流读写方式</a></li>
+</ul>
+</li>
+<li><a href="#sec-2-2">关闭流</a></li>
+<li><a href="#sec-2-3">读写流</a>
+<ul>
+<li><a href="#sec-2-3-1">单字符I/O</a>
+<ul>
+<li><a href="#sec-2-3-1-1">getc, fgetc, getchar函数</a></li>
+<li><a href="#sec-2-3-1-2">EOF判断</a></li>
+<li><a href="#sec-2-3-1-3">清除EOF标记</a></li>
+<li><a href="#sec-2-3-1-4">putc, fputc, putchar函数</a></li>
+<li><a href="#sec-2-3-1-5">ungetc函数</a></li>
+</ul>
+</li>
+<li><a href="#sec-2-3-2">行I/O</a>
+<ul>
+<li><a href="#sec-2-3-2-1">fgets, gets函数</a></li>
+<li><a href="#sec-2-3-2-2">fputs, puts函数</a></li>
+</ul>
+</li>
+<li><a href="#sec-2-3-3">标准I/O效率比较</a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -518,6 +585,561 @@ fflush：强制刷新一个流
 <div class="outline-text-2" id="text-2">
 </div><div id="outline-container-sec-2-1" class="outline-3">
 <h3 id="sec-2-1">打开流</h3>
+<div class="outline-text-3" id="text-2-1">
+<p>
+以下三个函数用于打开一个I/O流
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;stdio.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#26681;&#25454;&#25991;&#20214;&#36335;&#24452;&#21517;&#25171;&#24320;IO&#27969;</span>
+
+<span style="color: #ffa07a;">   pathname&#65306;&#25991;&#20214;&#36335;&#24452;&#21517;</span>
+<span style="color: #ffa07a;">   type&#65306;&#35813;I/O&#27969;&#30340;&#35835;&#12289;&#20889;&#26041;&#24335;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;&#25991;&#20214;&#25351;&#38024;&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;NULL</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">FILE</span> *<span style="color: #87cefa;">fopen</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">pathname</span>, <span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">type</span>);
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#22312;&#19968;&#20010;&#29305;&#23450;&#30340;&#27969;&#19978;&#25171;&#24320;&#19968;&#20010;&#25351;&#23450;&#30340;&#25991;&#20214;&#65292;&#22914;&#26524;&#27969;&#24050;&#32463;&#25171;&#24320;&#65292;&#37027;&#20808;&#20851;&#38381;&#27969;&#20877;&#25171;&#24320;</span>
+
+<span style="color: #ffa07a;">   pathname&#65306;&#25991;&#20214;&#36335;&#24452;&#21517;</span>
+<span style="color: #ffa07a;">   type&#65306;&#35813;I/O&#27969;&#30340;&#35835;&#12289;&#20889;&#26041;&#24335;</span>
+<span style="color: #ffa07a;">   fp&#65306;&#29305;&#23450;&#30340;&#27969;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;&#25991;&#20214;&#25351;&#38024;&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;NULL</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">FILE</span> *<span style="color: #87cefa;">freopen</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">pathname</span>, <span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">type</span>, <span style="color: #98fb98;">FILE</span> *<span style="color: #eedd82;">fp</span>);
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#26681;&#25454;&#25991;&#20214;&#25551;&#36848;&#31526;&#25171;&#24320;IO&#27969;</span>
+
+<span style="color: #ffa07a;">   filedes&#65306;&#25991;&#20214;&#25551;&#36848;&#31526;</span>
+<span style="color: #ffa07a;">   type&#65306;&#35813;I/O&#27969;&#30340;&#35835;&#12289;&#20889;&#26041;&#24335;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;&#25991;&#20214;&#25351;&#38024;&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;NULL</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">FILE</span> *<span style="color: #87cefa;">fdopen</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">filedes</span>, <span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">type</span>);
+</pre>
+</div>
+<ul class="org-ul">
+<li>fopen打开指定路径名的一个文件
+</li>
+<li>freopen在一个特定的流上打开一个指定的文件，如若该流已经打开，则先关闭该流。一般用于将一个指定的文件打开为一个预定义的流：标准输入、标准输出或标准出错
+</li>
+<li>fdopen取一个现存的文件描述符，并使一个标准的I/O流与该描述符相结合。常用于由创建管道和网络通信通道函数获得的插述符。因为这些特殊类型的文件不能用标准I/O的fopen函数打开，首先必须先调用设备专用函数以获得一个文件描述符
+</li>
+</ul>
+</div>
+<div id="outline-container-sec-2-1-1" class="outline-4">
+<h4 id="sec-2-1-1">流读写方式</h4>
+<div class="outline-text-4" id="text-2-1-1">
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 1:</span> 打开标准I/O流的type参数</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<thead>
+<tr>
+<th scope="col" class="left">type</th>
+<th scope="col" class="left">说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="left">r或rb</td>
+<td class="left">为读而打开</td>
+</tr>
+
+<tr>
+<td class="left">w或wb</td>
+<td class="left">使文件成为0长，或为写而创建</td>
+</tr>
+
+<tr>
+<td class="left">a或ab</td>
+<td class="left">添加;为在文件尾写而打开，或为写而创建</td>
+</tr>
+
+<tr>
+<td class="left">r+或r+b或rb+</td>
+<td class="left">为读和写而打开</td>
+</tr>
+
+<tr>
+<td class="left">w+或w+b或wb+</td>
+<td class="left">使文件为0长，或为读和写而打开</td>
+</tr>
+
+<tr>
+<td class="left">a+或a+b或ab+</td>
+<td class="left">为在文件尾读和写而打开或创建</td>
+</tr>
+</tbody>
+</table>
+
+
+<ul class="org-ul">
+<li>字符b作为type的一部分，使得标准I/O可以区分文本文件和二进制文件。但是UNIX并不对这两种文件进行区分，所以无意义
+</li>
+<li>在使用w或a选项时，若文件不存在则自动创建，新建文件的访问模式只能通过进程的umask限制，而无法手动指定权限
+</li>
+<li>当用字符a打开一文件后，则每次写都将数据写到文件的当前尾端处。如若有多个进程用添加方式打开了同一文件，那么每个进程的数据都将正确地写到文件中
+</li>
+<li>当以r+或者w+时，具有下列限制: 
+<ul class="org-ul">
+<li>如果中间没有fflush、fseek、fsetpos或rewind，则在输出的后面不能直接跟随输入
+</li>
+<li>如果中间没有fseek、fsetpos或rewind或者一个输出操作没有到达文件尾端，则在输入操作之后不能直接跟随输出
+</li>
+</ul>
+</li>
+<li>对于fdopen选项w不能截文件为0，而由filedes的open函数决定
+</li>
+</ul>
+
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 2:</span> 打开标准I/O流的六种方式</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<thead>
+<tr>
+<th scope="col" class="left">限制</th>
+<th scope="col" class="left">r</th>
+<th scope="col" class="left">w</th>
+<th scope="col" class="left">a</th>
+<th scope="col" class="left">r+</th>
+<th scope="col" class="left">w+</th>
+<th scope="col" class="left">a+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="left">文件必须已存在</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+</tr>
+
+<tr>
+<td class="left">文件截断为0</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+</tr>
+</tbody>
+<tbody>
+<tr>
+<td class="left">流可以读</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+<td class="left">•</td>
+<td class="left">•</td>
+</tr>
+
+<tr>
+<td class="left">流可以写</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+<td class="left">•</td>
+<td class="left">•</td>
+<td class="left">•</td>
+<td class="left">•</td>
+</tr>
+
+<tr>
+<td class="left">流只可以在尾部写</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<div id="outline-container-sec-2-2" class="outline-3">
+<h3 id="sec-2-2">关闭流</h3>
+<div class="outline-text-3" id="text-2-2">
+<p>
+fclose：关闭一个打开的流
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;stdio.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#20851;&#38381;&#19968;&#20010;&#24320;&#25171;&#30340;&#27969;</span>
+
+<span style="color: #ffa07a;">   fp&#65306;&#25991;&#20214;&#25351;&#38024;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;0&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;EOF</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">fclose</span>(<span style="color: #98fb98;">FILE</span> *<span style="color: #eedd82;">fp</span>);
+</pre>
+</div>
+<p>
+在文件被关闭之前，刷新缓存中的输出数据，缓存中的输入数据被丢弃。如果标准I/O库已经为该流自动分配了一个缓存，则释放此缓存
+</p>
+
+<p>
+当一个进程正常终止时，则所有带未写缓存数据的标准I/O流都被刷新，所有打开的标准I/O流都被关闭
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-3" class="outline-3">
+<h3 id="sec-2-3">读写流</h3>
+<div class="outline-text-3" id="text-2-3">
+<p>
+一旦打开了流，则可在三种不同类型的非格式化I/O中进行选择，对其进行读、写操作：
+</p>
+<ol class="org-ol">
+<li>每次一个字符的I/O：一次读或写一个字符
+</li>
+<li>每次一行的I/O：一次读或写一行。每行都以一个新行符终止
+</li>
+<li>直接I/O或二进制I/O：每次I/O操作读或写某种数量的对象，而每个对象具有指定的长度
+</li>
+</ol>
+</div>
+
+<div id="outline-container-sec-2-3-1" class="outline-4">
+<h4 id="sec-2-3-1">单字符I/O</h4>
+<div class="outline-text-4" id="text-2-3-1">
+<p>
+如果流是带缓存的，则标准I/O函数处理所有缓存
+</p>
+</div>
+<div id="outline-container-sec-2-3-1-1" class="outline-5">
+<h5 id="sec-2-3-1-1">getc, fgetc, getchar函数</h5>
+<div class="outline-text-5" id="text-2-3-1-1">
+<p>
+从文件流读取单个字符
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;stdio.h&gt;</span>
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#20174;&#25991;&#20214;&#25351;&#38024;&#35835;&#21462;&#19968;&#20010;&#23383;&#31526;&#65292;&#21487;&#20197;&#23454;&#29616;&#20026;&#23439;&#65292;&#25928;&#29575;&#22909;&#20110;fgetc</span>
+
+<span style="color: #ffa07a;">   fp&#65306;&#25991;&#20214;&#25351;&#38024;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;&#19979;&#19968;&#20010;&#23383;&#31526;&#65292;&#33509;&#24050;&#22788;&#25991;&#20214;&#23614;&#31471;&#25110;&#20986;&#38169;&#21017;&#20026;EOF</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">getc</span>(<span style="color: #98fb98;">FILE</span> *<span style="color: #eedd82;">fp</span>);
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#20174;&#25991;&#20214;&#25351;&#38024;&#35835;&#21462;&#19968;&#20010;&#23383;&#31526;&#65292;&#19981;&#33021;&#23454;&#29616;&#20026;&#23439;&#65292;&#25928;&#29575;&#27604;getc&#24046;</span>
+
+<span style="color: #ffa07a;">   fp&#65306;&#25991;&#20214;&#25351;&#38024;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;&#19979;&#19968;&#20010;&#23383;&#31526;&#65292;&#33509;&#24050;&#22788;&#25991;&#20214;&#23614;&#31471;&#25110;&#20986;&#38169;&#21017;&#20026;EOF</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">fgetc</span>(<span style="color: #98fb98;">FILE</span> *<span style="color: #eedd82;">fp</span>);
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#20174;&#26631;&#20934;&#36755;&#20837;&#35835;&#20837;&#19968;&#20010;&#23383;&#31526;&#65292;&#31561;&#20215;&#20110;getc(stdin)</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;&#19979;&#19968;&#20010;&#23383;&#31526;&#65292;&#33509;&#24050;&#22788;&#25991;&#20214;&#23614;&#31471;&#25110;&#20986;&#38169;&#21017;&#20026;EOF</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">getchar</span>(<span style="color: #98fb98;">void</span>);
+</pre>
+</div>
+<ul class="org-ul">
+<li>getc可以实现为宏，所以它的参数不应当是具有副作用的表达式 
+</li>
+<li>调用fgetc所需时间很可能长于调用getc，因为调用函数通常所需的时间长于调用宏
+</li>
+<li>因为fgetc一定是个函数，可以得到其地址。允许将fgetc的地址作为一个参数传送给另一个函数
+</li>
+<li>getchar()等价于getc(stdin)
+</li>
+</ul>
+
+<p>
+这三个函数以unsigned char类型转换为int的方式返回下一个字符。这样就可以返回所有可能的字符值再加上一个已发生错误或已到达文件尾端的指示值。在&lt;stdio.h&gt;中的常数EOF被要求是一个负值，其值经常是-1。所以不能返回结果是一个无符号字符，而必须是一个带符号整数
+</p>
+</div>
+</div>
+<div id="outline-container-sec-2-3-1-2" class="outline-5">
+<h5 id="sec-2-3-1-2">EOF判断</h5>
+<div class="outline-text-5" id="text-2-3-1-2">
+<p>
+不管是出错还是到达文件尾端，这三个函数都返回同样的值EOF。为了区分这两种不同的情况，必须调用ferror或feof函数：
+</p>
+
+<ul class="org-ul">
+<li>ferror函数：判断读取文件是否出错
+</li>
+<li>feop函数：判断读取文件是否结束
+</li>
+</ul>
+
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;stdio.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#35835;&#21462;&#25991;&#20214;&#26159;&#21542;&#20986;&#38169;</span>
+
+<span style="color: #ffa07a;">   fp&#65306;&#25991;&#20214;&#25351;&#38024;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#35835;&#21462;&#20986;&#38169;&#21017;&#20026;&#38750;0(&#30495;)&#65292;&#21542;&#21017;&#20026;0(&#20551;)</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">ferror</span>(<span style="color: #98fb98;">FILE</span> *<span style="color: #eedd82;">fp</span>);
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#25991;&#20214;&#26159;&#21542;&#32467;&#26463;</span>
+
+<span style="color: #ffa07a;">   fp&#65306;&#25991;&#20214;&#25351;&#38024;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25991;&#20214;&#32467;&#26463;&#21017;&#20026;&#38750;0(&#30495;)&#65292;&#21542;&#21017;&#20026;0(&#20551;)</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">feof</span>(<span style="color: #98fb98;">FILE</span> *<span style="color: #eedd82;">fp</span>);
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-3-1-3" class="outline-5">
+<h5 id="sec-2-3-1-3">清除EOF标记</h5>
+<div class="outline-text-5" id="text-2-3-1-3">
+<p>
+在大多数实现的FILE对象中，为每个流保持了两个标志:
+</p>
+<ul class="org-ul">
+<li>出错标志
+</li>
+<li>文件结束标志
+</li>
+</ul>
+
+<p>
+clearerr函数：清除这两个标志
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;stdio.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#28165;&#26970;&#25991;&#20214;&#20986;&#38169;&#21644;&#32467;&#23614;&#20004;&#20010;&#26631;&#24535;</span>
+
+<span style="color: #ffa07a;">   fp&#65306;&#25991;&#20214;&#25351;&#38024;</span>
+
+<span style="color: #ffa07a;">   &#26080;&#36820;&#22238;</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">void</span> <span style="color: #87cefa;">clearerr</span>(<span style="color: #98fb98;">FILE</span> *<span style="color: #eedd82;">fp</span>);
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-3-1-4" class="outline-5">
+<h5 id="sec-2-3-1-4">putc, fputc, putchar函数</h5>
+<div class="outline-text-5" id="text-2-3-1-4">
+<p>
+输出单个字符到文件流     
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;stdio.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#36755;&#20986;&#19968;&#20010;&#23383;&#31526;&#21040;&#27969;&#65292;&#21487;&#23454;&#29616;&#20026;&#23439;</span>
+
+<span style="color: #ffa07a;">   c&#65306;&#36755;&#20986;&#23383;&#31526;</span>
+<span style="color: #ffa07a;">   fp&#65306;&#25991;&#20214;&#25351;&#38024;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;c&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;EOF</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">putc</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">c</span>, <span style="color: #98fb98;">FILE</span> *<span style="color: #eedd82;">fp</span>);
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#36755;&#20986;&#19968;&#20010;&#23383;&#31526;&#21040;&#27969;&#65292;&#21482;&#21487;&#23454;&#29616;&#20026;&#20989;&#25968;</span>
+
+<span style="color: #ffa07a;">   c&#65306;&#36755;&#20986;&#23383;&#31526;</span>
+<span style="color: #ffa07a;">   fp&#65306;&#25991;&#20214;&#25351;&#38024;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;c&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;EOF</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">fputc</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">c</span>, <span style="color: #98fb98;">FILE</span> *<span style="color: #eedd82;">fp</span>);
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#36755;&#20986;&#19968;&#20010;&#23383;&#31526;&#21040;&#26631;&#20934;&#36755;&#20986;&#27969;&#65292;&#31561;&#20215;&#20110;putc(c, stdout)</span>
+
+<span style="color: #ffa07a;">   c&#65306;&#36755;&#20986;&#23383;&#31526;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;c&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;EOF</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">putchar</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">c</span>);
+</pre>
+</div>
+
+<ul class="org-ul">
+<li>putc可以实现为宏
+</li>
+<li>fputc只能实现为函数
+</li>
+<li>putchar(c)等价于putc(c, stdout)
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-2-3-1-5" class="outline-5">
+<h5 id="sec-2-3-1-5">ungetc函数</h5>
+<div class="outline-text-5" id="text-2-3-1-5">
+<p>
+ungetc函数：将字符压入流中
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;stdio.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#23558;&#23383;&#31526;&#21387;&#20837;&#27969;&#20013;</span>
+
+<span style="color: #ffa07a;">   c&#65306;&#21387;&#20837;&#30340;&#23383;&#31526;</span>
+<span style="color: #ffa07a;">   fp&#65306;&#25991;&#20214;&#25351;&#38024;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;c&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;EOF</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">ungetc</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">c</span>, <span style="color: #98fb98;">FILE</span> *<span style="color: #eedd82;">fp</span>);
+</pre>
+</div>
+<p>
+下次读取字符读到的就是被ungetc压入的字符。回送的字符不一定必须是上一次读到的字符。EOF不能回送。但是当已经到达文件尾端时仍可以回送一个字符。下次读将返回该字符，再次读则返回EOF。之所以能这样做的原因是一次成功的ungetc调用会清除该流的文件结束指示
+</p>
+
+<p>
+例如：读到第一个特殊字符时候，这个字符往往暂时没有用，需要先放回去，等处理完前面读出的数据后，再开始重新读
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-3-2" class="outline-4">
+<h4 id="sec-2-3-2">行I/O</h4>
+<div class="outline-text-4" id="text-2-3-2">
+</div><div id="outline-container-sec-2-3-2-1" class="outline-5">
+<h5 id="sec-2-3-2-1">fgets, gets函数</h5>
+<div class="outline-text-5" id="text-2-3-2-1">
+<p>
+从文件流读取一行到缓存区
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;stdio.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#20174;&#19968;&#20010;&#27969;&#35835;&#21462;&#19968;&#34892;&#21040;&#26368;&#22810;n-1&#20010;&#23383;&#31526;&#21040;&#32531;&#23384;&#21306;buf&#65292;&#32531;&#23384;&#21306;&#20197;null&#23383;&#31526;&#32467;&#26463;</span>
+
+<span style="color: #ffa07a;">   buf&#65306;&#32531;&#23384;&#21306;</span>
+<span style="color: #ffa07a;">   n&#65306;&#35835;&#21462;&#23383;&#31526;&#38271;&#24230;</span>
+<span style="color: #ffa07a;">   fp&#65306;&#25991;&#20214;&#25351;&#38024;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;buf&#65292;&#33509;&#24050;&#22788;&#25991;&#20214;&#23614;&#31471;&#25110;&#20986;&#38169;&#21017;&#20026;NULL</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">char</span> *<span style="color: #87cefa;">fgets</span>(<span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">buf</span>, <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">n</span>, <span style="color: #98fb98;">FILE</span> *<span style="color: #eedd82;">fp</span>);
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#20174;&#26631;&#20934;&#36755;&#20837;&#35835;&#21462;&#19968;&#34892;&#21040;&#21040;&#32531;&#23384;&#21306;buf</span>
+
+<span style="color: #ffa07a;">   buf&#65306;&#32531;&#23384;&#21306;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;buf&#65292;&#33509;&#24050;&#22788;&#25991;&#20214;&#23614;&#31471;&#25110;&#20986;&#38169;&#21017;&#20026;NULL</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">char</span> *<span style="color: #87cefa;">gets</span>(<span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">buf</span>);
+</pre>
+</div>
+
+<ul class="org-ul">
+<li>fgets函数：必须指定缓存的长度n。一直读到下一个新行符为止，但是不超过n-1个字符，读入的字符被送入缓存。该缓存以null字符结尾。如若该行包括最后一个新行符的字符数超过n-1，则只返回一个不完整的行，而且缓存总是以null字符结尾。对fgets的下一次调用会继续读该行
+</li>
+<li>gets直接从标准输入流读取，会有验证缓存区溢出的问题，缓存区也不会以null字符结尾
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-2-3-2-2" class="outline-5">
+<h5 id="sec-2-3-2-2">fputs, puts函数</h5>
+<div class="outline-text-5" id="text-2-3-2-2">
+<p>
+缓存区输出一行到文件流
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;stdio.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#36755;&#20986;&#19968;&#20010;&#20197;null&#32467;&#23614;&#30340;&#23383;&#31526;&#20018;&#21040;&#25991;&#20214;&#27969;&#65292;&#32456;&#27490;&#31526;null&#19981;&#36755;&#20986;&#65292;&#26032;&#34892;&#31526;\n&#38656;&#35201;&#21253;&#21547;&#22312;&#23383;&#31526;&#20018;&#20869;</span>
+
+<span style="color: #ffa07a;">   str&#65306;&#36755;&#20986;&#30340;&#23383;&#31526;&#20018;</span>
+<span style="color: #ffa07a;">   fp&#65306;&#25991;&#20214;&#25351;&#38024;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;&#36755;&#20986;&#30340;&#23383;&#31526;&#25968;&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;EOF</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">fputs</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">str</span>, <span style="color: #98fb98;">FILE</span> *<span style="color: #eedd82;">fp</span>);
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#36755;&#20986;&#19968;&#20010;null&#32467;&#23614;&#30340;&#23383;&#31526;&#20018;&#21040;&#26631;&#20934;&#36755;&#20986;&#27969;&#65292;&#32456;&#27490;&#31526;null&#19981;&#36755;&#20986;&#65292;&#33258;&#21160;&#22312;&#26368;&#21518;&#28155;&#21152;&#26032;&#34892;&#31526;\n</span>
+
+<span style="color: #ffa07a;">   str&#65306;&#36755;&#20986;&#30340;&#23383;&#31526;&#20018;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;&#36755;&#20986;&#30340;&#23383;&#31526;&#25968;&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;EOF</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">puts</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">str</span>);
+</pre>
+</div>
+
+<ul class="org-ul">
+<li>fputs函数：将一个以null符终止的字符串写到指定的流，终止符null不写出。必须手动在字符串包含新行符\n
+</li>
+<li>puts函数：将一个以null符终止的字符串写到标准输出，终止符null不写出。自动在最后将一个新行符\n写到标准输出
+</li>
+<li>puts函数不像gets函数那么不安全，但也最好尽量避免使用
+</li>
+</ul>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-3-3" class="outline-4">
+<h4 id="sec-2-3-3">标准I/O效率比较</h4>
+</div>
 </div>
 </div>
 </div>
