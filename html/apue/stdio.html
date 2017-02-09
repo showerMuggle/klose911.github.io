@@ -230,10 +230,21 @@ for the JavaScript code in this tag.
 </ul>
 </li>
 <li><a href="#sec-2-3-3">标准I/O效率比较</a></li>
+<li><a href="#sec-2-3-4">二进制I/O</a>
+<ul>
+<li><a href="#sec-2-3-4-1">读或写一个二进制数组</a></li>
+<li><a href="#sec-2-3-4-2">读或写一个结构</a></li>
+<li><a href="#sec-2-3-4-3">二进制I/O代码不可移植</a></li>
 </ul>
 </li>
 </ul>
 </li>
+<li><a href="#sec-2-4">定位流</a></li>
+</ul>
+</li>
+<li><a href="#sec-3">格式化I/O</a></li>
+<li><a href="#sec-4">实现细节</a></li>
+<li><a href="#sec-5">临时文件</a></li>
 </ul>
 </div>
 </div>
@@ -1139,8 +1150,256 @@ ungetc函数：将字符压入流中
 
 <div id="outline-container-sec-2-3-3" class="outline-4">
 <h4 id="sec-2-3-3">标准I/O效率比较</h4>
+<div class="outline-text-4" id="text-2-3-3">
+<p>
+用getc和putc将标准输入复制到标准输出
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">void</span>) 
+{
+    <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">c</span>;
+    <span style="color: #00ffff;">while</span> ( (c = getc(stdin)) != EOF)
+        <span style="color: #00ffff;">if</span>((putc(c, stdout)) == EOF)
+            err_sys(<span style="color: #ffa07a;">"output error"</span>);
+
+    <span style="color: #00ffff;">if</span>(ferror(stdin))
+        err_sys(<span style="color: #ffa07a;">"input error"</span>);
+
+    exit(0);
+
+}
+</pre>
+</div>
+<p>
+用fgets和fputs将标准输入复制到标准输出
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">void</span>)
+{
+    <span style="color: #98fb98;">char</span> <span style="color: #eedd82;">buf</span>[MAXLINE];
+
+    <span style="color: #00ffff;">while</span>(<span style="color: #7fffd4;">NULL</span> != fgets(buf, MAXLINE, stdin))
+        <span style="color: #00ffff;">if</span>(EOF == fputs(buf, stdout))
+            err_sys(<span style="color: #ffa07a;">"output error"</span>);
+
+    <span style="color: #00ffff;">if</span>(ferror(stdin))
+        err_sys(<span style="color: #ffa07a;">"input error"</span>);
+
+    exit(0);
+
+}
+</pre>
+</div>
+
+<p>
+表5-3中显示了对同一文件(1.5M字节，30，000行)进行操作所得的数据
+</p>
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 3:</span> 使用标准I/O例程得到的时间结果</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="right" />
+
+<col  class="right" />
+
+<col  class="right" />
+
+<col  class="right" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">函数</td>
+<td class="right">用户CPU(秒)</td>
+<td class="right">系统CPU(秒)</td>
+<td class="right">时钟时间(秒)</td>
+<td class="right">程序正文字节数</td>
+</tr>
+
+<tr>
+<td class="left">表3.1中的最佳时间</td>
+<td class="right">0.0</td>
+<td class="right">0.3</td>
+<td class="right">0.3</td>
+<td class="right">&#xa0;</td>
+</tr>
+
+<tr>
+<td class="left">fgets,fputs</td>
+<td class="right">2.2</td>
+<td class="right">0.3</td>
+<td class="right">2.6</td>
+<td class="right">184</td>
+</tr>
+
+<tr>
+<td class="left">getc,putc</td>
+<td class="right">4.3</td>
+<td class="right">0.3</td>
+<td class="right">4.8</td>
+<td class="right">384</td>
+</tr>
+
+<tr>
+<td class="left">fgetc,fputc</td>
+<td class="right">4.6</td>
+<td class="right">0.3</td>
+<td class="right">5.0</td>
+<td class="right">152</td>
+</tr>
+
+<tr>
+<td class="left">表3.1中的单字节时间</td>
+<td class="right">23.8</td>
+<td class="right">397.9</td>
+<td class="right">423.4</td>
+<td class="right">&#xa0;</td>
+</tr>
+</tbody>
+</table>
+
+<p>
+对于这三个标准I/O版本的每一个，其用户CPU时间都大于表3-1中的最佳read版本，这是因为每次读一个字符版本中有一个要执行150万次的循环，而在每次读一行的版本中有一个要执行30000次的循环。在read版本中，其循环只需执行180次(对于缓存长度为8192字节)。因为系统CPU时间都相同，所以用户CPU时间差别造成了时钟时间差别
+</p>
+
+<p>
+系统CPU时间相同的原因是因为所有这些程序对内核提出的读、写请求数相同。因此标准IO已经选择了最佳IO长度，只需要考虑fgets时最大行长度
+</p>
+
+<p>
+表5-3中的最后一列是每个main函数的文本空间字节数(由C编译产生的机器指令)。使用getc的版本在文本空间中作了getc和putc的宏代换，所以它所需使用的指令数超过了调用fgetc和fputc函数所需指令数，但是在程序中作宏代换和调用两个函数在时间上并没有多大差别
+</p>
+
+<p>
+fgetc版本较表3-1中BUFFSIZE=1的版本要快得多。两者都使用了约3百万次的函数调用，而fgetc版本的速度在用户CPU时间方面，大约是后者的5倍，而在时钟时间方面则几乎是100倍。原因是：使用read的版本执行了3百万次系统调用。而对于fgetc版本，它也执行3百万次函数调用，但是这只引起360次系统调用。系统调用与普通的函数调用相比是很花费时间的
+</p>
+
+<p>
+总而言之：标准IO与直接内核调用比起来并不慢很多，但却可以忽略不少细节！
+</p>
 </div>
 </div>
+
+<div id="outline-container-sec-2-3-4" class="outline-4">
+<h4 id="sec-2-3-4">二进制I/O</h4>
+<div class="outline-text-4" id="text-2-3-4">
+<p>
+如果想要读写某个结构，必须使用fgetc或者fputc一次读写一个字符来遍历整个结构。因为fputs在遇到null字节时就停止，而在结构中可能含有null字节，所以不能使用每次一行函数。类似地如果输入数据中包含有null字节或新行符，则fgets也不能正确工作。但是每次单个读写字符即不方便也不高效，标准I/O库提供了以下两个函数来支撑面向结构化的I/O
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;stdio.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#20174;&#25991;&#20214;&#25351;&#38024;fp&#35835;&#21462;nobj&#20010;&#35760;&#24405;&#21040;ptr&#20013;,&#20854;&#20013;&#27599;&#20010;&#35760;&#24405;&#30340;&#38271;&#24230;&#20026;size</span>
+
+<span style="color: #ffa07a;">   ptr&#65306;&#32531;&#23384;&#21306;</span>
+<span style="color: #ffa07a;">   size&#65306;&#27599;&#26465;&#35760;&#24405;&#38271;&#24230;</span>
+<span style="color: #ffa07a;">   nobj&#65306;&#35760;&#24405;&#20010;&#25968;</span>
+<span style="color: #ffa07a;">   fp&#65306;&#25991;&#20214;&#25351;&#38024;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#35835;&#30340;&#23545;&#35937;&#25968;&#65292;&#22914;&#26524;&#25968;&#37327;&#23567;&#20110;nobj&#65292;&#24212;&#36890;&#36807;feof&#25110;ferror&#21028;&#26029;&#32467;&#26524;</span>
+<span style="color: #ffa07a;"> */</span>
+<span style="color: #98fb98;">size_t</span> <span style="color: #87cefa;">fread</span>(<span style="color: #98fb98;">void</span> *<span style="color: #eedd82;">ptr</span>, <span style="color: #98fb98;">size_t</span> <span style="color: #eedd82;">size</span>, <span style="color: #98fb98;">size_t</span> <span style="color: #eedd82;">nobj</span>, <span style="color: #98fb98;">FILE</span> *<span style="color: #eedd82;">fp</span>);
+
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#20174;&#32531;&#23384;&#21306;ptr&#20013;&#21462;nobj&#20010;&#35760;&#24405;&#20889;&#21040;fp&#25351;&#21521;&#30340;&#25991;&#20214;&#27969;&#20013;&#65292;&#20854;&#20013;&#27599;&#20010;&#35760;&#24405;&#30340;&#38271;&#24230;&#20026;size</span>
+
+<span style="color: #ffa07a;">   ptr&#65306;&#32531;&#23384;&#21306;&#25351;&#38024;</span>
+<span style="color: #ffa07a;">   size&#65306;&#27599;&#26465;&#35760;&#24405;&#30340;&#38271;&#24230;</span>
+<span style="color: #ffa07a;">   nobj&#65306;&#35760;&#24405;&#30340;&#20010;&#25968;</span>
+<span style="color: #ffa07a;">   fp&#65306;&#25991;&#20214;&#25351;&#38024;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#20889;&#30340;&#25968;&#37327;&#65292;&#22914;&#26524;&#23567;&#20110;nobj&#19968;&#33324;&#26159;&#20986;&#38169;</span>
+<span style="color: #ffa07a;"> */</span>
+<span style="color: #98fb98;">size_t</span> <span style="color: #87cefa;">fwrite</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">void</span> *<span style="color: #eedd82;">ptr</span>, <span style="color: #98fb98;">size_t</span> <span style="color: #eedd82;">size</span>, <span style="color: #98fb98;">size_t</span> <span style="color: #eedd82;">nobj</span>, <span style="color: #98fb98;">FILE</span> *<span style="color: #eedd82;">fp</span>);
+</pre>
+</div>
+<p>
+fread和fwrite返回读或写的对象数。对于读，如果出错或到达文件尾端，则此数字可以少于nobj。在这种情况，应调用ferror或feof以判断究竟是那一种情况。对于写，如果返回值少于所要求的nobj，则出错
+</p>
+</div>
+
+<div id="outline-container-sec-2-3-4-1" class="outline-5">
+<h5 id="sec-2-3-4-1">读或写一个二进制数组</h5>
+<div class="outline-text-5" id="text-2-3-4-1">
+<p>
+将一个浮点数组的第2至第5个元素写至一个文件上
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #98fb98;">float</span> <span style="color: #eedd82;">data</span> [10];
+
+<span style="color: #00ffff;">if</span>(fwrite (&amp;data[2], <span style="color: #00ffff;">sizeof</span>(<span style="color: #98fb98;">float</span>), 4, fp) != 4)
+    err_sys(<span style="color: #ffa07a;">"fwrite error"</span>);
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-3-4-2" class="outline-5">
+<h5 id="sec-2-3-4-2">读或写一个结构</h5>
+<div class="outline-text-5" id="text-2-3-4-2">
+<p>
+读写自定义item结构
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #00ffff;">struct</span> 
+{
+    <span style="color: #98fb98;">short</span> <span style="color: #eedd82;">count</span>;
+    <span style="color: #98fb98;">long</span> <span style="color: #eedd82;">total</span>;
+    <span style="color: #98fb98;">char</span> <span style="color: #eedd82;">name</span>[NAMESIZE];
+} <span style="color: #eedd82;">item</span>;
+
+<span style="color: #00ffff;">if</span>(fwrite(&amp;item, <span style="color: #00ffff;">sizeof</span>(item), 1, fp) != 1)
+    err_sys(<span style="color: #ffa07a;">"fwrite error"</span>);
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-3-4-3" class="outline-5">
+<h5 id="sec-2-3-4-3">二进制I/O代码不可移植</h5>
+<div class="outline-text-5" id="text-2-3-4-3">
+<p>
+二进制I/O只能用于读已写在同一系统上的数据。其原因是:
+</p>
+<ul class="org-ul">
+<li>在一个结构中同一成员的位移量可能随编译程序和系统的不同而异(由于不同的对准要求)。某些编译程序有一选择项允许紧密包装结构(节省存储空间，而运行性能则可能有所下降)或准确对齐(以便在运行时易于存取结构中的各成员)。这意味着即使在单系统上，一个结构的二进制存放方式也可能因编译程序的选择项而不同
+</li>
+<li>用来存储多字节整数和浮点值的二进制格式在不同的系统结构间也可能不同
+</li>
+</ul>
+</div>
+</div>
+</div>
+</div>
+
+
+<div id="outline-container-sec-2-4" class="outline-3">
+<h3 id="sec-2-4">定位流</h3>
+</div>
+</div>
+
+<div id="outline-container-sec-3" class="outline-2">
+<h2 id="sec-3">格式化I/O</h2>
+</div>
+
+<div id="outline-container-sec-4" class="outline-2">
+<h2 id="sec-4">实现细节</h2>
+</div>
+
+<div id="outline-container-sec-5" class="outline-2">
+<h2 id="sec-5">临时文件</h2>
 </div>
 </div>
 <div id="postamble" class="status">

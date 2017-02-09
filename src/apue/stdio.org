@@ -343,8 +343,8 @@ clearerr函数：清除这两个标志
 + putchar(c)等价于putc(c, stdout)
   
 **** ungetc函数
-ungetc函数：将字符压入流中
-#+BEGIN_SRC C
+     ungetc函数：将字符压入流中
+     #+BEGIN_SRC C
   #include <stdio.h>
 
   /**
@@ -356,11 +356,11 @@ ungetc函数：将字符压入流中
      return：若成功则为c，若出错则为EOF
   ,*/
   int ungetc(int c, FILE *fp);
-#+END_SRC
-下次读取字符读到的就是被ungetc压入的字符。回送的字符不一定必须是上一次读到的字符。EOF不能回送。但是当已经到达文件尾端时仍可以回送一个字符。下次读将返回该字符，再次读则返回EOF。之所以能这样做的原因是一次成功的ungetc调用会清除该流的文件结束指示
-
-例如：读到第一个特殊字符时候，这个字符往往暂时没有用，需要先放回去，等处理完前面读出的数据后，再开始重新读
-
+     #+END_SRC
+     下次读取字符读到的就是被ungetc压入的字符。回送的字符不一定必须是上一次读到的字符。EOF不能回送。但是当已经到达文件尾端时仍可以回送一个字符。下次读将返回该字符，再次读则返回EOF。之所以能这样做的原因是一次成功的ungetc调用会清除该流的文件结束指示
+     
+     例如：读到第一个特殊字符时候，这个字符往往暂时没有用，需要先放回去，等处理完前面读出的数据后，再开始重新读
+     
 *** 行I/O
     
 **** fgets, gets函数
@@ -422,3 +422,129 @@ ungetc函数：将字符压入流中
 + puts函数不像gets函数那么不安全，但也最好尽量避免使用
   
 *** 标准I/O效率比较
+    用getc和putc将标准输入复制到标准输出
+    #+BEGIN_SRC C
+  #include "apue.h"
+
+  int main(void) 
+  {
+          int c;
+          while ( (c = getc(stdin)) != EOF)
+                  if((putc(c, stdout)) == EOF)
+                          err_sys("output error");
+
+          if(ferror(stdin))
+                  err_sys("input error");
+
+          exit(0);
+          
+  }
+    #+END_SRC
+    用fgets和fputs将标准输入复制到标准输出
+    #+BEGIN_SRC C
+  #include "apue.h"
+
+  int main(void)
+  {
+          char buf[MAXLINE];
+
+          while(NULL != fgets(buf, MAXLINE, stdin))
+                  if(EOF == fputs(buf, stdout))
+                          err_sys("output error");
+
+          if(ferror(stdin))
+                  err_sys("input error");
+
+          exit(0);
+          
+  }
+    #+END_SRC
+    
+    表5-3中显示了对同一文件(1.5M字节，30，000行)进行操作所得的数据
+    #+CAPTION: 使用标准I/O例程得到的时间结果
+    #+ATTR_HTML: :border 1 :rules all :frame boader
+    | 函数              | 用户CPU(秒) | 系统CPU(秒) | 时钟时间(秒) | 程序正文字节数 |
+    | 表3.1中的最佳时间 | 0.0         | 0.3         | 0.3          |                |
+    | fgets,fputs    | 2.2         | 0.3         | 2.6          | 184            |
+    | getc,putc         | 4.3         | 0.3         | 4.8          | 384            |
+    | fgetc,fputc       | 4.6         | 0.3         | 5.0          | 152            |
+    | 表3.1中的单字节时间 | 23.8        | 397.9       | 423.4        |                |
+    
+    对于这三个标准I/O版本的每一个，其用户CPU时间都大于表3-1中的最佳read版本，这是因为每次读一个字符版本中有一个要执行150万次的循环，而在每次读一行的版本中有一个要执行30000次的循环。在read版本中，其循环只需执行180次(对于缓存长度为8192字节)。因为系统CPU时间都相同，所以用户CPU时间差别造成了时钟时间差别
+    
+    系统CPU时间相同的原因是因为所有这些程序对内核提出的读、写请求数相同。因此标准IO已经选择了最佳IO长度，只需要考虑fgets时最大行长度
+    
+    表5-3中的最后一列是每个main函数的文本空间字节数(由C编译产生的机器指令)。使用getc的版本在文本空间中作了getc和putc的宏代换，所以它所需使用的指令数超过了调用fgetc和fputc函数所需指令数，但是在程序中作宏代换和调用两个函数在时间上并没有多大差别
+    
+    fgetc版本较表3-1中BUFFSIZE=1的版本要快得多。两者都使用了约3百万次的函数调用，而fgetc版本的速度在用户CPU时间方面，大约是后者的5倍，而在时钟时间方面则几乎是100倍。原因是：使用read的版本执行了3百万次系统调用。而对于fgetc版本，它也执行3百万次函数调用，但是这只引起360次系统调用。系统调用与普通的函数调用相比是很花费时间的
+    
+    总而言之：标准IO与直接内核调用比起来并不慢很多，但却可以忽略不少细节！
+    
+*** 二进制I/O
+    如果想要读写某个结构，必须使用fgetc或者fputc一次读写一个字符来遍历整个结构。因为fputs在遇到null字节时就停止，而在结构中可能含有null字节，所以不能使用每次一行函数。类似地如果输入数据中包含有null字节或新行符，则fgets也不能正确工作。但是每次单个读写字符即不方便也不高效，标准I/O库提供了以下两个函数来支撑面向结构化的I/O
+    #+BEGIN_SRC C
+  #include <stdio.h>
+
+  /**
+     从文件指针fp读取nobj个记录到ptr中,其中每个记录的长度为size
+
+     ptr：缓存区
+     size：每条记录长度
+     nobj：记录个数
+     fp：文件指针
+
+     return：读的对象数，如果数量小于nobj，应通过feof或ferror判断结果
+   ,*/
+  size_t fread(void *ptr, size_t size, size_t nobj, FILE *fp);
+
+
+  /**
+     从缓存区ptr中取nobj个记录写到fp指向的文件流中，其中每个记录的长度为size
+
+     ptr：缓存区指针
+     size：每条记录的长度
+     nobj：记录的个数
+     fp：文件指针
+
+     return：写的数量，如果小于nobj一般是出错
+   ,*/
+  size_t fwrite(const void *ptr, size_t size, size_t nobj, FILE *fp);
+    #+END_SRC
+    fread和fwrite返回读或写的对象数。对于读，如果出错或到达文件尾端，则此数字可以少于nobj。在这种情况，应调用ferror或feof以判断究竟是那一种情况。对于写，如果返回值少于所要求的nobj，则出错
+    
+**** 读或写一个二进制数组
+     将一个浮点数组的第2至第5个元素写至一个文件上
+     #+BEGIN_SRC C
+  float data [10];
+
+  if(fwrite (&data[2], sizeof(float), 4, fp) != 4)
+          err_sys("fwrite error");
+     #+END_SRC
+     
+**** 读或写一个结构
+读写自定义item结构
+     #+BEGIN_SRC C
+    struct 
+    {
+            short count;
+            long total;
+            char name[NAMESIZE];
+    } item;
+
+    if(fwrite(&item, sizeof(item), 1, fp) != 1)
+            err_sys("fwrite error");
+     #+END_SRC
+     
+**** 二进制I/O代码不可移植
+     二进制I/O只能用于读已写在同一系统上的数据。其原因是:
++ 在一个结构中同一成员的位移量可能随编译程序和系统的不同而异(由于不同的对准要求)。某些编译程序有一选择项允许紧密包装结构(节省存储空间，而运行性能则可能有所下降)或准确对齐(以便在运行时易于存取结构中的各成员)。这意味着即使在单系统上，一个结构的二进制存放方式也可能因编译程序的选择项而不同
++ 用来存储多字节整数和浮点值的二进制格式在不同的系统结构间也可能不同
+
+
+** 定位流
+
+* 格式化I/O
+
+* 实现细节
+
+* 临时文件
