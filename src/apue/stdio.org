@@ -542,8 +542,174 @@ clearerr函数：清除这两个标志
 
 
 ** 定位流
+有两种方法定位标准I/O流：
+1. ftell和fseek：假定文件的位置可以存放在一个long变量中，适用于Unix系统
+2. fgetpos和fsetpos：由ANSIC引入，通过一个新的抽象数据类型fpos_t来记录文件的位置。在非UNIX系统中这种数据类型可以定义为记录一个文件的位置所需的长度
 
+需要移植到非UNIX系统上运行的应用程序应当使用fgetpos和fsetpos 
+*** Unix
++ ftell函数：返回文件流当前位置
++ fseek函数：设置文件流当前位置
++ frewind函数：重置文件流当前位置
+    #+BEGIN_SRC C
+      #include <stdio.h>
+
+      /**
+         返回当前在文件流中的位置，以long为步长
+
+         fp：文件指针
+
+         return：若成功则为当前文件位置指示，若出错则为-1L
+      ,*/
+      long ftell(FILE *fp);
+
+      /**
+         以whence指定的起始位置，将当前位置重新定位在offset处
+
+         fp：文件指针
+         offset：步长
+         whence：初始位置(SEEK_SET：文件开头，SEEK_CUR：当前位置，SEEK_END：文件末尾) 
+
+         return：返回:若成功则为0，若出错则为非0
+      ,*/
+      int fseek(FILE *fp, long offset, int whence);
+
+
+      /**
+         复位当前位置到文件开头
+
+         fp：文件指针
+
+         return：无返回值
+      ,*/
+      void rewind(FILE *fp);
+    #+END_SRC
+
+*** ANSI
++ fgetpos：获取文件流当前位置
++ fsetpos：设置文件流当前位置
+#+BEGIN_SRC C
+  #include <stdio.h>
+
+  /**
+     将文件流的当前位置存到pos对象中
+
+     fp：文件指针
+     pos：文件位置结构指针
+
+     return：若成功则为0，若出错则为非0
+  ,*/
+  int fgetpos(FILE *fp, fpos_t *pos);
+
+  /**
+     将文件流当前位置设置为pos对象表达的位置
+
+     fp：文件流指针
+     pos：文件位置结构指针
+
+     return：若成功则为0，若出错则为非0   
+  ,*/
+  int fsetpos(FILE *fp, const fpost_t *pos);
+#+END_SRC
 * 格式化I/O
+可以使用的格式化标记可参考K&R编写的The C Programming Language一书，典型的使用包括%4d, %3.2f, %*.3f等...
+** 格式化输出
++ printf函数：格式化字符串输出到标准输出流
++ fprintf函数：格式化字符串输出到文件流
++ sprintf函数：格式化字符串输出到缓存区，在缓存区的尾端会自动加一个null字节，但该字节不包括在返回值中
+   #+BEGIN_SRC C
+     #include <stdio.h>
+
+     /**
+        格式化字符串format输出到标准输出stdout
+
+        format：输出格式
+
+        return：若成功则为输出字符数，若出错则为负值
+     ,*/
+     int printf(const char *format, ...);
+
+     /**
+        格式化字符串format输出到文件流fp
+
+        fp：文件指针
+        format：输出字符串格式
+        
+        若成功则为输出字符数,若输出出错则为负值
+     ,*/
+     int fprintf(FILE *fp, const char *format, ...);
+
+     /**
+        格式化字符串format输出到缓存区buf
+
+        buf：缓存区
+        format：输出字符串格式
+
+        return：存入数组的字符数
+     ,*/
+     int sprintf(char *buf, const char *format, ...);
+   #+END_SRC
+注意：sprintf可能会造成由buf指向的缓存区溢出，保证该缓存有足够长度是调用者的责任！ 
+*** 可变参数列表版本
+    #+BEGIN_SRC C
+      #include<stdarg.h>
+      #include<stdio.h>
+
+      int vprintf(const char *format, va_list arg);
+
+      int vfprintf(FILEfp,*const char* format, va_list arg);
+
+      int vsprintf(char *buf, const char* format, va_list arg);
+    #+END_SRC
+** 格式化输入
++ scanf函数：从标准输入流读取格式化的字符串
++ fscanf函数：从文件流读取格式化的字符串
++ sscanf函数：从缓存区读取格式化的字符串
+   #+BEGIN_SRC C
+     #include<stdio.h>
+
+     /**
+        从标准输入流stdin读取format格式的字符串
+
+        format：输入字符串格式
+
+        return：成功则返回指定的输入项数,　若出错或在任意变换前已至文件尾端则为EOF
+     ,*/
+     int scanf(const　char* format, ...);
+
+     /**
+        从文件流fp读取format格式的字符串
+
+        fp：文件指针
+        format：输入字符串格式
+        
+        return：成功则返回指定的输入项数,　若出错或在任意变换前已至文件尾端则为EOF
+     ,*/
+     int fscanf(FILE* fp, const char* format, ...);
+
+     /**
+        从字符缓存区buf读取format格式的字符串
+
+        buf：字符缓存区
+        format：输入字符串格式
+
+        return：成功则返回指定的输入项数,　若出错或在任意变换前已至文件尾端则为EOF
+     ,*/
+     int sscanf(const char* buf, const char* format, ...);
+   #+END_SRC
++ 使用时应输入必须和格式化的字符串匹配，否则第一个不匹配的字符后面的部分将被直接丢弃！
++ 空白字符(空格、制表符等)均归为转义符'\s';
+*** 可变参数列表版本
+    #+BEGIN_SRC C
+      #include <stdarg.h>
+      #include <stdio.h>
+
+      int vscanf(char *format, va_list arg);
+ 
+      int vfscanf(FILE *fp, const char *format, va_list arg); 
+
+      int vsscanf(char *buf, const char *format, va_list arg);
+    #+END_SRC
 
 * 实现细节
 
