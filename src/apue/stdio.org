@@ -1,6 +1,6 @@
 #+TITLE: 标准IO
 #+HTML_HEAD: <link rel="stylesheet" type="text/css" href="css/main.css" />
-#+HTML_LINK_UP: standard.html   
+#+HTML_LINK_UP: file_directory.html   
 #+HTML_LINK_HOME: apue.html
 #+OPTIONS: num:nil timestamp:nil ^:nil *:nil
 本章说明标准I/O库。因为不仅在UNIX而且在很多操作系统上都实现此库，所以它由ANSIC标准说明。标准I/O库处理很多细节，例如缓存分配，以优化长度执行I/O等。标准I/O库是在系统调用函数基础上构造的 
@@ -712,5 +712,228 @@ clearerr函数：清除这两个标志
     #+END_SRC
 
 * 实现细节
+想要了解所使用的系统中标准I/O库的实现，最好从头文件<stdio.h>开始。从中可以看到：
++ FILE对象是如何定义的
++ 每个流标志的定义
++ 定义为宏的各个标准I/O例程(比如getc等) 
 
+在UNIX中，标准I/O库最终都要调用第3章中说明的I/O例程，每个I/O流都有一个与其相关联的文件描述符
+** fileno
+fileno函数：获得某个文件流相关联的文件描述符
+#+BEGIN_SRC C
+  #include <stdio.h>
+  /**
+     获得某个文件流相关联的文件描述符
+
+     fp：文件指针
+
+     return：与该流相关联的文件描述符
+  ,*/
+  int fileno(FILE *fp);
+#+END_SRC
+如果要调用dup或fcntl等函数，需要fileno函数
+*** 实例
+为三个标准流以及一个与一个普通文件相关联的流打印有关缓存状态信息
+
+注意：在打印缓存状态信息之前，先对每个流执行I/O操作，因为第一个I/O操作通常就造成为该流分配缓存。结构成员_flag、_bufsiz以及常数_IONBF和_IOLBF是由所使用的系统定义的
+    #+BEGIN_SRC C
+      #include "apue.h"
+
+      void pr_stdio(const char *, FILE *);
+
+      int main(void) 
+      {
+              FILE *fp;
+              fputs("enter any characters\n", stdout);
+              if(EOF == getchar() )
+                      err_sys("getchar error");
+              
+              fputs("one line to standard error\n", stderr);
+
+              pr_stdio("stdin", stdin);
+              pr_stdio("stdout", stdout);
+              pr_stdio("stderr", stderr);
+
+              if(NULL == (fp = fopen("/etc/man.conf", "r")) )
+                      err_sys("fopen error");
+              if(EOF == getc(fp) )
+                      err_sys("getc error");
+
+              pr_stdio("/etc/man.conf", fp);
+
+              exit(0);
+              
+      }
+
+      void pr_stdio(const char *name, FILE *fp)
+      {
+              printf("stream= %s ", name);
+
+              if(fp->_flags & _IONBF)
+                      printf("unbuffered");
+              else if(fp->_flags & _IOLBF)
+                      printf("line buffered");
+              else
+                      printf("fully buffered");
+
+              printf(", buffer size = %d\n", (fp->_IO_buf_end - fp->_IO_buf_base));
+              
+      }
+    #+END_SRC
+运行程序两次，一次使三个标准流与终端相连接，另一次使它们都重定向到普通文件，则所得结果是:
+#+BEGIN_SRC sh
+  #stdin, stdout 和stderr都连至终端
+  klose@gentoo ~/Documents/programming/c/apue $ ./src/stdio/printfExample
+  enter any characters 
+  #键入新行符号
+  one line to standard error
+  stream= stdin fully buffered, buffer size = 1024
+  stream= stdout fully buffered, buffer size = 1024
+  stream= stderr unbuffered, buffer size = 1
+  stream= /etc/man.conf fully buffered, buffer size = 4096
+
+  #三个流都重定向到文件
+  klose@gentoo ~/Documents/programming/c/apue $ ./src/stdio/printfExample < /etc/profile > std.out 2> std.err　
+  klose@gentoo ~/Documents/programming/c/apue $ ls -l std.out std.err 
+  -rw-r--r-- 1 klose klose  27 Feb 12 21:30 std.err
+  -rw-r--r-- 1 klose klose 220 Feb 12 21:30 std.out
+
+  klose@gentoo ~/Documents/programming/c/apue $ cat std.out  
+  enter any characters
+  stream= stdin fully buffered, buffer size = 4096
+  stream= stdout fully buffered, buffer size = 4096
+  stream= stderr unbuffered, buffer size = 1
+  stream= /etc/man.conf fully buffered, buffer size = 4096
+
+  klose@gentoo ~/Documents/programming/c/apue $ cat std.err 
+  one line to standard error
+#+END_SRC
 * 临时文件
+** tmpnam, tmpfile
+标准I/O库提供了以下两个函数用来创建临时文件：
++ tmpnam：产生临时文件名
++ tmpfile：产生临时文件
+  #+BEGIN_SRC C
+    #include <stdio.h>
+
+    /**
+       产生一个与现在文件名不同的一个有效路径名的字符串，若ptr为NULL则存放在一个全局静态缓存区，反之保存在ptr内
+
+       ptr：存放临时文件名的缓存区
+
+       return：指向一唯一路径名的指针
+    ,*/
+    char *tmpnam(char *ptr);
+
+    /**
+       创建一个临时二进制文件(类型wb+)，在关闭该文件或程序结束时将自动删除这种文件
+
+       return：若成功则为文件指针，若出错则为NULL
+    ,*/
+    FILE *tmpfile(void);
+  #+END_SRC
+每次调用tmpnam时，它都产生一个不同的路径名，最多调用次数是TMP_MAX常量。如果ptr是NULL，则所产生的路径名存放在一个静态区中，指向该静态区的指针作为函数值返回。下一次再调用tmpnam时会重写该静态区。如果ptr不是NULL，则认为它指向长度至少是L_tmpnam个字符的数组，所产生的路径名存放在该数组中，ptr也作为函数值返回
+
+tmpfile创建一个临时二进制文件(类型wb+)，在关闭该文件或程序结束时将自动删除这种文件
+
+tmpfile函数的实现是先调用tmpnam产生一个唯一的路径名，然后立即unlink它
+*** 实例
+    #+BEGIN_SRC C
+      #include "apue.h"
+
+      int main(void)
+      {
+              char name[L_tmpnam], line[MAXLINE];
+              FILE *fp;
+
+              printf("%s\n", tmpnam(NULL) );
+
+              tmpnam(name);
+              printf("%s\n", name);
+
+              if(NULL == (fp = tmpfile() ) )
+                      err_sys("tempfile error");
+
+              fputs("Hello World\n", fp);
+              rewind(fp);
+              if(NULL == (fgets(line, sizeof(line), fp) ) )
+                      err_sys("fgets error");
+              fputs(line, stdout);
+
+              exit(0);
+              
+      }
+    #+END_SRC
+测试代码：
+    #+BEGIN_SRC sh
+      klose@gentoo ~/Documents/programming/c/apue $ ./src/stdio/tempfileExample 
+      /tmp/fileO0xmAZ
+      /tmp/fileN1WvPl
+      Hello World
+    #+END_SRC
+** tempnam
+tempnam函数：tmpnam的一个变体，允许调用者为所产生的路径名指定目录和前缀  
+    #+BEGIN_SRC C
+      #include <stdio.h>
+
+      /**
+         允许调用者为所产生的路径名指定目录和前缀
+
+         directory：文件目录名
+         prefix：文件前缀名，最多具有5个字符
+
+         return：指向一唯一路径名的指针
+      ,*/
+      char *tempnam(const char *directory, const char *prefix);
+    #+END_SRC
+对于目录有四种不同的选择，使用第一个条件为真的作为目录:
+1. 如果定义了环境变量TMPDIR，则用其作为目录
+2. 如果参数directory非NULL，则用其作为目录
+3. 将<stdio.h>中的字符串P_tmpdir用作为目录
+4. 将本地目录，通常是/tmp，用作为目录
+
+如果prefix非NULL，则它应该是最多包含5个字符的字符串，用其作为文件名的头几个字符
+*** 实例
+根据输入目录名和前缀名打印产生的临时文件名
+    #+BEGIN_SRC C
+      #include "apue.h"
+
+      int main(int argc, char *argv[])
+      {
+              if(argc != 3)
+                      err_quit("usage tempfileName: <directory> <prefix>");
+
+              printf("%s\n", tempnam(argv[1][0] != ' ' ? argv[1] : NULL,
+                                     argv[2][0] != ' ' ? argv[2] : NULL));
+
+              exit(0);
+      }
+    #+END_SRC
+测试代码:
+#+BEGIN_SRC sh
+  #指定目录和前缀
+  $ ./src/stdio/tempfileName ~/tmp/ temp
+  /home/klose/tmp/tempKcMUjW
+
+  #使用默认目录：P_tmpdir
+  $ ./src/stdio/tempfileName " " PFX
+  /tmp/PFXK8lxrK
+
+  #使用环境变量，无前缀
+  $ TMPDIR=/usr/tmp ./src/stdio/tempfileName  /tmp " "
+  /usr/tmp/file2UoOUE
+
+  #忽略无效的环境变量
+  $ TMPDIR=/no/such/file ./src/stdio/tempfileName  " " QQQQ
+  /tmp/QQQQTL3shI
+
+  #忽略无效的环境变量和目录设置
+  $ TMPDIR=/no/such/directory ./src/stdio/tempfileName  /no/such/file QQQQ
+  /tmp/QQQQSSmQeI
+#+END_SRC
+
+[[file:system_file.org][Next：系统文件]]
+
+[[file:file_directory.org][Previous：文件和目录]]
+
+[[file:apue.org][Home：目录]]
