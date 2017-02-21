@@ -146,13 +146,480 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#sec-1">口令文件</a></li>
+<li><a href="#sec-1">passwd文件</a>
+<ul>
+<li><a href="#sec-1-1">getpwuid, getpwnam</a></li>
+<li><a href="#sec-1-2">getpwent,setpwent,endpwent</a>
+<ul>
+<li><a href="#sec-1-2-1">getpwnam的简易实现</a></li>
+</ul>
+</li>
+<li><a href="#sec-1-3">shadow文件</a></li>
+</ul>
+</li>
+<li><a href="#sec-2">group文件</a>
+<ul>
+<li><a href="#sec-2-1">getgrgid, getgrnam</a></li>
+<li><a href="#sec-2-2">getgrent, setgrent, endgrent</a></li>
+<li><a href="#sec-2-3">附加组ID</a></li>
+</ul>
+</li>
+<li><a href="#sec-3">其他数据文件</a></li>
 </ul>
 </div>
 </div>
+<p>
+有很多操作需要使用一些与系统有关的数据文件，例如，口令文件/etc/passwd和组文件/etc/group就是经常由多种程序使用的两个文件。用户每次登录入UNIX系统，以及每次执行ls -l命令时都要使用口令文件。对于这些数据文件的可移植界面是本章的主题。本章也包括了系统标识函数、时间和日期函数等
+</p>
 
 <div id="outline-container-sec-1" class="outline-2">
-<h2 id="sec-1">口令文件</h2>
+<h2 id="sec-1">passwd文件</h2>
+<div class="outline-text-2" id="text-1">
+<p>
+UNIX口令文件包含了表6-1中所示的各字段，这些字段包含在&lt;pwd.h&gt;中定义的passwd结构中
+</p>
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 1:</span> /etc/passwd文件中的字段</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">说明</td>
+<td class="left">struct passwd成员</td>
+<td class="left">POSIX.1</td>
+</tr>
+
+<tr>
+<td class="left">用户名</td>
+<td class="left">char *pw_name</td>
+<td class="left">•</td>
+</tr>
+
+<tr>
+<td class="left">加密口令</td>
+<td class="left">char *pw_passwd</td>
+<td class="left">&#xa0;</td>
+</tr>
+
+<tr>
+<td class="left">数值用户ID</td>
+<td class="left">uid_t pw_uid</td>
+<td class="left">•</td>
+</tr>
+
+<tr>
+<td class="left">数值组ID</td>
+<td class="left">gid_t pw_gid</td>
+<td class="left">•</td>
+</tr>
+
+<tr>
+<td class="left">注释字段</td>
+<td class="left">char *pw_gecos</td>
+<td class="left">&#xa0;</td>
+</tr>
+
+<tr>
+<td class="left">初始工作目录</td>
+<td class="left">char *pw_dir</td>
+<td class="left">•</td>
+</tr>
+
+<tr>
+<td class="left">初始shell</td>
+<td class="left">char *pw_shell</td>
+<td class="left">•</td>
+</tr>
+</tbody>
+</table>
+
+
+<p>
+口令文件是/etc/passwd，这是是一个文本文件。每一行包含表6-1中所示的7个字段，字段之间用冒号相分隔
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">$ cat /etc/passwd
+
+root:jheVopR58x9Fx:0:1:The superuser:/:/bin/sh
+nobody:*:65534:65534::/:
+stevens:3hKVD8R58r9Fx:224:20:Richard Stevens:/home/stevens:/bin/ksh
+</pre>
+</div>
+
+<ul class="org-ul">
+<li>通常有一个登录项，其用户名为root，其用户ID是0(超级用户)
+</li>
+<li>现代的Unix系统此文件往往不包含加密后的密码，而是存放在/etc/shadow中
+</li>
+<li>口令文件中的某些字段可能是空。如果密码口令字段为空，这通常就意味着该用户没有口令。nobody有两个空白字段：注释字段和初始shell字段。空白注释字段不产生任何影响。空白shell字段则表示取系统默认值，通常是/bin/bash
+</li>
+<li>支持finger(1)命令的某些UNIX系统支持注释字段中的附加信息。其中，各部分之间都用逗号分隔：用户姓名，办公室地点，办公室电话号码，家庭电话号码
+</li>
+<li>如果里面注册的某个用户只打算用于守护进程之类而不打算给予登录shell,应将其Home目录字段设置为/dev/null 或者/bin/false等
+</li>
+</ul>
+</div>
+
+<div id="outline-container-sec-1-1" class="outline-3">
+<h3 id="sec-1-1">getpwuid, getpwnam</h3>
+<div class="outline-text-3" id="text-1-1">
+<ul class="org-ul">
+<li>getpwuid：根据用户id获取passwd记录
+</li>
+<li>getpwnam：根据用户登录名获取passwd记录
+</li>
+</ul>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;pwd.h&gt;</span>
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#26681;&#25454;&#29992;&#25143;id&#33719;&#21462;passwd&#35760;&#24405;</span>
+
+<span style="color: #ffa07a;">   uid&#65306;&#29992;&#25143;id</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;&#25351;&#21521;passwd&#32467;&#26500;&#30340;&#25351;&#38024;&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;NULL</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">passwd</span> *<span style="color: #87cefa;">getpwuid</span>(<span style="color: #98fb98;">uid_t</span> <span style="color: #eedd82;">uid</span>);
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#26681;&#25454;&#29992;&#25143;&#30331;&#24405;&#21517;&#33719;&#21462;passwd&#35760;&#24405;</span>
+
+<span style="color: #ffa07a;">   name&#65306;&#29992;&#25143;&#30331;&#24405;&#21517;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;&#25351;&#21521;passwd&#32467;&#26500;&#30340;&#25351;&#38024;&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;NULL</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">passwd</span> *<span style="color: #87cefa;">getpwnam</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">name</span>);
+</pre>
+</div>
+<p>
+这两个函数都返回一个指向passwd结构的指针，该结构通常是在相关函数内的静态变量，只要调用相关函数，其内容就会被重写!
+</p>
+
+<p>
+getpwuid由ls(1)程序使用，以便将包含在一个i节点中的数值用户ID映照为用户登录名。getpwnam在键入登录名时由login(1)程序使用
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-1-2" class="outline-3">
+<h3 id="sec-1-2">getpwent,setpwent,endpwent</h3>
+<div class="outline-text-3" id="text-1-2">
+<p>
+有些程序要查看整个口令文件。下列三个函数则可用于此：
+</p>
+<ul class="org-ul">
+<li>getpwent：返回passwd文件下一个记录项
+</li>
+<li>setpwent：重置getpwent的当前位置到最开始
+</li>
+<li>endpwent：关闭getpwent打开的文件
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;pwd.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#36820;&#22238;passwd&#25991;&#20214;&#19979;&#19968;&#20010;&#35760;&#24405;&#39033;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;&#25351;&#21521;passwd&#32467;&#26500;&#30340;&#25351;&#38024;&#65292;&#33509;&#20986;&#38169;&#25110;&#21040;&#36798;&#25991;&#20214;&#23614;&#31471;&#21017;&#20026;NULL</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">passwd</span> *<span style="color: #87cefa;">getpwent</span>(<span style="color: #98fb98;">void</span>);
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#37325;&#32622;getpwent&#30340;&#24403;&#21069;&#20301;&#32622;&#21040;&#26368;&#24320;&#22987;</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">void</span> <span style="color: #87cefa;">setpwent</span>(<span style="color: #98fb98;">void</span>);
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#20851;&#38381;getpwent&#25171;&#24320;&#30340;&#25991;&#20214;</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">void</span> <span style="color: #87cefa;">endpwent</span>(<span style="color: #98fb98;">void</span>);
+</pre>
+</div>
+</li>
+</ul>
+<p>
+在使用getpwent查看完口令文件后，一定要调用endpwent关闭这些文件。getpwent知道什么时间它应当打开它所使用的文件，但是它并不能知道何时关闭这些文件
+</p>
+</div>
+
+<div id="outline-container-sec-1-2-1" class="outline-4">
+<h4 id="sec-1-2-1">getpwnam的简易实现</h4>
+<div class="outline-text-4" id="text-1-2-1">
+<p>
+在开始处调用setpwent是保护性的措施，以便在调用者在此之前已经调用过getpwent的情况下，重置有关文件使它们定位到文件开始处。getpwnam和getpwuid完成后不应使有关文件仍处于打开状态，所以应调用endpwent关闭它们
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;pwd.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;stddef.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;string.h&gt;</span>
+
+<span style="color: #00ffff;">static</span> <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">passwd</span> *<span style="color: #87cefa;">retrievePasswd</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">name</span>);
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">void</span>) 
+{
+    <span style="color: #98fb98;">char</span> <span style="color: #eedd82;">name</span>[] = <span style="color: #ffa07a;">"klose"</span>;
+    <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">passwd</span> *<span style="color: #eedd82;">ptr</span>;
+    ptr = retrievePasswd(name);
+
+    <span style="color: #00ffff;">if</span>(<span style="color: #7fffd4;">NULL</span> == ptr)
+        err_sys(<span style="color: #ffa07a;">"error retrieve passwd entry"</span>);
+
+    printf(<span style="color: #ffa07a;">"work directory %s\n"</span>, ptr-&gt;pw_dir);
+    printf(<span style="color: #ffa07a;">"login shell  %s\n"</span>, ptr-&gt;pw_shell);
+
+    exit(0);
+
+}
+
+<span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">passwd</span> *<span style="color: #87cefa;">retrievePasswd</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">name</span>)
+{
+    <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">passwd</span> *<span style="color: #eedd82;">ptr</span>;
+    setpwent();
+
+    <span style="color: #00ffff;">while</span>((ptr = getpwent()) != <span style="color: #7fffd4;">NULL</span>)
+        <span style="color: #00ffff;">if</span>(0 == strcmp(name, ptr-&gt;pw_name) )
+            <span style="color: #00ffff;">break</span>;
+
+    endpwent();
+    <span style="color: #00ffff;">return</span> ptr;
+
+}
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-1-3" class="outline-3">
+<h3 id="sec-1-3">shadow文件</h3>
+<div class="outline-text-3" id="text-1-3">
+<p>
+某些系统将加密口令存放在另一个通常称为阴影口令shadow的文件中。该文件至少要包含用户名和加密口令。与该口令相关的其他信息也可存放在该文件中。例如，具有阴影口令的系统经常要求用户在一定时间间隔后选择一个新口令，这被称之为口令时效，选择新口令的时间间隔长度经常也存放在阴影口令文件中
+</p>
+
+<p>
+阴影口令文件不应是一般用户可以读取的。仅有少数几个程序需要存取加密口令文件，例如login(1)和passwd(1)，这些程序常常设置-用户-ID为root。有了阴影口令后，普通口令文件/etc/passwd可由各用户自由读取
+</p>
+
+<p>
+shadow文件相关接口：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;shadow.h&gt;</span>
+
+<span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">spwd</span> *<span style="color: #87cefa;">getspnam</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">name</span>);
+<span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">spwd</span> *<span style="color: #87cefa;">getspent</span>(<span style="color: #98fb98;">void</span>);
+<span style="color: #98fb98;">void</span> <span style="color: #87cefa;">setspent</span>(<span style="color: #98fb98;">void</span>)
+<span style="color: #98fb98;">void</span> <span style="color: #87cefa;">endspent</span>(<span style="color: #98fb98;">void</span>);
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2" class="outline-2">
+<h2 id="sec-2">group文件</h2>
+<div class="outline-text-2" id="text-2">
+<p>
+UNIX组文件包含了表6-2中所示字段，这些字段包含在&lt;grp.h&gt;中所定义的group结构中
+</p>
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 2:</span> /etc/group文件中的字段</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">说明</td>
+<td class="left">struct group成员</td>
+<td class="left">POSIX.1</td>
+</tr>
+
+<tr>
+<td class="left">组名</td>
+<td class="left">char *gr_name</td>
+<td class="left">•</td>
+</tr>
+
+<tr>
+<td class="left">加密口令</td>
+<td class="left">char *gr_passwd</td>
+<td class="left">&#xa0;</td>
+</tr>
+
+<tr>
+<td class="left">数字组ID</td>
+<td class="left">int gr_gid</td>
+<td class="left">•</td>
+</tr>
+
+<tr>
+<td class="left">指向各用户名指针的数组</td>
+<td class="left">char **gr_mem</td>
+<td class="left">•</td>
+</tr>
+</tbody>
+</table>
+
+<p>
+字段gr_mem是一个指针数组，其中的指针各指向一个属于该组的用户名。该数组以null结尾
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ cat /etc/group
+
+root:x:0:root
+bin:x:1:root,bin,daemon
+daemon:x:2:root,bin,daemon
+sys:x:3:root,bin,adm
+adm:x:4:root,adm,daemon
+</pre>
+</div>
+</div>
+
+<div id="outline-container-sec-2-1" class="outline-3">
+<h3 id="sec-2-1">getgrgid, getgrnam</h3>
+<div class="outline-text-3" id="text-2-1">
+<ul class="org-ul">
+<li>getgrgid：根据组id获取group记录
+</li>
+<li>getgrnam：根据组名字获取group记录
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;grp.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#26681;&#25454;&#32452;id&#33719;&#21462;group&#35760;&#24405;</span>
+
+<span style="color: #ffa07a;">   gid&#65306;&#32452;id</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;&#25351;&#21521;group&#32467;&#26500;&#30340;&#25351;&#38024;&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;NULL</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">group</span> *<span style="color: #87cefa;">getgrgid</span>(<span style="color: #98fb98;">gid_t</span> <span style="color: #eedd82;">gid</span>);
+
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#26681;&#25454;&#32452;&#21517;&#23383;&#33719;&#21462;group&#35760;&#24405;</span>
+
+<span style="color: #ffa07a;">   name&#65306;&#32452;&#21517;&#23383;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;&#25351;&#21521;group&#32467;&#26500;&#30340;&#25351;&#38024;&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;NULL</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">group</span> *<span style="color: #87cefa;">getgrnam</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">name</span>);
+</pre>
+</div>
+</li>
+</ul>
+<p>
+如同对口令文件进行操作的函数一样,这两个函数通常也返回指向一个静态变量的指针,在每次调用时都重写该静态变量！
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-2" class="outline-3">
+<h3 id="sec-2-2">getgrent, setgrent, endgrent</h3>
+<div class="outline-text-3" id="text-2-2">
+<ul class="org-ul">
+<li>getgrent：返回group文件下一个记录项
+</li>
+<li>setgrent：重置getgrent的当前位置到最开始
+</li>
+<li>endgrent：关闭getgrent打开的文件
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;grp.h&gt;</span>
+
+<span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">group</span> *<span style="color: #87cefa;">getgrent</span>(<span style="color: #98fb98;">void</span>);
+<span style="color: #98fb98;">void</span> <span style="color: #87cefa;">setgrent</span>(<span style="color: #98fb98;">void</span>);
+<span style="color: #98fb98;">void</span> <span style="color: #87cefa;">endgrent</span>(<span style="color: #98fb98;">void</span>);
+</pre>
+</div>
+</li>
+</ul>
+<p>
+调用getgrent后必须记得使用endgrent关闭！
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-3" class="outline-3">
+<h3 id="sec-2-3">附加组ID</h3>
+<div class="outline-text-3" id="text-2-3">
+<p>
+现代的Unix系统一个用户一般可以属于多个组，以下函数用来支持这种特性：
+</p>
+<ul class="org-ul">
+<li>getgroups：读取当前进程所属用户附加组ID表
+</li>
+<li>setgroups：设置当前进程所属用户附加组ID表
+</li>
+<li>initgroups：初始化用户附加组ID表
+</li>
+</ul>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;unistd.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#35835;&#21462;&#24403;&#21069;&#36827;&#31243;&#25152;&#23646;&#29992;&#25143;&#30340;&#38468;&#21152;&#32452;id&#34920;&#65292;&#24182;&#36820;&#22238;&#23454;&#38469;&#35835;&#21462;&#30340;&#38468;&#21152;&#32452;id&#25968;&#37327;</span>
+
+<span style="color: #ffa07a;">   gidsetsize&#65306;&#26368;&#22810;&#28155;&#21152;&#21040;grouplist&#30340;&#38468;&#21152;&#32452;&#25968;&#37327;&#65292;&#22914;&#26524;&#20026;0&#65292;&#21017;grouplist&#19981;&#20570;&#20462;&#25913;</span>
+<span style="color: #ffa07a;">   grouplist&#65306;&#38468;&#21152;&#32452;ID&#30340;&#25968;&#32452;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;&#23454;&#38469;&#35835;&#21462;&#30340;&#38468;&#21152;&#32452;ID&#25968;&#37327;&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">getgroups</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">gidsetsize</span>, <span style="color: #98fb98;">gid_t</span> <span style="color: #eedd82;">grouplist</span>][);
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#35774;&#32622;&#24403;&#21069;&#36827;&#31243;&#25152;&#23646;&#29992;&#25143;&#30340;&#38468;&#21152;&#32452;id&#34920;&#65292;&#24182;&#36820;&#22238;&#23454;&#38469;&#35774;&#32622;&#30340;&#38468;&#21152;&#32452;id&#25968;&#37327;</span>
+
+<span style="color: #ffa07a;">   ngroup&#65306;grouplist&#20013;&#30340;&#20803;&#32032;&#20010;&#25968;</span>
+<span style="color: #ffa07a;">   grouplist&#65306;&#35201;&#35774;&#32622;&#30340;&#38468;&#21152;&#32452;ID&#30340;&#25968;&#32452;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#25104;&#21151;&#36820;&#22238;0&#65292;&#22833;&#36133;&#36820;&#22238;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">setgroups</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">ngroups</span>, <span style="color: #00ffff;">const</span> <span style="color: #98fb98;">gid_t</span> <span style="color: #eedd82;">grouplist</span>[]);
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#21021;&#22987;&#21270;&#29992;&#25143;&#38468;&#21152;&#32452;id&#34920;</span>
+
+<span style="color: #ffa07a;">   username&#65306;&#29992;&#25143;&#30331;&#24405;&#21517;</span>
+<span style="color: #ffa07a;">   basegid&#65306;&#29992;&#25143;&#40664;&#35748;&#20027;&#32452;ID</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#25104;&#21151;&#36820;&#22238;0&#65292;&#22833;&#36133;&#36820;&#22238;-1   </span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">initgroups</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">username</span>, <span style="color: #98fb98;">gid_t</span> <span style="color: #eedd82;">basegid</span>);
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-3" class="outline-2">
+<h2 id="sec-3">其他数据文件</h2>
 </div>
 </div>
 <div id="postamble" class="status">
