@@ -3,7 +3,7 @@
 #+HTML_LINK_UP: stdio.html   
 #+HTML_LINK_HOME: apue.html
 #+OPTIONS: num:nil timestamp:nil ^:nil *:nil
-有很多操作需要使用一些与系统有关的数据文件，例如，口令文件/etc/passwd和组文件/etc/group就是经常由多种程序使用的两个文件。用户每次登录入UNIX系统，以及每次执行ls -l命令时都要使用口令文件。对于这些数据文件的可移植界面是本章的主题。本章也包括了系统标识函数、时间和日期函数等
+有很多操作需要使用一些与系统有关的数据文件，例如，口令文件/etc/passwd和组文件/etc/group就是经常由多种程序使用的两个文件。用户每次登录入UNIX系统，以及每次执行ls -l命令时都要使用口令文件。对于这些数据文件的可移植函数是本章的主题。本章也包括了系统标识函数、时间和日期函数等
 
 * passwd文件
 UNIX口令文件包含了表6-1中所示的各字段，这些字段包含在<pwd.h>中定义的passwd结构中
@@ -253,3 +253,128 @@ UNIX组文件包含了表6-2中所示字段，这些字段包含在<grp.h>中所
 #+END_SRC
 
 * 其他数据文件
++ /etc/services：记录服务器网络服务
++ /etc/protocols：记录各种网络协议
++ /etc/networks：记录各种网卡信息
++ /etc/hosts：记录各种域名信息
+
+** 操作函数
+一般情况下每个数据文件至少有三个函数:
+1. get函数：读下一个记录，如果需要还打开该文件。此种函数通常返回指向一个结构的指针。当已达到文件尾端时返回空指针。大多数get函数返回指向一个静态存储类结构的指针，如果要保存其内容，则需复制它
+2. set函数：打开相应数据文件(如果尚末打开)，重置该文件到最初。如果希望在相应文件起始处开始处理，则调用此函数
+3. end函数:关闭相应数据文件。在结束了对相应数据文件的读、写操作后，总应调用此函数以关闭所有相关文件 
+
+另外，如果数据文件支持某种形式的关键字搜索，则也提供搜索具有指定关键字的记录的函数
+
+#+CAPTION: 存取系统数据文件的一些函数
+#+ATTR_HTML: :border 1 :rules all :frame boader
+| 说明 | 数据文件 | 头文件 | 结构  | 附加的关键字搜索函数 |
+|------+----------+--------+-------+----------------------|
+| 口令 | /etc/passwd    | <pwd.h>  | passwd    | getpwnam,getpwuid               |
+| 组  | /etc/group     | <grp.h>  | group     | getgrnam,getgrgid               |
+|-----+----------------+----------+-----------+---------------------------------|
+| 主机 | /etc/hosts     | <netdb.h> | hostent   | gethostbyname,gethostbyaddr     |
+| 网络 | /etc/networks  | <netdb.h> | netent    | getnetbyname,getnetbyaddr       |
+| 协议 | /etc/protocols | <netdb.h> | protoent  | getprotobyname,getprotobynumber |
+| 服务 | /etc/services  | <netdb.h> | servent   | getservbyname,getservbyport     |
+
+* 登录统计
+大多数UNIX系统都提供下列两个数据文件：
+1. utmp文件：记录当前登录进系统的各个用户，供who(1)程序使用
+2. wtmp文件：跟踪各个登录和注销事件，供last(1)程序使用
+
+
+utmp文件位于/var/run目录下，wtmp文件位于/var/log目录下
+#+BEGIN_SRC sh
+  $ ls -l /var/run/utmp 
+  -rw-rw-r-- 1 root utmp 4608 Feb 22 22:28 /var/run/utmp
+
+  $ ls -l /var/log/wtmp 
+  -rw-rw-r-- 1 root utmp 20259072 Feb 22 22:28 /var/log/wtmp
+#+END_SRC
+
+
+** utmp结构
+#+BEGIN_SRC C
+  struct utmp
+  {
+          char ut_line[8]; /* tty line: "ttyh0", "ttyd0", "ttyp0", ... */
+          char ut_name[8]; /* login name*/
+          long ut_time; /* time since epoch */
+  };
+#+END_SRC
+登录时login程序产生一个utmp结构，然后将其写入到utmp文件中，同时也将其添加到wtmp文件中。注销时init进程将utmp文件中相应的记录擦除(每个字节都填以0)，并将一个新记录添写到wtmp文件中。读wtmp文件中的该注销记录，其ut_name字段清除为0。在系统再启动时，以及更改系统时间和日期的前后，都在wtmp文件中添写特殊的记录项
+
+* 系统标识
+** uname
+uname函数：返回与主机和操作系统有关的信息
+#+BEGIN_SRC C
+  #include <sys/utsname.h>
+  /**
+     与操作系统相关的信息读到指定的utsname结构指针中
+
+     name：存放主机和操作系统相关信息的utsname结构指针
+
+     return：若成功则为非负值，若出错则为-1
+  ,*/
+  int uname(stuct ustname *name);
+#+END_SRC
+通过参数向其传递一个utsname结构的指针，然后该函数填写此结构
+
+*** utsname结构 
+utsname结构至少包括以下字段：
+- sysname：内核名，如Linux
+- nodename：主机名，这个字段基本上没有意义
+- release：发行名，如Ubuntu
+- version：版本号，如2.6.24
+- machine：体系结构，如i686
+#+BEGIN_SRC C
+  struct utsname
+  {
+          /* Name of the implementation of the operating system.  */
+          char sysname[_UTSNAME_SYSNAME_LENGTH];
+
+          /* Name of this node on the network.  */
+          char nodename[_UTSNAME_NODENAME_LENGTH];
+
+          /* Current release level of this implementation.  */
+          char release[_UTSNAME_RELEASE_LENGTH];
+          /* Current version level of this release.  */
+          char version[_UTSNAME_VERSION_LENGTH];
+
+          /* Name of the hardware type the system is running on.  */
+          char machine[_UTSNAME_MACHINE_LENGTH];
+          //...
+  };
+#+END_SRC
+utsname结构中的信息通常可用uname(1)命令打印
+#+BEGIN_SRC sh
+  $ uname -a
+  Linux gentoo 4.9.6-gentoo-r1 #1 SMP Sat Feb 4 17:28:48 CST 2017 x86_64 Intel(R) Core(TM) i3-2100 CPU @ 3.10GHz GenuineIntel GNU/Linux
+#+END_SRC
+
+** gethostname
+gethostname：返回主机名，通常就是TCP/IP网络上主机的名字
+#+BEGIN_SRC C
+  #include  <unistd.h>
+
+  /**
+     返回主机名
+
+     name：读取主机名到name字符串，字符串以null结尾
+     namelen：数组长度
+
+     return：若成功返回0，若失败返回-1
+  ,*/
+  int gethostname(char *name, int namelen);
+#+END_SRC
+<sys/param.h>中的常数MAXHOSTNAMELEN规定了此名字的最大长度(通常是64字节)。如果宿主机联接到TCP/IP网络中，则此主机名通常是该主机的完整域名
+
+hostname(1)命令可用来存取和设置主机名。(超级用户用一个类似的函数sethostname来设置主机名)。主机名通常在系统启动时设置，由/etc/rc取自一个启动文件
+#+BEGIN_SRC sh
+  klose@gentoo /var/log $ hostname 
+
+  gentoo
+#+END_SRC
+
+* 日期函数

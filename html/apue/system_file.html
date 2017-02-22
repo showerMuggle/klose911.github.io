@@ -164,12 +164,32 @@ for the JavaScript code in this tag.
 <li><a href="#sec-2-3">附加组ID</a></li>
 </ul>
 </li>
-<li><a href="#sec-3">其他数据文件</a></li>
+<li><a href="#sec-3">其他数据文件</a>
+<ul>
+<li><a href="#sec-3-1">操作函数</a></li>
+</ul>
+</li>
+<li><a href="#sec-4">登录统计</a>
+<ul>
+<li><a href="#sec-4-1">utmp结构</a></li>
+</ul>
+</li>
+<li><a href="#sec-5">系统标识</a>
+<ul>
+<li><a href="#sec-5-1">uname</a>
+<ul>
+<li><a href="#sec-5-1-1">utsname结构</a></li>
+</ul>
+</li>
+<li><a href="#sec-5-2">gethostname</a></li>
+</ul>
+</li>
+<li><a href="#sec-6">日期函数</a></li>
 </ul>
 </div>
 </div>
 <p>
-有很多操作需要使用一些与系统有关的数据文件，例如，口令文件/etc/passwd和组文件/etc/group就是经常由多种程序使用的两个文件。用户每次登录入UNIX系统，以及每次执行ls -l命令时都要使用口令文件。对于这些数据文件的可移植界面是本章的主题。本章也包括了系统标识函数、时间和日期函数等
+有很多操作需要使用一些与系统有关的数据文件，例如，口令文件/etc/passwd和组文件/etc/group就是经常由多种程序使用的两个文件。用户每次登录入UNIX系统，以及每次执行ls -l命令时都要使用口令文件。对于这些数据文件的可移植函数是本章的主题。本章也包括了系统标识函数、时间和日期函数等
 </p>
 
 <div id="outline-container-sec-1" class="outline-2">
@@ -620,6 +640,285 @@ adm:x:4:root,adm,daemon
 
 <div id="outline-container-sec-3" class="outline-2">
 <h2 id="sec-3">其他数据文件</h2>
+<div class="outline-text-2" id="text-3">
+<ul class="org-ul">
+<li>/etc/services：记录服务器网络服务
+</li>
+<li>/etc/protocols：记录各种网络协议
+</li>
+<li>/etc/networks：记录各种网卡信息
+</li>
+<li>/etc/hosts：记录各种域名信息
+</li>
+</ul>
+</div>
+
+<div id="outline-container-sec-3-1" class="outline-3">
+<h3 id="sec-3-1">操作函数</h3>
+<div class="outline-text-3" id="text-3-1">
+<p>
+一般情况下每个数据文件至少有三个函数:
+</p>
+<ol class="org-ol">
+<li>get函数：读下一个记录，如果需要还打开该文件。此种函数通常返回指向一个结构的指针。当已达到文件尾端时返回空指针。大多数get函数返回指向一个静态存储类结构的指针，如果要保存其内容，则需复制它
+</li>
+<li>set函数：打开相应数据文件(如果尚末打开)，重置该文件到最初。如果希望在相应文件起始处开始处理，则调用此函数
+</li>
+<li>end函数:关闭相应数据文件。在结束了对相应数据文件的读、写操作后，总应调用此函数以关闭所有相关文件 
+</li>
+</ol>
+
+<p>
+另外，如果数据文件支持某种形式的关键字搜索，则也提供搜索具有指定关键字的记录的函数
+</p>
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 3:</span> 存取系统数据文件的一些函数</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<thead>
+<tr>
+<th scope="col" class="left">说明</th>
+<th scope="col" class="left">数据文件</th>
+<th scope="col" class="left">头文件</th>
+<th scope="col" class="left">结构</th>
+<th scope="col" class="left">附加的关键字搜索函数</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="left">口令</td>
+<td class="left">/etc/passwd</td>
+<td class="left">&lt;pwd.h&gt;</td>
+<td class="left">passwd</td>
+<td class="left">getpwnam,getpwuid</td>
+</tr>
+
+<tr>
+<td class="left">组</td>
+<td class="left">/etc/group</td>
+<td class="left">&lt;grp.h&gt;</td>
+<td class="left">group</td>
+<td class="left">getgrnam,getgrgid</td>
+</tr>
+</tbody>
+<tbody>
+<tr>
+<td class="left">主机</td>
+<td class="left">/etc/hosts</td>
+<td class="left">&lt;netdb.h&gt;</td>
+<td class="left">hostent</td>
+<td class="left">gethostbyname,gethostbyaddr</td>
+</tr>
+
+<tr>
+<td class="left">网络</td>
+<td class="left">/etc/networks</td>
+<td class="left">&lt;netdb.h&gt;</td>
+<td class="left">netent</td>
+<td class="left">getnetbyname,getnetbyaddr</td>
+</tr>
+
+<tr>
+<td class="left">协议</td>
+<td class="left">/etc/protocols</td>
+<td class="left">&lt;netdb.h&gt;</td>
+<td class="left">protoent</td>
+<td class="left">getprotobyname,getprotobynumber</td>
+</tr>
+
+<tr>
+<td class="left">服务</td>
+<td class="left">/etc/services</td>
+<td class="left">&lt;netdb.h&gt;</td>
+<td class="left">servent</td>
+<td class="left">getservbyname,getservbyport</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-4" class="outline-2">
+<h2 id="sec-4">登录统计</h2>
+<div class="outline-text-2" id="text-4">
+<p>
+大多数UNIX系统都提供下列两个数据文件：
+</p>
+<ol class="org-ol">
+<li>utmp文件：记录当前登录进系统的各个用户，供who(1)程序使用
+</li>
+<li>wtmp文件：跟踪各个登录和注销事件，供last(1)程序使用
+</li>
+</ol>
+
+
+<p>
+utmp文件位于/var/run目录下，wtmp文件位于/var/log目录下
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ ls -l /var/run/utmp 
+-rw-rw-r-- 1 root utmp 4608 Feb 22 22:28 /var/run/utmp
+
+$ ls -l /var/log/wtmp 
+-rw-rw-r-- 1 root utmp 20259072 Feb 22 22:28 /var/log/wtmp
+</pre>
+</div>
+</div>
+
+
+<div id="outline-container-sec-4-1" class="outline-3">
+<h3 id="sec-4-1">utmp结构</h3>
+<div class="outline-text-3" id="text-4-1">
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">utmp</span>
+{
+    <span style="color: #98fb98;">char</span> <span style="color: #eedd82;">ut_line</span>[8]; <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">tty line: "ttyh0", "ttyd0", "ttyp0", ... </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">char</span> <span style="color: #eedd82;">ut_name</span>[8]; <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">login name</span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">long</span> <span style="color: #eedd82;">ut_time</span>; <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">time since epoch </span><span style="color: #ff4500;">*/</span>
+};
+</pre>
+</div>
+<p>
+登录时login程序产生一个utmp结构，然后将其写入到utmp文件中，同时也将其添加到wtmp文件中。注销时init进程将utmp文件中相应的记录擦除(每个字节都填以0)，并将一个新记录添写到wtmp文件中。读wtmp文件中的该注销记录，其ut_name字段清除为0。在系统再启动时，以及更改系统时间和日期的前后，都在wtmp文件中添写特殊的记录项
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-5" class="outline-2">
+<h2 id="sec-5">系统标识</h2>
+<div class="outline-text-2" id="text-5">
+</div><div id="outline-container-sec-5-1" class="outline-3">
+<h3 id="sec-5-1">uname</h3>
+<div class="outline-text-3" id="text-5-1">
+<p>
+uname函数：返回与主机和操作系统有关的信息
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/utsname.h&gt;</span>
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#19982;&#25805;&#20316;&#31995;&#32479;&#30456;&#20851;&#30340;&#20449;&#24687;&#35835;&#21040;&#25351;&#23450;&#30340;utsname&#32467;&#26500;&#25351;&#38024;&#20013;</span>
+
+<span style="color: #ffa07a;">   name&#65306;&#23384;&#25918;&#20027;&#26426;&#21644;&#25805;&#20316;&#31995;&#32479;&#30456;&#20851;&#20449;&#24687;&#30340;utsname&#32467;&#26500;&#25351;&#38024;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;&#38750;&#36127;&#20540;&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">uname</span>(stuct <span style="color: #98fb98;">ustname</span> *<span style="color: #eedd82;">name</span>);
+</pre>
+</div>
+<p>
+通过参数向其传递一个utsname结构的指针，然后该函数填写此结构
+</p>
+</div>
+
+<div id="outline-container-sec-5-1-1" class="outline-4">
+<h4 id="sec-5-1-1">utsname结构</h4>
+<div class="outline-text-4" id="text-5-1-1">
+<p>
+utsname结构至少包括以下字段：
+</p>
+<ul class="org-ul">
+<li>sysname：内核名，如Linux
+</li>
+<li>nodename：主机名，这个字段基本上没有意义
+</li>
+<li>release：发行名，如Ubuntu
+</li>
+<li>version：版本号，如2.6.24
+</li>
+<li>machine：体系结构，如i686
+</li>
+</ul>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">utsname</span>
+{
+    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">Name of the implementation of the operating system.  </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">char</span> <span style="color: #eedd82;">sysname</span>[_UTSNAME_SYSNAME_LENGTH];
+
+    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">Name of this node on the network.  </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">char</span> <span style="color: #eedd82;">nodename</span>[_UTSNAME_NODENAME_LENGTH];
+
+    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">Current release level of this implementation.  </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">char</span> <span style="color: #eedd82;">release</span>[_UTSNAME_RELEASE_LENGTH];
+    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">Current version level of this release.  </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">char</span> <span style="color: #eedd82;">version</span>[_UTSNAME_VERSION_LENGTH];
+
+    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">Name of the hardware type the system is running on.  </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">char</span> <span style="color: #eedd82;">machine</span>[_UTSNAME_MACHINE_LENGTH];
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">...</span>
+};
+</pre>
+</div>
+<p>
+utsname结构中的信息通常可用uname(1)命令打印
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ uname -a
+Linux gentoo 4.9.6-gentoo-r1 <span style="color: #ff4500;">#</span><span style="color: #ff4500;">1 SMP Sat Feb 4 17:28:48 CST 2017 x86_64 Intel(R) Core(TM) i3-2100 CPU @ 3.10GHz GenuineIntel GNU/Linux</span>
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-5-2" class="outline-3">
+<h3 id="sec-5-2">gethostname</h3>
+<div class="outline-text-3" id="text-5-2">
+<p>
+gethostname：返回主机名，通常就是TCP/IP网络上主机的名字
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span>  <span style="color: #ffa07a;">&lt;unistd.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#36820;&#22238;&#20027;&#26426;&#21517;</span>
+
+<span style="color: #ffa07a;">   name&#65306;&#35835;&#21462;&#20027;&#26426;&#21517;&#21040;name&#23383;&#31526;&#20018;&#65292;&#23383;&#31526;&#20018;&#20197;null&#32467;&#23614;</span>
+<span style="color: #ffa07a;">   namelen&#65306;&#25968;&#32452;&#38271;&#24230;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#36820;&#22238;0&#65292;&#33509;&#22833;&#36133;&#36820;&#22238;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">gethostname</span>(<span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">name</span>, <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">namelen</span>);
+</pre>
+</div>
+<p>
+&lt;sys/param.h&gt;中的常数MAXHOSTNAMELEN规定了此名字的最大长度(通常是64字节)。如果宿主机联接到TCP/IP网络中，则此主机名通常是该主机的完整域名
+</p>
+
+<p>
+hostname(1)命令可用来存取和设置主机名。(超级用户用一个类似的函数sethostname来设置主机名)。主机名通常在系统启动时设置，由/etc/rc取自一个启动文件
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">klose@gentoo /var/log $ hostname 
+
+gentoo
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-6" class="outline-2">
+<h2 id="sec-6">日期函数</h2>
 </div>
 </div>
 <div id="postamble" class="status">
