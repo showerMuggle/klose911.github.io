@@ -3,7 +3,7 @@
 "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
-<title>Unix环境高级编程</title>
+<title>进程控制</title>
 <meta  http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta  name="generator" content="Org-mode" />
 <meta  name="author" content="Wu, Shanliang" />
@@ -136,26 +136,103 @@ for the JavaScript code in this tag.
 </script>
 </head>
 <body>
-<div id="content">
-<h1 class="title">Unix环境高级编程</h1>
+<div id="org-div-home-and-up">
+ <a accesskey="h" href="env.html"> UP </a>
+ |
+ <a accesskey="H" href="apue.html"> HOME </a>
+</div><div id="content">
+<h1 class="title">进程控制</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#sec-1">进程标识</a></li>
+</ul>
+</div>
+</div>
+<p>
+本章介绍UNIX的进程控制：
+</p>
 <ul class="org-ul">
-<li><a href="basic.html">基础知识</a>
+<li>创建新进程、执行程序和进程终止
 </li>
-<li><a href="standard.html">标准和实现</a>
+<li>进程的实际、有效和保存的用户和组ID
 </li>
-<li><a href="file_io.html">文件I/O</a>
+<li>解释器文件和system函数
 </li>
-<li><a href="file_directory.html">文件和目录</a>
-</li>
-<li><a href="stdio.html">标准I/O</a>
-</li>
-<li><a href="system_file.html">系统文件</a>
-</li>
-<li><a href="env.html">进程环境</a>
-</li>
-<li><a href="process.html">进程控制</a>
+<li>进程会计机制结束
 </li>
 </ul>
+
+<div id="outline-container-sec-1" class="outline-2">
+<h2 id="sec-1">进程标识</h2>
+<div class="outline-text-2" id="text-1">
+<p>
+每个进程都有一个非负整型的唯一进程ID。因为进程ID标识符总是唯一的，常将其用做其他标识符的一部分以保证其唯一性：
+</p>
+<ol class="org-ol">
+<li>ID 0进程：调度进程，它是内核进程，用来执行进程管理，也被称为交换进程
+</li>
+<li>ID 1进程：通常是init进程，在自举过程结束时由内核调用/sbin/init，通常读与系统有关的初始化文件(/etc/rc*文件)，并将系统引导到一个状态(例如多用户)。init进程决不会终止，它是一个普通的用户进程(不是内核中的系统进程)，但是它以超级用户特权运行
+</li>
+</ol>
+
+
+<p>
+除了进程ID每个进程还有一些其他标识符，下列函数返回这些标识符：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;unistd.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#33719;&#24471;&#35843;&#29992;&#36827;&#31243;&#30340;&#36827;&#31243;ID&#12288;</span>
+
+<span style="color: #ffa07a;">   &#36820;&#22238;&#65306;&#35843;&#29992;&#36827;&#31243;&#30340;&#36827;&#31243;ID</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">pid_t</span> <span style="color: #87cefa;">getpid</span>(<span style="color: #98fb98;">void</span>);
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#33719;&#24471;&#35843;&#29992;&#36827;&#31243;&#30340;&#29238;&#36827;&#31243;ID</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#35843;&#29992;&#36827;&#31243;&#30340;&#29238;&#36827;&#31243;ID </span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">pid_t</span> <span style="color: #87cefa;">getppid</span>(<span style="color: #98fb98;">void</span>);
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#33719;&#24471;&#35843;&#29992;&#36827;&#31243;&#30340;&#23454;&#38469;&#29992;&#25143;ID</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#35843;&#29992;&#36827;&#31243;&#30340;&#23454;&#38469;&#29992;&#25143;ID</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">uid_t</span> <span style="color: #87cefa;">getuid</span>(<span style="color: #98fb98;">void</span>);
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#33719;&#24471;&#35843;&#29992;&#36827;&#31243;&#30340;&#26377;&#25928;&#29992;&#25143;ID</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#35843;&#29992;&#36827;&#31243;&#30340;&#26377;&#25928;&#29992;&#25143;ID</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">uid_t</span> <span style="color: #87cefa;">geteuid</span>(<span style="color: #98fb98;">void</span>);
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#33719;&#24471;&#35843;&#29992;&#36827;&#31243;&#30340;&#23454;&#38469;&#32452;ID</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#35843;&#29992;&#36827;&#31243;&#30340;&#23454;&#38469;&#32452;ID</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">gid_t</span> <span style="color: #87cefa;">getgid</span>(<span style="color: #98fb98;">void</span>);
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#33719;&#24471;&#35843;&#29992;&#36827;&#31243;&#30340;&#26377;&#25928;&#32452;ID</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#35843;&#29992;&#36827;&#31243;&#30340;&#26377;&#25928;&#32452;ID</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">gid_t</span> <span style="color: #87cefa;">getegid</span>(<span style="color: #98fb98;">void</span>);
+</pre>
+</div>
+<p>
+注意：这些函数都没有出错返回！
+</p>
+</div>
+</div>
 </div>
 <div id="postamble" class="status">
 
