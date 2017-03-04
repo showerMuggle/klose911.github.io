@@ -147,6 +147,30 @@ for the JavaScript code in this tag.
 <div id="text-table-of-contents">
 <ul>
 <li><a href="#sec-1">进程标识</a></li>
+<li><a href="#sec-2">进程生命周期</a>
+<ul>
+<li><a href="#sec-2-1">创建进程</a></li>
+<li><a href="#sec-2-2">创建新进程</a>
+<ul>
+<li><a href="#sec-2-2-1">子进程的进程环境</a>
+<ul>
+<li><a href="#sec-2-2-1-1">写时复制</a></li>
+</ul>
+</li>
+<li><a href="#sec-2-2-2">fork实例</a></li>
+<li><a href="#sec-2-2-3">父、子进程的资源共享</a></li>
+<li><a href="#sec-2-2-4">父、子进程的区别</a></li>
+<li><a href="#sec-2-2-5">fork的常见用法</a></li>
+<li><a href="#sec-2-2-6">vfork</a>
+<ul>
+<li><a href="#sec-2-2-6-1">vfork实例</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#sec-2-3">终止进程</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
@@ -231,6 +255,354 @@ for the JavaScript code in this tag.
 <p>
 注意：这些函数都没有出错返回！
 </p>
+</div>
+</div>
+
+<div id="outline-container-sec-2" class="outline-2">
+<h2 id="sec-2">进程生命周期</h2>
+<div class="outline-text-2" id="text-2">
+</div><div id="outline-container-sec-2-1" class="outline-3">
+<h3 id="sec-2-1">创建进程</h3>
+</div>
+
+<div id="outline-container-sec-2-2" class="outline-3">
+<h3 id="sec-2-2">创建新进程</h3>
+<div class="outline-text-3" id="text-2-2">
+<p>
+fork：创建新进程的唯一方法 (除了上面提到的那些特殊进程，它们是内核启动时候以特殊方式创建的)
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;unistd.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;unistd.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#21019;&#24314;&#26032;&#36827;&#31243;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#23376;&#36827;&#31243;&#36820;&#22238;0&#65292;&#29238;&#36827;&#31243;&#36820;&#22238;&#23376;&#36827;&#31243;&#30340;ID&#65292;&#20986;&#38169;&#36820;&#22238;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">pid_t</span> <span style="color: #87cefa;">fork</span>(<span style="color: #98fb98;">void</span>);
+</pre>
+</div>
+<p>
+由fork创建的新进程被称为子进程。因为子进程和父进程都会继续执行fork之后的指令，所以该函数虽然被调用一次，但却会返回两次结果。两次返回的区别是子进程的返回值是0，而父进程的返回值则是新子进程的进程ID：
+</p>
+<ul class="org-ul">
+<li>将子进程ID返回给父进程的理由是：一个进程的子进程可以多于一个，没有一个函数可以使一个进程获得其所有子进程的进程ID。如果接下来父进程要使用子进程ID，那么只能在fork后记录返回的子进程ID
+</li>
+<li>fork使子进程得到返回值0的理由是：
+<ol class="org-ol">
+<li>进程ID为0总是由调度/交换进程使用，一个子进程的进程ID不可能为0，所以可以通过fork的返回结果来判断是不是子进程
+</li>
+<li>另外一个进程只会有一个父进程，子进程可以调用getppid以获得其父进程的进程ID，所以没有必要去返回父进程的ID
+</li>
+</ol>
+</li>
+</ul>
+</div>
+
+<div id="outline-container-sec-2-2-1" class="outline-4">
+<h4 id="sec-2-2-1">子进程的进程环境</h4>
+<div class="outline-text-4" id="text-2-2-1">
+<p>
+子进程是父进程的复制品：如果正文段是只读的，则父、子进程共享正文段。除此之外子进程获得父进程的初始化数据段、非初始化数据段、堆和栈的复制品。注意这是子进程所拥有的独立拷贝，父、子进程并不共享这些存储空间部分！
+</p>
+</div>
+
+<div id="outline-container-sec-2-2-1-1" class="outline-5">
+<h5 id="sec-2-2-1-1">写时复制</h5>
+<div class="outline-text-5" id="text-2-2-1-1">
+<p>
+现在很多的实现并不做一个父进程数据段和堆的完全拷贝，因为在fork之后经常跟随着exec执行另外一个程序。而作为替代使用了在写时复制(Copy-On-Write)的技术。例如在图1里面fork函数刚刚创建子进程的时候，父、子进程的数据指向同一块物理内存，但是内核将这些内存的访问变为只读的了。当父、子进程中的任何一个想要修改数据的时候，内核会为修改区域的那块内存制作一个副本，并将自己的虚拟地址映射到物理地址的指向修改为副本的地址，从此父子进程互不干扰，效率也提高了许多。新分配的副本大小通常是虚拟存储系统中的一个“页”
+</p>
+
+<div class="figure">
+<p><img src="pic/child-process.png" alt="child-process.png" width="90%" />
+</p>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-2-2" class="outline-4">
+<h4 id="sec-2-2-2">fork实例</h4>
+<div class="outline-text-4" id="text-2-2-2">
+<p>
+fork一个进程，修改相关变量并打印
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+
+<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">glob</span> = 6;
+<span style="color: #98fb98;">char</span> <span style="color: #eedd82;">buf</span>[] = <span style="color: #ffa07a;">"a write to stdin\n"</span>;
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">void</span>)
+{
+    <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">var</span>;
+    <span style="color: #98fb98;">pid_t</span> <span style="color: #eedd82;">pid</span>;
+
+    var = 88;
+    <span style="color: #00ffff;">if</span>(write(STDOUT_FILENO, buf, <span style="color: #00ffff;">sizeof</span>(buf) - 1) != (<span style="color: #00ffff;">sizeof</span>(buf) - 1))
+        err_sys(<span style="color: #ffa07a;">"write error"</span>);
+    printf(<span style="color: #ffa07a;">"before fork\n"</span>); <span style="color: #ff4500;">// </span><span style="color: #ff4500;">we don't flush stdout</span>
+
+    <span style="color: #00ffff;">if</span>( (pid = fork() ) &lt; 0)
+        err_sys(<span style="color: #ffa07a;">"fork error"</span>);
+
+    <span style="color: #00ffff;">else</span> <span style="color: #00ffff;">if</span>(0 == pid) { <span style="color: #ff4500;">//</span><span style="color: #ff4500;">child process</span>
+        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">modify variable</span>
+        glob++; 
+        var++; 
+    } <span style="color: #00ffff;">else</span> { <span style="color: #ff4500;">// </span><span style="color: #ff4500;">parent process</span>
+        sleep(2);
+    }
+
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">child &amp; parent share code</span>
+    printf(<span style="color: #ffa07a;">"pid = %d, glob = %d, var = %d\n"</span>, getpid(), glob, var);
+    exit(0);
+}
+</pre>
+</div>
+<p>
+一般来说，在fork之后是父进程先执行还是子进程先执行是不确定的。这取决于内核所使用的调度算法。如果要求父、子进程之间相互同步，则要求某种形式的进程间通信。在这个程序中父进程使自己睡眠2秒钟，以此使子进程先执行，但2秒钟并不一定保证已经足够
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ ./src/process/forkExample
+
+a write to stdin
+<span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#32456;&#31471;&#26159;&#34892;&#32531;&#23384;&#30340;&#65292;&#25152;&#20197;printf("before fork")&#30452;&#25509;&#36755;&#20986;</span>
+before fork
+pid = 8898, glob = 7, var = 89 <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#23376;&#36827;&#31243;&#25171;&#21360;&#25913;&#21464;&#21518;&#30340;&#21464;&#37327;&#20540;</span>
+pid = 8897, glob = 6, var = 88 <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#29238;&#36827;&#31243;&#25171;&#21360;&#26410;&#25913;&#21464;&#30340;&#21464;&#37327;&#20540;</span>
+
+$ ./src/process/forkExample &gt; temp.out
+
+$ cat temp.out 
+a write to stdin
+<span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#25991;&#20214;&#26159;&#20840;&#32531;&#23384;&#30340;&#65292;&#25152;&#20197;fork&#20043;&#21069;&#30340;printf&#25226;"before fork\n"&#25918;&#20837;&#20102;&#32531;&#23384;&#65292;&#20294;&#24182;&#27809;&#26377;&#36755;&#20986;</span>
+<span style="color: #ff4500;">#</span><span style="color: #ff4500;">fork&#25226;&#29238;&#36827;&#31243;&#30340;&#26631;&#20934;IO&#32531;&#23384;&#22797;&#21046;&#20102;&#65292;&#22240;&#27492;&#22312;&#26368;&#21518;&#30340;prinf("pid= %d ...)&#20063;&#36755;&#20986;&#20102;before fork\n</span>
+before fork 
+pid = 8962, glob = 7, var = 89 <span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#23376;&#36827;&#31243;</span>
+before fork
+pid = 8961, glob = 6, var = 88 <span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#29238;&#36827;&#31243;</span>
+</pre>
+</div>
+<p>
+fork与I/O函数之间的关系：
+</p>
+<ul class="org-ul">
+<li>文件IO是不带缓存的：所以"a write to stdin"只被write函数写到标准输出一次
+</li>
+<li>标准I/O库是带缓存的：如果标准输出连到终端设备，则它是行缓存的，否则它是全缓存的
+<ol class="org-ol">
+<li>当以交互方式运行该程序时：因为标准输出缓存由新行符刷新，所以"before fork"只被printf输出一次
+</li>
+<li>当将标准输出重新定向到一个文件时：在fork之前调用了printf("before fork")一次，但当调用fork时该行数据仍在缓存内，然后在父进程数据空间复制到子进程中时该缓存数据也被复制到子进程中。于是那时父、子进程各自有了"before fork"的缓存。所以当每个进程终止时，其缓存中的所有内容被写到相应文件中
+</li>
+</ol>
+</li>
+</ul>
+
+<p>
+因此在fork进程前请务必考虑flush所有的缓存！
+</p>
+</div>
+</div>
+<div id="outline-container-sec-2-2-3" class="outline-4">
+<h4 id="sec-2-2-3">父、子进程的资源共享</h4>
+<div class="outline-text-4" id="text-2-2-3">
+<p>
+所有由父进程打开的描述符都被复制到子进程中。父、子进程每个相同的打开描述符共享一个文件表项。所以在上面程序中重定向了父进程的标准输出时，子进程的标准输出也被同样重定向
+</p>
+
+<p>
+再比如一个进程打开了三个不同文件，它们是标准输入、标准输出和标准出错。在从fork返回时，我们有了如图8-1中所示的安排
+</p>
+<p>
+<img src="pic/child-fd.png" alt="child-fd.png" width="90%" />
+这种共享文件的方式使父、子进程对同一文件使用了一个文件位移量。如果父、子进程写到同一描述符文件，但又没有任何形式的同步(例如使父进程等待子进程)，那么它们的输出就会相互混合，但是这种情况并不常见。在fork之后处理文件描述符有两种常见的情况：
+</p>
+<ol class="org-ol">
+<li>父进程等待子进程完成。父进程无需对其描述符做任何处理。当子进程终止后，它曾进行过读、写操作的任一共享描述符的文件位移量已做了相应更新
+</li>
+<li>父、子进程各自执行不同的程序段。在fork之后父、子进程各自关闭它们不需使用的文件描述符，并且不干扰对方使用的文件描述符。这种方法是网络服务进程中经常使用
+</li>
+</ol>
+
+<p>
+除了打开文件之外，很多父进程的其他性质也由子进程继承:
+</p>
+<ul class="org-ul">
+<li>实际用户ID、实际组ID、有效用户ID、有效组ID
+</li>
+<li>添加组ID
+</li>
+<li>进程组ID
+</li>
+<li>对话期ID
+</li>
+<li>控制终端
+</li>
+<li>设置-用户-ID标志和设置-组-ID标志
+</li>
+<li>当前工作目录
+</li>
+<li>根目录
+</li>
+<li>文件方式创建屏蔽字
+</li>
+<li>信号屏蔽和排列
+</li>
+<li>对任一打开文件描述符的在执行时关闭标志
+</li>
+<li>环境
+</li>
+<li>连接的共享存储段
+</li>
+<li>资源限制
+</li>
+</ul>
+</div>
+</div>
+<div id="outline-container-sec-2-2-4" class="outline-4">
+<h4 id="sec-2-2-4">父、子进程的区别</h4>
+<div class="outline-text-4" id="text-2-2-4">
+<ul class="org-ul">
+<li>fork的返回值
+</li>
+<li>进程ID
+</li>
+<li>不同的父进程ID
+</li>
+<li>子进程的tms_utime，tms_stime，tms_cutime以及tms_ustime设置为0
+</li>
+<li>父进程设置的锁，子进程不继承
+</li>
+<li>子进程的未决告警被清除
+</li>
+<li>子进程的未决信号集设置为空集
+</li>
+</ul>
+</div>
+</div>
+<div id="outline-container-sec-2-2-5" class="outline-4">
+<h4 id="sec-2-2-5">fork的常见用法</h4>
+<div class="outline-text-4" id="text-2-2-5">
+<ol class="org-ol">
+<li>一个父进程希望复制自己，使父、子进程同时执行不同的代码段。这在网络服务进程中是常见的：父进程等待委托者的服务请求。当这种请求到达时，父进程调用fork，使子进程处理此请求。父进程则继续等待下一个服务请求
+</li>
+<li>一个进程要执行一个不同的程序。这对shell是常见的情况。在这种情况下，子进程在从fork返回后立即调用exec
+</li>
+</ol>
+
+<p>
+某些操作系统将第二种用法中的两个操作(fork之后执行exec)组合成一个，并称其为spawn。UNIX将这两个操作分开，因为在很多场合需要单独使用fork，其后并不跟随exec
+</p>
+</div>
+</div>
+<div id="outline-container-sec-2-2-6" class="outline-4">
+<h4 id="sec-2-2-6">vfork</h4>
+<div class="outline-text-4" id="text-2-2-6">
+<p>
+vfork：用于创建一个新进程，而该新进程的目的是为了exec一个新程序
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;unistd.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#21019;&#24314;&#26032;&#36827;&#31243;&#65292;&#32780;&#35813;&#26032;&#36827;&#31243;&#26159;&#30446;&#30340;&#26159;&#20026;&#20102;exec&#19968;&#20010;&#26032;&#31243;&#24207;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#23376;&#36827;&#31243;&#36820;&#22238;0&#65292;&#29238;&#36827;&#31243;&#36820;&#22238;&#23376;&#36827;&#31243;&#30340;ID&#65292;&#20986;&#38169;&#36820;&#22238;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">pid_t</span> <span style="color: #87cefa;">vfork</span>(<span style="color: #98fb98;">void</span>);
+</pre>
+</div>
+<p>
+vfork与fork的不同：
+</p>
+<ol class="org-ol">
+<li>vfork并不将父进程的地址空间复制到子进程中，在子进程exec之前完全使用父进程的地址空间，这意味着子进程如果修改了某个变量，这个修改对父进程也是可见的！
+</li>
+<li>vfork保证了子进程在父进程之前执行，父进程会阻塞运行直到子进程执行了exec或者exit函数。如果在调用这两个函数之前子进程依赖于父进程的进一步动作，则会导致死锁，特别是子进程并不继承父进程的记录锁，这时使用父进程打开的文件时可能会被阻塞！
+</li>
+</ol>
+</div>
+<div id="outline-container-sec-2-2-6-1" class="outline-5">
+<h5 id="sec-2-2-6-1">vfork实例</h5>
+<div class="outline-text-5" id="text-2-2-6-1">
+<p>
+改写fork实例
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">external variable in initialized data</span>
+<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">glob</span> = 6;
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">void</span>)
+{
+    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">automatic variable on the stack</span>
+    <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">var</span>;
+    <span style="color: #98fb98;">pid_t</span> <span style="color: #eedd82;">pid</span>;
+
+    var = 88;
+    printf(<span style="color: #ffa07a;">"before fork\n"</span>);
+
+    <span style="color: #00ffff;">if</span>((pid = vfork()) &lt; 0) {
+        err_sys(<span style="color: #ffa07a;">"fork error"</span>);
+    } <span style="color: #00ffff;">else</span> <span style="color: #00ffff;">if</span>(pid == 0) { <span style="color: #ff4500;">//</span><span style="color: #ff4500;">child </span>
+        glob++; <span style="color: #ff4500;">// </span><span style="color: #ff4500;">change variable </span>
+        var++; 
+        _exit(0); <span style="color: #ff4500;">//</span><span style="color: #ff4500;">child terminated</span>
+        <span style="color: #ff4500;">//</span><span style="color: #ff4500;">exit(0) </span>
+    }
+
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">parent</span>
+    printf(<span style="color: #ffa07a;">"pid = %d, glob = %d, var = %d\n"</span>, getpid(), glob, var);
+    exit(0);
+}
+</pre>
+</div>
+
+<p>
+子进程对变量glob和var做加1操作，结果改变了父进程中的变量值。因为子进程在父进程的地址空间中运行
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ gcc -I/home/klose/Documents/programming/c/apue/include -c -o vforkExample.o src/process/vforkExample.c <span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#32534;&#35793;c&#25991;&#20214;&#65292;&#27880;&#24847;&#19981;&#33021;&#26377;&#20248;&#21270;&#21442;&#25968;&#65281;</span>
+$ gcc -o vforkExample vforkExample.o src/lib/libapue.a <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#38142;&#25509;&#38745;&#24577;&#24211;&#25991;&#20214;&#65292;&#20135;&#29983;&#21487;&#25191;&#34892;&#25991;&#20214;</span>
+
+$ ./vforkExample 
+before fork
+pid = 19302, glob = 7, var = 89
+
+$ gcc -O2 -I/home/klose/Documents/programming/c/apue/include -c -o vforkExample1.o src/process/vforkExample.c 
+$ gcc -O2 -o vforkExample1 vforkExample1.o src/lib/libapue.a
+
+$ ./vforkExample1 <span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#30001;&#20110;&#20248;&#21270;&#65292;var&#34987;&#25918;&#22312;&#23492;&#23384;&#22120;&#20869;&#65292;&#25152;&#20197;&#20002;&#22833;&#20102;&#23376;&#32447;&#31243;&#30340;&#20462;&#25913;</span>
+before fork
+pid = 19471, glob = 7, var = 88
+</pre>
+</div>
+<p>
+注意：子进程对变量的改动只对保存在内存中的变量有效，而对寄存器中的变量有可能会回滚。如果编译使用了优化参数，结果可能并不同，为了保证效果可以使用volatile
+</p>
+
+<p>
+因为写时复制技术的普及，实际上vfork已经是个过时的函数，尽量避免使用vfork
+</p>
+</div>
+</div>
+</div>
+</div>
+<div id="outline-container-sec-2-3" class="outline-3">
+<h3 id="sec-2-3">终止进程</h3>
 </div>
 </div>
 </div>
