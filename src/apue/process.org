@@ -603,3 +603,135 @@
     以后会用信号量来实现五个例程TELL_WAIT、TELL_PARENT、TELL_CHILD、WAIT_PARENT以及WAIT_CHILD
     
 ** 执行程序
+   当进程调用一种exec函数时，该进程完全由新程序代换，而新程序则从其main函数开始执行。调用exec并不创建新进程，因此进程ID并未改变。exec只是用另一个新程序替换了当前进程的正文、数据、堆和栈段
+   
+*** exec家族函数
+    exec家族函数：将指定的程序装入当前进程，使之替换掉当前进程大部分的上下文环境。一共6个变体，使用类似但形式不同的参数。
+    #+BEGIN_SRC C
+  #include <unistd.h>
+
+  int execl(const char *pathname, const char *arg0, ..., /* (char *)0 */);
+  int execlp(const char *filename, const char *arg, ..., /* (char *)0 */);
+  int execle(const char *pathname, const char *arg0, ..., /* (char *)0, char *const envp[] */);
+  int execv(const char *pathname, char *const argv[]);
+  int execvp(const char *filename, char *const argv[]);
+  int execve(const char *pathname, char *const argv[], char *const envp[]);
+    #+END_SRC
+    这六个函数若出错则为-1，若成功则不返回
+    
++ 字母p表示该函数取filename作为参数，并且用PATH环境变量寻找可执行文件，没有字母ｐ表示pathname路径名
++ 字母l表示该函数取一个参数表，与字母v互斥，v表示该函数取一个argv[]
++ 字母e表示该函数取envp[]数组，而不使用当前环境
+#+CAPTION: 6个exec函数的参数区别
+#+ATTR_HTML: :border 1 :rules all :frame boade
+| 函数   | pathname | filename |   | 参数表 | argv[] |   | enviorn | envp[] |
+| execl    | •        |          |   | •      |        |   | •       |        |
+| execlp   |          | •        |   | •      |        |   | •       |        |
+| execle   | •        |          |   | •      |        |   |         | •      |
+| execv    | •        |          |   |        | •      |   | •       |        |
+| execvp   |          | •        |   |        | •      |   | •       |        |
+| execve   | •        |          |   |        | •      |   |         | •      |
+| 字母表示 |          | p        |   | l      | v      |   |         | e      |
+
+在很多UNIX实现中，这六个函数中只有一个execve是内核的系统调用。另外五个只是库函数，它们最终都要调用execve系统调用。这六个函数之间的关系示于图8-2中：
+#+ATTR_HTML: image :width 90% 
+[[file:pic/exec-family.jpg]]
+**** exec进程特征
+     执行exec后进程还保持了原进程的下列特征:
++ 进程ID和父进程ID
++ 实际用户ID和实际组ID
++ 添加组ID
++ 进程组ID
++ 对话期ID
++ 控制终端
++ 闹钟尚余留的时间
++ 当前工作目录
++ 根目录
++ 文件方式创建屏蔽字
++ 文件锁
++ 进程信号屏蔽
++ 未决信号
++ 资源限制
++ tms_utime，tms_stime，tms_cutime以及tms_ustime值
+  
+对打开文件的处理与每个描述符的exec关闭标志值FD_CLOEXEC有关。进程中每个打开描述符都有一个exec关闭标志。若此标志设置，则在执行exec时关闭该描述符，否则该描述符仍打开。除非特地用fcntl设置了该标志，否则系统的默认操作是在exec后仍保持这种描述符打开
+
+POSIX.1明确要求在exec时关闭打开目录流。这通常是由opendir函数实现的，它调用fcntl函数为对应于打开目录流的描述符设置exec关闭标志
+
+注意：在exec前后实际用户ID和实际组ID保持不变，而有效ID是否改变则取决于所执行程序的文件的设置-用户-ID位和设置-组-ID位是否设置。如果新程序的设置-用户-ID位已设置，则有效用户ID变成程序文件所有者的ID，否则有效用户ID不变。对组ID的处理方式与此相同！
+**** exec实例
+程序echoall是一个普通程序，回送其所有命令行参数及其全部环境表
+     #+BEGIN_SRC C
+       #include <stdio.h>
+
+       int main(int argc, char *argv[])
+       {
+               int i;
+               char **ptr;
+               extern char **environ;
+
+               for(i = 0; i < argc; i++)
+                       printf("argv[%d]: %s\n", i, argv[i]);
+
+               for(ptr = environ; *ptr != 0 ; ptr++ )
+                       printf("%s\n", *ptr);
+
+               exit(0);  
+       }
+     #+END_SRC
+
+调用execle要求一个路径名和一个特定的环境。下一个调用的是execlp用一个文件名，并将调用者的环境传送给新程序
+#+BEGIN_SRC C
+  #include <sys/types.h>
+  #include <sys/wait.h>
+  #include "apue.h"
+
+  char *env_init[] = { "USER=unknown", "PATH=/tmp", NULL};
+       
+  int main(void) 
+  {
+          pid_t pid;
+          if( (pid = fork() ) < 0 )
+                  err_sys("fork error");
+          else if( 0 == pid ) {
+                  if(execle("/home/klose/bin/echoall",
+                            "echoall", "myarg1", "MY ARG2", (char *) 0,
+                            env_init) < 0 )
+                          err_sys("execle error");
+                  
+          }
+
+          if (waitpid(pid, NULL, 0) < 0)
+                  err_sys("wait error");
+
+          if( (pid = fork() ) < 0 )
+                  err_sys("fork error");
+
+          else if (0 == pid) {
+                  if(execlp("echoall",
+                            "echoall", "only 1 arg", (char *) 0) < 0)
+                          err_sys("execlp error");
+          }
+
+          exit(0);
+          
+  }
+#+END_SRC
+
+测试代码如下
+#+BEGIN_SRC sh
+  $ ./execExample
+  argv[0]: echoall #execle执行echoall  
+  argv[1]: myarg1
+  argv[2]: MY ARG2
+  USER=unknown
+  PATH=/tmp
+  argv[0]: echoall #execlp执行echoall
+  $ argv[1]: only 1 arg
+  LC_PAPER=en_US.UTF8
+  HOME=/home/klose
+  # ...... 其他各种环境变量 
+  _=./execExample
+#+END_SRC
+注意：shell提示符号'$'出现在第二个exec打印"echo all"和"only 1 arg"之间，这是因为父进程并不等待该子进程结束
+* 更改用户ID和组ID

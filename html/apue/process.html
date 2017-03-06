@@ -188,9 +188,19 @@ for the JavaScript code in this tag.
 <li><a href="#sec-2-3-1">竞争条件实例</a></li>
 </ul>
 </li>
-<li><a href="#sec-2-4">执行程序</a></li>
+<li><a href="#sec-2-4">执行程序</a>
+<ul>
+<li><a href="#sec-2-4-1">exec家族函数</a>
+<ul>
+<li><a href="#sec-2-4-1-1">exec进程特征</a></li>
+<li><a href="#sec-2-4-1-2">exec实例</a></li>
 </ul>
 </li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#sec-3">更改用户ID和组ID</a></li>
 </ul>
 </div>
 </div>
@@ -1249,7 +1259,322 @@ $ output from child
 
 <div id="outline-container-sec-2-4" class="outline-3">
 <h3 id="sec-2-4">执行程序</h3>
+<div class="outline-text-3" id="text-2-4">
+<p>
+当进程调用一种exec函数时，该进程完全由新程序代换，而新程序则从其main函数开始执行。调用exec并不创建新进程，因此进程ID并未改变。exec只是用另一个新程序替换了当前进程的正文、数据、堆和栈段
+</p>
 </div>
+
+<div id="outline-container-sec-2-4-1" class="outline-4">
+<h4 id="sec-2-4-1">exec家族函数</h4>
+<div class="outline-text-4" id="text-2-4-1">
+<p>
+exec家族函数：将指定的程序装入当前进程，使之替换掉当前进程大部分的上下文环境。一共6个变体，使用类似但形式不同的参数。
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;unistd.h&gt;</span>
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">execl</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">pathname</span>, <span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">arg0</span>, ..., <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">(char *)0 </span><span style="color: #ff4500;">*/</span>);
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">execlp</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">filename</span>, <span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">arg</span>, ..., <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">(char *)0 </span><span style="color: #ff4500;">*/</span>);
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">execle</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">pathname</span>, <span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">arg0</span>, ..., <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">(char *)0, char *const envp[] </span><span style="color: #ff4500;">*/</span>);
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">execv</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">pathname</span>, <span style="color: #98fb98;">char</span> *<span style="color: #00ffff;">const</span> <span style="color: #eedd82;">argv</span>[]);
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">execvp</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">filename</span>, <span style="color: #98fb98;">char</span> *<span style="color: #00ffff;">const</span> <span style="color: #eedd82;">argv</span>[]);
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">execve</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">pathname</span>, <span style="color: #98fb98;">char</span> *<span style="color: #00ffff;">const</span> <span style="color: #eedd82;">argv</span>[], <span style="color: #98fb98;">char</span> *<span style="color: #00ffff;">const</span> <span style="color: #eedd82;">envp</span>[]);
+</pre>
+</div>
+<p>
+这六个函数若出错则为-1，若成功则不返回
+</p>
+
+<ul class="org-ul">
+<li>字母p表示该函数取filename作为参数，并且用PATH环境变量寻找可执行文件，没有字母ｐ表示pathname路径名
+</li>
+<li>字母l表示该函数取一个参数表，与字母v互斥，v表示该函数取一个argv[]
+</li>
+<li>字母e表示该函数取envp[]数组，而不使用当前环境
+</li>
+</ul>
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boade">
+<caption class="t-above"><span class="table-number">Table 5:</span> 6个exec函数的参数区别</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">函数</td>
+<td class="left">pathname</td>
+<td class="left">filename</td>
+<td class="left">&#xa0;</td>
+<td class="left">参数表</td>
+<td class="left">argv[]</td>
+<td class="left">&#xa0;</td>
+<td class="left">enviorn</td>
+<td class="left">envp[]</td>
+</tr>
+
+<tr>
+<td class="left">execl</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+</tr>
+
+<tr>
+<td class="left">execlp</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+</tr>
+
+<tr>
+<td class="left">execle</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+</tr>
+
+<tr>
+<td class="left">execv</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+</tr>
+
+<tr>
+<td class="left">execvp</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+</tr>
+
+<tr>
+<td class="left">execve</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+</tr>
+
+<tr>
+<td class="left">字母表示</td>
+<td class="left">&#xa0;</td>
+<td class="left">p</td>
+<td class="left">&#xa0;</td>
+<td class="left">l</td>
+<td class="left">v</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+<td class="left">e</td>
+</tr>
+</tbody>
+</table>
+
+<p>
+在很多UNIX实现中，这六个函数中只有一个execve是内核的系统调用。另外五个只是库函数，它们最终都要调用execve系统调用。这六个函数之间的关系示于图8-2中：
+</p>
+
+<div class="figure">
+<p><img src="pic/exec-family.jpg" alt="exec-family.jpg" width="90%" />
+</p>
+</div>
+</div>
+<div id="outline-container-sec-2-4-1-1" class="outline-5">
+<h5 id="sec-2-4-1-1">exec进程特征</h5>
+<div class="outline-text-5" id="text-2-4-1-1">
+<p>
+执行exec后进程还保持了原进程的下列特征:
+</p>
+<ul class="org-ul">
+<li>进程ID和父进程ID
+</li>
+<li>实际用户ID和实际组ID
+</li>
+<li>添加组ID
+</li>
+<li>进程组ID
+</li>
+<li>对话期ID
+</li>
+<li>控制终端
+</li>
+<li>闹钟尚余留的时间
+</li>
+<li>当前工作目录
+</li>
+<li>根目录
+</li>
+<li>文件方式创建屏蔽字
+</li>
+<li>文件锁
+</li>
+<li>进程信号屏蔽
+</li>
+<li>未决信号
+</li>
+<li>资源限制
+</li>
+<li>tms_utime，tms_stime，tms_cutime以及tms_ustime值
+</li>
+</ul>
+
+<p>
+对打开文件的处理与每个描述符的exec关闭标志值FD_CLOEXEC有关。进程中每个打开描述符都有一个exec关闭标志。若此标志设置，则在执行exec时关闭该描述符，否则该描述符仍打开。除非特地用fcntl设置了该标志，否则系统的默认操作是在exec后仍保持这种描述符打开
+</p>
+
+<p>
+POSIX.1明确要求在exec时关闭打开目录流。这通常是由opendir函数实现的，它调用fcntl函数为对应于打开目录流的描述符设置exec关闭标志
+</p>
+
+<p>
+注意：在exec前后实际用户ID和实际组ID保持不变，而有效ID是否改变则取决于所执行程序的文件的设置-用户-ID位和设置-组-ID位是否设置。如果新程序的设置-用户-ID位已设置，则有效用户ID变成程序文件所有者的ID，否则有效用户ID不变。对组ID的处理方式与此相同！
+</p>
+</div>
+</div>
+<div id="outline-container-sec-2-4-1-2" class="outline-5">
+<h5 id="sec-2-4-1-2">exec实例</h5>
+<div class="outline-text-5" id="text-2-4-1-2">
+<p>
+程序echoall是一个普通程序，回送其所有命令行参数及其全部环境表
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;stdio.h&gt;</span>
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">argc</span>, <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">argv</span>[])
+{
+    <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">i</span>;
+    <span style="color: #98fb98;">char</span> **<span style="color: #eedd82;">ptr</span>;
+    <span style="color: #00ffff;">extern</span> <span style="color: #98fb98;">char</span> **<span style="color: #eedd82;">environ</span>;
+
+    <span style="color: #00ffff;">for</span>(i = 0; i &lt; argc; i++)
+        printf(<span style="color: #ffa07a;">"argv[%d]: %s\n"</span>, i, argv[i]);
+
+    <span style="color: #00ffff;">for</span>(ptr = environ; *ptr != 0 ; ptr++ )
+        printf(<span style="color: #ffa07a;">"%s\n"</span>, *ptr);
+
+    exit(0);  
+}
+</pre>
+</div>
+
+<p>
+调用execle要求一个路径名和一个特定的环境。下一个调用的是execlp用一个文件名，并将调用者的环境传送给新程序
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/wait.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+
+<span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">env_init</span>[] = { <span style="color: #ffa07a;">"USER=unknown"</span>, <span style="color: #ffa07a;">"PATH=/tmp"</span>, <span style="color: #7fffd4;">NULL</span>};
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">void</span>) 
+{
+    <span style="color: #98fb98;">pid_t</span> <span style="color: #eedd82;">pid</span>;
+    <span style="color: #00ffff;">if</span>( (pid = fork() ) &lt; 0 )
+        err_sys(<span style="color: #ffa07a;">"fork error"</span>);
+    <span style="color: #00ffff;">else</span> <span style="color: #00ffff;">if</span>( 0 == pid ) {
+        <span style="color: #00ffff;">if</span>(execle(<span style="color: #ffa07a;">"/home/klose/bin/echoall"</span>,
+              <span style="color: #ffa07a;">"echoall"</span>, <span style="color: #ffa07a;">"myarg1"</span>, <span style="color: #ffa07a;">"MY ARG2"</span>, (<span style="color: #98fb98;">char</span> *) 0,
+              env_init) &lt; 0 )
+            err_sys(<span style="color: #ffa07a;">"execle error"</span>);
+
+    }
+
+    <span style="color: #00ffff;">if</span> (waitpid(pid, <span style="color: #7fffd4;">NULL</span>, 0) &lt; 0)
+        err_sys(<span style="color: #ffa07a;">"wait error"</span>);
+
+    <span style="color: #00ffff;">if</span>( (pid = fork() ) &lt; 0 )
+        err_sys(<span style="color: #ffa07a;">"fork error"</span>);
+
+    <span style="color: #00ffff;">else</span> <span style="color: #00ffff;">if</span> (0 == pid) {
+        <span style="color: #00ffff;">if</span>(execlp(<span style="color: #ffa07a;">"echoall"</span>,
+              <span style="color: #ffa07a;">"echoall"</span>, <span style="color: #ffa07a;">"only 1 arg"</span>, (<span style="color: #98fb98;">char</span> *) 0) &lt; 0)
+            err_sys(<span style="color: #ffa07a;">"execlp error"</span>);
+    }
+
+    exit(0);
+
+}
+</pre>
+</div>
+
+<p>
+测试代码如下
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ ./execExample
+argv[0]: echoall <span style="color: #ff4500;">#</span><span style="color: #ff4500;">execle&#25191;&#34892;echoall  </span>
+argv[1]: myarg1
+argv[2]: MY ARG2
+<span style="color: #eedd82;">USER</span>=unknown
+<span style="color: #eedd82;">PATH</span>=/tmp
+argv[0]: echoall <span style="color: #ff4500;">#</span><span style="color: #ff4500;">execlp&#25191;&#34892;echoall</span>
+$ argv[1]: only 1 arg
+<span style="color: #eedd82;">LC_PAPER</span>=en_US.UTF8
+<span style="color: #eedd82;">HOME</span>=/home/klose
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">...... &#20854;&#20182;&#21508;&#31181;&#29615;&#22659;&#21464;&#37327; </span>
+<span style="color: #eedd82;">_</span>=./execExample
+</pre>
+</div>
+<p>
+注意：shell提示符号'$'出现在第二个exec打印"echo all"和"only 1 arg"之间，这是因为父进程并不等待该子进程结束
+</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div id="outline-container-sec-3" class="outline-2">
+<h2 id="sec-3">更改用户ID和组ID</h2>
 </div>
 </div>
 <div id="postamble" class="status">
