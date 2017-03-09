@@ -218,12 +218,28 @@ for the JavaScript code in this tag.
 <li><a href="#sec-3-5">组ID</a></li>
 </ul>
 </li>
-<li><a href="#sec-4">解释器</a></li>
+<li><a href="#sec-4">解释器</a>
+<ul>
+<li><a href="#sec-4-1">exec调用解释器文件</a></li>
+<li><a href="#sec-4-2">awk实例</a></li>
+<li><a href="#sec-4-3">解释器文件的优劣</a></li>
+</ul>
+</li>
+<li><a href="#sec-5">system函数</a>
+<ul>
+<li><a href="#sec-5-1">system简单实现</a>
+<ul>
+<li><a href="#sec-5-1-1">mysystem实例</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#sec-6">进程会计</a></li>
 </ul>
 </div>
 </div>
 <p>
-本章介绍UNIX的进程控制：
+本章介绍Unix的进程控制：
 </p>
 <ul class="org-ul">
 <li>创建新进程、执行程序和进程终止
@@ -232,7 +248,7 @@ for the JavaScript code in this tag.
 </li>
 <li>解释器文件和system函数
 </li>
-<li>进程会计机制结束
+<li>进程会计机制
 </li>
 </ul>
 
@@ -1815,7 +1831,7 @@ setuid/setgid的规则：
 对于进程特权的改变，应遵循“使用能完成工作的最小特权”的原则，以避免用户进程越权操作：
 1. 在不需要设置-用户-ID带来的权限时，使用setuid(getuid())降低有效用户ID的特权
 2. getuid和geteuid函数只能获得实际用户ID和有效用户ID的当前值，
-   而不能获得所保存的设置-用户-ID的当前值。必须在降低权限前通过调用geteuid然后保存
+  而不能获得所保存的设置-用户-ID的当前值。必须在降低权限前通过调用geteuid然后保存
 3. 再次需要高级权限的时候，可以通过setuid(保存的euid)来恢复
 4. 在子进程执行exec之前，应setuid(getuid())以避免设置-用户-ID引起的特权传递
 5. 如果程序的设置-用户-ID为root，以超级用户特权调用setuid就会设置所有三个用户ID，慎用！
@@ -1936,6 +1952,378 @@ setuid/setgid的规则：
 
 <div id="outline-container-sec-4" class="outline-2">
 <h2 id="sec-4">解释器</h2>
+<div class="outline-text-2" id="text-4">
+<p>
+解释器文件是文本文件，其起始行的形式是:  
+</p>
+<pre class="example">
+#!pathname [optional-argument]
+</pre>
+<p>
+在惊叹号和pathname之间的空格是可任选的。最常见的是以下列行开始:
+</p>
+<pre class="example">
+#!/bin/sh
+</pre>
+<p>
+pathname通常是个绝对路径名，不需要使用PATH进行路径搜索。对这种文件的识别是由内核作为exec系统调用处理的一部分来完成的。内核使调用exec函数的进程实际执行的文件并不是该解释器文件，而是在该解释器文件的第一行中pathname所指定的程序文件！
+</p>
+</div>
+
+<div id="outline-container-sec-4-1" class="outline-3">
+<h3 id="sec-4-1">exec调用解释器文件</h3>
+<div class="outline-text-3" id="text-4-1">
+<p>
+解释器文件testinterp，程序echoall(解释器)回送每一个命令行参数
+</p>
+<pre class="example">
+#!/home/klose/bin/echoall foo
+</pre>
+<p>
+使用exec调用解释器文件/home/klose/bin/testinterp
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/wait.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">void</span>)
+{
+    <span style="color: #98fb98;">pid_t</span> <span style="color: #eedd82;">pid</span>;
+
+    <span style="color: #00ffff;">if</span>( (pid = fork()) &lt; 0 )
+        err_sys(<span style="color: #ffa07a;">"fork error"</span>);
+    <span style="color: #00ffff;">else</span> <span style="color: #00ffff;">if</span> ( 0 == pid ) <span style="color: #ff4500;">//</span><span style="color: #ff4500;">child </span>
+        <span style="color: #00ffff;">if</span>(execl(<span style="color: #ffa07a;">"/home/klose/bin/testinterp"</span>, <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#35299;&#37322;&#22120;&#25991;&#20214;&#36335;&#24452;&#21517;pathname</span>
+             <span style="color: #ffa07a;">"testinterp"</span>, <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#25191;&#34892;&#31243;&#24207;&#21517;&#65292;&#25171;&#21360;&#30340;&#26102;&#20505;&#20250;&#34987;pathname&#20195;&#26367;</span>
+             <span style="color: #ffa07a;">"myarg1"</span>, <span style="color: #ffa07a;">"MY ARG2"</span>, <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#12288;&#21629;&#20196;&#34892;&#21442;&#25968;</span>
+             (<span style="color: #98fb98;">char</span> *) 0 <span style="color: #ff4500;">//</span><span style="color: #ff4500;">NULL&#23383;&#31526;&#25351;&#38024;</span>
+               ) &lt; 0 )
+            err_sys(<span style="color: #ffa07a;">"execl error"</span>);
+
+    <span style="color: #00ffff;">if</span> (waitpid(pid, <span style="color: #7fffd4;">NULL</span>, 0) != pid )
+        err_sys(<span style="color: #ffa07a;">"waitpid error"</span>);
+
+    exit(0);
+
+}
+</pre>
+</div>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">$ ./src/process/interpret
+
+argv[0]: /home/klose/bin/echoall
+argv[1]: foo
+argv[2]: /home/klose/bin/testinterp
+argv[3]: myarg1
+argv[4]: MY ARG2
+<span style="color: #eedd82;">LC_PAPER</span>=en_US.UTF8
+<span style="color: #ff4500;">#</span><span style="color: #ff4500;">...</span>
+=./src/process/interpret
+</pre>
+</div>
+<p>
+当内核exec执行解释器(/home/klose/bin/echoll)时，argv <code>[0]</code> 是该解释器的pathname，argv <code>[1]</code> 是解释器文件中的可选参数，其余参数是pathname(/home/klose/bin/testinterp)，以及程序中调用execl的第二和第三个参数(myarg1和MY ARG2)。调用execl时的argv <code>[1]</code> 和argv <code>[2]</code> 已右移了两个位置。注意：内核取execl中的pathname代替第一个参数(testinterp)，因为一般pathname包含了较第一个参数更多的信息！
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-4-2" class="outline-3">
+<h3 id="sec-4-2">awk实例</h3>
+<div class="outline-text-3" id="text-4-2">
+<p>
+在解释器pathname后可跟随可选参数，它们常用于为支持-f选择项的程序指定该选择项。例如，可以以下列方式执行awk(1)程序：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">awk -f myfile
+</pre>
+</div>
+<p>
+它告诉awk从文件myfile中读awk程序，而在在解释器文件中使用-f选择项，可以写成:
+</p>
+<pre class="example">
+#!awk -f 
+(在解释器文件中的awk程序)
+</pre>
+<p>
+以下awk程序打印所有的参数
+</p>
+<div class="org-src-container">
+
+<pre class="src src-awk"><span style="color: #ff4500;">#</span><span style="color: #ff4500;">!/bin/awk -f</span>
+
+<span style="color: #00ffff;">BEGIN</span> {
+    <span style="color: #00ffff;">for</span> (i = 0; i &lt; <span style="color: #eedd82;">ARGC</span>; i++)
+        <span style="color: #7fffd4;">printf</span> <span style="color: #ffa07a;">"ARGV[%d] = %s\n"</span>, i, <span style="color: #eedd82;">ARGV</span>[i]
+    <span style="color: #00ffff;">exit</span>
+}
+</pre>
+</div>
+<p>
+测试:
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C">$ ./awkexample filel FILENAME2 f3 
+
+ARGV[0] = awk
+ARGV[1] = filel
+ARGV[2] = FILENAME2
+ARGV[3] = f3
+</pre>
+</div>
+<p>
+执行/bin/awk时，其命令行参数是：
+</p>
+<pre class="example">
+/bin/awk -f /home/klose/Documents/programming/c/apue/orignal/proc/awkexample file1 FILENAME2 f3
+</pre>
+<p>
+解释器文件的路径名(/usr/local/bin/awkexample)被传送给解释器。因为不能期望该解释器(在本例中是/bin/awk)会使用PATH变量定位该解释器文件，所以只传送其路径名中的文件名是不够的。当awk读解释器文件时，因为#是awk的注释字符，所以在awk读解释器文件时，它忽略第一行
+</p>
+
+<p>
+在此例子中解释器的-f选择项是必需的。因为它告诉awk在什么地方得到awk程序。如果在解释器文件中删除-f选择项，则其结果是: 
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ ./awkexample filel FILENAME2 f3 
+
+awk: cmd. line:1: ./awkexample
+awk: cmd. line:1: ^ syntax error
+awk: cmd. line:1: ./awkexample
+awk: cmd. line:1:   ^ unterminated regexp
+</pre>
+</div>
+<p>
+因为其命令行参数变成了：
+</p>
+<pre class="example">
+/bin/awk /home/klose/Documents/programming/c/apue/orignal/proc/awkexample file1 FILENAME2 f3
+</pre>
+<p>
+于是awk企图将字符串/usr/local/bin/awkexample解释为一个awk程序。如果不能向解释器传递至少一个可选参数(在本例中是-f)，那么这些解释器文件只有对shell才是有用的
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-4-3" class="outline-3">
+<h3 id="sec-4-3">解释器文件的优劣</h3>
+<div class="outline-text-3" id="text-4-3">
+<p>
+解释器文件的劣势主要在于效率，因为内核需要识别解释器文件，这会带来额外的开销。但是解释器文件还是有用的:
+</p>
+<ul class="org-ul">
+<li>某些程序是用某种语言写的脚本，可以隐藏这一事实。例如只需使用下列命令行:
+</li>
+</ul>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ awkexample optional-arguments
+</pre>
+</div>
+<p>
+而并不需要知道该程序实际上是一个awk脚本，否则就要以下列方式执行该程序:
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ awk -f awkexample optional-arguments
+</pre>
+</div>
+<ul class="org-ul">
+<li>解释器脚本在效率方面也提供了好处。再考虑一下前面的例子，如果将其放在一个shell脚本中:
+<div class="org-src-container">
+
+<pre class="src src-sh"><span style="color: #ff4500;">#</span><span style="color: #ff4500;">!/bin/</span><span style="color: #00ffff;">sh</span>
+
+awk <span style="color: #ffa07a;">'BEGIN {</span>
+<span style="color: #ffa07a;">for (i = 0; i &lt; ARGC; i++)</span>
+<span style="color: #ffa07a;">printf "ARGV[%d] = %s\n", i, ARGV[i]</span>
+<span style="color: #ffa07a;">e x i t</span>
+<span style="color: #ffa07a;">}'</span> $<span style="color: #eedd82;">*</span>
+</pre>
+</div>
+</li>
+</ul>
+<p>
+这只会要求做更多的工作。首先shell读此命令，然后试图execlp此文件名。因为shell脚本是一个可执行文件，但却不是机器可执行的，于是返回一个错误，execlp就认为该文件是一个shell脚本。然后再执行/bin/sh，并以该shell脚本的路径名作为其参数。shell正确地执行脚本，但是为了运行awk程序，它调用fork，exec和wait。用一个shell脚本代替解释器脚本往往需要更多的开销
+</p>
+
+<ul class="org-ul">
+<li>使用解释器脚本可以调用除/bin/sh以外的其他shell来编写shell脚本。当execlp找到一个非机器可执行的可执行文件时，它总是调用/bin/sh来解释执行该文件。但是用解释器脚本则可编写成: 
+<pre class="example">
+#!/bin/csh
+(在解释器文件中后随Cshell脚本)
+</pre>
+</li>
+</ul>
+<p>
+虽然可将此放在一个/bin/sh脚本中(然后由其调用Cshell)，但同样会有更多的开销
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-5" class="outline-2">
+<h2 id="sec-5">system函数</h2>
+<div class="outline-text-2" id="text-5">
+<p>
+system：在程序中执行一个命令字符串，是否支持system完全依赖于操作系统
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;stdlib.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#20351;&#29992;/bin/sh&#25191;&#34892;&#25351;&#23450;&#30340;&#21629;&#20196;&#20018;&#25191;&#34892;&#26631;&#20934;&#30340;shell&#21629;&#20196;</span>
+
+<span style="color: #ffa07a;">   cmdstring&#65306;&#21629;&#20196;&#20018;</span>
+
+<span style="color: #ffa07a;">   return: 1. &#22914;&#26524;fork&#22833;&#36133;&#25110;&#32773;waitpid&#36820;&#22238;&#38500;EINTR&#20043;&#22806;&#30340;&#20986;&#38169;&#65292;&#21017;system&#36820;&#22238;-1&#65292;&#32780;&#19988;errno&#20013;&#35774;&#32622;&#20102;&#38169;&#35823;&#31867;&#22411;&#12290;</span>
+<span style="color: #ffa07a;">       2. &#22914;&#26524;exec&#22833;&#36133;(&#34920;&#31034;&#19981;&#33021;&#25191;&#34892;shell)&#65292;&#21017;&#20854;&#36820;&#22238;&#20540;&#22914;&#21516;shell&#25191;&#34892;&#20102;exit(127)&#19968;&#26679;&#12290;</span>
+<span style="color: #ffa07a;">       3. &#25152;&#26377;&#19977;&#20010;&#20989;&#25968;(fork&#65292;exec&#21644;waitpid)&#37117;&#25104;&#21151;&#65292;&#24182;&#19988;system&#30340;&#36820;&#22238;&#20540;&#26159;shell&#30340;&#32456;&#27490;&#29366;&#24577;</span>
+<span style="color: #ffa07a;"> */</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">system</span>(cont <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">cmdstring</span>);
+</pre>
+</div>
+<p>
+如果cmdstring是一个空指针，则仅当system命令处理程序可用时返回非0值，这一特征可以用来判定在一个给定的操作系统上是否支持system函数。在UNIX中system总是可用的
+</p>
+
+<p>
+因为system在其实现中调用了fork、exec和waitpid，因此有三种返回值:
+</p>
+<ol class="org-ol">
+<li>如果fork失败或者waitpid返回除EINTR之外的出错，则system返回-1，而且errno中设置了错误类型
+</li>
+<li>如果exec失败(表示不能执行shell)，则其返回值如同shell执行了exit(127)一样
+</li>
+<li>否则所有三个函数(fork，exec和waitpid)都成功，并且system的返回值是shell的终止状态，其格式已在waitpid中说明
+</li>
+</ol>
+</div>
+
+<div id="outline-container-sec-5-1" class="outline-3">
+<h3 id="sec-5-1">system简单实现</h3>
+<div class="outline-text-3" id="text-5-1">
+<p>
+以下程序是system的一个实现，没有考虑信号处理
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span>    <span style="color: #ffa07a;">&lt;sys/wait.h&gt;</span>
+<span style="color: #7fffd4;">#include</span>    <span style="color: #ffa07a;">&lt;errno.h&gt;</span>
+<span style="color: #7fffd4;">#include</span>    <span style="color: #ffa07a;">&lt;unistd.h&gt;</span>
+
+<span style="color: #ff4500;">/* </span><span style="color: #ff4500;">&#32570;&#23569;&#20449;&#21495;&#22788;&#29702; </span><span style="color: #ff4500;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">mysystem</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">cmdstring</span>) 
+{
+    <span style="color: #98fb98;">pid_t</span>   <span style="color: #eedd82;">pid</span>;
+    <span style="color: #98fb98;">int</span>     <span style="color: #eedd82;">status</span>;
+
+    <span style="color: #00ffff;">if</span> (cmdstring == <span style="color: #7fffd4;">NULL</span>)
+        <span style="color: #00ffff;">return</span>(1); <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#36820;&#22238;1&#34920;&#31034;&#25903;&#25345;system&#20989;&#25968;    </span>
+
+    <span style="color: #00ffff;">if</span> ((pid = fork()) &lt; 0) {
+        status = -1;    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#26080;&#27861;&#20877;&#21019;&#24314;&#26032;&#30340;&#36827;&#31243;</span>
+    } <span style="color: #00ffff;">else</span> <span style="color: #00ffff;">if</span> (pid == 0) { <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#23376;&#36827;&#31243;</span>
+        execl(<span style="color: #ffa07a;">"/bin/sh"</span>, <span style="color: #ffa07a;">"sh"</span>, <span style="color: #ffa07a;">"-c"</span>, cmdstring, (<span style="color: #98fb98;">char</span> *)0);
+        _exit(127);     <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#26080;&#27861;&#25191;&#34892;exec&#20989;&#25968;&#65292;&#36820;&#22238;127</span>
+    } <span style="color: #00ffff;">else</span> { <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#29238;&#36827;&#31243;&#31561;&#24453;&#23376;&#36827;&#31243;&#32467;&#26463;</span>
+        <span style="color: #00ffff;">while</span> (waitpid(pid, &amp;status, 0) &lt; 0) {
+            <span style="color: #00ffff;">if</span> (errno != EINTR) {
+                status = -1; <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">waitpid&#19981;&#26159;&#36890;&#36807;&#25429;&#33719;&#20013;&#26029;&#20449;&#21495;&#32780;&#36820;&#22238;&#65292;&#20986;&#38169;&#36820;&#22238;-1 </span><span style="color: #ff4500;">*/</span>
+                <span style="color: #00ffff;">break</span>;
+            }
+        }
+    }
+
+    <span style="color: #00ffff;">return</span>(status); <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#36820;&#22238;&#23376;&#36827;&#31243;&#30340;&#32456;&#27490;&#29366;&#24577;</span>
+}
+</pre>
+</div>
+<p>
+shell的-c选择项告诉shell程序取下一个命令行参数(在这里是cmdstring)作为命令输入(而不是从标准输入或从一个给定的文件中读命令)。shell对以null字符终止的命令字符串进行语法分析，将它们分成分隔开的命令行参数。传递给shell的实际命令串可以包含任一有效的shell命令。例如可以用'&lt;'和'&gt;'对输入和输出重新定向
+</p>
+
+<p>
+如果不使用shell执行此命令，而是试图由我们自己去执行它，那么将相当困难。首先必须用execlp而不是execl，像shell那样使用PATH变量。那么必须将null符结尾的命令字符串分成各个命令行参数，以便调用execlp。最后也不能使用任何一个shell元字符。
+</p>
+
+<p>
+注意：最后调用_exit而不是exit。这是为了防止任一标准I/O缓存(这些缓存会在fork中由父进程复制到子进程)在子进程中被刷新！
+</p>
+</div>
+
+<div id="outline-container-sec-5-1-1" class="outline-4">
+<h4 id="sec-5-1-1">mysystem实例</h4>
+<div class="outline-text-4" id="text-5-1-1">
+<p>
+调用mystem来执行shell命令：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/wait.h&gt;</span>
+
+<span style="color: #00ffff;">extern</span> <span style="color: #98fb98;">int</span> <span style="color: #87cefa;">mysystem</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">cmdstring</span>);
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">void</span>)
+{
+    <span style="color: #98fb98;">int</span>     <span style="color: #eedd82;">status</span>;
+
+    <span style="color: #00ffff;">if</span> ((status = mysystem(<span style="color: #ffa07a;">"date"</span>)) &lt; 0)
+        err_sys(<span style="color: #ffa07a;">"system() error"</span>);
+    pr_exit(status);
+
+    <span style="color: #00ffff;">if</span> ((status = mysystem(<span style="color: #ffa07a;">"nosuchcommand"</span>)) &lt; 0)
+        err_sys(<span style="color: #ffa07a;">"system() error"</span>);
+    pr_exit(status);
+
+    <span style="color: #00ffff;">if</span> ((status = mysystem(<span style="color: #ffa07a;">"who; exit 44"</span>)) &lt; 0)
+        err_sys(<span style="color: #ffa07a;">"system() error"</span>);
+    pr_exit(status);
+
+    exit(0);
+}
+</pre>
+</div>
+<p>
+测试：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ ./src/process/mysystest1 
+
+Thu Mar  9 23:57:44 CST 2017
+normal termination, exit status = 0 <span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#25104;&#21151;&#25191;&#34892;&#32456;&#27490;&#29366;&#24577;&#36820;&#22238;0</span>
+sh: nosuchcommand: command not found
+normal termination, exit status = 127 <span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#26080;&#27861;&#25191;&#34892;shell&#21629;&#20196;&#65292;&#32456;&#27490;&#29366;&#24577;&#36820;&#22238;127</span>
+klose    tty1         2017-03-09 22:08
+klose    pts/0        2017-03-09 22:19 (:0.0)
+klose    pts/1        2017-03-09 22:29 (:0.0)
+normal termination, exit status = 44 <span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#25163;&#21160;&#36820;&#22238;&#32456;&#27490;&#29366;&#24577;44</span>
+</pre>
+</div>
+
+<p>
+使用system而不直接使用fork和exec的原因是：system进行了所需的各种出错处理，以及各种信号处理
+</p>
+
+<p>
+如果一个进程正以特殊的许可权(设置-用户-ID或设置-组-ID)运行，但又想生成另一个进程执行另一个程序，则它应当直接使用fork和exec，而且在fork之后、exec之前要改回到普通许可权。设置-用户-ID或设置-组-ID程序决不应调用system函数。另外，作为服务器程序时也不应使用system处理客户程序提供的字符串参数，以避免恶意用户利用shell中的特殊操作符进行越权操作
+</p>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-6" class="outline-2">
+<h2 id="sec-6">进程会计</h2>
 </div>
 </div>
 <div id="postamble" class="status">

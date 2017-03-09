@@ -3,11 +3,11 @@
 #+HTML_LINK_UP: env.html   
 #+HTML_LINK_HOME: apue.html
 #+OPTIONS: num:nil timestamp:nil ^:nil *:nil
-本章介绍UNIX的进程控制：
+本章介绍Unix的进程控制：
 + 创建新进程、执行程序和进程终止
 + 进程的实际、有效和保存的用户和组ID
 + 解释器文件和system函数
-+ 进程会计机制结束
++ 进程会计机制
   
 * 进程标识
   每个进程都有一个非负整型的唯一进程ID。因为进程ID标识符总是唯一的，常将其用做其他标识符的一部分以保证其唯一性：
@@ -660,7 +660,7 @@ POSIX.1明确要求在exec时关闭打开目录流。这通常是由opendir函�
 
 注意：在exec前后实际用户ID和实际组ID保持不变，而有效ID是否改变则取决于所执行程序的文件的设置-用户-ID位和设置-组-ID位是否设置。如果新程序的设置-用户-ID位已设置，则有效用户ID变成程序文件所有者的ID，否则有效用户ID不变。对组ID的处理方式与此相同！
 **** exec实例
-程序echoall是一个普通程序，回送其所有命令行参数及其全部环境表
+     程序echoall是一个普通程序，回送其所有命令行参数及其全部环境表
      #+BEGIN_SRC C
        #include <stdio.h>
 
@@ -679,9 +679,9 @@ POSIX.1明确要求在exec时关闭打开目录流。这通常是由opendir函�
                exit(0);  
        }
      #+END_SRC
-
-调用execle要求一个路径名和一个特定的环境。下一个调用的是execlp用一个文件名，并将调用者的环境传送给新程序
-#+BEGIN_SRC C
+     
+     调用execle要求一个路径名和一个特定的环境。下一个调用的是execlp用一个文件名，并将调用者的环境传送给新程序
+     #+BEGIN_SRC C
   #include <sys/types.h>
   #include <sys/wait.h>
   #include "apue.h"
@@ -716,10 +716,10 @@ POSIX.1明确要求在exec时关闭打开目录流。这通常是由opendir函�
           exit(0);
           
   }
-#+END_SRC
-
-测试代码如下
-#+BEGIN_SRC sh
+     #+END_SRC
+     
+     测试代码如下
+     #+BEGIN_SRC sh
   $ ./execExample
   argv[0]: echoall #execle执行echoall  
   argv[1]: myarg1
@@ -732,8 +732,8 @@ POSIX.1明确要求在exec时关闭打开目录流。这通常是由opendir函�
   HOME=/home/klose
   # ...... 其他各种环境变量 
   _=./execExample
-#+END_SRC
-注意：shell提示符号'$'出现在第二个exec打印"echo all"和"only 1 arg"之间，这是因为父进程并不等待该子进程结束
+     #+END_SRC
+     注意：shell提示符号'$'出现在第二个exec打印"echo all"和"only 1 arg"之间，这是因为父进程并不等待该子进程结束
 * 更改用户ID和组ID
 + 通过fork创建的子进程，其实际用户ID和有效用户ID将继承自父进程
 + 用exec执行一个程序时，若该进程的程序文件有"保存设置-用户-ID"位，则其有效用户ID为"exec执行程序的文件所属用户的ID"，否则继承自exec之前的上下文
@@ -763,33 +763,33 @@ POSIX.1明确要求在exec时关闭打开目录流。这通常是由opendir函�
      ,*/
     int setgid(gid_t gid);
   #+END_SRC
-
+  
 *** 改变ID规则
-setuid/setgid的规则：
+    setuid/setgid的规则：
 1. 如果进程具有超级用户特权，则setuid函数将实际用户ID、有效用户ID，以及保存的设置-用户-ID设置为uid
 2. 如果进程没有超级用户特权，但是uid等于实际用户ID或保存的设置-用户-ID，则setuid只将有效用户ID设置为uid。不改变实际用户ID和保存的设置-用户-ID
 3. 如果上面两个条件都不满足，则errno设置为EPERM，并返回出错
-
+   
 **** 注意事项
 + 只有超级用户进程可以更改实际用户ID。通常，实际用户ID是在用户登录时由login(1)程序设置的，而且决不会改变它。因为login是一个超级用户进程，当它调用setuid时设置所有三个用户ID
 + 仅当对程序文件设置了设置-用户-ID位时，exec函数设置有效用户ID。如果设置-用户-ID位没有设置，则exec函数不会改变有效用户ID，而将其维持为原先值。任何时候都可以调用setuid，将有效用户ID设置为实际用户ID或保存的设置-用户-ID，但是不能将有效用户ID设置为任一随机值
 + 保存的设置-用户-ID是由exec从有效用户ID复制的：在exec按文件用户ID设置了有效用户ID后，即进行这种复制，并将此副本保存起来
-
+  
 下面表格列出了改变这三个用户ID的不同方法：
-  +------------------+-------------------------------------+-------------------------------------+
-  |                  |               exec                  |                setuid               |
-  |       ID         +------------------+------------------+------------------+------------------+
-  |                  | 设置-用户-ID关闭 | 设置-用户-ID打开 |       超级用户   |      非超级用户  |
-  +------------------+------------------+------------------+------------------+------------------+
-  |    实际用户ID    |       不变       |       不变       |        uid       |       不变       |
-  +------------------+------------------+------------------+------------------+------------------+
-  |    有效用户ID    |       不变       | 程序文件的用户ID |        uid       |       uid        |
-  +------------------+------------------+------------------+------------------+------------------+
-  |保存的设置-用户-ID| 从有效用户ID复制 | 从有效用户ID复制 |        uid       |       不变       |
-  +------------------+------------------+------------------+------------------+------------------+
++------------------+-------------------------------------+-------------------------------------+
+|                  |               exec                  |                setuid               |
+|       ID         +------------------+------------------+------------------+------------------+
+|                  | 设置-用户-ID关闭 | 设置-用户-ID打开 |       超级用户   |      非超级用户  |
++------------------+------------------+------------------+------------------+------------------+
+|    实际用户ID    |       不变       |       不变       |        uid       |       不变       |
++------------------+------------------+------------------+------------------+------------------+
+|    有效用户ID    |       不变       | 程序文件的用户ID |        uid       |       uid        |
++------------------+------------------+------------------+------------------+------------------+
+|保存的设置-用户-ID| 从有效用户ID复制 | 从有效用户ID复制 |        uid       |       不变       |
++------------------+------------------+------------------+------------------+------------------+
 
 **** 实例
-观察的tip(1)程序，这个程序连接到一个远程系统，或者是直接连接，或者是拨号一个调制解调器。当tip使用调制解调器时，它必须通过使用锁文件来独占使用它。此锁文件与UUCP程序共享，因为这两个程序可能要同时使用同一调制解调器。对其工作步骤说明如下:
+     观察的tip(1)程序，这个程序连接到一个远程系统，或者是直接连接，或者是拨号一个调制解调器。当tip使用调制解调器时，它必须通过使用锁文件来独占使用它。此锁文件与UUCP程序共享，因为这两个程序可能要同时使用同一调制解调器。对其工作步骤说明如下:
 1. tip程序文件是由用户uucp拥有的，并且其设置-用户-ID位已设置。当exec此程序时，则关于用户ID得到下列结果:
    + 实际用户ID = 我们的用户ID
    + 有效用户ID = uucp
@@ -804,27 +804,27 @@ setuid/setgid的规则：
    + 有效用户ID = uucp
    + 保存设置-用户-ID = uucp(未改变)
 5. tip现在可对其锁文件进行操作以释放它们，因为tip的有效用户ID是uucp。以这种方法使用保存的设置-用户-ID，在进程的开始和结束部分就可以使用由于程序文件的设置用户ID而得到的额外优先权。但是进程在其运行的大部分时间只具有普通的许可权。如果进程不能在其结束部分切换回保存的设置-用户-ID，那么就不得不在全部运行时间都保持额外的许可权(这可能会造成安全问题)
-
+   
 如果在tip运行时生成一个shell进程(先fork，然后exec)将发生什么？因为实际用户ID和有效用户ID都是我们的普通用户ID(上面的第(3)步)，所以该shell没有额外的许可权。它不能存取tip运行时设置成uucp的保存的设置-用户-ID，因为该shell所保存的设置-用户-ID是由exec复制有效用户ID而得到的。所以在执行exec的子进程中：
  + 实际用户ID = 我们的用户ID
  + 有效用户ID = 我们的用户ID
  + 保存设置-用户-ID = 我们的用户ID
-
-总结如下：
+   
+ 总结如下：
  #+BEGIN_EXAMPLE 
-对于进程特权的改变，应遵循“使用能完成工作的最小特权”的原则，以避免用户进程越权操作：
-1. 在不需要设置-用户-ID带来的权限时，使用setuid(getuid())降低有效用户ID的特权
-2. getuid和geteuid函数只能获得实际用户ID和有效用户ID的当前值，
+ 对于进程特权的改变，应遵循“使用能完成工作的最小特权”的原则，以避免用户进程越权操作：
+ 1. 在不需要设置-用户-ID带来的权限时，使用setuid(getuid())降低有效用户ID的特权
+ 2. getuid和geteuid函数只能获得实际用户ID和有效用户ID的当前值，
    而不能获得所保存的设置-用户-ID的当前值。必须在降低权限前通过调用geteuid然后保存
-3. 再次需要高级权限的时候，可以通过setuid(保存的euid)来恢复
-4. 在子进程执行exec之前，应setuid(getuid())以避免设置-用户-ID引起的特权传递
-5. 如果程序的设置-用户-ID为root，以超级用户特权调用setuid就会设置所有三个用户ID，慎用！
+ 3. 再次需要高级权限的时候，可以通过setuid(保存的euid)来恢复
+ 4. 在子进程执行exec之前，应setuid(getuid())以避免设置-用户-ID引起的特权传递
+ 5. 如果程序的设置-用户-ID为root，以超级用户特权调用setuid就会设置所有三个用户ID，慎用！
  #+END_EXAMPLE
-
+ 
 ** setreuid, setregid
 + setreuid：交换实际用户ID和有效用户ID的值
 + setregid：交换实际组ID和有效组ID的值
-   #+BEGIN_SRC C
+  #+BEGIN_SRC C
      #include <sys/types.h>
      #include <unistd.h>
 
@@ -847,7 +847,7 @@ setuid/setgid的规则：
         return：若成功则为0，若出错则为-1
      ,*/
      int setregid(gid_t rgid, gid_t egid);
-   #+END_SRC
+  #+END_SRC
 一个非特权用户总能交换实际用户ID和有效用户ID。这就允许一个设置-用户-ID程序转换成只具有用户的普通许可权，以后又可再次转换回设置-用户-ID所得到的额外许可权。POSIX.1引进了保存的设置-用户-ID特征后，其作用也相应加强，它也允许一个非特权用 户将其有效用户ID设置为保存的设置-用户-ID
 
 实际上更方便了调用上述程序，而无须手动进行保存有效用户ID，再手动setuid
@@ -855,8 +855,8 @@ setuid/setgid的规则：
 ** seteuid和setegid函数
 + seteuid：设置有效用户ID，而setuid函数更改三个用户ID
 + setegid：设置有效组ID
-
-   #+BEGIN_SRC C
+  
+  #+BEGIN_SRC C
      #include <sys/types.h>
      #include <unistd.h>
 
@@ -877,15 +877,259 @@ setuid/setgid的规则：
         return：若成功则为0，若出错则为-1，并设置errno
       ,*/
      int setegid(gid_t egid);
-   #+END_SRC
+  #+END_SRC
 规则类似于setuid函数：一个非特权用户可将其有效用户ID设置为其实际用户ID或其保存的设置-用户-ID，一个特权用户则可将有效用户ID设置为uid
 
 ** 总结
-图8-3给出了修改三个不同用户ID的各个函数：
-#+ATTR_HTML: image :width 90% 
-[[file:pic/uid.png]]
-
+   图8-3给出了修改三个不同用户ID的各个函数：
+   #+ATTR_HTML: image :width 90% 
+   [[file:pic/uid.png]]
+   
 ** 组ID
-上面描述的适用于各个组ID。添加组ID不受setgid函数的影响
-
+   上面描述的适用于各个组ID。添加组ID不受setgid函数的影响
+   
 * 解释器
+  解释器文件是文本文件，其起始行的形式是:  
+  #+BEGIN_EXAMPLE
+  #!pathname [optional-argument]
+  #+END_EXAMPLE
+  在惊叹号和pathname之间的空格是可任选的。最常见的是以下列行开始:
+  #+BEGIN_SRC 
+  #!/bin/sh
+  #+END_SRC
+  pathname通常是个绝对路径名，不需要使用PATH进行路径搜索。对这种文件的识别是由内核作为exec系统调用处理的一部分来完成的。内核使调用exec函数的进程实际执行的文件并不是该解释器文件，而是在该解释器文件的第一行中pathname所指定的程序文件！
+  
+** exec调用解释器文件
+   解释器文件testinterp，程序echoall(解释器)回送每一个命令行参数
+   #+BEGIN_SRC 
+  #!/home/klose/bin/echoall foo
+   #+END_SRC
+   使用exec调用解释器文件/home/klose/bin/testinterp
+   #+BEGIN_SRC C
+     #include <sys/types.h>
+     #include <sys/wait.h>
+     #include "apue.h"
+
+     int main(void)
+     {
+             pid_t pid;
+
+             if( (pid = fork()) < 0 )
+                     err_sys("fork error");
+             else if ( 0 == pid ) //child 
+                     if(execl("/home/klose/bin/testinterp", //解释器文件路径名pathname
+                              "testinterp", //执行程序名，打印的时候会被pathname代替
+                              "myarg1", "MY ARG2", //　命令行参数
+                              (char *) 0 //NULL字符指针
+                                ) < 0 )
+                             err_sys("execl error");
+
+             if (waitpid(pid, NULL, 0) != pid )
+                     err_sys("waitpid error");
+
+             exit(0);
+               
+     }
+   #+END_SRC
+   
+   #+BEGIN_SRC sh
+  $ ./src/process/interpret
+
+  argv[0]: /home/klose/bin/echoall
+  argv[1]: foo
+  argv[2]: /home/klose/bin/testinterp
+  argv[3]: myarg1
+  argv[4]: MY ARG2
+  LC_PAPER=en_US.UTF8
+  #...
+  =./src/process/interpret
+   #+END_SRC
+   当内核exec执行解释器(/home/klose/bin/echoll)时，argv =[0]= 是该解释器的pathname，argv =[1]= 是解释器文件中的可选参数，其余参数是pathname(/home/klose/bin/testinterp)，以及程序中调用execl的第二和第三个参数(myarg1和MY ARG2)。调用execl时的argv =[1]= 和argv =[2]= 已右移了两个位置。注意：内核取execl中的pathname代替第一个参数(testinterp)，因为一般pathname包含了较第一个参数更多的信息！
+   
+** awk实例
+   在解释器pathname后可跟随可选参数，它们常用于为支持-f选择项的程序指定该选择项。例如，可以以下列方式执行awk(1)程序：
+   #+BEGIN_SRC sh
+  awk -f myfile
+   #+END_SRC
+   它告诉awk从文件myfile中读awk程序，而在在解释器文件中使用-f选择项，可以写成:
+   #+BEGIN_EXAMPLE 
+   #!awk -f 
+   (在解释器文件中的awk程序)
+   #+END_EXAMPLE
+   以下awk程序打印所有的参数
+   #+BEGIN_SRC awk
+  #!/bin/awk -f
+
+  BEGIN {
+          for (i = 0; i < ARGC; i++)
+                  printf "ARGV[%d] = %s\n", i, ARGV[i]
+          exit
+  }
+   #+END_SRC
+   测试:
+   #+BEGIN_SRC C
+  $ ./awkexample filel FILENAME2 f3 
+
+  ARGV[0] = awk
+  ARGV[1] = filel
+  ARGV[2] = FILENAME2
+  ARGV[3] = f3
+   #+END_SRC
+   执行/bin/awk时，其命令行参数是：
+   #+BEGIN_EXAMPLE
+   /bin/awk -f /home/klose/Documents/programming/c/apue/orignal/proc/awkexample file1 FILENAME2 f3
+   #+END_EXAMPLE
+   解释器文件的路径名(/usr/local/bin/awkexample)被传送给解释器。因为不能期望该解释器(在本例中是/bin/awk)会使用PATH变量定位该解释器文件，所以只传送其路径名中的文件名是不够的。当awk读解释器文件时，因为#是awk的注释字符，所以在awk读解释器文件时，它忽略第一行
+   
+   在此例子中解释器的-f选择项是必需的。因为它告诉awk在什么地方得到awk程序。如果在解释器文件中删除-f选择项，则其结果是: 
+   #+BEGIN_SRC sh
+  $ ./awkexample filel FILENAME2 f3 
+
+  awk: cmd. line:1: ./awkexample
+  awk: cmd. line:1: ^ syntax error
+  awk: cmd. line:1: ./awkexample
+  awk: cmd. line:1:   ^ unterminated regexp
+   #+END_SRC
+   因为其命令行参数变成了：
+   #+BEGIN_EXAMPLE
+   /bin/awk /home/klose/Documents/programming/c/apue/orignal/proc/awkexample file1 FILENAME2 f3
+   #+END_EXAMPLE
+   于是awk企图将字符串/usr/local/bin/awkexample解释为一个awk程序。如果不能向解释器传递至少一个可选参数(在本例中是-f)，那么这些解释器文件只有对shell才是有用的
+   
+** 解释器文件的优劣
+解释器文件的劣势主要在于效率，因为内核需要识别解释器文件，这会带来额外的开销。但是解释器文件还是有用的:
++ 某些程序是用某种语言写的脚本，可以隐藏这一事实。例如只需使用下列命令行:
+#+BEGIN_SRC sh
+  $ awkexample optional-arguments
+#+END_SRC
+而并不需要知道该程序实际上是一个awk脚本，否则就要以下列方式执行该程序:
+#+BEGIN_SRC sh
+$ awk -f awkexample optional-arguments
+#+END_SRC
++ 解释器脚本在效率方面也提供了好处。再考虑一下前面的例子，如果将其放在一个shell脚本中:
+  #+BEGIN_SRC sh
+    #!/bin/sh
+
+    awk 'BEGIN {
+    for (i = 0; i < ARGC; i++)
+    printf "ARGV[%d] = %s\n", i, ARGV[i]
+    e x i t
+    }' $*
+  #+END_SRC
+这只会要求做更多的工作。首先shell读此命令，然后试图execlp此文件名。因为shell脚本是一个可执行文件，但却不是机器可执行的，于是返回一个错误，execlp就认为该文件是一个shell脚本。然后再执行/bin/sh，并以该shell脚本的路径名作为其参数。shell正确地执行脚本，但是为了运行awk程序，它调用fork，exec和wait。用一个shell脚本代替解释器脚本往往需要更多的开销
+
++ 使用解释器脚本可以调用除/bin/sh以外的其他shell来编写shell脚本。当execlp找到一个非机器可执行的可执行文件时，它总是调用/bin/sh来解释执行该文件。但是用解释器脚本则可编写成: 
+  #+BEGIN_EXAMPLE
+     #!/bin/csh
+     (在解释器文件中后随Cshell脚本)
+  #+END_EXAMPLE
+虽然可将此放在一个/bin/sh脚本中(然后由其调用Cshell)，但同样会有更多的开销
+
+* system函数
+system：在程序中执行一个命令字符串，是否支持system完全依赖于操作系统
+#+BEGIN_SRC C
+  #include <stdlib.h>
+
+  /**
+     使用/bin/sh执行指定的命令串执行标准的shell命令
+
+     cmdstring：命令串
+
+     return: 1. 如果fork失败或者waitpid返回除EINTR之外的出错，则system返回-1，而且errno中设置了错误类型。
+             2. 如果exec失败(表示不能执行shell)，则其返回值如同shell执行了exit(127)一样。
+             3. 所有三个函数(fork，exec和waitpid)都成功，并且system的返回值是shell的终止状态
+   ,*/
+  int system(cont char *cmdstring);
+#+END_SRC
+如果cmdstring是一个空指针，则仅当system命令处理程序可用时返回非0值，这一特征可以用来判定在一个给定的操作系统上是否支持system函数。在UNIX中system总是可用的
+
+因为system在其实现中调用了fork、exec和waitpid，因此有三种返回值:
+1. 如果fork失败或者waitpid返回除EINTR之外的出错，则system返回-1，而且errno中设置了错误类型
+2. 如果exec失败(表示不能执行shell)，则其返回值如同shell执行了exit(127)一样
+3. 否则所有三个函数(fork，exec和waitpid)都成功，并且system的返回值是shell的终止状态，其格式已在waitpid中说明
+
+** system简单实现
+以下程序是system的一个实现，没有考虑信号处理
+   #+BEGIN_SRC C
+     #include    <sys/wait.h>
+     #include    <errno.h>
+     #include    <unistd.h>
+
+     /* 缺少信号处理 */
+     int mysystem(const char *cmdstring) 
+     {
+             pid_t   pid;
+             int     status;
+             
+             if (cmdstring == NULL)
+                     return(1); //返回1表示支持system函数    
+
+             if ((pid = fork()) < 0) {
+                     status = -1;    //无法再创建新的进程
+             } else if (pid == 0) { //子进程
+                     execl("/bin/sh", "sh", "-c", cmdstring, (char *)0);
+                     _exit(127);     //无法执行exec函数，返回127
+             } else { //父进程等待子进程结束
+                     while (waitpid(pid, &status, 0) < 0) {
+                             if (errno != EINTR) {
+                                     status = -1; /* waitpid不是通过捕获中断信号而返回，出错返回-1 */
+                                     break;
+                             }
+                     }
+             }
+
+             return(status); //返回子进程的终止状态
+     }
+   #+END_SRC
+shell的-c选择项告诉shell程序取下一个命令行参数(在这里是cmdstring)作为命令输入(而不是从标准输入或从一个给定的文件中读命令)。shell对以null字符终止的命令字符串进行语法分析，将它们分成分隔开的命令行参数。传递给shell的实际命令串可以包含任一有效的shell命令。例如可以用'<'和'>'对输入和输出重新定向
+
+如果不使用shell执行此命令，而是试图由我们自己去执行它，那么将相当困难。首先必须用execlp而不是execl，像shell那样使用PATH变量。那么必须将null符结尾的命令字符串分成各个命令行参数，以便调用execlp。最后也不能使用任何一个shell元字符。
+
+注意：最后调用_exit而不是exit。这是为了防止任一标准I/O缓存(这些缓存会在fork中由父进程复制到子进程)在子进程中被刷新！
+
+*** mysystem实例
+调用mystem来执行shell命令：
+    #+BEGIN_SRC C
+      #include "apue.h"
+      #include <sys/wait.h>
+
+      extern int mysystem(const char *cmdstring);
+
+      int main(void)
+      {
+              int     status;
+
+              if ((status = mysystem("date")) < 0)
+                      err_sys("system() error");
+              pr_exit(status);
+
+              if ((status = mysystem("nosuchcommand")) < 0)
+                      err_sys("system() error");
+              pr_exit(status);
+
+              if ((status = mysystem("who; exit 44")) < 0)
+                      err_sys("system() error");
+              pr_exit(status);
+
+              exit(0);
+      }
+    #+END_SRC
+测试：
+#+BEGIN_SRC sh
+  $ ./src/process/mysystest1 
+
+  Thu Mar  9 23:57:44 CST 2017
+  normal termination, exit status = 0 #成功执行终止状态返回0
+  sh: nosuchcommand: command not found
+  normal termination, exit status = 127 #无法执行shell命令，终止状态返回127
+  klose    tty1         2017-03-09 22:08
+  klose    pts/0        2017-03-09 22:19 (:0.0)
+  klose    pts/1        2017-03-09 22:29 (:0.0)
+  normal termination, exit status = 44 #手动返回终止状态44
+#+END_SRC
+
+使用system而不直接使用fork和exec的原因是：system进行了所需的各种出错处理，以及各种信号处理
+
+如果一个进程正以特殊的许可权(设置-用户-ID或设置-组-ID)运行，但又想生成另一个进程执行另一个程序，则它应当直接使用fork和exec，而且在fork之后、exec之前要改回到普通许可权。设置-用户-ID或设置-组-ID程序决不应调用system函数。另外，作为服务器程序时也不应使用system处理客户程序提供的字符串参数，以避免恶意用户利用shell中的特殊操作符进行越权操作
+
+* 进程会计
