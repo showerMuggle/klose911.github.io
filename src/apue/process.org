@@ -1133,3 +1133,165 @@ shell的-c选择项告诉shell程序取下一个命令行参数(在这里是cmds
 如果一个进程正以特殊的许可权(设置-用户-ID或设置-组-ID)运行，但又想生成另一个进程执行另一个程序，则它应当直接使用fork和exec，而且在fork之后、exec之前要改回到普通许可权。设置-用户-ID或设置-组-ID程序决不应调用system函数。另外，作为服务器程序时也不应使用system处理客户程序提供的字符串参数，以避免恶意用户利用shell中的特殊操作符进行越权操作
 
 * 进程会计
+很多UNIX系统提供了一个选择项以进行进程会计事务处理。当取了这种选择项后，每当进程结束时内核就写一个会计记录。典型的会计记录是32字节长的二进制数据，包括命令名、所使用的CPU时间总量、用户ID和组ID、起动时间等
+
+** acct结构
+会计记录结构定义在头文件<sys/acct.h>中，其样式如下：
+   #+BEGIN_SRC C
+     typedef u_int16_t comp_t;
+
+     struct acct
+     {
+             char ac_flag;         /* Flags.  */
+             u_int16_t ac_uid;     /* Real user ID.  */
+             u_int16_t ac_gid;     /* Real group ID.  */
+             u_int16_t ac_tty;     /* Controlling terminal.  */
+             u_int32_t ac_btime;       /* Beginning time.  */
+             comp_t ac_utime;      /* User time.  */
+             comp_t ac_stime;      /* System time.  */
+             comp_t ac_etime;      /* Elapsed time.  */
+             comp_t ac_mem;        /* Average memory usage.  */
+             comp_t ac_io;         /* Chars transferred.  */
+             comp_t ac_rw;         /* Blocks read or written.  */
+             comp_t ac_minflt;     /* Minor pagefaults.  */
+             comp_t ac_majflt;     /* Major pagefaults.  */
+             comp_t ac_swaps;      /* Number of swaps.  */
+             u_int32_t ac_exitcode;    /* Process exitcode.  */
+             char ac_comm[ACCT_COMM+1];    /* Command name.  */
+             char ac_pad[10];      /* Padding bytes.  */
+     };
+   #+END_SRC
+其中ac_flag记录了进程执行期间的某些事件。这些事件见下表：
+#+CAPTION: 会计记录中的ac_flag值
+#+ATTR_HTML: :border 1 :rules all :frame boade
+| ac_flag | 说明                               |
+|---------+------------------------------------|
+| AFORK   | 进程是由fork产生的，但从未调用exec |
+| ASU     | 进程使用超级用户优先权  |
+| ACOMPAT | 进程使用兼容方式(仅VAX)   |
+| ACORE   | 进程转储core(不在SVR4)       |
+| AXSIG   | 进程由信号消灭(不在SVR4)           |
+
+*** 会记记录的缺陷
+会计记录所需的各个数据(各CPU时间、传输的字符数等)都由内核保存在进程表中，并在一个新进程被创建时置初值(例如fork之后在子进程中)。进程终止时写一个会计记录。这就意味着在会计文件中记录的顺序对应于进程终止的顺序，而不是它们起动的顺序。为了确定起动顺序，需要读全部会计文件，并按起动日历时间进行排序
+
+会计记录对应于进程而不是程序。在fork之后内核为子进程初始化一个记录，而不是在一个新程序被执行时。虽然exec并不创建一个新的会计记录，但相应记录中的命令名改变了，AFORK标志则被清除。这意味着：如果一个进程顺序执行了三个程序(A exec B，B exec C，最后C exit)，但只写一个会计记录。在该记录中的命令名对应于程序C，但CPU时间是程序A、B、C之和
+
+会记记录并不是POSIX标准，各个系统实现都不一样，建议谨慎使用！
+
+** 用户标识
+在实际的Unix系统中，uid和gid是标志一个用户的方式，但是用户不需要以数字标志的形式管理系统，所以就有了以英文形式提供的用户标识，系统也提供了对应的映射
+
+getlogin：获取用户登录名
+#+BEGIN_SRC C
+  #include <unistd.h>
+  /**
+     获取用户登录名
+     
+     return：若成功则为指向登录名字符串的指针，若出错则为NULL
+   ,*/
+  char *getlogin(void);
+#+END_SRC
+
+** 进程时间
+times：获得某个进程各个时间
+#+BEGIN_SRC C
+  #include <sys/times.h>
+
+  /**
+     获得进程的系统cpu时间，用户cpu时间，终止子进程系统cpu时间总和，终止子进程用户cpu时间总和
+
+     buffer：进程时间结构指针，填写进程相关时间
+
+     return：若成功则为经过的墙上时钟时间(单位:滴答)，若出错则为-1
+  ,*/
+  clock_t times(struct tms *buffer);
+#+END_SRC
+填写由buf指向的tms结构，该结构定义如下: 
+    #+BEGIN_SRC C
+      struct tms {
+              clock_t tms_utime; //用户CPU时间
+              clock_t tms_stime; //系统CPU时间
+              clock_t tms_cutime; //终止的子进程用户CPU时间总和
+              clock_t tms_cstime;//终止的子进程系统CPU时间总和
+      };
+    #+END_SRC
+注意：此结构没有包含墙上时钟时间。作为代替times函数返回墙上时钟时间作为函数值。此值是相对于过去的某一时刻度量的，所以不能用其绝对值而必须使用其相对值。例如调用times保存其返回值。在以后某个时间再次调用times，从新返回的值中减去以前返回的值，此差值就是墙上时钟时间
+
+*** 打印进程时间实例
+将每个命令行参数作为shell命令串执行，对每个命令计时并打印：
+    #+BEGIN_SRC C
+      #include "apue.h"
+      #include <sys/times.h>
+
+      static void pr_times(clock_t, struct tms *, struct tms *);
+      static void do_cmd(char *);
+
+      int main(int argc, char *argv[])
+      {
+              int     i;
+
+              setbuf(stdout, NULL);
+              for (i = 1; i < argc; i++)
+                      do_cmd(argv[i]);    /* once for each command-line arg */
+              exit(0);
+      }
+
+      static void do_cmd(char *cmd)       /* execute and time the "cmd" */
+      {
+              struct tms  tmsstart, tmsend;
+              clock_t     start, end;
+              int         status;
+
+              printf("\ncommand: %s\n", cmd);
+
+              if ((start = times(&tmsstart)) == -1)   /* starting values */
+                      err_sys("times error");
+
+              if ((status = system(cmd)) < 0)     /* execute command */
+                      err_sys("system() error");
+
+              if ((end = times(&tmsend)) == -1)       /* ending values */
+                      err_sys("times error");
+
+              pr_times(end-start, &tmsstart, &tmsend);
+              pr_exit(status);
+      }
+
+      static void pr_times(clock_t real, struct tms *tmsstart, struct tms *tmsend)
+      {
+              static long     clktck = 0;
+
+              if (clktck == 0)    /* fetch clock ticks per second first time */
+                      if ((clktck = sysconf(_SC_CLK_TCK)) < 0)
+                              err_sys("sysconf error");
+              printf("  real:  %7.2f\n", real / (double) clktck);
+              printf("  user:  %7.2f\n",
+                     (tmsend->tms_utime - tmsstart->tms_utime) / (double) clktck);
+              printf("  sys:   %7.2f\n",
+                     (tmsend->tms_stime - tmsstart->tms_stime) / (double) clktck);
+              printf("  child user:  %7.2f\n",
+                     (tmsend->tms_cutime - tmsstart->tms_cutime) / (double) clktck);
+              printf("  child sys:   %7.2f\n",
+                     (tmsend->tms_cstime - tmsstart->tms_cstime) / (double) clktck);
+      }
+    #+END_SRC
+
+#+BEGIN_SRC sh
+$ ./src/process/timesExample "cd /usr/include; grep _POSIX_SOURCE */*.h >/dev/null 2>/dev/null"   
+
+command: cd /usr/include; grep _POSIX_SOURCE */*.h >/dev/null 2>/dev/null
+  real:     0.04
+  user:     0.00
+  sys:      0.00
+  child user:     0.02
+  child sys:      0.01
+normal termination, exit status = 2
+#+END_SRC
+在child user和child sys行中显示的时间分别是执行shell和命令的子进程所使用的CPU时间
+
+[[file:proc_group.org][Next：进程组]]
+
+[[file:env.org][Previous：进程环境]]
+
+[[file:apue.org][Home：目录]]

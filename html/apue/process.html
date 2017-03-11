@@ -234,7 +234,21 @@ for the JavaScript code in this tag.
 </li>
 </ul>
 </li>
-<li><a href="#sec-6">进程会计</a></li>
+<li><a href="#sec-6">进程会计</a>
+<ul>
+<li><a href="#sec-6-1">acct结构</a>
+<ul>
+<li><a href="#sec-6-1-1">会记记录的缺陷</a></li>
+</ul>
+</li>
+<li><a href="#sec-6-2">用户标识</a></li>
+<li><a href="#sec-6-3">进程时间</a>
+<ul>
+<li><a href="#sec-6-3-1">打印进程时间实例</a></li>
+</ul>
+</li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
@@ -2324,6 +2338,266 @@ normal termination, exit status = 44 <span style="color: #ff4500;">#</span><span
 
 <div id="outline-container-sec-6" class="outline-2">
 <h2 id="sec-6">进程会计</h2>
+<div class="outline-text-2" id="text-6">
+<p>
+很多UNIX系统提供了一个选择项以进行进程会计事务处理。当取了这种选择项后，每当进程结束时内核就写一个会计记录。典型的会计记录是32字节长的二进制数据，包括命令名、所使用的CPU时间总量、用户ID和组ID、起动时间等
+</p>
+</div>
+
+<div id="outline-container-sec-6-1" class="outline-3">
+<h3 id="sec-6-1">acct结构</h3>
+<div class="outline-text-3" id="text-6-1">
+<p>
+会计记录结构定义在头文件&lt;sys/acct.h&gt;中，其样式如下：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #00ffff;">typedef</span> <span style="color: #98fb98;">u_int16_t</span> <span style="color: #98fb98;">comp_t</span>;
+
+<span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">acct</span>
+{
+    <span style="color: #98fb98;">char</span> <span style="color: #eedd82;">ac_flag</span>;         <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">Flags.  </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">u_int16_t</span> <span style="color: #eedd82;">ac_uid</span>;     <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">Real user ID.  </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">u_int16_t</span> <span style="color: #eedd82;">ac_gid</span>;     <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">Real group ID.  </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">u_int16_t</span> <span style="color: #eedd82;">ac_tty</span>;     <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">Controlling terminal.  </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">u_int32_t</span> <span style="color: #eedd82;">ac_btime</span>;       <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">Beginning time.  </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">comp_t</span> <span style="color: #eedd82;">ac_utime</span>;      <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">User time.  </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">comp_t</span> <span style="color: #eedd82;">ac_stime</span>;      <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">System time.  </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">comp_t</span> <span style="color: #eedd82;">ac_etime</span>;      <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">Elapsed time.  </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">comp_t</span> <span style="color: #eedd82;">ac_mem</span>;        <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">Average memory usage.  </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">comp_t</span> <span style="color: #eedd82;">ac_io</span>;         <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">Chars transferred.  </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">comp_t</span> <span style="color: #eedd82;">ac_rw</span>;         <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">Blocks read or written.  </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">comp_t</span> <span style="color: #eedd82;">ac_minflt</span>;     <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">Minor pagefaults.  </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">comp_t</span> <span style="color: #eedd82;">ac_majflt</span>;     <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">Major pagefaults.  </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">comp_t</span> <span style="color: #eedd82;">ac_swaps</span>;      <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">Number of swaps.  </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">u_int32_t</span> <span style="color: #eedd82;">ac_exitcode</span>;    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">Process exitcode.  </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">char</span> <span style="color: #eedd82;">ac_comm</span>[ACCT_COMM+1];    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">Command name.  </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">char</span> <span style="color: #eedd82;">ac_pad</span>[10];      <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">Padding bytes.  </span><span style="color: #ff4500;">*/</span>
+};
+</pre>
+</div>
+<p>
+其中ac_flag记录了进程执行期间的某些事件。这些事件见下表：
+</p>
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boade">
+<caption class="t-above"><span class="table-number">Table 6:</span> 会计记录中的ac_flag值</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<thead>
+<tr>
+<th scope="col" class="left">ac_flag</th>
+<th scope="col" class="left">说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="left">AFORK</td>
+<td class="left">进程是由fork产生的，但从未调用exec</td>
+</tr>
+
+<tr>
+<td class="left">ASU</td>
+<td class="left">进程使用超级用户优先权</td>
+</tr>
+
+<tr>
+<td class="left">ACOMPAT</td>
+<td class="left">进程使用兼容方式(仅VAX)</td>
+</tr>
+
+<tr>
+<td class="left">ACORE</td>
+<td class="left">进程转储core(不在SVR4)</td>
+</tr>
+
+<tr>
+<td class="left">AXSIG</td>
+<td class="left">进程由信号消灭(不在SVR4)</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<div id="outline-container-sec-6-1-1" class="outline-4">
+<h4 id="sec-6-1-1">会记记录的缺陷</h4>
+<div class="outline-text-4" id="text-6-1-1">
+<p>
+会计记录所需的各个数据(各CPU时间、传输的字符数等)都由内核保存在进程表中，并在一个新进程被创建时置初值(例如fork之后在子进程中)。进程终止时写一个会计记录。这就意味着在会计文件中记录的顺序对应于进程终止的顺序，而不是它们起动的顺序。为了确定起动顺序，需要读全部会计文件，并按起动日历时间进行排序
+</p>
+
+<p>
+会计记录对应于进程而不是程序。在fork之后内核为子进程初始化一个记录，而不是在一个新程序被执行时。虽然exec并不创建一个新的会计记录，但相应记录中的命令名改变了，AFORK标志则被清除。这意味着：如果一个进程顺序执行了三个程序(A exec B，B exec C，最后C exit)，但只写一个会计记录。在该记录中的命令名对应于程序C，但CPU时间是程序A、B、C之和
+</p>
+
+<p>
+会记记录并不是POSIX标准，各个系统实现都不一样，建议谨慎使用！
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-6-2" class="outline-3">
+<h3 id="sec-6-2">用户标识</h3>
+<div class="outline-text-3" id="text-6-2">
+<p>
+在实际的Unix系统中，uid和gid是标志一个用户的方式，但是用户不需要以数字标志的形式管理系统，所以就有了以英文形式提供的用户标识，系统也提供了对应的映射
+</p>
+
+<p>
+getlogin：获取用户登录名
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;unistd.h&gt;</span>
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#33719;&#21462;&#29992;&#25143;&#30331;&#24405;&#21517;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;&#25351;&#21521;&#30331;&#24405;&#21517;&#23383;&#31526;&#20018;&#30340;&#25351;&#38024;&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;NULL</span>
+<span style="color: #ffa07a;"> */</span>
+<span style="color: #98fb98;">char</span> *<span style="color: #87cefa;">getlogin</span>(<span style="color: #98fb98;">void</span>);
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-6-3" class="outline-3">
+<h3 id="sec-6-3">进程时间</h3>
+<div class="outline-text-3" id="text-6-3">
+<p>
+times：获得某个进程各个时间
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/times.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#33719;&#24471;&#36827;&#31243;&#30340;&#31995;&#32479;cpu&#26102;&#38388;&#65292;&#29992;&#25143;cpu&#26102;&#38388;&#65292;&#32456;&#27490;&#23376;&#36827;&#31243;&#31995;&#32479;cpu&#26102;&#38388;&#24635;&#21644;&#65292;&#32456;&#27490;&#23376;&#36827;&#31243;&#29992;&#25143;cpu&#26102;&#38388;&#24635;&#21644;</span>
+
+<span style="color: #ffa07a;">   buffer&#65306;&#36827;&#31243;&#26102;&#38388;&#32467;&#26500;&#25351;&#38024;&#65292;&#22635;&#20889;&#36827;&#31243;&#30456;&#20851;&#26102;&#38388;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;&#32463;&#36807;&#30340;&#22681;&#19978;&#26102;&#38047;&#26102;&#38388;(&#21333;&#20301;:&#28404;&#31572;)&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">clock_t</span> <span style="color: #87cefa;">times</span>(<span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">tms</span> *<span style="color: #eedd82;">buffer</span>);
+</pre>
+</div>
+<p>
+填写由buf指向的tms结构，该结构定义如下: 
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">tms</span> {
+    <span style="color: #98fb98;">clock_t</span> <span style="color: #eedd82;">tms_utime</span>; <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#29992;&#25143;CPU&#26102;&#38388;</span>
+    <span style="color: #98fb98;">clock_t</span> <span style="color: #eedd82;">tms_stime</span>; <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#31995;&#32479;CPU&#26102;&#38388;</span>
+    <span style="color: #98fb98;">clock_t</span> <span style="color: #eedd82;">tms_cutime</span>; <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#32456;&#27490;&#30340;&#23376;&#36827;&#31243;&#29992;&#25143;CPU&#26102;&#38388;&#24635;&#21644;</span>
+    <span style="color: #98fb98;">clock_t</span> <span style="color: #eedd82;">tms_cstime</span>;<span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#32456;&#27490;&#30340;&#23376;&#36827;&#31243;&#31995;&#32479;CPU&#26102;&#38388;&#24635;&#21644;</span>
+};
+</pre>
+</div>
+<p>
+注意：此结构没有包含墙上时钟时间。作为代替times函数返回墙上时钟时间作为函数值。此值是相对于过去的某一时刻度量的，所以不能用其绝对值而必须使用其相对值。例如调用times保存其返回值。在以后某个时间再次调用times，从新返回的值中减去以前返回的值，此差值就是墙上时钟时间
+</p>
+</div>
+
+<div id="outline-container-sec-6-3-1" class="outline-4">
+<h4 id="sec-6-3-1">打印进程时间实例</h4>
+<div class="outline-text-4" id="text-6-3-1">
+<p>
+将每个命令行参数作为shell命令串执行，对每个命令计时并打印：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/times.h&gt;</span>
+
+<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">pr_times</span>(<span style="color: #98fb98;">clock_t</span>, <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">tms</span> *, <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">tms</span> *);
+<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">do_cmd</span>(<span style="color: #98fb98;">char</span> *);
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">argc</span>, <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">argv</span>[])
+{
+    <span style="color: #98fb98;">int</span>     <span style="color: #eedd82;">i</span>;
+
+    setbuf(stdout, <span style="color: #7fffd4;">NULL</span>);
+    <span style="color: #00ffff;">for</span> (i = 1; i &lt; argc; i++)
+        do_cmd(argv[i]);    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">once for each command-line arg </span><span style="color: #ff4500;">*/</span>
+    exit(0);
+}
+
+<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">do_cmd</span>(<span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">cmd</span>)       <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">execute and time the "cmd" </span><span style="color: #ff4500;">*/</span>
+{
+    <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">tms</span>  <span style="color: #eedd82;">tmsstart</span>, <span style="color: #eedd82;">tmsend</span>;
+    <span style="color: #98fb98;">clock_t</span>     <span style="color: #eedd82;">start</span>, <span style="color: #eedd82;">end</span>;
+    <span style="color: #98fb98;">int</span>         <span style="color: #eedd82;">status</span>;
+
+    printf(<span style="color: #ffa07a;">"\ncommand: %s\n"</span>, cmd);
+
+    <span style="color: #00ffff;">if</span> ((start = times(&amp;tmsstart)) == -1)   <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">starting values </span><span style="color: #ff4500;">*/</span>
+        err_sys(<span style="color: #ffa07a;">"times error"</span>);
+
+    <span style="color: #00ffff;">if</span> ((status = system(cmd)) &lt; 0)     <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">execute command </span><span style="color: #ff4500;">*/</span>
+        err_sys(<span style="color: #ffa07a;">"system() error"</span>);
+
+    <span style="color: #00ffff;">if</span> ((end = times(&amp;tmsend)) == -1)       <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">ending values </span><span style="color: #ff4500;">*/</span>
+        err_sys(<span style="color: #ffa07a;">"times error"</span>);
+
+    pr_times(end-start, &amp;tmsstart, &amp;tmsend);
+    pr_exit(status);
+}
+
+<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">pr_times</span>(<span style="color: #98fb98;">clock_t</span> <span style="color: #eedd82;">real</span>, <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">tms</span> *<span style="color: #eedd82;">tmsstart</span>, <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">tms</span> *<span style="color: #eedd82;">tmsend</span>)
+{
+    <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">long</span>     <span style="color: #eedd82;">clktck</span> = 0;
+
+    <span style="color: #00ffff;">if</span> (clktck == 0)    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">fetch clock ticks per second first time </span><span style="color: #ff4500;">*/</span>
+        <span style="color: #00ffff;">if</span> ((clktck = sysconf(_SC_CLK_TCK)) &lt; 0)
+            err_sys(<span style="color: #ffa07a;">"sysconf error"</span>);
+    printf(<span style="color: #ffa07a;">"  real:  %7.2f\n"</span>, real / (<span style="color: #98fb98;">double</span>) clktck);
+    printf(<span style="color: #ffa07a;">"  user:  %7.2f\n"</span>,
+           (tmsend-&gt;tms_utime - tmsstart-&gt;tms_utime) / (<span style="color: #98fb98;">double</span>) clktck);
+    printf(<span style="color: #ffa07a;">"  sys:   %7.2f\n"</span>,
+           (tmsend-&gt;tms_stime - tmsstart-&gt;tms_stime) / (<span style="color: #98fb98;">double</span>) clktck);
+    printf(<span style="color: #ffa07a;">"  child user:  %7.2f\n"</span>,
+           (tmsend-&gt;tms_cutime - tmsstart-&gt;tms_cutime) / (<span style="color: #98fb98;">double</span>) clktck);
+    printf(<span style="color: #ffa07a;">"  child sys:   %7.2f\n"</span>,
+           (tmsend-&gt;tms_cstime - tmsstart-&gt;tms_cstime) / (<span style="color: #98fb98;">double</span>) clktck);
+}
+</pre>
+</div>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">$ ./src/process/timesExample <span style="color: #ffa07a;">"cd /usr/include; grep _POSIX_SOURCE */*.h &gt;/dev/null 2&gt;/dev/null"</span>   
+
+<span style="color: #b0c4de;">command</span>: cd /usr/include; grep _POSIX_SOURCE */*.h &gt;/dev/null 2&gt;/dev/null
+  real:     0.04
+  user:     0.00
+  sys:      0.00
+  child user:     0.02
+  child sys:      0.01
+normal termination, exit status = 2
+</pre>
+</div>
+<p>
+在child user和child sys行中显示的时间分别是执行shell和命令的子进程所使用的CPU时间
+</p>
+
+<p>
+<a href="proc_group.html">Next：进程组</a>
+</p>
+
+<p>
+<a href="env.html">Previous：进程环境</a>
+</p>
+
+<p>
+<a href="apue.html">Home：目录</a>
+</p>
+</div>
+</div>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
