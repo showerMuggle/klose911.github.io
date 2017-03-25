@@ -409,4 +409,135 @@ Bash以与Bourne shell相同的方式产生后台管道进程
 cat1和ps都处在后台进程组712中，先创建最后一个命令cat1，再创建命令ps
 
 * 孤儿进程组
++ 孤儿进程：一个父进程已终止的进程，这种进程由init进程托管
++ 孤儿进程组：该组中每个成员的父进程要么是该组的一个成员，要么不是该组所属对话期的成员
+
+一个进程组不是孤儿进程组的条件是：该组中存在一个进程,其父进程在同一会话的其它进程组中。如果进程组不是孤儿进程组，那么在属于同一对话期的另一个组中的父进程就有机会重新起动该组中停止的进程
+
+孤儿进程组将被置于后台执行
+** 实例
+考虑一个进程，它fork了一个子进程然后终止。这在系统中是经常发生的，并无异常之处，但是在父进程终止时，如果该子进程停止(作业控制)，则子进程就成了孤儿进程组。程序9-1是这种情况的一个例子：
+#+BEGIN_SRC C
+  #include <sys/types.h>
+  #include <errno.h>
+  #include <fcntl.h>
+  #include <signal.h>
+  #include "apue.h"
+
+  static void sig_hup(int);
+  static void pr_ids(char *);
+
+  int main(void)
+  {
+          char c;
+          pid_t pid;
+
+          pr_ids("parent");
+          if( (pid = fork()) < 0)
+                  err_sys("fork error");
+
+          else if(pid > 0) { 
+                  sleep(5);//父进程先休眠，使得子进程有机会先运行
+                  exit(0); 
+          } else {
+                  pr_ids("child");
+                  signal(SIGHUP, sig_hup); //处理挂断信号
+                  kill(getpid(), SIGTSTP); //发送信号使得子进程停止
+                  pr_ids("child"); //变成孤儿进程组后，转入后台运行
+                  if(read(STDIN_FILENO, &c, 1) != 1)
+                          //后台进程组读取控制终端输入会产生SIGTTIN信号，导致读取报错errno=EIO
+                          printf("read error from control terminal, errno = %d\n", errno
+                                 exit(0);
+                                 }        
+          }
+
+          static void sig_hup(int signo)
+          {
+                  printf("SIGHUP received, pid = %d\n", getpid());
+                  return;
+            
+          }
+
+          static void pr_ids(char *name)
+          {
+                  printf("%s: pid = %d, ppid = %d, pgrp = %d\n",
+                         name, getpid(), getppid(), tcgetpgrp(STDIN_FILENO));
+                  fflush(stdout);
+          }
+#+END_SRC
+
+图9-10显示了父进程已经fork了子进程后的情况：
+#+ATTR_HTML: image :width 50% 
+[[file:pic/orphan-process-group.png]]
+
+假定使用了一个作业控制shell。shell将前台进程放在一个进程组中(本例中是512)，shell则留在自己的组内(442)。子进程继承其父进程(512)的进程组。在fork之后:
+1. 父进程睡眠5秒钟，让子进程在父进程终止之前运行
+2. 子进程为挂断信号(SIGHUP)建立信号处理程序。这样就能观察到SIGHUP信号是否已送到子进程
+3. 子进程用kill函数向其自身发送停止信号(SIGTSTP)，停止了子进程，类似于用终端挂起字符(Ctrl-Z)停止一个前台作业
+4. 当父进程终止时，该子进程成为孤儿进程，父进程ID成为1，也就是init进程
+5. 现在子进程成为一个孤儿进程组的成员：因为进程组中所有进程的进程(如进程513的父进程1)属于另一个对话期，所以此进程组是孤儿进程组
+6. POSIX.1要求向新孤儿进程组中处于停止状态的每一个进程发送挂断信号(SIGHUP)，接着又向其发送继续信号(SIGCONT)
+7. 在处理了挂断信号后，子进程继续。对挂断信号的系统默认动作是终止该进程，所以提供一个信号处理程序以捕捉该信号
+
+测试结果：
+#+BEGIN_SRC sh
+  $ a.out
+  parent: pid = 512, ppid = 442, pgrp = 512
+  child: pid = 513, ppid = 512, pgrp = 512
+  $ SIGHUP received, pid = 513
+  child: pid = 513, ppid = 1, pgrp = 512
+  read error from control terminal, errno = 5
+#+END_SRC
+注意：
++ 因为两个进程登录shell和子进程都写向终端，所以shell提示符和子进程的输出一起出现
++ 子进程的父进程ID变成1，成为了孤儿进程
++ 父进程终止时，子进程变成后台进程组，而父进程是由shell作为前台作业执行的
++ sig_hup函数中的printf会在pr_ids函数中的printf之前执行
++ 在子进程中调用pr_ids后，程序企图读标准输入。当后台进程组试图读控制终端时，则对该后台进程组产生SIGTTIN，这导致read返回出错，其errno设置为EIO(其值是5)
+
 * BSD实现
+图9-11显示了BSD中进程，进程组，会话期，控制终端等各种数据结构：
+#+ATTR_HTML: image :width 80% 
+[[file:pic/proc-group-bsd.jpg]]
+
+** session结构
+每个对话期都分配了一个session结构：
++ s_count：该对话期中的进程组数。当此计数器减至0时，则可释放此结构
++ s_leader：指向对话期首进程proc结构的指针。4.3+BSD不保持对话期ID字段，而SVR4则保持此字段
++ s_ttyvp：指向控制终端vnode结构的指针
++ s_ttyp：指向控制终端tty结构的指针 
+
+在调用setsid时，在内核中分配一个新的对话期结构。s_count设置为1，s_leader设置为调用进程的proc结构的指针，因为新对话期没有控制终端，所以s_ttyvp和s_ttyp设置为空指针
+
+** tty结构
+每个终端设备和每个伪终端设备均在内核中分配这样一个tty结构：
++ t_session：指向将此终端作为控制终端的session结构(注意：session结构也会指向tty结构)。终端在失去载波信号时需要使用此指针将挂起信号送给对话期首进程
++ t_pgrp：指向前台进程组的pgrp结构。终端驱动程序用此字段将信号送向前台进程组。由输入特殊字符(中断、退出和挂起)而产生的三个信号被送至前台进程组
++ t_termios：包含所有这些特殊字符和与该终端有关信息的结构
++ t_winsize：包含终端窗口当前尺寸的winsize结构
+
+注意：为了找到特定对话期的前台进程组，内核从session结构开始，然后用s_ttyp得到控制终端的tty结构，然后用t_pgrp得到前台进程组的pgrp结构
+
+** pgrp结构
+pgrp结构包含一个进程组的信息：
++ pg_id：进程组ID
++ pg_session：指向此进程组所属的session结构
++ pg_mem：是指向此进程组第一个进程proc结构的指针
+
+** proc结构
+proc结构包含一个进程的所有信息：
++ p_pid：进程ID
++ p_pptr：指向父进程proc结构的指针
++ p_pgrp：指向本进程所属的进程组的pgrp结构
++ p_pgrpnxt：指向进程组中下一个进程的指针，进程组中最后一个进程的p_pgrpnxt为NULL指针
+
+** vnode结构
+在打开控制终端设备时分配vnode结构，进程对/dev/tty的所有访问都通过vnode结构
+
+在BSD中实际i节点是v节点的一部分，而SVR4实现中v节点存在i节点中
+
+[[file:signal.org][Next：信号]]
+
+[[file:process.org][Previous：进程控制]]
+
+[[file:apue.org][Home：目录]]

@@ -210,8 +210,20 @@ for the JavaScript code in this tag.
 </li>
 </ul>
 </li>
-<li><a href="#sec-7">孤儿进程组</a></li>
-<li><a href="#sec-8">BSD实现</a></li>
+<li><a href="#sec-7">孤儿进程组</a>
+<ul>
+<li><a href="#sec-7-1">实例</a></li>
+</ul>
+</li>
+<li><a href="#sec-8">BSD实现</a>
+<ul>
+<li><a href="#sec-8-1">session结构</a></li>
+<li><a href="#sec-8-2">tty结构</a></li>
+<li><a href="#sec-8-3">pgrp结构</a></li>
+<li><a href="#sec-8-4">proc结构</a></li>
+<li><a href="#sec-8-5">vnode结构</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
@@ -1010,9 +1022,259 @@ cat1和ps都处在后台进程组712中，先创建最后一个命令cat1，再�
 
 <div id="outline-container-sec-7" class="outline-2">
 <h2 id="sec-7">孤儿进程组</h2>
+<div class="outline-text-2" id="text-7">
+<ul class="org-ul">
+<li>孤儿进程：一个父进程已终止的进程，这种进程由init进程托管
+</li>
+<li>孤儿进程组：该组中每个成员的父进程要么是该组的一个成员，要么不是该组所属对话期的成员
+</li>
+</ul>
+
+<p>
+一个进程组不是孤儿进程组的条件是：该组中存在一个进程,其父进程在同一会话的其它进程组中。如果进程组不是孤儿进程组，那么在属于同一对话期的另一个组中的父进程就有机会重新起动该组中停止的进程
+</p>
+
+<p>
+孤儿进程组将被置于后台执行
+</p>
 </div>
+<div id="outline-container-sec-7-1" class="outline-3">
+<h3 id="sec-7-1">实例</h3>
+<div class="outline-text-3" id="text-7-1">
+<p>
+考虑一个进程，它fork了一个子进程然后终止。这在系统中是经常发生的，并无异常之处，但是在父进程终止时，如果该子进程停止(作业控制)，则子进程就成了孤儿进程组。程序9-1是这种情况的一个例子：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;errno.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;fcntl.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;signal.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+
+<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">sig_hup</span>(<span style="color: #98fb98;">int</span>);
+<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">pr_ids</span>(<span style="color: #98fb98;">char</span> *);
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">void</span>)
+{
+    <span style="color: #98fb98;">char</span> <span style="color: #eedd82;">c</span>;
+    <span style="color: #98fb98;">pid_t</span> <span style="color: #eedd82;">pid</span>;
+
+    pr_ids(<span style="color: #ffa07a;">"parent"</span>);
+    <span style="color: #00ffff;">if</span>( (pid = fork()) &lt; 0)
+        err_sys(<span style="color: #ffa07a;">"fork error"</span>);
+
+    <span style="color: #00ffff;">else</span> <span style="color: #00ffff;">if</span>(pid &gt; 0) { 
+        sleep(5);<span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#29238;&#36827;&#31243;&#20808;&#20241;&#30496;&#65292;&#20351;&#24471;&#23376;&#36827;&#31243;&#26377;&#26426;&#20250;&#20808;&#36816;&#34892;</span>
+        exit(0); 
+    } <span style="color: #00ffff;">else</span> {
+        pr_ids(<span style="color: #ffa07a;">"child"</span>);
+        signal(SIGHUP, sig_hup); <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#22788;&#29702;&#25346;&#26029;&#20449;&#21495;</span>
+        kill(getpid(), SIGTSTP); <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#21457;&#36865;&#20449;&#21495;&#20351;&#24471;&#23376;&#36827;&#31243;&#20572;&#27490;</span>
+        pr_ids(<span style="color: #ffa07a;">"child"</span>); <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#21464;&#25104;&#23396;&#20799;&#36827;&#31243;&#32452;&#21518;&#65292;&#36716;&#20837;&#21518;&#21488;&#36816;&#34892;</span>
+        <span style="color: #00ffff;">if</span>(read(STDIN_FILENO, &amp;c, 1) != 1)
+            <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#21518;&#21488;&#36827;&#31243;&#32452;&#35835;&#21462;&#25511;&#21046;&#32456;&#31471;&#36755;&#20837;&#20250;&#20135;&#29983;SIGTTIN&#20449;&#21495;&#65292;&#23548;&#33268;&#35835;&#21462;&#25253;&#38169;errno=EIO</span>
+            printf(<span style="color: #ffa07a;">"read error from control terminal, errno = %d\n"</span>, <span style="color: #98fb98;">errno</span>
+                   <span style="color: #eedd82;">exit</span>(0);
+                   }        
+    }
+
+    <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #eedd82;">sig_hup</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">signo</span>)
+    {
+        printf(<span style="color: #ffa07a;">"SIGHUP received, pid = %d\n"</span>, getpid());
+        <span style="color: #00ffff;">return</span>;
+
+    }
+
+    <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #eedd82;">pr_ids</span>(<span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">name</span>)
+    {
+        printf(<span style="color: #ffa07a;">"%s: pid = %d, ppid = %d, pgrp = %d\n"</span>,
+               name, getpid(), getppid(), tcgetpgrp(STDIN_FILENO));
+        fflush(stdout);
+    }
+</pre>
+</div>
+
+<p>
+图9-10显示了父进程已经fork了子进程后的情况：
+</p>
+
+<div class="figure">
+<p><img src="pic/orphan-process-group.png" alt="orphan-process-group.png" width="50%" />
+</p>
+</div>
+
+<p>
+假定使用了一个作业控制shell。shell将前台进程放在一个进程组中(本例中是512)，shell则留在自己的组内(442)。子进程继承其父进程(512)的进程组。在fork之后:
+</p>
+<ol class="org-ol">
+<li>父进程睡眠5秒钟，让子进程在父进程终止之前运行
+</li>
+<li>子进程为挂断信号(SIGHUP)建立信号处理程序。这样就能观察到SIGHUP信号是否已送到子进程
+</li>
+<li>子进程用kill函数向其自身发送停止信号(SIGTSTP)，停止了子进程，类似于用终端挂起字符(Ctrl-Z)停止一个前台作业
+</li>
+<li>当父进程终止时，该子进程成为孤儿进程，父进程ID成为1，也就是init进程
+</li>
+<li>现在子进程成为一个孤儿进程组的成员：因为进程组中所有进程的进程(如进程513的父进程1)属于另一个对话期，所以此进程组是孤儿进程组
+</li>
+<li>POSIX.1要求向新孤儿进程组中处于停止状态的每一个进程发送挂断信号(SIGHUP)，接着又向其发送继续信号(SIGCONT)
+</li>
+<li>在处理了挂断信号后，子进程继续。对挂断信号的系统默认动作是终止该进程，所以提供一个信号处理程序以捕捉该信号
+</li>
+</ol>
+
+<p>
+测试结果：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ a.out
+parent: pid = 512, ppid = 442, pgrp = 512
+child: pid = 513, ppid = 512, pgrp = 512
+$ SIGHUP received, pid = 513
+child: pid = 513, ppid = 1, pgrp = 512
+<span style="color: #b0c4de;">read</span> error from control terminal, errno = 5
+</pre>
+</div>
+<p>
+注意：
+</p>
+<ul class="org-ul">
+<li>因为两个进程登录shell和子进程都写向终端，所以shell提示符和子进程的输出一起出现
+</li>
+<li>子进程的父进程ID变成1，成为了孤儿进程
+</li>
+<li>父进程终止时，子进程变成后台进程组，而父进程是由shell作为前台作业执行的
+</li>
+<li>sig_hup函数中的printf会在pr_ids函数中的printf之前执行
+</li>
+<li>在子进程中调用pr_ids后，程序企图读标准输入。当后台进程组试图读控制终端时，则对该后台进程组产生SIGTTIN，这导致read返回出错，其errno设置为EIO(其值是5)
+</li>
+</ul>
+</div>
+</div>
+</div>
+
 <div id="outline-container-sec-8" class="outline-2">
 <h2 id="sec-8">BSD实现</h2>
+<div class="outline-text-2" id="text-8">
+<p>
+图9-11显示了BSD中进程，进程组，会话期，控制终端等各种数据结构：
+</p>
+
+<div class="figure">
+<p><img src="pic/proc-group-bsd.jpg" alt="proc-group-bsd.jpg" width="80%" />
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-8-1" class="outline-3">
+<h3 id="sec-8-1">session结构</h3>
+<div class="outline-text-3" id="text-8-1">
+<p>
+每个对话期都分配了一个session结构：
+</p>
+<ul class="org-ul">
+<li>s_count：该对话期中的进程组数。当此计数器减至0时，则可释放此结构
+</li>
+<li>s_leader：指向对话期首进程proc结构的指针。4.3+BSD不保持对话期ID字段，而SVR4则保持此字段
+</li>
+<li>s_ttyvp：指向控制终端vnode结构的指针
+</li>
+<li>s_ttyp：指向控制终端tty结构的指针 
+</li>
+</ul>
+
+<p>
+在调用setsid时，在内核中分配一个新的对话期结构。s_count设置为1，s_leader设置为调用进程的proc结构的指针，因为新对话期没有控制终端，所以s_ttyvp和s_ttyp设置为空指针
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-8-2" class="outline-3">
+<h3 id="sec-8-2">tty结构</h3>
+<div class="outline-text-3" id="text-8-2">
+<p>
+每个终端设备和每个伪终端设备均在内核中分配这样一个tty结构：
+</p>
+<ul class="org-ul">
+<li>t_session：指向将此终端作为控制终端的session结构(注意：session结构也会指向tty结构)。终端在失去载波信号时需要使用此指针将挂起信号送给对话期首进程
+</li>
+<li>t_pgrp：指向前台进程组的pgrp结构。终端驱动程序用此字段将信号送向前台进程组。由输入特殊字符(中断、退出和挂起)而产生的三个信号被送至前台进程组
+</li>
+<li>t_termios：包含所有这些特殊字符和与该终端有关信息的结构
+</li>
+<li>t_winsize：包含终端窗口当前尺寸的winsize结构
+</li>
+</ul>
+
+<p>
+注意：为了找到特定对话期的前台进程组，内核从session结构开始，然后用s_ttyp得到控制终端的tty结构，然后用t_pgrp得到前台进程组的pgrp结构
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-8-3" class="outline-3">
+<h3 id="sec-8-3">pgrp结构</h3>
+<div class="outline-text-3" id="text-8-3">
+<p>
+pgrp结构包含一个进程组的信息：
+</p>
+<ul class="org-ul">
+<li>pg_id：进程组ID
+</li>
+<li>pg_session：指向此进程组所属的session结构
+</li>
+<li>pg_mem：是指向此进程组第一个进程proc结构的指针
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-8-4" class="outline-3">
+<h3 id="sec-8-4">proc结构</h3>
+<div class="outline-text-3" id="text-8-4">
+<p>
+proc结构包含一个进程的所有信息：
+</p>
+<ul class="org-ul">
+<li>p_pid：进程ID
+</li>
+<li>p_pptr：指向父进程proc结构的指针
+</li>
+<li>p_pgrp：指向本进程所属的进程组的pgrp结构
+</li>
+<li>p_pgrpnxt：指向进程组中下一个进程的指针，进程组中最后一个进程的p_pgrpnxt为NULL指针
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-8-5" class="outline-3">
+<h3 id="sec-8-5">vnode结构</h3>
+<div class="outline-text-3" id="text-8-5">
+<p>
+在打开控制终端设备时分配vnode结构，进程对/dev/tty的所有访问都通过vnode结构
+</p>
+
+<p>
+在BSD中实际i节点是v节点的一部分，而SVR4实现中v节点存在i节点中
+</p>
+
+<p>
+<a href="signal.html">Next：信号</a>
+</p>
+
+<p>
+<a href="process.html">Previous：进程控制</a>
+</p>
+
+<p>
+<a href="apue.html">Home：目录</a>
+</p>
+</div>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
