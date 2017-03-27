@@ -158,7 +158,26 @@ for the JavaScript code in this tag.
 </li>
 </ul>
 </li>
-<li><a href="#sec-2">不可靠的信号机制</a></li>
+<li><a href="#sec-2">signal函数</a>
+<ul>
+<li><a href="#sec-2-1">signal实例</a></li>
+<li><a href="#sec-2-2">exec启动程序</a></li>
+<li><a href="#sec-2-3">fork创建进程</a></li>
+</ul>
+</li>
+<li><a href="#sec-3">不可靠性</a>
+<ul>
+<li><a href="#sec-3-1">丢失信号</a></li>
+<li><a href="#sec-3-2">无法阻塞信号</a></li>
+</ul>
+</li>
+<li><a href="#sec-4">可中断的系统调用</a></li>
+<li><a href="#sec-5">可再入函数</a>
+<ul>
+<li><a href="#sec-5-1">信号处理函数中调用不可再入函数</a></li>
+</ul>
+</li>
+<li><a href="#sec-6">可靠信号机制</a></li>
 </ul>
 </div>
 </div>
@@ -611,7 +630,584 @@ core文件的许可权通常是用户读/写，组读和其他读
 </div>
 
 <div id="outline-container-sec-2" class="outline-2">
-<h2 id="sec-2">不可靠的信号机制</h2>
+<h2 id="sec-2">signal函数</h2>
+<div class="outline-text-2" id="text-2">
+<p>
+signal函数：为某个特定信号设置处理函数
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;signal.h&gt;</span>
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#22768;&#26126;sighandler_t&#26159;&#19968;&#20010;&#20989;&#25968;&#25351;&#38024;&#31867;&#22411;&#65292;&#20854;&#21442;&#25968;&#26159;&#19968;&#20010;int&#65292;&#27809;&#26377;&#36820;&#22238;&#20540;&#30340;&#20989;&#25968;&#25351;&#38024;</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #00ffff;">typedef</span> <span style="color: #98fb98;">void</span> (*<span style="color: #98fb98;">sighandler_t</span>)(<span style="color: #98fb98;">int</span>);
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#20026;&#20449;&#21495;signo&#27880;&#20876;&#19968;&#20010;&#29305;&#23450;&#30340;&#22788;&#29702;&#20989;&#25968;handler</span>
+
+<span style="color: #ffa07a;">   signo&#65306;&#20449;&#21495;&#32534;&#21495;</span>
+<span style="color: #ffa07a;">   handler&#65306;&#20989;&#25968;&#25351;&#38024;&#65292;&#21442;&#25968;&#26159;&#19968;&#20010;int&#31867;&#22411;&#65292;&#26080;&#36820;&#22238;&#20540;&#12290;SIG_IGN&#65306;&#24573;&#30053;&#25351;&#23450;&#20449;&#21495;&#12289;SIG_DFL&#65306;&#31995;&#32479;&#40664;&#35748;&#22788;&#29702;&#20449;&#21495;&#12289;&#25110;&#32773;&#26159;&#33258;&#23450;&#20041;&#20449;&#21495;&#22788;&#29702;&#20989;&#25968;&#30340;&#22320;&#22336;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#25104;&#21151;&#21017;&#20026;&#20043;&#21069;&#30340;&#20449;&#21495;&#22788;&#29702;&#20989;&#25968;&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;SIG_ERR</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">sighandler_t</span> <span style="color: #87cefa;">signal</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">signo</span>, <span style="color: #98fb98;">sighandler_t</span> <span style="color: #eedd82;">handler</span>);
+
+<span style="color: #98fb98;">void</span> (*signal(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">signo</span>, <span style="color: #98fb98;">void</span> (*<span style="color: #eedd82;">handler</span>)(<span style="color: #98fb98;">int</span>))(<span style="color: #98fb98;">int</span>);
+</pre>
+</div>
+
+<p>
+signal函数要求两个参数：
+</p>
+<ul class="org-ul">
+<li>第一个参数signo：一个整型数，表10-1中的信号名
+</li>
+<li>第二个参数handler：一个函数指针，它指向的函数需要一个整型参数，无返回值，其含义是指向要设置的信号处理函数的指针
+<ul class="org-ul">
+<li>常数SIG_IGN：内核表示忽略此信号，SIGKILL和SIGSTOP不能忽略
+</li>
+<li>常数SIG_DFL：系统默认动作
+</li>
+<li>接到信号后要调用的函数的地址：此函数为信号处理程序或信号捕捉函数，调用此函数为捕捉信号
+</li>
+</ul>
+</li>
+</ul>
+
+<p>
+signal的返回值也是一个函数指针，指向的函数需要一个整形参数，无返回值，其含义是指向以前的信号处理函数的指针
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #ff4500;">/* </span><span style="color: #ff4500;">Fake signal functions.  </span><span style="color: #ff4500;">*/</span>
+<span style="color: #7fffd4;">#define</span> <span style="color: #eedd82;">SIG_ERR</span> ((<span style="color: #98fb98;">__sighandler_t</span>) -1)       <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">Error return.  </span><span style="color: #ff4500;">*/</span>
+<span style="color: #7fffd4;">#define</span> <span style="color: #eedd82;">SIG_DFL</span> ((<span style="color: #98fb98;">__sighandler_t</span>) 0)        <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">Default action.  </span><span style="color: #ff4500;">*/</span>
+<span style="color: #7fffd4;">#define</span> <span style="color: #eedd82;">SIG_IGN</span> ((<span style="color: #98fb98;">__sighandler_t</span>) 1)        <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">Ignore signal.  </span><span style="color: #ff4500;">*/</span>
+
+<span style="color: #7fffd4;">#define</span> <span style="color: #eedd82;">SIG_ERR</span> (<span style="color: #98fb98;">void</span> (*)()) -1
+<span style="color: #7fffd4;">#define</span> <span style="color: #eedd82;">SIG_DFL</span> (<span style="color: #98fb98;">void</span> (*)()) 0
+<span style="color: #7fffd4;">#define</span> <span style="color: #eedd82;">SIG_IGN</span> (<span style="color: #98fb98;">void</span> (*)()) 1
+</pre>
+</div>
+<p>
+这些常数可用于表示"指向函数的指针，该函数要一个整型参数，而且无返回值"。signal的第二个参数及其返回值就可用它们表示。这些常数所使用的三个值不一定要是-1，0和1。它们必须是三个值而决不能是任一可说明函数的地址。大多数UNIX系统使用上面所示的值
+</p>
+</div>
+
+<div id="outline-container-sec-2-1" class="outline-3">
+<h3 id="sec-2-1">signal实例</h3>
+<div class="outline-text-3" id="text-2-1">
+<p>
+捕捉两个用户定义的信号并打印信号编号：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;signal.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+
+<span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#20449;&#21495;&#22788;&#29702;&#20989;&#25968;&#65292;&#19968;&#20010;&#20989;&#25968;&#23545;&#24212;&#20004;&#20010;&#20449;&#21495;SIGUSR1&#21644;SIGUSR2</span>
+<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">sig_usr</span>(<span style="color: #98fb98;">int</span>);
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">void</span>) 
+{
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#27880;&#20876;&#20449;&#21495;&#22788;&#29702;&#20989;&#25968;</span>
+    <span style="color: #00ffff;">if</span> ( SIG_ERR == signal(SIGUSR1, sig_usr))
+        err_sys(<span style="color: #ffa07a;">"can't catch signal SIG_USR1"</span>);
+    <span style="color: #00ffff;">if</span>( SIG_ERR == signal(SIGUSR2, sig_usr))
+        err_sys(<span style="color: #ffa07a;">"can't catch signal SIG_USR2"</span>);
+
+    <span style="color: #00ffff;">for</span> (; ; )
+        pause();
+
+}
+
+<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">sig_usr</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">signo</span>)
+{
+    <span style="color: #00ffff;">if</span> (SIGUSR1 == signo)
+        printf(<span style="color: #ffa07a;">"received SIGUSR1\n"</span>);
+    <span style="color: #00ffff;">else</span> <span style="color: #00ffff;">if</span> (SIGUSR2 == signo)
+        printf(<span style="color: #ffa07a;">"received SIGUSR2\n"</span>);
+    <span style="color: #00ffff;">else</span>
+        err_dump(<span style="color: #ffa07a;">"received signal %d \n"</span>, signo);
+    <span style="color: #00ffff;">return</span> ;
+
+}
+</pre>
+</div>
+
+<p>
+测试结果：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ ./src/signal/sigusr1 &amp; <span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#21518;&#21488;&#21551;&#21160;&#36827;&#31243;</span>
+[1] 10225 <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#25903;&#25345;&#20316;&#19994;&#25511;&#21046;shell&#25171;&#21360;&#20316;&#19994;&#21495;&#21644;&#36827;&#31243;&#21495;</span>
+
+$ kill -USR1 10225 <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#21521;&#36827;&#31243;&#21457;&#36865;&#20449;&#21495;SIGUSR1 </span>
+received SIGUSR1
+
+$ kill -USR2 10225 <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#21521;&#36827;&#31243;&#21457;&#36865;&#20449;&#21495;SIGUSR2</span>
+received SIGUSR2
+
+$ kill 10225 <span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#12288;&#21521;&#36827;&#31243;&#21457;&#36865;&#20449;&#21495;SIGTERM</span>
+[1]+  Terminated ./src/signal/sigusr1
+</pre>
+</div>
+<p>
+当向该进程发送SIGTERM信号后，该进程就终止，因为它不捕捉此信号，而对此信号的系统默认动作是终止
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-2" class="outline-3">
+<h3 id="sec-2-2">exec启动程序</h3>
+<div class="outline-text-3" id="text-2-2">
+<p>
+当执行一个程序时，所有信号的状态都是系统默认或忽略。通常所有信号都被设置为系统默认动作，除非调用exec的进程忽略该信号
+</p>
+
+<p>
+exec函数将原先设置为要捕捉的信号都更改为默认动作，其他信号的状态则不变。一个进程原先要捕捉的信号，当其执行一个新程序后，就自然地不能再捕捉了，因为信号捕捉函数的地址很可能在所执行的新程序文件中已无意义
+</p>
+
+<p>
+对于一个非作业控制shell，当在后台执行一个进程时，例如：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ cc main.c &amp;
+</pre>
+</div>
+<p>
+shell自动将后台进程中对中断和退出信号的处理方式设置为忽略，于是当按中断键时就不会影响到后台进程。如果没有这样的处理，那么当按中断键时，它不但终止前台进程，也终止所有后台进程
+</p>
+
+<p>
+很多捕捉这两个信号的交互程序具有下列形式的代码:
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #98fb98;">void</span> <span style="color: #87cefa;">sig_int</span>(<span style="color: #98fb98;">int</span>);
+<span style="color: #98fb98;">void</span> <span style="color: #87cefa;">sig_quit</span>(<span style="color: #98fb98;">int</span>);
+
+<span style="color: #00ffff;">if</span> (signal(SIGINT, SIG_IGN) != SIG_IGN)
+    signal(SIGINT, sig_int);
+<span style="color: #00ffff;">if</span> (signal(SIGQUIT, SIG_IGN) != SIG_IGN)
+    signal(SIGQUIT, sig_quit);
+</pre>
+</div>
+<p>
+这样处理后，仅当SIGINT和SIGQUIT当前并不忽略，进程才捕捉它们
+</p>
+
+<p>
+从signal的这两个调用中也可以看到这种函数的限制：只有通过改变信号的处理方式就才能获得信号的当前处理方式
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-3" class="outline-3">
+<h3 id="sec-2-3">fork创建进程</h3>
+<div class="outline-text-3" id="text-2-3">
+<p>
+当一个进程调用fork时，其子进程继承父进程的信号处理方式。因为子进程在开始时复制了父进程存储图像，所以信号捕捉函数的地址在子进程中是有意义的
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-3" class="outline-2">
+<h2 id="sec-3">不可靠性</h2>
+<div class="outline-text-2" id="text-3">
+<p>
+在早期的UNIX版本中(例如V7)，信号是不可靠的。不可靠：一个信号发生了，但进程却可能不知道这个信号
+</p>
+</div>
+<div id="outline-container-sec-3-1" class="outline-3">
+<h3 id="sec-3-1">丢失信号</h3>
+<div class="outline-text-3" id="text-3-1">
+<p>
+早期版本中的一个问题是在进程每次处理信号时，随即将信号动作复置为默认值，因此早期的信号处理如下：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #00ffff;">static</span> <span style="color: #98fb98;">int</span> <span style="color: #87cefa;">sig_int</span>();
+<span style="color: #ff4500;">//</span><span style="color: #ff4500;">...</span>
+signal(SIGINT, sig_int);
+<span style="color: #ff4500;">//</span><span style="color: #ff4500;">...</span>
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">sig_int</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">signo</span>)
+{
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#27492;&#26102;SIGINT&#20449;&#21495;&#22788;&#29702;&#21160;&#20316;&#24050;&#32463;&#24674;&#22797;&#25104;&#40664;&#35748;&#65292;&#24517;&#39035;&#20877;&#27425;&#27880;&#20876;sig_int&#20989;&#25968;</span>
+    signal(SIGINT, sig_int);
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#22788;&#29702;SIGINT&#20449;&#21495;</span>
+}
+</pre>
+</div>
+<p>
+问题在于：在信号发生之后到信号处理程序中调用signal函数之间有一个时间窗口。在此段时间中可能发生另一次同样中断信号，第二个信号会造成执行默认动作，而对中断信号则是终止该进程！
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-3-2" class="outline-3">
+<h3 id="sec-3-2">无法阻塞信号</h3>
+<div class="outline-text-3" id="text-3-2">
+<p>
+那时进程对信号的控制能力也很低，它能捕捉信号或忽略它，但有些很需要的功能它却并不具备。例如，有时用户希望通知内核阻塞一种信号：不要忽略该信号，在其发生时记住它，然后在进程作好了准备时再通知它。这种阻塞信号的能力当时并不具备。同样内核也无法关闭某种信号，只能忽略它　
+</p>
+
+<p>
+主函数调用pause函数使自己睡眠，直到捕捉到一个信号。当信号被捕捉到后，信号处理程序将标志sig_int_flag设置为非0。在信号处理程序返回之后，内核将该进程唤醒，它检测到该标志为非0，然后执行它所需做的
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #98fb98;">int</span> <span style="color: #eedd82;">sig_int_flag</span> = 0; <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#22914;&#26524;&#25429;&#25417;&#21040;SIGINT&#20449;&#21495;&#65292;&#21017;&#38750;0</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">sig_int</span>(<span style="color: #98fb98;">int</span>);  <span style="color: #ff4500;">//</span><span style="color: #ff4500;">SIGINT&#20449;&#21495;&#22788;&#29702;&#20989;&#25968;</span>
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>()
+{
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#27880;&#20876;SIGINT&#20449;&#21495;&#22788;&#29702;&#20989;&#25968;</span>
+    signal(SIGINT, sig_int);
+
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">...</span>
+
+    <span style="color: #00ffff;">while</span>(sig_int_flag == 0)
+        pause();<span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#19968;&#30452;&#30561;&#30496;&#30452;&#21040;&#26576;&#20010;&#20449;&#21495;&#21457;&#29983;</span>
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">...</span>
+}
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">sig_int</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">signo</span>)
+{
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#20877;&#27425;&#27880;&#20876;&#20449;&#21495;&#22788;&#29702;&#20989;&#25968;</span>
+    signal(SIGINT, sig_int);
+
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#35774;&#32622;&#26631;&#24535;&#21464;&#37327;&#65292;&#20351;&#24471;main&#20989;&#25968;&#31163;&#24320;while&#24490;&#29615;</span>
+    sig_int_flag = 1;
+}
+</pre>
+</div>
+<p>
+问题在于：如果在测试sig_int_flag之后，调用pause之前发生信号，此时sig_int_flag已经变为1，但是程序还是会调用pause，如果以后再无此信号发生，则此进程可能会一直睡眠，因此这次发生的信号也就丢失了！
+</p>
+
+<p>
+这种类型的程序段在大多数情况下会正常工作，使得我们认为它们正确，而实际上却并不是如此
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-4" class="outline-2">
+<h2 id="sec-4">可中断的系统调用</h2>
+<div class="outline-text-2" id="text-4">
+<p>
+早期UNIX系统的一个特性是：如果在进程执行一个低速系统调用而阻塞期间捕捉到一个信号，则该系统调用就被中断不再继续执行。该系统调用返回出错，其errno设置为EINTR。这样处理的理由是因为一个信号发生了，进程捕捉到了它，这意味着已经发生了某种事情，所以是个好机会应当唤醒阻塞的系统调用
+</p>
+
+<p>
+系统调用分成两类：低速系统调用和其他系统调用。低速系统调用是可能会使进程永远阻塞的一类系统调用，它们包括:
+</p>
+<ul class="org-ul">
+<li>在读某些类型的文件时，如果数据并不存在则可能会使调用者永远阻塞。例如管道、终端设备以及网络设备
+</li>
+<li>在写这些类型的文件时，如果不能立即接受这些数据，则也可能会使调用者永远阻塞
+</li>
+<li>打开文件，在某种条件发生之前也可能会使调用者阻塞。例如，打开终端设备，它要等待直到所连接的调制解调器回答了电话
+</li>
+<li>pause(调用进程睡眠直至捕捉到一个信号)和wait
+</li>
+<li>某些ioctl操作
+</li>
+<li>某些进程间通信函数
+</li>
+</ul>
+
+<p>
+在这些低速系统调用中一个例外是与磁盘I/O有关的系统调用。虽然读、写一个磁盘文件可能暂时阻塞调用者(在磁盘驱动程序将请求排入队列，然后在适当时间执行请求期间)，但是除非发生硬件错误，I/O操作总会很快返回，并使调用者不再处于阻塞状态。
+</p>
+
+<p>
+使用中断系统调用这种方法来处理的一种情况是：一个进程起动了读终端操作，而使用该终端设备的用户却离开该终端很长时间。在这种情况下进程可能处于阻塞状态几个小时甚至数天，除非系统停机，否则一直如此
+</p>
+
+<p>
+必须用显式方法处理可中断的系统调用带来的出错返回。典型的代码序列，假定进行一个读操作，它被中断，我们希望重新起动它如下列样式：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">again</span>:
+<span style="color: #00ffff;">if</span> ((n = read(fd, buff, BUFFSIZE)) &lt; 0) {
+    <span style="color: #00ffff;">if</span> (errno == EINTR)
+        <span style="color: #00ffff;">goto</span> <span style="color: #7fffd4;">again</span>;
+<span style="color: #ff4500;">/* </span><span style="color: #ff4500;">just an interrupted system call </span><span style="color: #ff4500;">*/</span>
+<span style="color: #ff4500;">/* </span><span style="color: #ff4500;">handle other errors </span><span style="color: #ff4500;">*/</span>
+}
+</pre>
+</div>
+<p>
+为了帮助应用程序使其不必处理被中断的系统调用，4.2BSD引进了某些被中断的系统调用的自动再起动。自动再起动的系统调用包括:ioctl、read、readv、write、writev、wait和waitpid。正如前述，其中前五个函数只有对低速设备进行操作时才会被信号中断。而wait和waitpid在捕捉到信号时总是被中断
+</p>
+
+<p>
+某些应用程序并不希望这些函数被中断后再起动，因为这种自动再起动的处理方式也会带来问题，为此4.3BSD允许进程在每个信号各别处理的基础上不使用此功能
+</p>
+
+<p>
+4.2BSD引进自动再起动功能的一个理由是：有时用户并不知道所使用的输入、输出设备是否是低速设备。如果编写的程序可以用交互方式运行，则它可能读、写终端低速设备。如果在程序中捕捉信号，而系统却不提供再起动功能，则对每次读、写系统调用就要进行是否出错返回的测试，如果是被中断的，则再进行读、写
+</p>
+
+<p>
+表10-2列出了几种实现所提供的信号功能及它们的语义
+</p>
+<!-- This HTML table template is generated by emacs 24.5.1 -->
+<table border="1">
+  <tr>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;函数&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;系统&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;信号处理&nbsp;<br />
+      &nbsp;&nbsp;函数是否<br />
+      &nbsp;再包装&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;阻塞信号&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;的能力&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;被中断系统&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;调用的再<br />
+      &nbsp;&nbsp;启动&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+  </tr>
+  <tr>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;signal&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;V7,&nbsp;SVR2<br />
+      &nbsp;&nbsp;SVR3,&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;SVR4&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;决不&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+  </tr>
+  <tr>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;sigset,&nbsp;sighold,&nbsp;sigrelse,&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;sigignore,&nbsp;sigpause&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;SVR3,&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;SVR4&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;•&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;•&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;决不&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+  </tr>
+  <tr>
+    <td rowspan="2" align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;signal,&nbsp;sigvec,&nbsp;sigblock,&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;sigsetmask,&nbsp;sigpause&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;4.2BSD&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;•&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;•&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;总是&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+  </tr>
+  <tr>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;4.3BSD&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;•&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;•&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;默认&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+  </tr>
+  <tr>
+    <td rowspan="3" align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;sigaction,&nbsp;sigprocmask,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;sigpending,&nbsp;sigsuspend&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;POSIX.1&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;•&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;•&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;未说明&nbsp;&nbsp;&nbsp;
+    </td>
+  </tr>
+  <tr>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;SVR4&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;•&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;•&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;可选&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+  </tr>
+  <tr>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;4.3BSD&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;•&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;•&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;可选&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+  </tr>
+</table>
+</div>
+</div>
+
+<div id="outline-container-sec-5" class="outline-2">
+<h2 id="sec-5">可再入函数</h2>
+<div class="outline-text-2" id="text-5">
+<p>
+进程捕捉到信号并继续执行时，它首先执行该信号处理程序中的指令。如果从信号处理程序正常返回(例如没有调用exit或longjmp)，则继续执行在捕捉到信号时进程正在执行的正常指令序列
+</p>
+
+<p>
+但在信号处理程序中，不能判断捕捉到信号时进程执行到何处。如果进程正在执行malloc，在其堆中分配另外的存储空间，而此时由于捕捉到信号插入执行该信号处理程序，其中又调用malloc，这时会发生什么？又比如进程正在执行getpwnam这种将其结果存放在静态存储单元中的函数，而插入执行的信号处理程序中又调用这样的函数，这时又会发生什么呢？在malloc例子中，可能会对进程造成破坏，因为malloc通常为它所分配的存储区保持一个连接表，而插入执行信号处理程序时，进程可能正在更改此连接表。而在getpwnam的例子中，正常返回给调用者的信息可能由返回至信号处理程序的信息覆盖
+</p>
+
+<p>
+函数是不可再入的原因为：
+</p>
+<ul class="org-ul">
+<li>使用静态数据结构
+</li>
+<li>调用malloc或free函数
+</li>
+<li>标准I/O函数，标准I/O库的很多实现都以不可再入方式使用全局数据结构
+</li>
+</ul>
+
+<p>
+信号处理程序中即使调用了POSIX定义的可再入的函数，但因为每个进程只有一个errno变量，所以仍可能修改了其原先的值。一个信号处理程序，它恰好在main刚设置errno之后被调用。如果该信号处理程序调用read，则它可能更改errno的值，从而取代了刚由main设置的值。因此，作为一个通用的规则，应当在信号处理程序前保存，而在其后恢复errno
+</p>
+</div>
+
+<div id="outline-container-sec-5-1" class="outline-3">
+<h3 id="sec-5-1">信号处理函数中调用不可再入函数</h3>
+<div class="outline-text-3" id="text-5-1">
+<p>
+信号处理程序my_alarm调用不可再入函数getpwnam，而my_alarm每秒钟被调用一次：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;pwd.h&gt;</span>
+
+<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">my_alarm</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">signo</span>)
+{
+    <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">passwd</span> *<span style="color: #eedd82;">rootptr</span>;
+
+    printf(<span style="color: #ffa07a;">"in signal handler\n"</span>);
+    <span style="color: #00ffff;">if</span> ((rootptr = getpwnam(<span style="color: #ffa07a;">"root"</span>)) == <span style="color: #7fffd4;">NULL</span>)
+        err_sys(<span style="color: #ffa07a;">"getpwnam(root) error"</span>);
+    alarm(1);
+}
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">void</span>)
+{
+    <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">passwd</span>   *<span style="color: #eedd82;">ptr</span>;
+
+    signal(SIGALRM, my_alarm);
+    alarm(1);
+    <span style="color: #00ffff;">for</span> ( ; ; ) {
+        <span style="color: #00ffff;">if</span> ((ptr = getpwnam(<span style="color: #ffa07a;">"sar"</span>)) == <span style="color: #7fffd4;">NULL</span>)
+            err_sys(<span style="color: #ffa07a;">"getpwnam error"</span>);
+        <span style="color: #00ffff;">if</span> (strcmp(ptr-&gt;pw_name, <span style="color: #ffa07a;">"sar"</span>) != 0)
+            printf(<span style="color: #ffa07a;">"return value corrupted!, pw_name = %s\n"</span>,
+                   ptr-&gt;pw_name);
+    }
+}
+</pre>
+</div>
+<p>
+运行此程序时，其结果具有随意性：通常在信号处理程序第一次返回时，该程序将由SIGSEGV信号终止。检查core文件，从中可以看到main函数已调用getpwnam，而且当信号处理程序调用此同一函数时，某些内部指针出了问题。偶然，此程序会运行若干秒，然后因产生SIGSEGV信号而终止。在捕捉到信号后，若main函数仍正确运行，其返回值却有时错误，有时正确。有时在信号处理程序中调用getpwnam会出错返回，其出错值为EBADF(无效文件描述符)
+</p>
+
+<p>
+从此实例中可以看出：若在信号处理程序中调用一个不可再入函数，则其结果是不可预见的！
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-6" class="outline-2">
+<h2 id="sec-6">可靠信号机制</h2>
 </div>
 </div>
 <div id="postamble" class="status">

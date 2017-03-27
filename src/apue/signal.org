@@ -124,4 +124,280 @@ core文件的许可权通常是用户读/写，组读和其他读
 + SIGXCPUS：如果进程超过了其软CPU时间限制，则产生此信号
 + SIGXFSZ：如果进程超过了其软文件长度限制，则产生此信号
 
-* 不可靠的信号机制
+* signal函数
+signal函数：为某个特定信号设置处理函数
+#+BEGIN_SRC C
+  #include <signal.h>
+  /**
+     声明sighandler_t是一个函数指针类型，其参数是一个int，没有返回值的函数指针
+  ,*/
+  typedef void (*sighandler_t)(int);
+  /**
+     为信号signo注册一个特定的处理函数handler
+
+     signo：信号编号
+     handler：函数指针，参数是一个int类型，无返回值。SIG_IGN：忽略指定信号、SIG_DFL：系统默认处理信号、或者是自定义信号处理函数的地址
+
+     return：成功则为之前的信号处理函数，若出错则为SIG_ERR
+  ,*/
+  sighandler_t signal(int signo, sighandler_t handler);
+
+  void (*signal(int signo, void (*handler)(int))(int);
+#+END_SRC
+
+signal函数要求两个参数：
++ 第一个参数signo：一个整型数，表10-1中的信号名
++ 第二个参数handler：一个函数指针，它指向的函数需要一个整型参数，无返回值，其含义是指向要设置的信号处理函数的指针
+  + 常数SIG_IGN：内核表示忽略此信号，SIGKILL和SIGSTOP不能忽略
+  + 常数SIG_DFL：系统默认动作
+  + 接到信号后要调用的函数的地址：此函数为信号处理程序或信号捕捉函数，调用此函数为捕捉信号
+
+signal的返回值也是一个函数指针，指向的函数需要一个整形参数，无返回值，其含义是指向以前的信号处理函数的指针
+
+#+BEGIN_SRC C
+  /* Fake signal functions.  */
+  #define SIG_ERR ((__sighandler_t) -1)       /* Error return.  */
+  #define SIG_DFL ((__sighandler_t) 0)        /* Default action.  */
+  #define SIG_IGN ((__sighandler_t) 1)        /* Ignore signal.  */
+
+  #define SIG_ERR (void (*)()) -1
+  #define SIG_DFL (void (*)()) 0
+  #define SIG_IGN (void (*)()) 1 
+#+END_SRC
+这些常数可用于表示"指向函数的指针，该函数要一个整型参数，而且无返回值"。signal的第二个参数及其返回值就可用它们表示。这些常数所使用的三个值不一定要是-1，0和1。它们必须是三个值而决不能是任一可说明函数的地址。大多数UNIX系统使用上面所示的值
+
+** signal实例
+捕捉两个用户定义的信号并打印信号编号：
+    #+BEGIN_SRC C
+      #include <signal.h>
+      #include "apue.h"
+
+      //信号处理函数，一个函数对应两个信号SIGUSR1和SIGUSR2
+      static void sig_usr(int);
+
+      int main(void) 
+      {
+              //注册信号处理函数
+              if ( SIG_ERR == signal(SIGUSR1, sig_usr))
+                      err_sys("can't catch signal SIG_USR1");
+              if( SIG_ERR == signal(SIGUSR2, sig_usr))
+                      err_sys("can't catch signal SIG_USR2");
+
+              for (; ; )
+                      pause();
+              
+      }
+
+      static void sig_usr(int signo)
+      {
+              if (SIGUSR1 == signo)
+                      printf("received SIGUSR1\n");
+              else if (SIGUSR2 == signo)
+                      printf("received SIGUSR2\n");
+              else
+                      err_dump("received signal %d \n", signo);
+              return ;
+              
+      }
+    #+END_SRC
+
+测试结果：
+#+BEGIN_SRC sh
+  $ ./src/signal/sigusr1 & #后台启动进程
+  [1] 10225 # 支持作业控制shell打印作业号和进程号
+
+  $ kill -USR1 10225 # 向进程发送信号SIGUSR1 
+  received SIGUSR1
+
+  $ kill -USR2 10225 # 向进程发送信号SIGUSR2
+  received SIGUSR2
+
+  $ kill 10225 #　向进程发送信号SIGTERM
+  [1]+  Terminated ./src/signal/sigusr1
+#+END_SRC
+当向该进程发送SIGTERM信号后，该进程就终止，因为它不捕捉此信号，而对此信号的系统默认动作是终止
+
+** exec启动程序
+当执行一个程序时，所有信号的状态都是系统默认或忽略。通常所有信号都被设置为系统默认动作，除非调用exec的进程忽略该信号
+
+exec函数将原先设置为要捕捉的信号都更改为默认动作，其他信号的状态则不变。一个进程原先要捕捉的信号，当其执行一个新程序后，就自然地不能再捕捉了，因为信号捕捉函数的地址很可能在所执行的新程序文件中已无意义
+
+对于一个非作业控制shell，当在后台执行一个进程时，例如：
+#+BEGIN_SRC sh
+  $ cc main.c &
+#+END_SRC
+shell自动将后台进程中对中断和退出信号的处理方式设置为忽略，于是当按中断键时就不会影响到后台进程。如果没有这样的处理，那么当按中断键时，它不但终止前台进程，也终止所有后台进程
+
+很多捕捉这两个信号的交互程序具有下列形式的代码:
+#+BEGIN_SRC C
+  void sig_int(int);
+  void sig_quit(int);
+
+  if (signal(SIGINT, SIG_IGN) != SIG_IGN)
+          signal(SIGINT, sig_int);
+  if (signal(SIGQUIT, SIG_IGN) != SIG_IGN)
+          signal(SIGQUIT, sig_quit);
+#+END_SRC
+这样处理后，仅当SIGINT和SIGQUIT当前并不忽略，进程才捕捉它们
+
+从signal的这两个调用中也可以看到这种函数的限制：只有通过改变信号的处理方式就才能获得信号的当前处理方式
+
+** fork创建进程
+当一个进程调用fork时，其子进程继承父进程的信号处理方式。因为子进程在开始时复制了父进程存储图像，所以信号捕捉函数的地址在子进程中是有意义的
+
+* 不可靠性
+在早期的UNIX版本中(例如V7)，信号是不可靠的。不可靠：一个信号发生了，但进程却可能不知道这个信号
+** 丢失信号
+早期版本中的一个问题是在进程每次处理信号时，随即将信号动作复置为默认值，因此早期的信号处理如下：
+#+BEGIN_SRC C
+  static int sig_int();
+  //...
+  signal(SIGINT, sig_int);
+  //...
+
+  int sig_int(int signo)
+  {
+          //此时SIGINT信号处理动作已经恢复成默认，必须再次注册sig_int函数
+          signal(SIGINT, sig_int);
+          //处理SIGINT信号
+  }
+#+END_SRC
+问题在于：在信号发生之后到信号处理程序中调用signal函数之间有一个时间窗口。在此段时间中可能发生另一次同样中断信号，第二个信号会造成执行默认动作，而对中断信号则是终止该进程！
+
+** 无法阻塞信号
+那时进程对信号的控制能力也很低，它能捕捉信号或忽略它，但有些很需要的功能它却并不具备。例如，有时用户希望通知内核阻塞一种信号：不要忽略该信号，在其发生时记住它，然后在进程作好了准备时再通知它。这种阻塞信号的能力当时并不具备。同样内核也无法关闭某种信号，只能忽略它　
+
+主函数调用pause函数使自己睡眠，直到捕捉到一个信号。当信号被捕捉到后，信号处理程序将标志sig_int_flag设置为非0。在信号处理程序返回之后，内核将该进程唤醒，它检测到该标志为非0，然后执行它所需做的
+#+BEGIN_SRC C
+  int sig_int_flag = 0; //如果捕捉到SIGINT信号，则非0
+  int sig_int(int);  //SIGINT信号处理函数
+
+  int main()
+  {
+          //注册SIGINT信号处理函数
+          signal(SIGINT, sig_int);
+
+          //...
+          
+          while(sig_int_flag == 0)
+                  pause();//一直睡眠直到某个信号发生
+          //...
+  }
+
+  int sig_int(int signo)
+  {
+          //再次注册信号处理函数
+          signal(SIGINT, sig_int);
+
+          //设置标志变量，使得main函数离开while循环
+          sig_int_flag = 1;
+  }
+#+END_SRC
+问题在于：如果在测试sig_int_flag之后，调用pause之前发生信号，此时sig_int_flag已经变为1，但是程序还是会调用pause，如果以后再无此信号发生，则此进程可能会一直睡眠，因此这次发生的信号也就丢失了！
+
+这种类型的程序段在大多数情况下会正常工作，使得我们认为它们正确，而实际上却并不是如此
+
+* 可中断的系统调用
+早期UNIX系统的一个特性是：如果在进程执行一个低速系统调用而阻塞期间捕捉到一个信号，则该系统调用就被中断不再继续执行。该系统调用返回出错，其errno设置为EINTR。这样处理的理由是因为一个信号发生了，进程捕捉到了它，这意味着已经发生了某种事情，所以是个好机会应当唤醒阻塞的系统调用
+
+系统调用分成两类：低速系统调用和其他系统调用。低速系统调用是可能会使进程永远阻塞的一类系统调用，它们包括:
++ 在读某些类型的文件时，如果数据并不存在则可能会使调用者永远阻塞。例如管道、终端设备以及网络设备
++ 在写这些类型的文件时，如果不能立即接受这些数据，则也可能会使调用者永远阻塞
++ 打开文件，在某种条件发生之前也可能会使调用者阻塞。例如，打开终端设备，它要等待直到所连接的调制解调器回答了电话
++ pause(调用进程睡眠直至捕捉到一个信号)和wait
++ 某些ioctl操作
++ 某些进程间通信函数
+
+在这些低速系统调用中一个例外是与磁盘I/O有关的系统调用。虽然读、写一个磁盘文件可能暂时阻塞调用者(在磁盘驱动程序将请求排入队列，然后在适当时间执行请求期间)，但是除非发生硬件错误，I/O操作总会很快返回，并使调用者不再处于阻塞状态。
+
+使用中断系统调用这种方法来处理的一种情况是：一个进程起动了读终端操作，而使用该终端设备的用户却离开该终端很长时间。在这种情况下进程可能处于阻塞状态几个小时甚至数天，除非系统停机，否则一直如此
+
+必须用显式方法处理可中断的系统调用带来的出错返回。典型的代码序列，假定进行一个读操作，它被中断，我们希望重新起动它如下列样式：
+#+BEGIN_SRC C
+  again:
+  if ((n = read(fd, buff, BUFFSIZE)) < 0) {
+          if (errno == EINTR)
+                  goto again;
+  /* just an interrupted system call */
+  /* handle other errors */
+  }
+#+END_SRC
+为了帮助应用程序使其不必处理被中断的系统调用，4.2BSD引进了某些被中断的系统调用的自动再起动。自动再起动的系统调用包括:ioctl、read、readv、write、writev、wait和waitpid。正如前述，其中前五个函数只有对低速设备进行操作时才会被信号中断。而wait和waitpid在捕捉到信号时总是被中断
+
+某些应用程序并不希望这些函数被中断后再起动，因为这种自动再起动的处理方式也会带来问题，为此4.3BSD允许进程在每个信号各别处理的基础上不使用此功能
+
+4.2BSD引进自动再起动功能的一个理由是：有时用户并不知道所使用的输入、输出设备是否是低速设备。如果编写的程序可以用交互方式运行，则它可能读、写终端低速设备。如果在程序中捕捉信号，而系统却不提供再起动功能，则对每次读、写系统调用就要进行是否出错返回的测试，如果是被中断的，则再进行读、写
+
+表10-2列出了几种实现所提供的信号功能及它们的语义
+  +--------------------------------+----------+----------+----------+------------+
+  |                                |          | 信号处理 | 阻塞信号 | 被中断系统 |
+  |            函数                |   系统   |  函数是否|   的能力 |    调用的再|
+  |                                |          | 再包装   |          |  启动      |
+  +--------------------------------+----------+----------+----------+------------+
+  |                                |  V7, SVR2|          |          |            |
+  |            signal              |  SVR3,   |          |          |   决不     |
+  |                                |  SVR4    |          |          |            |
+  +--------------------------------+----------+----------+----------+------------+
+  |   sigset, sighold, sigrelse,   |  SVR3,   |          |          |            |
+  |                                |          |    •     |    •     |   决不     |
+  |     sigignore, sigpause        |  SVR4    |          |          |            |
+  +--------------------------------+----------+----------+----------+------------+
+  |   signal, sigvec, sigblock,    |  4.2BSD  |    •     |    •     |   总是     |
+  |                                +----------+----------+----------+------------+
+  |   sigsetmask, sigpause         |  4.3BSD  |    •     |    •     |   默认     |
+  +--------------------------------+----------+----------+----------+------------+
+  |                                |  POSIX.1 |    •     |    •     |   未说明   |
+  |   sigaction, sigprocmask,      +----------+----------+----------+------------+
+  |                                |   SVR4   |    •     |    •     |    可选    |
+  |   sigpending, sigsuspend       +----------+----------+----------+------------+
+  |                                |  4.3BSD  |    •     |    •     |    可选    |
+  +--------------------------------+----------+----------+----------+------------+
+
+* 可再入函数
+进程捕捉到信号并继续执行时，它首先执行该信号处理程序中的指令。如果从信号处理程序正常返回(例如没有调用exit或longjmp)，则继续执行在捕捉到信号时进程正在执行的正常指令序列
+
+但在信号处理程序中，不能判断捕捉到信号时进程执行到何处。如果进程正在执行malloc，在其堆中分配另外的存储空间，而此时由于捕捉到信号插入执行该信号处理程序，其中又调用malloc，这时会发生什么？又比如进程正在执行getpwnam这种将其结果存放在静态存储单元中的函数，而插入执行的信号处理程序中又调用这样的函数，这时又会发生什么呢？在malloc例子中，可能会对进程造成破坏，因为malloc通常为它所分配的存储区保持一个连接表，而插入执行信号处理程序时，进程可能正在更改此连接表。而在getpwnam的例子中，正常返回给调用者的信息可能由返回至信号处理程序的信息覆盖
+
+函数是不可再入的原因为：
++ 使用静态数据结构
++ 调用malloc或free函数
++ 标准I/O函数，标准I/O库的很多实现都以不可再入方式使用全局数据结构
+
+信号处理程序中即使调用了POSIX定义的可再入的函数，但因为每个进程只有一个errno变量，所以仍可能修改了其原先的值。一个信号处理程序，它恰好在main刚设置errno之后被调用。如果该信号处理程序调用read，则它可能更改errno的值，从而取代了刚由main设置的值。因此，作为一个通用的规则，应当在信号处理程序前保存，而在其后恢复errno
+
+** 信号处理函数中调用不可再入函数
+信号处理程序my_alarm调用不可再入函数getpwnam，而my_alarm每秒钟被调用一次：
+#+BEGIN_SRC C
+  #include "apue.h"
+  #include <pwd.h>
+
+  static void my_alarm(int signo)
+  {
+          struct passwd *rootptr;
+
+          printf("in signal handler\n");
+          if ((rootptr = getpwnam("root")) == NULL)
+                  err_sys("getpwnam(root) error");
+          alarm(1);
+  }
+
+  int main(void)
+  {
+          struct passwd   *ptr;
+
+          signal(SIGALRM, my_alarm);
+          alarm(1);
+          for ( ; ; ) {
+                  if ((ptr = getpwnam("sar")) == NULL)
+                          err_sys("getpwnam error");
+                  if (strcmp(ptr->pw_name, "sar") != 0)
+                          printf("return value corrupted!, pw_name = %s\n",
+                                 ptr->pw_name);
+          }
+  }
+#+END_SRC
+运行此程序时，其结果具有随意性：通常在信号处理程序第一次返回时，该程序将由SIGSEGV信号终止。检查core文件，从中可以看到main函数已调用getpwnam，而且当信号处理程序调用此同一函数时，某些内部指针出了问题。偶然，此程序会运行若干秒，然后因产生SIGSEGV信号而终止。在捕捉到信号后，若main函数仍正确运行，其返回值却有时错误，有时正确。有时在信号处理程序中调用getpwnam会出错返回，其出错值为EBADF(无效文件描述符)
+
+从此实例中可以看出：若在信号处理程序中调用一个不可再入函数，则其结果是不可预见的！
+
+* 可靠信号机制
