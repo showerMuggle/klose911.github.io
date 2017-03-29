@@ -177,7 +177,58 @@ for the JavaScript code in this tag.
 <li><a href="#sec-5-1">信号处理函数中调用不可再入函数</a></li>
 </ul>
 </li>
-<li><a href="#sec-6">可靠信号机制</a></li>
+<li><a href="#sec-6">可靠信号机制</a>
+<ul>
+<li><a href="#sec-6-1">术语</a>
+<ul>
+<li><a href="#sec-6-1-1">产生(generation)</a></li>
+<li><a href="#sec-6-1-2">递送(delivery)</a>
+<ul>
+<li><a href="#sec-6-1-2-1">递送顺序(delivery order)</a></li>
+</ul>
+</li>
+<li><a href="#sec-6-1-3">未决(pending)</a></li>
+<li><a href="#sec-6-1-4">阻塞(blocking)</a>
+<ul>
+<li><a href="#sec-6-1-4-1">排队(queue)</a></li>
+</ul>
+</li>
+<li><a href="#sec-6-1-5">信号屏蔽字(signal mask)</a></li>
+<li><a href="#sec-6-1-6">信号集(sigset)</a></li>
+</ul>
+</li>
+<li><a href="#sec-6-2">发送信号</a>
+<ul>
+<li><a href="#sec-6-2-1">kill函数</a>
+<ul>
+<li><a href="#sec-6-2-1-1">发送权限</a></li>
+<li><a href="#sec-6-2-1-2">空信号</a></li>
+</ul>
+</li>
+<li><a href="#sec-6-2-2">raise函数</a></li>
+</ul>
+</li>
+<li><a href="#sec-6-3">alarm和pause函数</a>
+<ul>
+<li><a href="#sec-6-3-1">alarm</a></li>
+<li><a href="#sec-6-3-2">pause</a></li>
+<li><a href="#sec-6-3-3">sleep实现</a>
+<ul>
+<li><a href="#sec-6-3-3-1">sleep1</a></li>
+<li><a href="#sec-6-3-3-2">sleep2</a></li>
+<li><a href="#sec-6-3-3-3">其他信号处理程序中调用sleep2</a></li>
+</ul>
+</li>
+<li><a href="#sec-6-3-4">超时限制的读操作</a>
+<ul>
+<li><a href="#sec-6-3-4-1">read2</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#sec-6-4">信号集</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
@@ -1208,6 +1259,556 @@ signal(SIGINT, sig_int);
 
 <div id="outline-container-sec-6" class="outline-2">
 <h2 id="sec-6">可靠信号机制</h2>
+<div class="outline-text-2" id="text-6">
+</div><div id="outline-container-sec-6-1" class="outline-3">
+<h3 id="sec-6-1">术语</h3>
+<div class="outline-text-3" id="text-6-1">
+</div><div id="outline-container-sec-6-1-1" class="outline-4">
+<h4 id="sec-6-1-1">产生(generation)</h4>
+<div class="outline-text-4" id="text-6-1-1">
+<p>
+造成信号的某个事件发生，向某个进程发送一个信号
+</p>
+<ol class="org-ol">
+<li>硬件异常：例如除以0
+</li>
+<li>软件条件：例如闹钟时间超过
+</li>
+<li>终端特殊键
+</li>
+<li>调用kill函数
+</li>
+</ol>
+</div>
+</div>
+
+<div id="outline-container-sec-6-1-2" class="outline-4">
+<h4 id="sec-6-1-2">递送(delivery)</h4>
+<div class="outline-text-4" id="text-6-1-2">
+<p>
+内核在进程表中设置某种形式的一个标志，这被称为向一个进程递送信号
+</p>
+</div>
+<div id="outline-container-sec-6-1-2-1" class="outline-5">
+<h5 id="sec-6-1-2-1">递送顺序(delivery order)</h5>
+<div class="outline-text-5" id="text-6-1-2-1">
+<p>
+如果有多个信号要递送给一个进程，POSIX.1并没有规定这些信号的递送顺序，但是与进程当前状态有关的信号一般会被优先递送，例如SIGSEGV
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-6-1-3" class="outline-4">
+<h4 id="sec-6-1-3">未决(pending)</h4>
+<div class="outline-text-4" id="text-6-1-3">
+<p>
+信号产生和递送之间的时间间隔
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-6-1-4" class="outline-4">
+<h4 id="sec-6-1-4">阻塞(blocking)</h4>
+<div class="outline-text-4" id="text-6-1-4">
+<p>
+进程可以为某个信号设置为阻塞：如果对该信号的动作是系统默认或捕捉该信号，则该进程将对此信号一直保持为未决状态，直到该进程
+</p>
+<ol class="org-ol">
+<li>对此信号解除了阻塞
+</li>
+<li>对此信号的动作更改为忽略
+</li>
+</ol>
+
+<p>
+注意：内核是在递送信号给进程的时候决定它的处理动作，而不是在信号发生时候，因此进程在信号递送前仍然可以改变对它的处理动作
+</p>
+
+<p>
+进程调用sigpending函数将指定的信号设置为阻塞和未决
+</p>
+</div>
+<div id="outline-container-sec-6-1-4-1" class="outline-5">
+<h5 id="sec-6-1-4-1">排队(queue)</h5>
+<div class="outline-text-5" id="text-6-1-4-1">
+<p>
+如果在进程解除对某个信号的阻塞之前，这种信号发生了多次，POSIX.1允许系统递送该信号一次或多次。如果递送该信号多次，则称这些信号排了队
+</p>
+
+<p>
+大多数UNIX并不对信号排队，虽然发生多次，但内核最终只递送这种信号一次
+</p>
+</div>
+</div>
+</div>
+<div id="outline-container-sec-6-1-5" class="outline-4">
+<h4 id="sec-6-1-5">信号屏蔽字(signal mask)</h4>
+<div class="outline-text-4" id="text-6-1-5">
+<p>
+信号屏蔽字规定了当前要阻塞递送到该进程的信号集。对于每种可能的信号，该屏蔽字中都有一位与之对应。对于某种信号，若其对应位已设置，则它当前是被阻塞的
+</p>
+
+<p>
+进程可以调用sigprocmask来检测和更改其当前信号屏蔽字
+</p>
+</div>
+</div>
+<div id="outline-container-sec-6-1-6" class="outline-4">
+<h4 id="sec-6-1-6">信号集(sigset)</h4>
+<div class="outline-text-4" id="text-6-1-6">
+<p>
+信号数可能会超过一个整型数所包含的二进制位数，因此POSIX.1定义了一个新数据类型sigset_t，它保持一个信号集。例如，信号屏蔽字就保存在这些信号集的一个中
+</p>
+</div>
+</div>
+</div>
+<div id="outline-container-sec-6-2" class="outline-3">
+<h3 id="sec-6-2">发送信号</h3>
+<div class="outline-text-3" id="text-6-2">
+</div><div id="outline-container-sec-6-2-1" class="outline-4">
+<h4 id="sec-6-2-1">kill函数</h4>
+<div class="outline-text-4" id="text-6-2-1">
+<p>
+kill：将信号发送给进程或进程组
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;stdio.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#23558;&#20449;&#21495;&#21457;&#36865;&#32473;&#36827;&#31243;&#25110;&#36827;&#31243;&#32452;</span>
+
+<span style="color: #ffa07a;">   pid&#65306;&#36827;&#31243;ID&#25110;&#36827;&#31243;&#32452;ID</span>
+<span style="color: #ffa07a;">   signo&#65306;&#20449;&#21495;&#32534;&#21495;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;0&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffa07a;"> */</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">kill</span>(<span style="color: #98fb98;">pid_t</span> <span style="color: #eedd82;">pid</span>, <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">signo</span>);
+</pre>
+</div>
+<p>
+pid参数有四种不同的情况: 
+</p>
+<ul class="org-ul">
+<li>pid&gt;0：将信号发送给进程ID为pid的进程
+</li>
+<li>pid==0：将信号发送给其进程组ID等于发送进程的进程组ID，而且发送进程有许可权向其发送信号的所有进程，所有进程”并不包括系统进程集中的进程
+</li>
+<li>pid&lt;0：将信号发送给其进程组ID等于pid绝对值，而且发送进程有许可权向其发送信号 的所有进程。所有进程并不包括系统进程集中的进程
+</li>
+<li>pid==-1：将信号发送给所有进程
+</li>
+</ul>
+
+<p>
+如果调用kill为调用进程产生信号，而且此信号是不被阻塞的，那么在kill返回之前，signo或者某个其他未决的、非阻塞信号被递送至该进程
+</p>
+</div>
+
+<div id="outline-container-sec-6-2-1-1" class="outline-5">
+<h5 id="sec-6-2-1-1">发送权限</h5>
+<div class="outline-text-5" id="text-6-2-1-1">
+<p>
+进程将信号发送给其他进程需要权限：
+</p>
+<ul class="org-ul">
+<li>超级用户可将信号发送给另一个进程
+</li>
+<li>对于非超级用户，其基本规则是发送者的实际或有效用户ID必须等于接收者的实际或有效用户ID。如果实现支持_POSIX_SAVED_IDS，则用保存的设置-用户-ID代替有效用户ID
+</li>
+<li>特例：如果被发送的信号是SIGCONT，则进程可将它发送给属于同一对话期的任一其他进程
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-6-2-1-2" class="outline-5">
+<h5 id="sec-6-2-1-2">空信号</h5>
+<div class="outline-text-5" id="text-6-2-1-2">
+<p>
+POSIX.1将信号编号0定义为空信号。如果signo参数是0，则kill仍执行正常的错误检查，但不发送信号
+</p>
+
+<p>
+这常被用来确定一个特定进程是否仍旧存在。如果向一个并不存在的进程发送空信号，则kill返回-1，errno则被设置为ESRCH
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-6-2-2" class="outline-4">
+<h4 id="sec-6-2-2">raise函数</h4>
+<div class="outline-text-4" id="text-6-2-2">
+<p>
+raise：向当前进程发送信号
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;signal.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#21521;&#24403;&#21069;&#36827;&#31243;&#21457;&#36865;&#20449;&#21495;</span>
+
+<span style="color: #ffa07a;">   singo&#65306;&#20449;&#21495;&#32534;&#21495;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#36820;&#22238;0&#65292;&#33509;&#22833;&#36133;&#36820;&#22238;-1</span>
+<span style="color: #ffa07a;"> */</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">raise</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">signo</span>)
+</pre>
+</div>
+
+<p>
+等价于：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C">kill(getpid(), signo);
+</pre>
+</div>
+<p>
+raise的用法类似于面向对象中的"throw Exception"
+</p>
+</div>
+</div>
+</div>
+<div id="outline-container-sec-6-3" class="outline-3">
+<h3 id="sec-6-3">alarm和pause函数</h3>
+<div class="outline-text-3" id="text-6-3">
+</div><div id="outline-container-sec-6-3-1" class="outline-4">
+<h4 id="sec-6-3-1">alarm</h4>
+<div class="outline-text-4" id="text-6-3-1">
+<p>
+alarm：设置一个时间值，在将来的某个时刻该时间值会被超过，产生SIGALRM信号，默认动作是终止该进程
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;unistd.h&gt;</span>
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#20197;&#31186;&#20026;&#21333;&#20301;&#35774;&#32622;&#36827;&#31243;&#30340;&#38393;&#38047;&#23450;&#26102;&#22120;&#65292;</span>
+<span style="color: #ffa07a;">   &#36229;&#36807;&#26102;&#20869;&#26680;&#23558;&#20135;&#29983;SIGALARM&#20449;&#21495;&#24182;&#21457;&#36865;&#21040;&#35843;&#29992;&#36827;&#31243;&#65292;&#35813;&#20449;&#21495;&#30340;&#40664;&#35748;&#21160;&#20316;&#26159;&#32456;&#27490;&#36827;&#31243;</span>
+
+<span style="color: #ffa07a;">   seconds: &#31186;&#25968;</span>
+
+<span style="color: #ffa07a;">   return&#65306;0&#25110;&#20197;&#21069;&#35774;&#32622;&#30340;&#38393;&#38047;&#26102;&#38388;&#30340;&#20313;&#30041;&#31186;&#25968;</span>
+<span style="color: #ffa07a;"> */</span>
+<span style="color: #98fb98;">unsigned</span> <span style="color: #98fb98;">int</span> <span style="color: #87cefa;">alarm</span>(<span style="color: #98fb98;">unsigned</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">seconds</span>);
+</pre>
+</div>
+<p>
+参数seconds的值是秒数，经过了指定的seconds秒后会产生信号SIGALRM。信号由内核产生，由于进程调度的延迟，进程得到控制能够处理该信号还需一段时间
+</p>
+
+<p>
+每个进程只能有一个闹钟时间。如果在调用alarm前已为该进程设置过闹钟时间，而且它还没有超时，则该闹钟时间的余留值作为本次alarm函数调用的值返回。以前登记的闹钟时间则被新值代换
+</p>
+
+<p>
+如果有以前登记的尚未超过的闹钟时间，而且seconds值是0，则取消以前的闹钟时间，其余留值仍作为函数的返回值
+</p>
+
+<p>
+虽然SIGALRM的默认动作是终止进程，但是大多数使用闹钟的进程捕捉此信号，例如执行定时的清除操作等
+</p>
+</div>
+</div>
+<div id="outline-container-sec-6-3-2" class="outline-4">
+<h4 id="sec-6-3-2">pause</h4>
+<div class="outline-text-4" id="text-6-3-2">
+<p>
+pause：使调用进程挂起直至捕捉到一个信号
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;unistd.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#20351;&#36827;&#31243;&#22312;&#35843;&#29992;&#22788;&#36827;&#20837;&#25346;&#36215;&#29366;&#24577;&#31561;&#24453;&#35813;&#36827;&#31243;&#22788;&#29702;&#19968;&#20010;&#20449;&#21495;</span>
+
+<span style="color: #ffa07a;">   return&#65306;-1&#65292;&#24182;&#19988;errno&#35774;&#32622;&#20026;EINTR</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">pause</span>(<span style="color: #98fb98;">void</span>);
+</pre>
+</div>
+<p>
+只有执行了一个信号处理程序并从其返回后，pause才返回。在这种情况下，pause返回-1，而且errno被设置为EINTR
+</p>
+</div>
+</div>
+<div id="outline-container-sec-6-3-3" class="outline-4">
+<h4 id="sec-6-3-3">sleep实现</h4>
+<div class="outline-text-4" id="text-6-3-3">
+</div><div id="outline-container-sec-6-3-3-1" class="outline-5">
+<h5 id="sec-6-3-3-1">sleep1</h5>
+<div class="outline-text-5" id="text-6-3-3-1">
+<p>
+使用alarm和pause实现sleep1，进程可使自己睡眠一段指定的时间：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span>    <span style="color: #ffa07a;">&lt;signal.h&gt;</span>
+<span style="color: #7fffd4;">#include</span>    <span style="color: #ffa07a;">&lt;unistd.h&gt;</span>
+
+<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">sig_alrm</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">signo</span>)
+{
+    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">nothing to do, just return to wake up the pause </span><span style="color: #ff4500;">*/</span>
+}
+
+<span style="color: #98fb98;">unsigned</span> <span style="color: #98fb98;">int</span> <span style="color: #87cefa;">sleep1</span>(<span style="color: #98fb98;">unsigned</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">nsecs</span>)
+{
+    <span style="color: #00ffff;">if</span> (signal(SIGALRM, sig_alrm) == SIG_ERR)
+    <span style="color: #00ffff;">return</span>(nsecs);
+    alarm(nsecs);       <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">start the timer </span><span style="color: #ff4500;">*/</span>
+    pause();            <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">next caught signal wakes us up </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #00ffff;">return</span>(alarm(0));   <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">turn off timer, return unslept time </span><span style="color: #ff4500;">*/</span>
+}
+</pre>
+</div>
+<p>
+sleep1实现有下列问题：
+</p>
+<ul class="org-ul">
+<li>如果调用者已设置了闹钟，则它被sleep1函数中的第一次alarm调用擦去
+</li>
+</ul>
+
+<p>
+修正方法：检查第一次调用alarm的返回值，如其小于本次调用alarm的参数值，则只应等到该前次设置的闹钟时间超时。如果前次设置闹钟时间的超时时刻后于本次设置值，则在sleep1函数返回之前，再次设置闹钟时间，使其在预定时间再发生超时
+</p>
+
+<ul class="org-ul">
+<li>该程序中修改了对SIGALRM的配置。如果编写了一个函数供其他函数调用，则在该函数被调用时先要保存原配置，在该函数返回前再恢复原配置
+</li>
+</ul>
+
+<p>
+修正方法：保存signal函数的返回值，在返回前恢复设置原配置
+</p>
+
+<ul class="org-ul">
+<li>在调用alarm和pause之间有一个竞态条件：在一个繁忙的系统中，可能alarm在调用pause之前超时，并调用了信号处理程序。如果发生了这种情况，则在调用pause后，如果没有捕捉到其他信号，则调用者将永远被挂起
+</li>
+</ul>
+
+<p>
+有两种修正方法：
+</p>
+<ol class="org-ol">
+<li>使用setjmp，以下会说明
+</li>
+<li>使用sigprocmask和sigsuspend
+</li>
+</ol>
+</div>
+</div>
+<div id="outline-container-sec-6-3-3-2" class="outline-5">
+<h5 id="sec-6-3-3-2">sleep2</h5>
+<div class="outline-text-5" id="text-6-3-3-2">
+<p>
+即使pause从未执行，在发生SIGALRM时，sleep2函数也返回 
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span>    <span style="color: #ffa07a;">&lt;setjmp.h&gt;</span>
+<span style="color: #7fffd4;">#include</span>    <span style="color: #ffa07a;">&lt;signal.h&gt;</span>
+<span style="color: #7fffd4;">#include</span>    <span style="color: #ffa07a;">&lt;unistd.h&gt;</span>
+
+<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">jmp_buf</span>  <span style="color: #eedd82;">env_alrm</span>;
+
+<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">sig_alrm</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">signo</span>)
+{
+    longjmp(env_alrm, 1);
+}
+
+<span style="color: #98fb98;">unsigned</span> <span style="color: #98fb98;">int</span> <span style="color: #87cefa;">sleep2</span>(<span style="color: #98fb98;">unsigned</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">nsecs</span>)
+{
+    <span style="color: #00ffff;">if</span> (signal(SIGALRM, sig_alrm) == SIG_ERR)
+        <span style="color: #00ffff;">return</span>(nsecs);
+    <span style="color: #00ffff;">if</span> (setjmp(env_alrm) == 0) {
+        alarm(nsecs);       <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">start the timer </span><span style="color: #ff4500;">*/</span>
+        pause();            <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">next caught signal wakes us up </span><span style="color: #ff4500;">*/</span>
+    }
+    <span style="color: #00ffff;">return</span>(alarm(0));       <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">turn off timer, return unslept time </span><span style="color: #ff4500;">*/</span>
+}
+</pre>
+</div>
+<p>
+但是sleep2函数中却有另一个难于察觉的问题，它涉及到与其他信号的相互作用。如果SIGALRM中断了某个其他信号处理程序，则调用longjmp会提早终止该信号处理程序
+</p>
+</div>
+</div>
+<div id="outline-container-sec-6-3-3-3" class="outline-5">
+<h5 id="sec-6-3-3-3">其他信号处理程序中调用sleep2</h5>
+<div class="outline-text-5" id="text-6-3-3-3">
+<p>
+故意使SIGINT处理程序中的for循环语句的执行时间超过5秒钟，也就是大于sleep2的参数值，并且整型变量j说明为volatile，这样就阻止了优化编译程序除去循环语句：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;setjmp.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;signal.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;unistd.h&gt;</span>
+
+<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">sig_int</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">signo</span>);
+<span style="color: #00ffff;">extern</span> <span style="color: #98fb98;">unsigned</span> <span style="color: #98fb98;">int</span> <span style="color: #87cefa;">sleep2</span>(<span style="color: #98fb98;">unsigned</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">nsecs</span>);
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">void</span>) 
+{
+    <span style="color: #98fb98;">unsigned</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">unslept</span>;
+
+    <span style="color: #00ffff;">if</span> (SIG_ERR == (signal(SIGINT, sig_int)) )
+        err_sys(<span style="color: #ffa07a;">"signal(SIGINT) error"</span>);
+
+    unslept = sleep2(5);
+
+    printf(<span style="color: #ffa07a;">"sleep2 returned: %u\n"</span>, unslept);
+
+    exit(0);
+
+}
+
+<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">sig_int</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">signo</span>) 
+{
+    <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">i</span>;
+    <span style="color: #00ffff;">volatile</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">j</span>;
+
+    printf(<span style="color: #ffa07a;">"\n sig_int starting \n"</span>);
+
+    <span style="color: #00ffff;">for</span>(i = 0; i &lt; 200000; i++) {
+        j += i * i;
+        printf(<span style="color: #ffa07a;">"i is %d, j is %d\n"</span>, i, j);
+    }
+
+
+    printf(<span style="color: #ffa07a;">"sig_int finished\n"</span>);
+
+    <span style="color: #00ffff;">return</span>;
+}
+</pre>
+</div>
+
+<p>
+测试结果：sleep2中的longjmp终止了sig_int的程序运行
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ ./src/signal/sleep2
+&#710;? <span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#38190;&#20837;&#20013;&#26029;&#23383;&#31526;</span>
+sig_int starting
+<span style="color: #ff4500;">#</span><span style="color: #ff4500;">...</span>
+
+i is 166016, j is -143706370i is 166016, j is -143706370
+sleep2 returned: 0
+</pre>
+</div>
+</div>
+</div>
+</div>
+<div id="outline-container-sec-6-3-4" class="outline-4">
+<h4 id="sec-6-3-4">超时限制的读操作</h4>
+<div class="outline-text-4" id="text-6-3-4">
+<p>
+alarm还常用于对可能阻塞的操作设置一个时间上限值，以下程序在一段时间内从标准输入读一行，然后将其写到标准输出上，通过SIGALRM信号来打断read操作以避免read一直阻塞：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+
+<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">sig_alrm</span>(<span style="color: #98fb98;">int</span>);
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">void</span>)
+{
+    <span style="color: #98fb98;">int</span>     <span style="color: #eedd82;">n</span>;
+    <span style="color: #98fb98;">char</span>    <span style="color: #eedd82;">line</span>[MAXLINE];
+
+    <span style="color: #00ffff;">if</span> (signal(SIGALRM, sig_alrm) == SIG_ERR)
+    err_sys(<span style="color: #ffa07a;">"signal(SIGALRM) error"</span>);
+
+    alarm(10); <span style="color: #ff4500;">//</span><span style="color: #ff4500;">start timer </span>
+
+    <span style="color: #00ffff;">if</span> ((n = read(STDIN_FILENO, line, MAXLINE)) &lt; 0)
+    err_sys(<span style="color: #ffa07a;">"read error"</span>);
+
+    alarm(0); <span style="color: #ff4500;">//</span><span style="color: #ff4500;">stop alarm </span>
+
+    write(STDOUT_FILENO, line, n);
+    exit(0);
+}
+
+<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">sig_alrm</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">signo</span>)
+{
+    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">nothing to do, just return to interrupt the read </span><span style="color: #ff4500;">*/</span>
+}
+</pre>
+</div>
+<p>
+但是这程序依然有两个问题:
+</p>
+<ul class="org-ul">
+<li>在第一次alarm调用和read调用之间有一个竞态条件：如果内核在这两个函数调用之间使进程不能占用处理机运行，而其时间长度又超过闹钟时间，则read可能永远阻塞
+</li>
+
+<li>如果系统调用是自动再起动的，则当从SIGALRM信号处理程序返回时，read并不被终止。在这种情形下，设置时间限制不会起作用
+</li>
+</ul>
+</div>
+
+<div id="outline-container-sec-6-3-4-1" class="outline-5">
+<h5 id="sec-6-3-4-1">read2</h5>
+<div class="outline-text-5" id="text-6-3-4-1">
+<p>
+用longjmp来避免静态条件：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;setjmp.h&gt;</span>
+
+<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span>     <span style="color: #87cefa;">sig_alrm</span>(<span style="color: #98fb98;">int</span>);
+<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">jmp_buf</span>  <span style="color: #eedd82;">env_alrm</span>;
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">void</span>)
+{
+    <span style="color: #98fb98;">int</span>     <span style="color: #eedd82;">n</span>;
+    <span style="color: #98fb98;">char</span>    <span style="color: #eedd82;">line</span>[MAXLINE];
+
+    <span style="color: #00ffff;">if</span> (signal(SIGALRM, sig_alrm) == SIG_ERR)
+        err_sys(<span style="color: #ffa07a;">"signal(SIGALRM) error"</span>);
+    <span style="color: #00ffff;">if</span> (setjmp(env_alrm) != 0)
+        err_quit(<span style="color: #ffa07a;">"read timeout"</span>);
+
+    alarm(10);
+    <span style="color: #00ffff;">if</span> ((n = read(STDIN_FILENO, line, MAXLINE)) &lt; 0)
+        err_sys(<span style="color: #ffa07a;">"read error"</span>);
+    alarm(0);
+
+    write(STDOUT_FILENO, line, n);
+    exit(0);
+}
+
+<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">sig_alrm</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">signo</span>)
+{
+    longjmp(env_alrm, 1);
+}
+</pre>
+</div>
+<p>
+不管是否自动重新启动系统调用，也都会如所预期的那样工作，但是仍旧会有与其他信号处理程序相互作用的问题
+</p>
+
+<p>
+另一种更好地选择是使用select或poll函数
+</p>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-6-4" class="outline-3">
+<h3 id="sec-6-4">信号集</h3>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
