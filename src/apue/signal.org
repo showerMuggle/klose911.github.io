@@ -716,3 +716,262 @@ signal的返回值也是一个函数指针，指向的函数需要一个整形�
      另一种更好地选择是使用select或poll函数
      
 ** 信号集
+POSIX.1定义数据类型sigset_t以包含一个信号集，并且定义了下列五个处理信号集的函数:
++ sigemptyset：初始化由set指向的信号集，使排除其中所有信号
++ sigfillset：初始化由set指向的信号集，使其包括所有信号
++ sigaddset：将一个信号添加到现存集中
++ sigdelset：从信号集中删除一个信号
++ sigismember：测试信号是否在信号集中
+#+BEGIN_SRC C
+  #include <signal.h>
+
+  /**
+     初始化由set指向的信号集，使排除其中所有信号
+
+     set：信号集
+
+     return：成功返回0，失败返回-1
+  ,*/
+  int sigemptyset(sigset_t *set);
+
+  /**
+     填满指定的信号集
+
+     set：信号集
+
+     return：成功返回0，失败返回-1
+  ,*/
+  int sigfillset(siget_t *set);
+  /**
+     为信号集中增加一个信号
+
+     set：信号集
+     signo：信号编号
+
+     return：成功返回0，失败返回-1
+  ,*/
+  int sigaddset(sigset_t *set, int signo);
+  /**
+     为信号集中删除一个信号
+
+     set：信号集
+     signo：信号编号
+
+     return：成功返回0，失败返回-1
+  ,*/
+  int sigdelset(setset_t *set, int signo);
+  /**
+     测试信号是否在信号集中
+
+     set：信号集
+     signo：信号编号
+
+     return：若真则为1，若假则为0
+  ,*/
+  int sigismember(const sigset_t *set, int signo);
+#+END_SRC
+所有应用程序在使用信号集前，要对该信号集调用sigemptyset或sigfillset一次，主要是因为C编译程序将不赋初值的外部和静态度量都初始化为0，而这是否与给定系统上信号集的实现相对应并不清楚
+
+一旦已经初始化了一个信号集就可在该信号集中增、删特定的信号
+
+*** BSD实现
+如果实现的信号数目少于一个整型量所包含的位数，则可用一位代表一个信号的方法实现信号集。例如，大多数4.3+BSD实现中有31种信号和32位整型。sigemptyset和sigfillset这两个函数可以在<signal.h>头文件中实现为宏：
+#+BEGIN_SRC C
+  #define sigemptyset(ptr) ( *(ptr) = 0 )
+  //注意：除了设置对应信号集中各信号的位外，sigfillset必须返回0，所以使用逗号算符，将之后的值作为表达式的值返回
+  #define sigfillset(ptr) ( *(ptr) =  ~(sigset_t)0, 0 )
+#+END_SRC
+
+使用这种形式表达的信号集，sigaddset设置对应信号位为1，sigdelset则设置对应信号位为0，sigismember测试一指定信号位。因为没有信号编号值为0，所以从信号编号中减1以得到要处理的位的位编号数
+#+BEGIN_SRC C
+  #include    <signal.h>
+  #include    <errno.h>
+
+  /* <signal.h> usually defines NSIG to include signal number 0 */
+  #define SIGBAD(signo)   ((signo) <= 0 || (signo) >= NSIG)
+
+  int sigaddset(sigset_t *set, int signo)
+  {
+          if (SIGBAD(signo)) { errno = EINVAL; return(-1); }
+
+          //  001111001110001011111111101010011 | 0000000000000001000000000000000
+          //= 001111001110001111111111101010011
+          ,*set |= 1 << (signo - 1);       /* turn bit on */
+          return(0);
+  }
+
+  int sigdelset(sigset_t *set, int signo)
+  {
+          if (SIGBAD(signo)) { errno = EINVAL; return(-1); }
+          //  001111001110001011111111101010011 & 1111111111111101111111111111111
+          //= 001111001110000011111111101010011
+          ,*set &= ~(1 << (signo - 1));    /* turn bit off */
+          return(0);
+  }
+
+  int sigismember(const sigset_t *set, int signo)
+  {
+          if (SIGBAD(signo)) { errno = EINVAL; return(-1); }
+          // 001111001110001011111111101010011 & 0000000000000001000000000000000 = 0
+          // 001111001110001111111111101010011 & 0000000000000001000000000000000
+          // = 0000000000000001000000000000000
+          return((*set & (1 << (signo - 1))) != 0);
+  }
+#+END_SRC
+也可将这三个函数在实现为各一行的宏，但是POSIX.1要求检查信号编号参数的有效性，如果无效则设置errno，而在宏中实现这一点比函数要难
+
+*** sigprocmask函数
+sigprocmask：检测或更改进程的信号屏蔽字
+
+如果在调用sigprocmask后有任何未决的、不再阻塞的信号，则在sigprocmask返回前，至少将其中之一递送给该进程
+#+BEGIN_SRC C
+  #include <signal.h>
+
+  /**
+     以how指定的方式将信号集set设置为调用进程的信号屏蔽字，同时把原信号屏蔽字取值保存到oset中作为备份
+
+     how：更改当前信号屏蔽字的方法
+     set：要设置的信号集
+     oset：原信号屏蔽字
+     
+  ,*/
+  int sigprocmask(int how, const sigset_t *set, sigset_t *oset);
+#+END_SRC
++ oset是非空指针，进程的当前信号屏蔽字通过oset返回
++ set是一个非空指针，则参数how指示如何修改当前信号屏蔽字：
+  1. SIG_BLOCK：屏蔽
+  2. SIG_UNBLOCK：解除屏蔽
+  3. SIG_SETMASK：赋值
+#+CAPTION: 用sigprocmask更改当前信号屏蔽字的方法
+#+ATTR_HTML: :border 1 :rules all :frame boader
+| how         | 说明                                                                                       |
+| SIG_BLOCK   | 该进程新的信号屏蔽字是其当前信号屏蔽字和set指向信号集的并集。set包含了希望阻塞的附加信号 |
+| SIG_UNBLOCK | 该进程新的信号屏蔽字是其当前信号屏蔽字和set所指向信号集的交集。set包含了希望解除阻塞的信号 |
+| SIG_SETMASK | 该进程新的信号屏蔽是set指向的值                                              |
+
++ set是个空指针，则不改变该进程的信号屏蔽字，how的值也无意义，只是通过oset返回当前信号屏蔽字
+
+**** 实例
+打印调用进程的信号屏蔽字所阻塞信号的名称：
+#+BEGIN_SRC C
+  #include <signal.h>
+  #include <errno.h>
+  #include "apue.h"
+  void pr_mask(const char *str) 
+  {
+          sigset_t sigset;
+          int error_save;
+
+          error_save = errno; //save errno we can be called by signal handler
+
+          if (sigpromask(0, NULL, &sigset) < 0 )
+                  err_sys("sigpromask error");
+
+          printf("%s", str);
+
+          if(sigismemeber(&sigset, SIGINT))
+                  printf("SIGINT ");
+          if(sigismemeber(&sigset, SIGQUIT))
+                  printf("SIGQUIT ");
+          if(sigismemeber(&sigset, SIGUSR1))
+                  printf("SIGUSR1 ");
+          if(sigismemeber(&sigset, SIGALRM))
+                  printf("SIGALRM ");
+
+          printf('\n');
+
+          errno = error_save;
+  }
+#+END_SRC
+
+*** sigpending函数
+sigpending：返回对于调用进程被阻塞不能递送和当前未决的信号集
+#+BEGIN_SRC C
+  #include <signal.h>
+
+  /**
+     获取当前因阻塞而未决的信号集到指定的指针set中
+
+     set：信号集
+
+     return：若成功则为0，若出错则为-1
+  ,*/
+  int sigpending(sigset_t *set);
+#+END_SRC
+
+**** 实例
+进程阻塞了SIGQUIT信号，保存了当前信号屏蔽字以便以后恢复，然后睡眠5秒钟。在此期间所产生的退出信号都被阻塞，不递送至该进程，直到该信号不再被阻塞。在5秒睡眠结束后，检查是否有信号未决，然后将SIGQUIT设置为不再阻塞
+#+BEGIN_SRC C
+  #include <signal.h>
+  #include "apue.h"
+
+  static void sig_quit(int);
+
+  static void sig_quit(int signo) 
+  {
+          printf("caught SIGQUIT\n");
+
+          if(SIG_ERR == (signal(SIGQUIT, SIG_DFL)) )
+                  err_sys("can't reset SIGQUIT");
+
+          return;
+  }
+
+
+  int main(void) 
+  {
+          sigset_t newmask, oldmask, pendmask;
+
+          if(SIG_ERR == (signal(SIGQUIT, sig_quit)))
+                  err_sys("can't catch SIGQUIT");
+
+          sigemptyset(&newmask);
+          sigaddset(&newmask, SIGQUIT);
+
+          //block SIGQUIT and save current signal mask
+          if(sigprocmask(SIG_BLOCK, &newmask, &oldmask) < 0 )
+                  err_sys("SIG_BLOCK error");
+
+          sleep(5); //SIGQUIT remain pending
+
+          if(sigpending(&pendmask) < 0 )
+                  err_sys("sigpending error");
+          if(sigismember(&pendmask, SIGQUIT))
+                  printf("\nSIGQUIT pending\n");
+
+          //reset signal mask which unblocks SIGQUIT
+          if(sigprocmask(SIG_SETMASK, &oldmask, NULL) < 0)
+                  err_sys("SIG_SETMASK error");
+
+          printf("SIGQUIT unblocked\n");
+
+          sleep(5);
+
+          exit(0);
+  }
+#+END_SRC
+注意：在设置SIGQUIT为阻塞前，保存了老的屏蔽字。为了解除对该信号的阻塞，用老的屏蔽字重新设置了进程信号屏蔽字(SIG_SETMASK)。另一种方法是用SIG_UNBLOCK使阻塞的信号不再阻塞。但是如果编写一个可能由其他人使用的函数，而且需要在函数中阻塞一个信号，则不能用SIG_UNBLOCK解除对此信号的阻塞，这是因为此函数的调用者在调用本函数之前可能也阻塞了此信号。在这种情况下必须使用SIG_SETMASK将信号屏蔽字恢复为原先值！
+
+测试代码：
+#+BEGIN_SRC sh
+  $ ./src/signal/sigprocmaskExample 
+  ^\ #产生信号一次(在5秒之内)
+  SIGQUIT pending #从sleep返回
+  caught SIGQUIT # 信号处理程序
+  SIGQUIT unblocked #从sigprocmask返回后
+  ^\Quit # 再次递送信号，默认动作处理
+
+  $ ./src/signal/sigprocmaskExample 
+  ^\^\^\^\^\^\^\^\^\ # 产生多次信号(在5秒之内)
+  SIGQUIT pending
+  caught SIGQUIT # 只递送信号一次
+  SIGQUIT unblocked
+  ^\Quit
+#+END_SRC
+在第一次睡眠期间如果产生了退出信号，那么此时该信号是未决的，但是不再受阻塞，所以在sigprocmask返回之前，它被递送到本进程。从程序的输出中可以看到：SIGQUIT处理程序(sig_quit)中的printf语句先执行，然后再执行sigprocmask之后的printf语句
+
+然后该进程再睡眠5秒钟。如果在此期间再产生退出信号，那么它就会使该进程终止，因为在上次捕捉到该信号时，已将其处理方式设置为默认动作
+
+在第二次运行该程序时，在进程睡眠期间使SIGQUIT信号产生了10次，但是解除了对该信号的阻塞后，只向进程传送一次SIGQUIT。从中可以看出linux系统没有将信号进行排队
+
+** sigaction函数

@@ -226,7 +226,22 @@ for the JavaScript code in this tag.
 </li>
 </ul>
 </li>
-<li><a href="#sec-6-4">信号集</a></li>
+<li><a href="#sec-6-4">信号集</a>
+<ul>
+<li><a href="#sec-6-4-1">BSD实现</a></li>
+<li><a href="#sec-6-4-2">sigprocmask函数</a>
+<ul>
+<li><a href="#sec-6-4-2-1">实例</a></li>
+</ul>
+</li>
+<li><a href="#sec-6-4-3">sigpending函数</a>
+<ul>
+<li><a href="#sec-6-4-3-1">实例</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#sec-6-5">sigaction函数</a></li>
 </ul>
 </li>
 </ul>
@@ -1808,6 +1823,380 @@ alarm还常用于对可能阻塞的操作设置一个时间上限值，以下程
 
 <div id="outline-container-sec-6-4" class="outline-3">
 <h3 id="sec-6-4">信号集</h3>
+<div class="outline-text-3" id="text-6-4">
+<p>
+POSIX.1定义数据类型sigset_t以包含一个信号集，并且定义了下列五个处理信号集的函数:
+</p>
+<ul class="org-ul">
+<li>sigemptyset：初始化由set指向的信号集，使排除其中所有信号
+</li>
+<li>sigfillset：初始化由set指向的信号集，使其包括所有信号
+</li>
+<li>sigaddset：将一个信号添加到现存集中
+</li>
+<li>sigdelset：从信号集中删除一个信号
+</li>
+<li>sigismember：测试信号是否在信号集中
+</li>
+</ul>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;signal.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#21021;&#22987;&#21270;&#30001;set&#25351;&#21521;&#30340;&#20449;&#21495;&#38598;&#65292;&#20351;&#25490;&#38500;&#20854;&#20013;&#25152;&#26377;&#20449;&#21495;</span>
+
+<span style="color: #ffa07a;">   set&#65306;&#20449;&#21495;&#38598;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#25104;&#21151;&#36820;&#22238;0&#65292;&#22833;&#36133;&#36820;&#22238;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">sigemptyset</span>(<span style="color: #98fb98;">sigset_t</span> *<span style="color: #eedd82;">set</span>);
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#22635;&#28385;&#25351;&#23450;&#30340;&#20449;&#21495;&#38598;</span>
+
+<span style="color: #ffa07a;">   set&#65306;&#20449;&#21495;&#38598;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#25104;&#21151;&#36820;&#22238;0&#65292;&#22833;&#36133;&#36820;&#22238;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">sigfillset</span>(<span style="color: #98fb98;">siget_t</span> *<span style="color: #eedd82;">set</span>);
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#20026;&#20449;&#21495;&#38598;&#20013;&#22686;&#21152;&#19968;&#20010;&#20449;&#21495;</span>
+
+<span style="color: #ffa07a;">   set&#65306;&#20449;&#21495;&#38598;</span>
+<span style="color: #ffa07a;">   signo&#65306;&#20449;&#21495;&#32534;&#21495;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#25104;&#21151;&#36820;&#22238;0&#65292;&#22833;&#36133;&#36820;&#22238;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">sigaddset</span>(<span style="color: #98fb98;">sigset_t</span> *<span style="color: #eedd82;">set</span>, <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">signo</span>);
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#20026;&#20449;&#21495;&#38598;&#20013;&#21024;&#38500;&#19968;&#20010;&#20449;&#21495;</span>
+
+<span style="color: #ffa07a;">   set&#65306;&#20449;&#21495;&#38598;</span>
+<span style="color: #ffa07a;">   signo&#65306;&#20449;&#21495;&#32534;&#21495;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#25104;&#21151;&#36820;&#22238;0&#65292;&#22833;&#36133;&#36820;&#22238;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">sigdelset</span>(<span style="color: #98fb98;">setset_t</span> *<span style="color: #eedd82;">set</span>, <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">signo</span>);
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#27979;&#35797;&#20449;&#21495;&#26159;&#21542;&#22312;&#20449;&#21495;&#38598;&#20013;</span>
+
+<span style="color: #ffa07a;">   set&#65306;&#20449;&#21495;&#38598;</span>
+<span style="color: #ffa07a;">   signo&#65306;&#20449;&#21495;&#32534;&#21495;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#30495;&#21017;&#20026;1&#65292;&#33509;&#20551;&#21017;&#20026;0</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">sigismember</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">sigset_t</span> *<span style="color: #eedd82;">set</span>, <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">signo</span>);
+</pre>
+</div>
+<p>
+所有应用程序在使用信号集前，要对该信号集调用sigemptyset或sigfillset一次，主要是因为C编译程序将不赋初值的外部和静态度量都初始化为0，而这是否与给定系统上信号集的实现相对应并不清楚
+</p>
+
+<p>
+一旦已经初始化了一个信号集就可在该信号集中增、删特定的信号
+</p>
+</div>
+
+<div id="outline-container-sec-6-4-1" class="outline-4">
+<h4 id="sec-6-4-1">BSD实现</h4>
+<div class="outline-text-4" id="text-6-4-1">
+<p>
+如果实现的信号数目少于一个整型量所包含的位数，则可用一位代表一个信号的方法实现信号集。例如，大多数4.3+BSD实现中有31种信号和32位整型。sigemptyset和sigfillset这两个函数可以在&lt;signal.h&gt;头文件中实现为宏：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#define</span> <span style="color: #87cefa;">sigemptyset</span>(<span style="color: #eedd82;">ptr</span>) ( *(ptr) = 0 )
+<span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#27880;&#24847;&#65306;&#38500;&#20102;&#35774;&#32622;&#23545;&#24212;&#20449;&#21495;&#38598;&#20013;&#21508;&#20449;&#21495;&#30340;&#20301;&#22806;&#65292;sigfillset&#24517;&#39035;&#36820;&#22238;0&#65292;&#25152;&#20197;&#20351;&#29992;&#36887;&#21495;&#31639;&#31526;&#65292;&#23558;&#20043;&#21518;&#30340;&#20540;&#20316;&#20026;&#34920;&#36798;&#24335;&#30340;&#20540;&#36820;&#22238;</span>
+<span style="color: #7fffd4;">#define</span> <span style="color: #87cefa;">sigfillset</span>(<span style="color: #eedd82;">ptr</span>) ( *(ptr) =  ~(<span style="color: #98fb98;">sigset_t</span>)0, 0 )
+</pre>
+</div>
+
+<p>
+使用这种形式表达的信号集，sigaddset设置对应信号位为1，sigdelset则设置对应信号位为0，sigismember测试一指定信号位。因为没有信号编号值为0，所以从信号编号中减1以得到要处理的位的位编号数
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span>    <span style="color: #ffa07a;">&lt;signal.h&gt;</span>
+<span style="color: #7fffd4;">#include</span>    <span style="color: #ffa07a;">&lt;errno.h&gt;</span>
+
+<span style="color: #ff4500;">/* </span><span style="color: #ff4500;">&lt;signal.h&gt; usually defines NSIG to include signal number 0 </span><span style="color: #ff4500;">*/</span>
+<span style="color: #7fffd4;">#define</span> <span style="color: #87cefa;">SIGBAD</span>(<span style="color: #eedd82;">signo</span>)   ((signo) &lt;= 0 || (signo) &gt;= NSIG)
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">sigaddset</span>(<span style="color: #98fb98;">sigset_t</span> *<span style="color: #eedd82;">set</span>, <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">signo</span>)
+{
+    <span style="color: #00ffff;">if</span> (SIGBAD(signo)) { errno = EINVAL; <span style="color: #00ffff;">return</span>(-1); }
+
+    <span style="color: #ff4500;">//  </span><span style="color: #ff4500;">001111001110001011111111101010011 | 0000000000000001000000000000000</span>
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">= 001111001110001111111111101010011</span>
+    *set |= 1 &lt;&lt; (signo - 1);       <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">turn bit on </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #00ffff;">return</span>(0);
+}
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">sigdelset</span>(<span style="color: #98fb98;">sigset_t</span> *<span style="color: #eedd82;">set</span>, <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">signo</span>)
+{
+    <span style="color: #00ffff;">if</span> (SIGBAD(signo)) { errno = EINVAL; <span style="color: #00ffff;">return</span>(-1); }
+    <span style="color: #ff4500;">//  </span><span style="color: #ff4500;">001111001110001011111111101010011 &amp; 1111111111111101111111111111111</span>
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">= 001111001110000011111111101010011</span>
+    *set &amp;= ~(1 &lt;&lt; (signo - 1));    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">turn bit off </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #00ffff;">return</span>(0);
+}
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">sigismember</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">sigset_t</span> *<span style="color: #eedd82;">set</span>, <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">signo</span>)
+{
+    <span style="color: #00ffff;">if</span> (SIGBAD(signo)) { errno = EINVAL; <span style="color: #00ffff;">return</span>(-1); }
+    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">001111001110001011111111101010011 &amp; 0000000000000001000000000000000 = 0</span>
+    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">001111001110001111111111101010011 &amp; 0000000000000001000000000000000</span>
+    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">= 0000000000000001000000000000000</span>
+    <span style="color: #00ffff;">return</span>((*set &amp; (1 &lt;&lt; (signo - 1))) != 0);
+}
+</pre>
+</div>
+<p>
+也可将这三个函数在实现为各一行的宏，但是POSIX.1要求检查信号编号参数的有效性，如果无效则设置errno，而在宏中实现这一点比函数要难
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-6-4-2" class="outline-4">
+<h4 id="sec-6-4-2">sigprocmask函数</h4>
+<div class="outline-text-4" id="text-6-4-2">
+<p>
+sigprocmask：检测或更改进程的信号屏蔽字
+</p>
+
+<p>
+如果在调用sigprocmask后有任何未决的、不再阻塞的信号，则在sigprocmask返回前，至少将其中之一递送给该进程
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;signal.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#20197;how&#25351;&#23450;&#30340;&#26041;&#24335;&#23558;&#20449;&#21495;&#38598;set&#35774;&#32622;&#20026;&#35843;&#29992;&#36827;&#31243;&#30340;&#20449;&#21495;&#23631;&#34109;&#23383;&#65292;&#21516;&#26102;&#25226;&#21407;&#20449;&#21495;&#23631;&#34109;&#23383;&#21462;&#20540;&#20445;&#23384;&#21040;oset&#20013;&#20316;&#20026;&#22791;&#20221;</span>
+
+<span style="color: #ffa07a;">   how&#65306;&#26356;&#25913;&#24403;&#21069;&#20449;&#21495;&#23631;&#34109;&#23383;&#30340;&#26041;&#27861;</span>
+<span style="color: #ffa07a;">   set&#65306;&#35201;&#35774;&#32622;&#30340;&#20449;&#21495;&#38598;</span>
+<span style="color: #ffa07a;">   oset&#65306;&#21407;&#20449;&#21495;&#23631;&#34109;&#23383;</span>
+
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">sigprocmask</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">how</span>, <span style="color: #00ffff;">const</span> <span style="color: #98fb98;">sigset_t</span> *<span style="color: #eedd82;">set</span>, <span style="color: #98fb98;">sigset_t</span> *<span style="color: #eedd82;">oset</span>);
+</pre>
+</div>
+<ul class="org-ul">
+<li>oset是非空指针，进程的当前信号屏蔽字通过oset返回
+</li>
+<li>set是一个非空指针，则参数how指示如何修改当前信号屏蔽字：
+<ol class="org-ol">
+<li>SIG_BLOCK：屏蔽
+</li>
+<li>SIG_UNBLOCK：解除屏蔽
+</li>
+<li>SIG_SETMASK：赋值
+</li>
+</ol>
+</li>
+</ul>
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 2:</span> 用sigprocmask更改当前信号屏蔽字的方法</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">how</td>
+<td class="left">说明</td>
+</tr>
+
+<tr>
+<td class="left">SIG_BLOCK</td>
+<td class="left">该进程新的信号屏蔽字是其当前信号屏蔽字和set指向信号集的并集。set包含了希望阻塞的附加信号</td>
+</tr>
+
+<tr>
+<td class="left">SIG_UNBLOCK</td>
+<td class="left">该进程新的信号屏蔽字是其当前信号屏蔽字和set所指向信号集的交集。set包含了希望解除阻塞的信号</td>
+</tr>
+
+<tr>
+<td class="left">SIG_SETMASK</td>
+<td class="left">该进程新的信号屏蔽是set指向的值</td>
+</tr>
+</tbody>
+</table>
+
+<ul class="org-ul">
+<li>set是个空指针，则不改变该进程的信号屏蔽字，how的值也无意义，只是通过oset返回当前信号屏蔽字
+</li>
+</ul>
+</div>
+
+<div id="outline-container-sec-6-4-2-1" class="outline-5">
+<h5 id="sec-6-4-2-1">实例</h5>
+<div class="outline-text-5" id="text-6-4-2-1">
+<p>
+打印调用进程的信号屏蔽字所阻塞信号的名称：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;signal.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;errno.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+<span style="color: #98fb98;">void</span> <span style="color: #87cefa;">pr_mask</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">str</span>) 
+{
+    <span style="color: #98fb98;">sigset_t</span> <span style="color: #eedd82;">sigset</span>;
+    <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">error_save</span>;
+
+    error_save = errno; <span style="color: #ff4500;">//</span><span style="color: #ff4500;">save errno we can be called by signal handler</span>
+
+    <span style="color: #00ffff;">if</span> (sigpromask(0, <span style="color: #7fffd4;">NULL</span>, &amp;sigset) &lt; 0 )
+        err_sys(<span style="color: #ffa07a;">"sigpromask error"</span>);
+
+    printf(<span style="color: #ffa07a;">"%s"</span>, str);
+
+    <span style="color: #00ffff;">if</span>(sigismemeber(&amp;sigset, SIGINT))
+        printf(<span style="color: #ffa07a;">"SIGINT "</span>);
+    <span style="color: #00ffff;">if</span>(sigismemeber(&amp;sigset, SIGQUIT))
+        printf(<span style="color: #ffa07a;">"SIGQUIT "</span>);
+    <span style="color: #00ffff;">if</span>(sigismemeber(&amp;sigset, SIGUSR1))
+        printf(<span style="color: #ffa07a;">"SIGUSR1 "</span>);
+    <span style="color: #00ffff;">if</span>(sigismemeber(&amp;sigset, SIGALRM))
+        printf(<span style="color: #ffa07a;">"SIGALRM "</span>);
+
+    printf(<span style="color: #ffa07a;">'\n'</span>);
+
+    errno = error_save;
+}
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-6-4-3" class="outline-4">
+<h4 id="sec-6-4-3">sigpending函数</h4>
+<div class="outline-text-4" id="text-6-4-3">
+<p>
+sigpending：返回对于调用进程被阻塞不能递送和当前未决的信号集
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;signal.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#33719;&#21462;&#24403;&#21069;&#22240;&#38459;&#22622;&#32780;&#26410;&#20915;&#30340;&#20449;&#21495;&#38598;&#21040;&#25351;&#23450;&#30340;&#25351;&#38024;set&#20013;</span>
+
+<span style="color: #ffa07a;">   set&#65306;&#20449;&#21495;&#38598;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;0&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">sigpending</span>(<span style="color: #98fb98;">sigset_t</span> *<span style="color: #eedd82;">set</span>);
+</pre>
+</div>
+</div>
+
+<div id="outline-container-sec-6-4-3-1" class="outline-5">
+<h5 id="sec-6-4-3-1">实例</h5>
+<div class="outline-text-5" id="text-6-4-3-1">
+<p>
+进程阻塞了SIGQUIT信号，保存了当前信号屏蔽字以便以后恢复，然后睡眠5秒钟。在此期间所产生的退出信号都被阻塞，不递送至该进程，直到该信号不再被阻塞。在5秒睡眠结束后，检查是否有信号未决，然后将SIGQUIT设置为不再阻塞
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;signal.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+
+<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">sig_quit</span>(<span style="color: #98fb98;">int</span>);
+
+<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">sig_quit</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">signo</span>) 
+{
+    printf(<span style="color: #ffa07a;">"caught SIGQUIT\n"</span>);
+
+    <span style="color: #00ffff;">if</span>(SIG_ERR == (signal(SIGQUIT, SIG_DFL)) )
+        err_sys(<span style="color: #ffa07a;">"can't reset SIGQUIT"</span>);
+
+    <span style="color: #00ffff;">return</span>;
+}
+
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">void</span>) 
+{
+    <span style="color: #98fb98;">sigset_t</span> <span style="color: #eedd82;">newmask</span>, <span style="color: #eedd82;">oldmask</span>, <span style="color: #eedd82;">pendmask</span>;
+
+    <span style="color: #00ffff;">if</span>(SIG_ERR == (signal(SIGQUIT, sig_quit)))
+        err_sys(<span style="color: #ffa07a;">"can't catch SIGQUIT"</span>);
+
+    sigemptyset(&amp;newmask);
+    sigaddset(&amp;newmask, SIGQUIT);
+
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">block SIGQUIT and save current signal mask</span>
+    <span style="color: #00ffff;">if</span>(sigprocmask(SIG_BLOCK, &amp;newmask, &amp;oldmask) &lt; 0 )
+        err_sys(<span style="color: #ffa07a;">"SIG_BLOCK error"</span>);
+
+    sleep(5); <span style="color: #ff4500;">//</span><span style="color: #ff4500;">SIGQUIT remain pending</span>
+
+    <span style="color: #00ffff;">if</span>(sigpending(&amp;pendmask) &lt; 0 )
+        err_sys(<span style="color: #ffa07a;">"sigpending error"</span>);
+    <span style="color: #00ffff;">if</span>(sigismember(&amp;pendmask, SIGQUIT))
+        printf(<span style="color: #ffa07a;">"\nSIGQUIT pending\n"</span>);
+
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">reset signal mask which unblocks SIGQUIT</span>
+    <span style="color: #00ffff;">if</span>(sigprocmask(SIG_SETMASK, &amp;oldmask, <span style="color: #7fffd4;">NULL</span>) &lt; 0)
+        err_sys(<span style="color: #ffa07a;">"SIG_SETMASK error"</span>);
+
+    printf(<span style="color: #ffa07a;">"SIGQUIT unblocked\n"</span>);
+
+    sleep(5);
+
+    exit(0);
+}
+</pre>
+</div>
+<p>
+注意：在设置SIGQUIT为阻塞前，保存了老的屏蔽字。为了解除对该信号的阻塞，用老的屏蔽字重新设置了进程信号屏蔽字(SIG_SETMASK)。另一种方法是用SIG_UNBLOCK使阻塞的信号不再阻塞。但是如果编写一个可能由其他人使用的函数，而且需要在函数中阻塞一个信号，则不能用SIG_UNBLOCK解除对此信号的阻塞，这是因为此函数的调用者在调用本函数之前可能也阻塞了此信号。在这种情况下必须使用SIG_SETMASK将信号屏蔽字恢复为原先值！
+</p>
+
+<p>
+测试代码：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ ./src/signal/sigprocmaskExample 
+^<span style="color: #ffa07a;">\ </span><span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#20135;&#29983;&#20449;&#21495;&#19968;&#27425;(&#22312;5&#31186;&#20043;&#20869;)</span>
+SIGQUIT pending <span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#20174;sleep&#36820;&#22238;</span>
+caught SIGQUIT <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#20449;&#21495;&#22788;&#29702;&#31243;&#24207;</span>
+SIGQUIT unblocked <span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#20174;sigprocmask&#36820;&#22238;&#21518;</span>
+^\Quit <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#20877;&#27425;&#36882;&#36865;&#20449;&#21495;&#65292;&#40664;&#35748;&#21160;&#20316;&#22788;&#29702;</span>
+
+$ ./src/signal/sigprocmaskExample 
+^<span style="color: #ffa07a;">\^\^\^\^\^\^\^\^\ </span><span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#20135;&#29983;&#22810;&#27425;&#20449;&#21495;(&#22312;5&#31186;&#20043;&#20869;)</span>
+SIGQUIT pending
+caught SIGQUIT <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#21482;&#36882;&#36865;&#20449;&#21495;&#19968;&#27425;</span>
+SIGQUIT unblocked
+^\Quit
+</pre>
+</div>
+<p>
+在第一次睡眠期间如果产生了退出信号，那么此时该信号是未决的，但是不再受阻塞，所以在sigprocmask返回之前，它被递送到本进程。从程序的输出中可以看到：SIGQUIT处理程序(sig_quit)中的printf语句先执行，然后再执行sigprocmask之后的printf语句
+</p>
+
+<p>
+然后该进程再睡眠5秒钟。如果在此期间再产生退出信号，那么它就会使该进程终止，因为在上次捕捉到该信号时，已将其处理方式设置为默认动作
+</p>
+
+<p>
+在第二次运行该程序时，在进程睡眠期间使SIGQUIT信号产生了10次，但是解除了对该信号的阻塞后，只向进程传送一次SIGQUIT。从中可以看出linux系统没有将信号进行排队
+</p>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-6-5" class="outline-3">
+<h3 id="sec-6-5">sigaction函数</h3>
 </div>
 </div>
 </div>
