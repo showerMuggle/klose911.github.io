@@ -276,7 +276,28 @@ for the JavaScript code in this tag.
 </li>
 </ul>
 </li>
-<li><a href="#sec-7">信号应用</a></li>
+<li><a href="#sec-7">常用函数</a>
+<ul>
+<li><a href="#sec-7-1">abort函数</a>
+<ul>
+<li><a href="#sec-7-1-1">abort实现</a></li>
+</ul>
+</li>
+<li><a href="#sec-7-2">system函数</a>
+<ul>
+<li><a href="#sec-7-2-1">system函数的信号处理</a></li>
+<li><a href="#sec-7-2-2">system函数实现</a></li>
+<li><a href="#sec-7-2-3">system的返回值</a></li>
+</ul>
+</li>
+<li><a href="#sec-7-3">sleep函数</a>
+<ul>
+<li><a href="#sec-7-3-1">sleep函数实现</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#sec-8">作业控制信号</a></li>
 </ul>
 </div>
 </div>
@@ -2978,14 +2999,473 @@ quit <span style="color: #ff4500;"># </span><span style="color: #ff4500;">sig_in
 <h4 id="sec-6-7-4">sigsuspend的局限</h4>
 <div class="outline-text-4" id="text-6-7-4">
 <p>
-如果在等待信号发生时希望去睡眠，则sigsuspend函数可以满足此种要求，但是如果在等待信号期间希望调用其他系统函数则将如何呢？不幸的是对此问题没有可靠的解决方法
+如果需要捕捉SIGINT和SIGALRM这两种信号，在信号发生时，这两个信号处理程序都各自设置一个全局变量。用signal_intr函数设置这两个信号处理程序，使得它们中断任一被阻塞的慢速系统调用。当阻塞在select函数调用，等待慢速设备的输入时很可能发生这两种信号(设置闹钟以阻止永远等待输入)。能尽力做到的是：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #00ffff;">if</span>(intr_flag) <span style="color: #ff4500;">//</span><span style="color: #ff4500;">flag set by our SIGINT handler</span>
+    handle_intr();
+
+<span style="color: #00ffff;">if</span>(alrm_flag) <span style="color: #ff4500;">//</span><span style="color: #ff4500;">flag set by our SIGALRM handler</span>
+    handle_alrm();
+
+<span style="color: #ff4500;">/* </span><span style="color: #ff4500;">signal occurs here are lost </span><span style="color: #ff4500;">*/</span>
+<span style="color: #00ffff;">while</span>( select(...) &lt; 0 ) {
+    <span style="color: #00ffff;">if</span>(errno == EINTR) {
+        <span style="color: #00ffff;">if</span>(alrm_flag)
+            handle_alrm();
+        <span style="color: #00ffff;">if</span>(intr_flag)
+            handle_intr();
+    } <span style="color: #00ffff;">else</span> {
+        <span style="color: #ff4500;">//</span><span style="color: #ff4500;">some other error</span>
+    }        
+}
+</pre>
+</div>
+<p>
+在调用select之前测试各全局标志。如果select返回一个中断的系统调用错误，则再次进行测试。如果在前两个if语句和之后的select调用之间捕捉到两个信号中的任意一个，此处发生的信号会丢失了。因为即使调用了相应的信号处理程序，它们设置了相应的全局变量，但是除非某些数据已准备好可读，select绝不会返回，这意味着循环中的测试有可能因为select不返回而无法被执行到
+</p>
+
+<p>
+我们希望的执行序列是：
+</p>
+<ol class="org-ol">
+<li>阻塞SIGINT和SIGALRM
+</li>
+<li>测试两个全局变量以判别是否发生了一个信号，如果已发生则处理此条件
+</li>
+<li>调用select(或任何其他系统调用，例如read)并解除对这两个信号的阻塞，这两个操作要作为一个原子操作
+</li>
+</ol>
+
+<p>
+只有当第三步的调用是pause的时候，也就说希望在睡眠的时候等待信号，则sigsuspend函数可以满足此种要求，但是如果在调用select的时候等待信号，suspend则无能为力！
 </p>
 </div>
 </div>
 </div>
 </div>
+
 <div id="outline-container-sec-7" class="outline-2">
-<h2 id="sec-7">信号应用</h2>
+<h2 id="sec-7">常用函数</h2>
+<div class="outline-text-2" id="text-7">
+</div><div id="outline-container-sec-7-1" class="outline-3">
+<h3 id="sec-7-1">abort函数</h3>
+<div class="outline-text-3" id="text-7-1">
+<p>
+abort：使得进程异常终止
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;stdlib.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#20351;&#31243;&#24207;&#24322;&#24120;&#32456;&#27490;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#26080;</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">void</span> <span style="color: #87cefa;">abort</span>(<span style="color: #98fb98;">void</span>)
+</pre>
+</div>
+<p>
+将SIGABRT信号发送给调用进程，进程不应忽略此信号
+</p>
+
+<p>
+ANSIC要求若捕捉到此信号而且相应信号处理程序返回，abort仍不会返回到其调用者。如果捕捉到此信号，则信号处理程序不能返回的唯一方法是它调用exit、_exit、longjmp或siglongjmp。POSIX.1也说明abort覆盖了进程对此信号的阻塞和忽略
+</p>
+
+<p>
+让进程捕捉SIGABRT的意图是：在进程终止之前由其执行所需的清除操作。如果进程并不在信号处理程序中终止自己，POSIX.1说明当信号处理程序返回时，abort终止该进程
+</p>
+
+<p>
+ANSIC对此函数的规格说明将这一问题留由实现决定，而不管输出流是否刷新以及不管临时文件是否删除。POSIX.1的要求则进了一步：如果abort调用终止进程，则它应该有对所有打开的标准I/O流调用fclose的效果。但是如果abort调用并不终止进程，则它对打开流也不应有影响
+</p>
+</div>
+<div id="outline-container-sec-7-1-1" class="outline-4">
+<h4 id="sec-7-1-1">abort实现</h4>
+<div class="outline-text-4" id="text-7-1-1">
+<p>
+以下程序实现了POSIX标准的abort函数，对处理打开的标准I/O流的要求是难于实现的：
+</p>
+<ol class="org-ol">
+<li>如果对于SIGABRT信号是忽略，则设置为执行了默认动作
+</li>
+<li>如果对于SIGABRT信号是默认动作，则刷新所有标准I/O流。但这只是刷新，而不是关闭它们，只有当进程终止时，内核会自动关闭所有打开文件，相当于fclose的效果
+</li>
+<li>确保解除对SIGABRT信号的屏蔽
+</li>
+<li>发送SIGABRT信号给当前进程
+</li>
+<li>如果对于SIGABRT信号处理是用户自定义函数：
+<ul class="org-ul">
+<li>如果进程捕捉此信号并返回:
+<ul class="org-ul">
+<li>刷新所有的流
+</li>
+<li>再次设置为SIGABRT的处理方式为默认动作
+</li>
+<li>重新发送SIGABRT信号给当前进程
+</li>
+</ul>
+</li>
+<li>如果进程捕捉此信号并且不返回，则不会触及标准I/O流，因为在自定义信号处理函数可以手动调用_exit来结束进程，这时候不希望缓存被刷新
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;signal.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;stdio.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;stdlib.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;unistd.h&gt;</span>
+
+<span style="color: #98fb98;">void</span> <span style="color: #87cefa;">abort</span>(<span style="color: #98fb98;">void</span>)            <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">POSIX-style abort() function </span><span style="color: #ff4500;">*/</span>
+{
+    <span style="color: #98fb98;">sigset_t</span>            <span style="color: #eedd82;">mask</span>;
+    <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">sigaction</span>    <span style="color: #eedd82;">action</span>;
+
+    <span style="color: #ff4500;">/*</span>
+<span style="color: #ff4500;">     * Caller can't ignore SIGABRT, if so reset to default.</span>
+<span style="color: #ff4500;">     </span><span style="color: #ff4500;">*/</span>
+    sigaction(SIGABRT, <span style="color: #7fffd4;">NULL</span>, &amp;action);
+    <span style="color: #00ffff;">if</span> (action.sa_handler == SIG_IGN) {
+    action.sa_handler = SIG_DFL;
+    sigaction(SIGABRT, &amp;action, <span style="color: #7fffd4;">NULL</span>);
+    }
+    <span style="color: #00ffff;">if</span> (action.sa_handler == SIG_DFL)
+    fflush(<span style="color: #7fffd4;">NULL</span>);           <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">flush all open stdio streams </span><span style="color: #ff4500;">*/</span>
+
+    <span style="color: #ff4500;">/*</span>
+<span style="color: #ff4500;">     * Caller can't block SIGABRT; make sure it's unblocked.</span>
+<span style="color: #ff4500;">     </span><span style="color: #ff4500;">*/</span>
+    sigfillset(&amp;mask);
+    sigdelset(&amp;mask, SIGABRT);  <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">mask has only SIGABRT turned off </span><span style="color: #ff4500;">*/</span>
+    sigprocmask(SIG_SETMASK, &amp;mask, <span style="color: #7fffd4;">NULL</span>);
+    kill(getpid(), SIGABRT);    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">send the signal </span><span style="color: #ff4500;">*/</span>
+
+    <span style="color: #ff4500;">/*</span>
+<span style="color: #ff4500;">     * If we're here, process caught SIGABRT and returned.</span>
+<span style="color: #ff4500;">     </span><span style="color: #ff4500;">*/</span>
+    fflush(<span style="color: #7fffd4;">NULL</span>);               <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">flush all open stdio streams </span><span style="color: #ff4500;">*/</span>
+    action.sa_handler = SIG_DFL;
+    sigaction(<span style="color: #eedd82;">SIGABRT</span>, &amp;action, <span style="color: #7fffd4;">NULL</span>);  <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">reset to default </span><span style="color: #ff4500;">*/</span>
+    sigprocmask(SIG_SETMASK, &amp;mask, <span style="color: #7fffd4;">NULL</span>);  <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">just in case ... </span><span style="color: #ff4500;">*/</span>
+    kill(getpid(), SIGABRT);                <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">and one more time </span><span style="color: #ff4500;">*/</span>
+    exit(1);    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">this should never be executed ... </span><span style="color: #ff4500;">*/</span>
+}
+</pre>
+</div>
+</li>
+</ul>
+</li>
+</ol>
+<p>
+如果调用kill使其为调用者产生信号，并且如果该信号是不被阻塞的，则在kill返回前该信号就被传送给了该进程。这样就可确知如果对kill的调用返回了，则该进程一定已捕捉到该信号，并且也从该信号处理程序返回
+</p>
+</div>
+</div>
+</div>
+<div id="outline-container-sec-7-2" class="outline-3">
+<h3 id="sec-7-2">system函数</h3>
+<div class="outline-text-3" id="text-7-2">
+<p>
+在进程控制那章已经有了一个system函数的实现，但是该版本并不做任何信号处理。POSIX要求system忽略SIGINT和SIGQUIT，阻塞SIGCHLD
+</p>
+</div>
+<div id="outline-container-sec-7-2-1" class="outline-4">
+<h4 id="sec-7-2-1">system函数的信号处理</h4>
+<div class="outline-text-4" id="text-7-2-1">
+<p>
+使用以前的system版本来调用ed(1)编辑程序。使用它的原因是：它是一个交互式的捕捉中断和退出信号的程序。若从shell调用ed，并键入中断字符，则它捕捉中断信号并打印问号。它也对退出符的处理方式设置为忽略
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+
+<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">sig_int</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">signo</span>)
+{
+    printf(<span style="color: #ffa07a;">"caught SIGINT\n"</span>);
+}
+
+<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">sig_chld</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">signo</span>)
+{
+    printf(<span style="color: #ffa07a;">"caught SIGCHLD\n"</span>);
+}
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">void</span>)
+{
+    <span style="color: #00ffff;">if</span> (signal(SIGINT, sig_int) == SIG_ERR)
+    err_sys(<span style="color: #ffa07a;">"signal(SIGINT) error"</span>);
+    <span style="color: #00ffff;">if</span> (signal(SIGCHLD, sig_chld) == SIG_ERR)
+    err_sys(<span style="color: #ffa07a;">"signal(SIGCHLD) error"</span>);
+    <span style="color: #00ffff;">if</span> (mysystem(<span style="color: #ffa07a;">"/bin/ed"</span>) &lt; 0)
+    err_sys(<span style="color: #ffa07a;">"system() error"</span>);
+    exit(0);
+}
+</pre>
+</div>
+<p>
+图10-2显示了编辑程序正在进行时的进程安排：
+</p>
+
+<div class="figure">
+<p><img src="pic/system-process-group.png" alt="system-process-group.png" width="90%" />
+</p>
+</div>
+
+<p>
+测试SIGCHLD信号：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ ./src/process/a.out 
+a <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#23558;&#27491;&#25991;&#28155;&#21152;&#33267;&#32534;&#36753;&#22120;&#32531;&#23384;</span>
+Here is one line of text
+and another
+<span style="color: #b0c4de;">.</span> <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#20572;&#27490;&#28155;&#21152;&#26041;&#24335;</span>
+1, $<span style="color: #eedd82;">p</span> <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#25171;&#21360;&#31532;1&#34892;&#33267;&#26368;&#21518;1&#34892;,&#20197;&#20415;&#35266;&#23519;&#32531;&#23384;&#20013;&#30340;&#20869;&#23481;</span>
+Here is one line of text
+and another
+w temp.foo <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#23558;&#32531;&#23384;&#20889;&#33267;&#19968;&#25991;&#20214;</span>
+37 <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#32534;&#36753;&#22120;&#31216;&#20889;&#20102;37&#20010;&#23383;&#33410;</span>
+q <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#31163;&#24320;&#32534;&#36753;&#22120;</span>
+caught SIGCHLD <span style="color: #ff4500;">#</span>
+</pre>
+</div>
+<p>
+结果显示：当ed程序终止时，产生SIGCHLD信号。a.out进程捕捉它，执行其处理程序，然后从其返回。如果不阻塞SIGCHLD而在外部程序安装了处理SIGCHLD信号的话，那么system执行子进程返回的话，首先会通知捕获程序。如果捕获程序里面调用了wait的话，那么system的wait就会一直阻塞住了。因此在执行system的时候，父进程中SIGCHLD信号的递送应当被阻塞
+</p>
+
+<p>
+测试SIGINT信号：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ ./src/process/a.out  
+a
+hello, world
+<span style="color: #b0c4de;">.</span>
+w etmp.foo
+13
+^C <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#38190;&#20837;&#20013;&#26029;&#31526;</span>
+? <span style="color: #ff4500;"># </span><span style="color: #ff4500;">ed&#31243;&#24207;&#25429;&#25417;&#21040;SIGINT&#20449;&#21495;&#65292;&#25171;&#21360;&#38382;&#21495;</span>
+caught SIGINT <span style="color: #ff4500;"># </span><span style="color: #ff4500;">a.out&#36827;&#31243;&#25429;&#25417;&#21040;SIGINT&#20449;&#21495;</span>
+q
+caught SIGCHLD
+</pre>
+</div>
+
+<p>
+键入中断字符可使中断信号传送给前台进程组中的所有进程，所以SIGINT信号会被送给三个前台进程：shell进程忽略此信号，a.out进程和ed进程捕捉该信号。但是当用system运行另一个程序时，不应使父、子进程两者都捕捉终端产生的SIGINT和SIGQUIT信号。这两个信号只应送给正在运行的程序，也就是子进程，所以system的调用者就不应接收这两个终端产生的信号
+</p>
+</div>
+</div>
+<div id="outline-container-sec-7-2-2" class="outline-4">
+<h4 id="sec-7-2-2">system函数实现</h4>
+<div class="outline-text-4" id="text-7-2-2">
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span>    <span style="color: #ffa07a;">&lt;sys/wait.h&gt;</span>
+<span style="color: #7fffd4;">#include</span>    <span style="color: #ffa07a;">&lt;errno.h&gt;</span>
+<span style="color: #7fffd4;">#include</span>    <span style="color: #ffa07a;">&lt;signal.h&gt;</span>
+<span style="color: #7fffd4;">#include</span>    <span style="color: #ffa07a;">&lt;unistd.h&gt;</span>
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">system</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">cmdstring</span>)   <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">with appropriate signal handling </span><span style="color: #ff4500;">*/</span>
+{
+    <span style="color: #98fb98;">pid_t</span>               <span style="color: #eedd82;">pid</span>;
+    <span style="color: #98fb98;">int</span>                 <span style="color: #eedd82;">status</span>;
+    <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">sigaction</span>    <span style="color: #eedd82;">ignore</span>, <span style="color: #eedd82;">saveintr</span>, <span style="color: #eedd82;">savequit</span>;
+    <span style="color: #98fb98;">sigset_t</span>            <span style="color: #eedd82;">chldmask</span>, <span style="color: #eedd82;">savemask</span>;
+
+    <span style="color: #00ffff;">if</span> (cmdstring == <span style="color: #7fffd4;">NULL</span>)
+        <span style="color: #00ffff;">return</span>(1);      <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">always a command processor with UNIX </span><span style="color: #ff4500;">*/</span>
+
+    ignore.sa_handler = SIG_IGN;    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">ignore SIGINT and SIGQUIT </span><span style="color: #ff4500;">*/</span>
+    sigemptyset(&amp;ignore.sa_mask);
+    ignore.sa_flags = 0;
+    <span style="color: #00ffff;">if</span> (sigaction(SIGINT, &amp;ignore, &amp;saveintr) &lt; 0)
+        <span style="color: #00ffff;">return</span>(-1);
+    <span style="color: #00ffff;">if</span> (sigaction(SIGQUIT, &amp;ignore, &amp;savequit) &lt; 0)
+        <span style="color: #00ffff;">return</span>(-1);
+    sigemptyset(&amp;chldmask);         <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">now block SIGCHLD </span><span style="color: #ff4500;">*/</span>
+    sigaddset(&amp;chldmask, SIGCHLD);
+    <span style="color: #00ffff;">if</span> (sigprocmask(SIG_BLOCK, &amp;chldmask, &amp;savemask) &lt; 0)
+        <span style="color: #00ffff;">return</span>(-1);
+
+    <span style="color: #00ffff;">if</span> ((pid = fork()) &lt; 0) {
+        status = -1;    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">probably out of processes </span><span style="color: #ff4500;">*/</span>
+    } <span style="color: #00ffff;">else</span> <span style="color: #00ffff;">if</span> (pid == 0) {          <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">child </span><span style="color: #ff4500;">*/</span>
+        <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">restore previous signal actions &amp; reset signal mask </span><span style="color: #ff4500;">*/</span>
+        sigaction(<span style="color: #eedd82;">SIGINT</span>, &amp;saveintr, <span style="color: #7fffd4;">NULL</span>);
+        sigaction(<span style="color: #eedd82;">SIGQUIT</span>, &amp;savequit, <span style="color: #7fffd4;">NULL</span>);
+        sigprocmask(SIG_SETMASK, &amp;savemask, <span style="color: #7fffd4;">NULL</span>);
+
+        execl(<span style="color: #ffa07a;">"/bin/sh"</span>, <span style="color: #ffa07a;">"sh"</span>, <span style="color: #ffa07a;">"-c"</span>, cmdstring, (<span style="color: #98fb98;">char</span> *)0);
+        _exit(127);     <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">exec error </span><span style="color: #ff4500;">*/</span>
+    } <span style="color: #00ffff;">else</span> {                        <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">parent </span><span style="color: #ff4500;">*/</span>
+        <span style="color: #00ffff;">while</span> (waitpid(pid, &amp;status, 0) &lt; 0)
+            <span style="color: #00ffff;">if</span> (errno != EINTR) {
+                status = -1; <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">error other than EINTR from waitpid() </span><span style="color: #ff4500;">*/</span>
+                <span style="color: #00ffff;">break</span>;
+            }
+    }
+
+    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">restore previous signal actions &amp; reset signal mask </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #00ffff;">if</span> (sigaction(SIGINT, &amp;saveintr, <span style="color: #7fffd4;">NULL</span>) &lt; 0)
+        <span style="color: #00ffff;">return</span>(-1);
+    <span style="color: #00ffff;">if</span> (sigaction(SIGQUIT, &amp;savequit, <span style="color: #7fffd4;">NULL</span>) &lt; 0)
+        <span style="color: #00ffff;">return</span>(-1);
+    <span style="color: #00ffff;">if</span> (sigprocmask(SIG_SETMASK, &amp;savemask, <span style="color: #7fffd4;">NULL</span>) &lt; 0)
+        <span style="color: #00ffff;">return</span>(-1);
+
+    <span style="color: #00ffff;">return</span>(status);
+}
+</pre>
+</div>
+<p>
+注意：
+</p>
+<ul class="org-ul">
+<li>在fork进程前，就必须更改信号的处理方式
+</li>
+<li>子进程在调用execl之前要先恢复这两个信号的配置。这允许在调用者配置的基础上，execl可将它们的配置更改为默认值
+</li>
+</ul>
+</div>
+</div>
+<div id="outline-container-sec-7-2-3" class="outline-4">
+<h4 id="sec-7-2-3">system的返回值</h4>
+<div class="outline-text-4" id="text-7-2-3">
+<ul class="org-ul">
+<li>如果/bin/sh没有正常执行的话，那么返回127
+</li>
+<li>如果命令正常执行的话，那么返回命令退出状态
+</li>
+<li>如果/bin/sh因为信号退出的话，那么退出状态时128+信号编号
+</li>
+</ul>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ sh -c <span style="color: #ffa07a;">'sleep 30'</span>
+^C <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#20351;&#29992;&#20013;&#26029;&#38190;&#36864;&#20986;</span>
+$ echo $<span style="color: #eedd82;">?</span> <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#25171;&#21360;&#36864;&#20986;&#29366;&#24577;</span>
+130 <span style="color: #ff4500;"># </span><span style="color: #ff4500;">128 + 2(SIGINT)</span>
+</pre>
+</div>
+</div>
+</div>
+</div>
+<div id="outline-container-sec-7-3" class="outline-3">
+<h3 id="sec-7-3">sleep函数</h3>
+<div class="outline-text-3" id="text-7-3">
+<p>
+sleep：尝试使进程睡眠若干秒
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;unistd.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#23581;&#35797;&#20351;&#31243;&#24207;&#30561;&#30496;seconds&#31186;</span>
+
+<span style="color: #ffa07a;">   return&#65306;0&#25110;&#26410;&#30561;&#30340;&#31186;&#25968;</span>
+<span style="color: #ffa07a;"> */</span>
+<span style="color: #98fb98;">unsigned</span> <span style="color: #98fb98;">int</span> <span style="color: #87cefa;">sleep</span>(<span style="color: #98fb98;">unsigned</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">seconds</span>)
+</pre>
+</div>
+<p>
+使调用进程被挂起直到：
+</p>
+<ol class="org-ol">
+<li>已经过了seconds所指定的墙上时钟时间，返回值是0
+</li>
+<li>该进程捕捉到一个信号并从信号处理程序返回，返回值是未睡的秒数
+</li>
+</ol>
+
+<p>
+如同alarm信号一样，如果系统负荷过重，实际返回时间比所要求的会迟一些
+</p>
+</div>
+<div id="outline-container-sec-7-3-1" class="outline-4">
+<h4 id="sec-7-3-1">sleep函数实现</h4>
+<div class="outline-text-4" id="text-7-3-1">
+<p>
+下面程序使用alarm函数实现sleep，但这并不是必需的：
+</p>
+<ol class="org-ol">
+<li>注册SIGALRM处理方式
+</li>
+<li>屏蔽SIGALRM信号
+</li>
+<li>调用alarm启动闹钟，到时间自动产生SIGALRM信号
+</li>
+<li>调用sigsuspend来等待任意信号发生
+</li>
+<li>捕获任意信号(包括捕获的SIGALRM信号)后，取消闹钟，并获得未睡眠的秒数
+</li>
+<li>恢复SIGALRM的处理方式
+</li>
+<li>重置信号屏蔽字
+</li>
+<li>返回未睡的秒数
+</li>
+</ol>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+
+<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">sig_alrm</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">signo</span>)
+{
+    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">nothing to do, just returning wakes up sigsuspend() </span><span style="color: #ff4500;">*/</span>
+}
+
+<span style="color: #98fb98;">unsigned</span> <span style="color: #98fb98;">int</span> <span style="color: #87cefa;">sleep</span>(<span style="color: #98fb98;">unsigned</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">nsecs</span>)
+{
+    <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">sigaction</span>    <span style="color: #eedd82;">newact</span>, <span style="color: #eedd82;">oldact</span>;
+    <span style="color: #98fb98;">sigset_t</span>            <span style="color: #eedd82;">newmask</span>, <span style="color: #eedd82;">oldmask</span>, <span style="color: #eedd82;">suspmask</span>;
+    <span style="color: #98fb98;">unsigned</span> <span style="color: #98fb98;">int</span>        <span style="color: #eedd82;">unslept</span>;
+
+    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">set our handler, save previous information </span><span style="color: #ff4500;">*/</span>
+    newact.sa_handler = sig_alrm;
+    sigemptyset(&amp;newact.sa_mask);
+    newact.sa_flags = 0;
+    sigaction(<span style="color: #eedd82;">SIGALRM</span>, &amp;newact, &amp;oldact);
+
+    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">block SIGALRM and save current signal mask </span><span style="color: #ff4500;">*/</span>
+    sigemptyset(&amp;newmask);
+    sigaddset(&amp;newmask, SIGALRM);
+    sigprocmask(SIG_BLOCK, &amp;newmask, &amp;oldmask);
+
+    alarm(nsecs);
+
+    suspmask = oldmask;
+    sigdelset(&amp;suspmask, SIGALRM);  <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">make sure SIGALRM isn't blocked </span><span style="color: #ff4500;">*/</span>
+    sigsuspend(&amp;suspmask);          <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">wait for any signal to be caught </span><span style="color: #ff4500;">*/</span>
+
+    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">some signal has been caught, SIGALRM is now blocked </span><span style="color: #ff4500;">*/</span>
+
+    unslept = alarm(0);
+    sigaction(<span style="color: #eedd82;">SIGALRM</span>, &amp;oldact, <span style="color: #7fffd4;">NULL</span>);  <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">reset previous action </span><span style="color: #ff4500;">*/</span>
+
+    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">reset signal mask, which unblocks SIGALRM </span><span style="color: #ff4500;">*/</span>
+    sigprocmask(SIG_SETMASK, &amp;oldmask, <span style="color: #7fffd4;">NULL</span>);
+    <span style="color: #00ffff;">return</span>(unslept);
+}
+</pre>
+</div>
+<p>
+因为没有使用longjmp来避免竟态条件，所以对处理SIGALRM信号期间可能执行的其他信号处理程序没有影响
+</p>
+
+<p>
+因为使用alarm，则这两个函数之间可能有交互作用。例如，若先调用alarm(10)，过了3秒后又调用sleep(5)，那么将如何呢？sleep将在5秒后返回(假定在这段时间内没有捕捉到另一个信号)，但是否在2秒后又产生另一个SIGALRM信号呢？这些细节并没有考虑在内
+</p>
+</div>
+</div>
+</div>
+</div>
+<div id="outline-container-sec-8" class="outline-2">
+<h2 id="sec-8">作业控制信号</h2>
 </div>
 </div>
 <div id="postamble" class="status">

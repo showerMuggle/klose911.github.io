@@ -1466,6 +1466,315 @@ canjump必须被声明为数据类型sig_atomic_t，这是由ANSIC定义的在�
       }
     #+END_SRC
 *** sigsuspend的局限
-如果在等待信号发生时希望去睡眠，则sigsuspend函数可以满足此种要求，但是如果在等待信号期间希望调用其他系统函数则将如何呢？不幸的是对此问题没有可靠的解决方法
-* 信号应用
+如果需要捕捉SIGINT和SIGALRM这两种信号，在信号发生时，这两个信号处理程序都各自设置一个全局变量。用signal_intr函数设置这两个信号处理程序，使得它们中断任一被阻塞的慢速系统调用。当阻塞在select函数调用，等待慢速设备的输入时很可能发生这两种信号(设置闹钟以阻止永远等待输入)。能尽力做到的是：
+#+BEGIN_SRC C
+  if(intr_flag) //flag set by our SIGINT handler
+          handle_intr();
 
+  if(alrm_flag) //flag set by our SIGALRM handler
+          handle_alrm();
+
+  /* signal occurs here are lost */
+  while( select(...) < 0 ) {
+          if(errno == EINTR) {
+                  if(alrm_flag)
+                          handle_alrm();
+                  if(intr_flag)
+                          handle_intr();
+          } else {
+                  //some other error
+          }        
+  }
+#+END_SRC
+在调用select之前测试各全局标志。如果select返回一个中断的系统调用错误，则再次进行测试。如果在前两个if语句和之后的select调用之间捕捉到两个信号中的任意一个，此处发生的信号会丢失了。因为即使调用了相应的信号处理程序，它们设置了相应的全局变量，但是除非某些数据已准备好可读，select绝不会返回，这意味着循环中的测试有可能因为select不返回而无法被执行到
+
+我们希望的执行序列是：
+1. 阻塞SIGINT和SIGALRM
+2. 测试两个全局变量以判别是否发生了一个信号，如果已发生则处理此条件
+3. 调用select(或任何其他系统调用，例如read)并解除对这两个信号的阻塞，这两个操作要作为一个原子操作
+
+只有当第三步的调用是pause的时候，也就说希望在睡眠的时候等待信号，则sigsuspend函数可以满足此种要求，但是如果在调用select的时候等待信号，suspend则无能为力！
+
+* 常用函数
+** abort函数
+abort：使得进程异常终止
+#+BEGIN_SRC C
+  #include <stdlib.h>
+
+  /**
+     使程序异常终止
+
+     return：无
+  ,*/
+  void abort(void)
+#+END_SRC
+将SIGABRT信号发送给调用进程，进程不应忽略此信号
+  
+ANSIC要求若捕捉到此信号而且相应信号处理程序返回，abort仍不会返回到其调用者。如果捕捉到此信号，则信号处理程序不能返回的唯一方法是它调用exit、_exit、longjmp或siglongjmp。POSIX.1也说明abort覆盖了进程对此信号的阻塞和忽略
+
+让进程捕捉SIGABRT的意图是：在进程终止之前由其执行所需的清除操作。如果进程并不在信号处理程序中终止自己，POSIX.1说明当信号处理程序返回时，abort终止该进程
+ 
+ANSIC对此函数的规格说明将这一问题留由实现决定，而不管输出流是否刷新以及不管临时文件是否删除。POSIX.1的要求则进了一步：如果abort调用终止进程，则它应该有对所有打开的标准I/O流调用fclose的效果。但是如果abort调用并不终止进程，则它对打开流也不应有影响
+*** abort实现
+以下程序实现了POSIX标准的abort函数，对处理打开的标准I/O流的要求是难于实现的：
+1. 如果对于SIGABRT信号是忽略，则设置为执行了默认动作
+2. 如果对于SIGABRT信号是默认动作，则刷新所有标准I/O流。但这只是刷新，而不是关闭它们，只有当进程终止时，内核会自动关闭所有打开文件，相当于fclose的效果
+3. 确保解除对SIGABRT信号的屏蔽
+4. 发送SIGABRT信号给当前进程
+5. 如果对于SIGABRT信号处理是用户自定义函数：
+   + 如果进程捕捉此信号并返回:
+     - 刷新所有的流
+     - 再次设置为SIGABRT的处理方式为默认动作
+     - 重新发送SIGABRT信号给当前进程
+   + 如果进程捕捉此信号并且不返回，则不会触及标准I/O流，因为在自定义信号处理函数可以手动调用_exit来结束进程，这时候不希望缓存被刷新
+    #+BEGIN_SRC C
+      #include <signal.h>
+      #include <stdio.h>
+      #include <stdlib.h>
+      #include <unistd.h>
+
+      void abort(void)            /* POSIX-style abort() function */
+      {
+          sigset_t            mask;
+          struct sigaction    action;
+
+          /*
+           ,* Caller can't ignore SIGABRT, if so reset to default.
+           ,*/
+          sigaction(SIGABRT, NULL, &action);
+          if (action.sa_handler == SIG_IGN) {
+              action.sa_handler = SIG_DFL;
+              sigaction(SIGABRT, &action, NULL);
+          }
+          if (action.sa_handler == SIG_DFL)
+              fflush(NULL);           /* flush all open stdio streams */
+
+          /*
+           ,* Caller can't block SIGABRT; make sure it's unblocked.
+           ,*/
+          sigfillset(&mask);
+          sigdelset(&mask, SIGABRT);  /* mask has only SIGABRT turned off */
+          sigprocmask(SIG_SETMASK, &mask, NULL);
+          kill(getpid(), SIGABRT);    /* send the signal */
+
+          /*
+           ,* If we're here, process caught SIGABRT and returned.
+           ,*/
+          fflush(NULL);               /* flush all open stdio streams */
+          action.sa_handler = SIG_DFL;
+          sigaction(SIGABRT, &action, NULL);  /* reset to default */
+          sigprocmask(SIG_SETMASK, &mask, NULL);  /* just in case ... */
+          kill(getpid(), SIGABRT);                /* and one more time */
+          exit(1);    /* this should never be executed ... */
+      }
+    #+END_SRC
+如果调用kill使其为调用者产生信号，并且如果该信号是不被阻塞的，则在kill返回前该信号就被传送给了该进程。这样就可确知如果对kill的调用返回了，则该进程一定已捕捉到该信号，并且也从该信号处理程序返回
+** system函数
+在进程控制那章已经有了一个system函数的实现，但是该版本并不做任何信号处理。POSIX要求system忽略SIGINT和SIGQUIT，阻塞SIGCHLD
+*** system函数的信号处理
+使用以前的system版本来调用ed(1)编辑程序。使用它的原因是：它是一个交互式的捕捉中断和退出信号的程序。若从shell调用ed，并键入中断字符，则它捕捉中断信号并打印问号。它也对退出符的处理方式设置为忽略
+    #+BEGIN_SRC C
+      #include "apue.h"
+
+      static void sig_int(int signo)
+      {
+          printf("caught SIGINT\n");
+      }
+
+      static void sig_chld(int signo)
+      {
+          printf("caught SIGCHLD\n");
+      }
+
+      int main(void)
+      {
+          if (signal(SIGINT, sig_int) == SIG_ERR)
+              err_sys("signal(SIGINT) error");
+          if (signal(SIGCHLD, sig_chld) == SIG_ERR)
+              err_sys("signal(SIGCHLD) error");
+          if (mysystem("/bin/ed") < 0)
+              err_sys("system() error");
+          exit(0);
+      }
+    #+END_SRC
+图10-2显示了编辑程序正在进行时的进程安排：
+  #+ATTR_HTML: image :width 90% 
+  [[file:pic/system-process-group.png]]
+
+测试SIGCHLD信号：
+#+BEGIN_SRC sh
+  $ ./src/process/a.out 
+  a # 将正文添加至编辑器缓存
+  Here is one line of text
+  and another
+  . # 停止添加方式
+  1, $p # 打印第1行至最后1行,以便观察缓存中的内容
+  Here is one line of text
+  and another
+  w temp.foo # 将缓存写至一文件
+  37 # 编辑器称写了37个字节
+  q # 离开编辑器
+  caught SIGCHLD #
+#+END_SRC
+结果显示：当ed程序终止时，产生SIGCHLD信号。a.out进程捕捉它，执行其处理程序，然后从其返回。如果不阻塞SIGCHLD而在外部程序安装了处理SIGCHLD信号的话，那么system执行子进程返回的话，首先会通知捕获程序。如果捕获程序里面调用了wait的话，那么system的wait就会一直阻塞住了。因此在执行system的时候，父进程中SIGCHLD信号的递送应当被阻塞
+
+测试SIGINT信号：
+#+BEGIN_SRC sh
+  $ ./src/process/a.out  
+  a
+  hello, world
+  .
+  w etmp.foo
+  13
+  ^C # 键入中断符
+  ? # ed程序捕捉到SIGINT信号，打印问号
+  caught SIGINT # a.out进程捕捉到SIGINT信号
+  q
+  caught SIGCHLD
+#+END_SRC
+
+键入中断字符可使中断信号传送给前台进程组中的所有进程，所以SIGINT信号会被送给三个前台进程：shell进程忽略此信号，a.out进程和ed进程捕捉该信号。但是当用system运行另一个程序时，不应使父、子进程两者都捕捉终端产生的SIGINT和SIGQUIT信号。这两个信号只应送给正在运行的程序，也就是子进程，所以system的调用者就不应接收这两个终端产生的信号
+*** system函数实现
+
+    #+BEGIN_SRC C
+      #include    <sys/wait.h>
+      #include    <errno.h>
+      #include    <signal.h>
+      #include    <unistd.h>
+
+      int system(const char *cmdstring)   /* with appropriate signal handling */
+      {
+              pid_t               pid;
+              int                 status;
+              struct sigaction    ignore, saveintr, savequit;
+              sigset_t            chldmask, savemask;
+
+              if (cmdstring == NULL)
+                      return(1);      /* always a command processor with UNIX */
+
+              ignore.sa_handler = SIG_IGN;    /* ignore SIGINT and SIGQUIT */
+              sigemptyset(&ignore.sa_mask);
+              ignore.sa_flags = 0;
+              if (sigaction(SIGINT, &ignore, &saveintr) < 0)
+                      return(-1);
+              if (sigaction(SIGQUIT, &ignore, &savequit) < 0)
+                      return(-1);
+              sigemptyset(&chldmask);         /* now block SIGCHLD */
+              sigaddset(&chldmask, SIGCHLD);
+              if (sigprocmask(SIG_BLOCK, &chldmask, &savemask) < 0)
+                      return(-1);
+
+              if ((pid = fork()) < 0) {
+                      status = -1;    /* probably out of processes */
+              } else if (pid == 0) {          /* child */
+                      /* restore previous signal actions & reset signal mask */
+                      sigaction(SIGINT, &saveintr, NULL);
+                      sigaction(SIGQUIT, &savequit, NULL);
+                      sigprocmask(SIG_SETMASK, &savemask, NULL);
+
+                      execl("/bin/sh", "sh", "-c", cmdstring, (char *)0);
+                      _exit(127);     /* exec error */
+              } else {                        /* parent */
+                      while (waitpid(pid, &status, 0) < 0)
+                              if (errno != EINTR) {
+                                      status = -1; /* error other than EINTR from waitpid() */
+                                      break;
+                              }
+              }
+
+              /* restore previous signal actions & reset signal mask */
+              if (sigaction(SIGINT, &saveintr, NULL) < 0)
+                      return(-1);
+              if (sigaction(SIGQUIT, &savequit, NULL) < 0)
+                      return(-1);
+              if (sigprocmask(SIG_SETMASK, &savemask, NULL) < 0)
+                      return(-1);
+
+              return(status);
+      }
+    #+END_SRC
+注意：
++ 在fork进程前，就必须更改信号的处理方式
++ 子进程在调用execl之前要先恢复这两个信号的配置。这允许在调用者配置的基础上，execl可将它们的配置更改为默认值
+*** system的返回值
++ 如果/bin/sh没有正常执行的话，那么返回127
++ 如果命令正常执行的话，那么返回命令退出状态
++ 如果/bin/sh因为信号退出的话，那么退出状态时128+信号编号
+#+BEGIN_SRC sh
+  $ sh -c 'sleep 30'
+  ^C # 使用中断键退出
+  $ echo $? # 打印退出状态
+  130 # 128 + 2(SIGINT)
+#+END_SRC
+** sleep函数
+sleep：尝试使进程睡眠若干秒
+#+BEGIN_SRC C
+  #include <unistd.h>
+
+  /**
+     尝试使程序睡眠seconds秒
+
+     return：0或未睡的秒数
+   ,*/
+  unsigned int sleep(unsigned int seconds)
+#+END_SRC
+使调用进程被挂起直到：
+1. 已经过了seconds所指定的墙上时钟时间，返回值是0
+2. 该进程捕捉到一个信号并从信号处理程序返回，返回值是未睡的秒数
+ 
+如同alarm信号一样，如果系统负荷过重，实际返回时间比所要求的会迟一些
+*** sleep函数实现
+下面程序使用alarm函数实现sleep，但这并不是必需的：
+1. 注册SIGALRM处理方式
+2. 屏蔽SIGALRM信号
+3. 调用alarm启动闹钟，到时间自动产生SIGALRM信号
+4. 调用sigsuspend来等待任意信号发生
+5. 捕获任意信号(包括捕获的SIGALRM信号)后，取消闹钟，并获得未睡眠的秒数
+6. 恢复SIGALRM的处理方式
+7. 重置信号屏蔽字
+8. 返回未睡的秒数
+#+BEGIN_SRC C
+  #include "apue.h"
+
+  static void sig_alrm(int signo)
+  {
+          /* nothing to do, just returning wakes up sigsuspend() */
+  }
+
+  unsigned int sleep(unsigned int nsecs)
+  {
+          struct sigaction    newact, oldact;
+          sigset_t            newmask, oldmask, suspmask;
+          unsigned int        unslept;
+
+          /* set our handler, save previous information */
+          newact.sa_handler = sig_alrm;
+          sigemptyset(&newact.sa_mask);
+          newact.sa_flags = 0;
+          sigaction(SIGALRM, &newact, &oldact);
+
+          /* block SIGALRM and save current signal mask */
+          sigemptyset(&newmask);
+          sigaddset(&newmask, SIGALRM);
+          sigprocmask(SIG_BLOCK, &newmask, &oldmask);
+
+          alarm(nsecs);
+
+          suspmask = oldmask;
+          sigdelset(&suspmask, SIGALRM);  /* make sure SIGALRM isn't blocked */
+          sigsuspend(&suspmask);          /* wait for any signal to be caught */
+
+          /* some signal has been caught, SIGALRM is now blocked */
+
+          unslept = alarm(0);
+          sigaction(SIGALRM, &oldact, NULL);  /* reset previous action */
+
+          /* reset signal mask, which unblocks SIGALRM */
+          sigprocmask(SIG_SETMASK, &oldmask, NULL);
+          return(unslept);
+  }
+#+END_SRC
+因为没有使用longjmp来避免竟态条件，所以对处理SIGALRM信号期间可能执行的其他信号处理程序没有影响
+
+因为使用alarm，则这两个函数之间可能有交互作用。例如，若先调用alarm(10)，过了3秒后又调用sleep(5)，那么将如何呢？sleep将在5秒后返回(假定在这段时间内没有捕捉到另一个信号)，但是否在2秒后又产生另一个SIGALRM信号呢？这些细节并没有考虑在内
+* 作业控制信号
