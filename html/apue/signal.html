@@ -297,7 +297,15 @@ for the JavaScript code in this tag.
 </li>
 </ul>
 </li>
-<li><a href="#sec-8">作业控制信号</a></li>
+<li><a href="#sec-8">作业控制信号</a>
+<ul>
+<li><a href="#sec-8-1">shell处理作业控制信号</a>
+<ul>
+<li><a href="#sec-8-1-1">管理终端进程实例</a></li>
+</ul>
+</li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
@@ -3466,6 +3474,179 @@ sleep：尝试使进程睡眠若干秒
 </div>
 <div id="outline-container-sec-8" class="outline-2">
 <h2 id="sec-8">作业控制信号</h2>
+<div class="outline-text-2" id="text-8">
+<p>
+POSIX.1中有六个被认为是与作业控制有关的信号：
+</p>
+<ul class="org-ul">
+<li>SIGCHLD：子进程已停止或终止
+</li>
+<li>SIGCONT：如果进程已停止，则使其继续运行
+</li>
+<li>SIGSTOP：停止信号，不能被捕捉或忽略
+</li>
+<li>SIGTSTP：交互停止信号
+</li>
+<li>SIGTTIN：后台进程组的成员读控制终端，默认方式会使得后台进程停止，并等待通过fg命令变为前台进程
+</li>
+<li>SIGTTOU：后台进程组的成员写控制终端，禁止或者允许可以通过stty命令设置
+</li>
+</ul>
+</div>
+
+<div id="outline-container-sec-8-1" class="outline-3">
+<h3 id="sec-8-1">shell处理作业控制信号</h3>
+<div class="outline-text-3" id="text-8-1">
+<p>
+大多数应用程序并不处理这些信号，交互式shell通常做处理这些信号的所有工作：
+</p>
+<ul class="org-ul">
+<li>当键入挂起字符(Ctrl-Z)时，SIGTSTP被送至后台进程组的所有进程
+</li>
+<li>当通知shell在前台或后台恢复一个作业时，shell向作业中的所有进程发送SIGCONT信号
+</li>
+<li>如果向一个进程递送了SIGTTIN或SIGTTOU信号，则根据系统默认，此进程停止，作业控制shell了解到这一点后再通知
+</li>
+<li>如果进程是停止的，SIGCONT的默认动作是继续一个进程，否则忽略此信号。通常对该信号无需做任何事情。当对一个停止的进程产生一个SIGCONT信号时，该进程就继续，即使该信号是被阻塞或忽略的也是这样
+</li>
+<li>在作业控制信号间有某种相互作用：当对一个进程产生四种停止信号(SIGTSTP, SIGSTOP, SIGTTIN或SIGTTOU)中的任意一种时，对该进程的任一未决的SIGCONT信号就被丢弃。同样当对一个进程产生SIGCONT信号时，对同一进程的任一未决的停止信号被丢弃
+</li>
+</ul>
+</div>
+
+<div id="outline-container-sec-8-1-1" class="outline-4">
+<h4 id="sec-8-1-1">管理终端进程实例</h4>
+<div class="outline-text-4" id="text-8-1-1">
+<p>
+管理终端的进程，例如vi编辑程序，当用户要挂起它时，它需要能了解到这一点，这样才能将终端状态恢复到vi起动时的情况。另外当在前台恢复它时，它需要将终端状态设置回所希望的状态，并需要重新绘制终端屏幕
+</p>
+
+<p>
+以下程序展示了在管理终端的进程中如何对作业控制信号进行处理，虽然主程序只是将其标准输入复制到其标准输出，但是在信号处理程序中以注释形式给出了管理屏幕的程序所执行的典型操作：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+
+<span style="color: #7fffd4;">#define</span> <span style="color: #eedd82;">BUFFSIZE</span>    1024
+
+<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">sig_tstp</span>(<span style="color: #98fb98;">int</span>);
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">void</span>)
+{
+    <span style="color: #98fb98;">int</span>     <span style="color: #eedd82;">n</span>;
+    <span style="color: #98fb98;">char</span>    <span style="color: #eedd82;">buf</span>[BUFFSIZE];
+
+    <span style="color: #ff4500;">/*</span>
+<span style="color: #ff4500;">     * Only catch SIGTSTP if we're running with a job-control shell.</span>
+<span style="color: #ff4500;">     </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #00ffff;">if</span> (signal(SIGTSTP, SIG_IGN) == SIG_DFL)
+        signal(SIGTSTP, sig_tstp);
+
+    <span style="color: #00ffff;">while</span> ((n = read(STDIN_FILENO, buf, BUFFSIZE)) &gt; 0)
+        <span style="color: #00ffff;">if</span> (write(STDOUT_FILENO, buf, n) != n)
+            err_sys(<span style="color: #ffa07a;">"write error"</span>);
+
+    <span style="color: #00ffff;">if</span> (n &lt; 0)
+        err_sys(<span style="color: #ffa07a;">"read error"</span>);
+
+    exit(0);
+}
+
+<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">sig_tstp</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">signo</span>) <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">signal handler for SIGTSTP </span><span style="color: #ff4500;">*/</span>
+{
+    <span style="color: #98fb98;">sigset_t</span>    <span style="color: #eedd82;">mask</span>;
+    pr_mask(<span style="color: #ffa07a;">"start process SIG_STOP"</span>);
+
+    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">... move cursor to lower left corner, reset tty mode ... </span><span style="color: #ff4500;">*/</span>
+
+    <span style="color: #ff4500;">/*</span>
+<span style="color: #ff4500;">     * Unblock SIGTSTP, since it's blocked while we're handling it.</span>
+<span style="color: #ff4500;">     </span><span style="color: #ff4500;">*/</span>
+    sigemptyset(&amp;mask);
+    sigaddset(&amp;mask, SIGTSTP);
+    sigprocmask(SIG_UNBLOCK, &amp;mask, <span style="color: #7fffd4;">NULL</span>);
+
+    signal(SIGTSTP, SIG_DFL);   <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">reset disposition to default </span><span style="color: #ff4500;">*/</span>
+
+    pr_mask(<span style="color: #ffa07a;">"unblock SIGSTOP"</span>);
+
+    kill(getpid(), SIGTSTP);    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">and send the signal to ourself </span><span style="color: #ff4500;">*/</span>
+
+    pr_mask(<span style="color: #ffa07a;">"resend SIGSTOP signal"</span>);
+
+    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">we won't return from the kill until we're continued </span><span style="color: #ff4500;">*/</span>
+
+    signal(SIGTSTP, sig_tstp);  <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">reestablish signal handler </span><span style="color: #ff4500;">*/</span>
+
+    pr_mask(<span style="color: #ffa07a;">"reestablish signal handler"</span>);
+
+    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">... reset tty mode, redraw screen ... </span><span style="color: #ff4500;">*/</span>
+}
+</pre>
+</div>
+<p>
+当键入挂起字符时，进程接到SIGTSTP信号，然后该信号处理被调用：
+</p>
+<ol class="org-ol">
+<li>首先进行与终端有关的处理：比如将光标移到左下角，恢复终端工作方式等等
+</li>
+<li>在将SIGTSTP重新设置为默认值(停止该进程)
+</li>
+<li>因为正在处理SIGTSTP信号，而在捕捉到该信号期间系统自动地阻塞它，所以应当解除对此信号的阻塞
+</li>
+<li>进程调用kill函数向自己发送同一信号SIGTSTP。因为这时候SIGTSTP信号的处理已经变成了默认方式，这意味着自动停止该程序运行，所以这个kill调用不会返回
+</li>
+<li>直到通过终端向这个进程发送SIGCONT信号，该进程才得以继续，此时该程序才会从kill函数返回
+</li>
+<li>将SIGTSTP信号再设置为捕捉
+</li>
+<li>再次对终端进行处理，例如重新绘制屏幕
+</li>
+</ol>
+
+<p>
+测试结果：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ ./src/signal/sigtstop 
+hello world <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#35835;&#21462;&#32456;&#31471;&#36755;&#20837;&#65292;&#36755;&#20986;&#21040;&#32456;&#31471;</span>
+hello world
+^Z <span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#25353;&#20837;&#20572;&#27490;&#38190;</span>
+start process SIG_STOP <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#24320;&#22987;&#35843;&#29992;sig_stop&#20989;&#25968;</span>
+unblock SIGSTOP <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#37325;&#26032;&#24674;&#22797;SIGTSTP&#20026;&#40664;&#35748;&#22788;&#29702;&#26041;&#24335;&#65292;&#21457;&#36865;SIGTSTP&#20449;&#21495;&#32473;&#33258;&#36523;&#65292;kill&#35843;&#29992;&#31561;&#24453;&#36820;&#22238;</span>
+
+[1]+  Stopped                 ./src/signal/sigtstop&#12288;
+
+$ fg 1 <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#24674;&#22797;&#21407;&#26469;&#36827;&#31243;&#65292;&#21457;&#36865;SIGCONT&#20449;&#21495;&#32473;&#20316;&#19994;1</span>
+./src/signal/sigtstop 
+resend SIGSTOP signal <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#20174;kill&#20989;&#25968;&#35843;&#29992;&#36820;&#22238;</span>
+reestablish signal handler <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#20877;&#27425;&#35774;&#32622;SIGTSTP&#35843;&#29992;</span>
+<span style="color: #b0c4de;">test</span> sigtstp <span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#35835;&#21462;&#32456;&#31471;&#36755;&#20837;&#65292;&#36755;&#20986;&#21040;&#32456;&#31471;</span>
+<span style="color: #b0c4de;">test</span> sigtstp 
+^C <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#21457;&#36865;SIGINT&#32473;&#36827;&#31243;&#65292;&#32456;&#27490;&#36827;&#31243;</span>
+</pre>
+</div>
+
+<p>
+注意：仅当SIGTSTP信号的配置是SIG_DFL，它才会捕捉该信号。因为当此程序由不支持作业控制的shell所起动时，此信号的配置应当设置为SIG_IGN。实际上shell并不显式地忽略此信号，而是init将这三个作业控制信号SIGTSTP、SIGTTIN和SIGTTOU设置为SIG_IGN。这种配置由所有登录shell继承。只有作业控制shell才应将这三个信号重新设置为SIG_DFL
+</p>
+
+<p>
+<a href="advanced_io.html">Next：高级IO</a>
+</p>
+
+<p>
+<a href="proc_group.html">Previous：进程关系</a>
+</p>
+
+<p>
+<a href="apue.html">Home：目录</a>
+</p>
+</div>
+</div>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">

@@ -123,7 +123,7 @@ core文件的许可权通常是用户读/写，组读和其他读
 + SIGWINCH：SVR4和4.3+BSD内核保持与每个终端或伪终端相关联的窗口的大小，一个进程可以用ioctl函数得到或设置窗口的大小。如果一个进程用ioctl的设置-窗口-大小命令更改了窗口大小，则内核将SIGWINCH信号送至前台进程组
 + SIGXCPUS：如果进程超过了其软CPU时间限制，则产生此信号
 + SIGXFSZ：如果进程超过了其软文件长度限制，则产生此信号
-  
+
 * signal函数
   signal函数：为某个特定信号设置处理函数
   #+BEGIN_SRC C
@@ -1778,3 +1778,118 @@ sleep：尝试使进程睡眠若干秒
 
 因为使用alarm，则这两个函数之间可能有交互作用。例如，若先调用alarm(10)，过了3秒后又调用sleep(5)，那么将如何呢？sleep将在5秒后返回(假定在这段时间内没有捕捉到另一个信号)，但是否在2秒后又产生另一个SIGALRM信号呢？这些细节并没有考虑在内
 * 作业控制信号
+POSIX.1中有六个被认为是与作业控制有关的信号：
++ SIGCHLD：子进程已停止或终止
++ SIGCONT：如果进程已停止，则使其继续运行
++ SIGSTOP：停止信号，不能被捕捉或忽略
++ SIGTSTP：交互停止信号
++ SIGTTIN：后台进程组的成员读控制终端，默认方式会使得后台进程停止，并等待通过fg命令变为前台进程
++ SIGTTOU：后台进程组的成员写控制终端，禁止或者允许可以通过stty命令设置
+
+** shell处理作业控制信号
+大多数应用程序并不处理这些信号，交互式shell通常做处理这些信号的所有工作：
++ 当键入挂起字符(Ctrl-Z)时，SIGTSTP被送至后台进程组的所有进程
++ 当通知shell在前台或后台恢复一个作业时，shell向作业中的所有进程发送SIGCONT信号
++ 如果向一个进程递送了SIGTTIN或SIGTTOU信号，则根据系统默认，此进程停止，作业控制shell了解到这一点后再通知
++ 如果进程是停止的，SIGCONT的默认动作是继续一个进程，否则忽略此信号。通常对该信号无需做任何事情。当对一个停止的进程产生一个SIGCONT信号时，该进程就继续，即使该信号是被阻塞或忽略的也是这样
++ 在作业控制信号间有某种相互作用：当对一个进程产生四种停止信号(SIGTSTP, SIGSTOP, SIGTTIN或SIGTTOU)中的任意一种时，对该进程的任一未决的SIGCONT信号就被丢弃。同样当对一个进程产生SIGCONT信号时，对同一进程的任一未决的停止信号被丢弃
+
+*** 管理终端进程实例
+管理终端的进程，例如vi编辑程序，当用户要挂起它时，它需要能了解到这一点，这样才能将终端状态恢复到vi起动时的情况。另外当在前台恢复它时，它需要将终端状态设置回所希望的状态，并需要重新绘制终端屏幕
+
+以下程序展示了在管理终端的进程中如何对作业控制信号进行处理，虽然主程序只是将其标准输入复制到其标准输出，但是在信号处理程序中以注释形式给出了管理屏幕的程序所执行的典型操作：
+   #+BEGIN_SRC C
+     #include "apue.h"
+
+     #define BUFFSIZE    1024
+
+     static void sig_tstp(int);
+
+     int main(void)
+     {
+             int     n;
+             char    buf[BUFFSIZE];
+
+             /*
+              ,* Only catch SIGTSTP if we're running with a job-control shell.
+              ,*/
+             if (signal(SIGTSTP, SIG_IGN) == SIG_DFL)
+                     signal(SIGTSTP, sig_tstp);
+
+             while ((n = read(STDIN_FILENO, buf, BUFFSIZE)) > 0)
+                     if (write(STDOUT_FILENO, buf, n) != n)
+                             err_sys("write error");
+
+             if (n < 0)
+                     err_sys("read error");
+
+             exit(0);
+     }
+
+     static void sig_tstp(int signo) /* signal handler for SIGTSTP */
+     {
+             sigset_t    mask;
+             pr_mask("start process SIG_STOP");
+
+             /* ... move cursor to lower left corner, reset tty mode ... */
+
+             /*
+              ,* Unblock SIGTSTP, since it's blocked while we're handling it.
+              ,*/
+             sigemptyset(&mask);
+             sigaddset(&mask, SIGTSTP);
+             sigprocmask(SIG_UNBLOCK, &mask, NULL);
+
+             signal(SIGTSTP, SIG_DFL);   /* reset disposition to default */
+
+             pr_mask("unblock SIGSTOP");
+             
+             kill(getpid(), SIGTSTP);    /* and send the signal to ourself */
+
+             pr_mask("resend SIGSTOP signal");
+             
+             /* we won't return from the kill until we're continued */
+
+             signal(SIGTSTP, sig_tstp);  /* reestablish signal handler */
+
+             pr_mask("reestablish signal handler");
+             
+             /* ... reset tty mode, redraw screen ... */
+     }
+   #+END_SRC
+当键入挂起字符时，进程接到SIGTSTP信号，然后该信号处理被调用：
+1. 首先进行与终端有关的处理：比如将光标移到左下角，恢复终端工作方式等等
+2. 在将SIGTSTP重新设置为默认值(停止该进程)
+3. 因为正在处理SIGTSTP信号，而在捕捉到该信号期间系统自动地阻塞它，所以应当解除对此信号的阻塞
+4. 进程调用kill函数向自己发送同一信号SIGTSTP。因为这时候SIGTSTP信号的处理已经变成了默认方式，这意味着自动停止该程序运行，所以这个kill调用不会返回
+5. 直到通过终端向这个进程发送SIGCONT信号，该进程才得以继续，此时该程序才会从kill函数返回
+6. 将SIGTSTP信号再设置为捕捉
+7. 再次对终端进行处理，例如重新绘制屏幕
+
+测试结果：
+#+BEGIN_SRC sh
+  $ ./src/signal/sigtstop 
+  hello world # 读取终端输入，输出到终端
+  hello world
+  ^Z #按入停止键
+  start process SIG_STOP # 开始调用sig_stop函数
+  unblock SIGSTOP # 重新恢复SIGTSTP为默认处理方式，发送SIGTSTP信号给自身，kill调用等待返回
+
+  [1]+  Stopped                 ./src/signal/sigtstop　
+
+  $ fg 1 # 恢复原来进程，发送SIGCONT信号给作业1
+  ./src/signal/sigtstop 
+  resend SIGSTOP signal # 从kill函数调用返回
+  reestablish signal handler # 再次设置SIGTSTP调用
+  test sigtstp #读取终端输入，输出到终端
+  test sigtstp 
+  ^C # 发送SIGINT给进程，终止进程
+#+END_SRC
+
+注意：仅当SIGTSTP信号的配置是SIG_DFL，它才会捕捉该信号。因为当此程序由不支持作业控制的shell所起动时，此信号的配置应当设置为SIG_IGN。实际上shell并不显式地忽略此信号，而是init将这三个作业控制信号SIGTSTP、SIGTTIN和SIGTTOU设置为SIG_IGN。这种配置由所有登录shell继承。只有作业控制shell才应将这三个信号重新设置为SIG_DFL
+
+[[file:advanced_io.org][Next：高级IO]]
+
+[[file:proc_group.org][Previous：进程关系]]
+
+[[file:apue.org][Home：目录]]
