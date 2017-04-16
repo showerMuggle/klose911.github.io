@@ -142,6 +142,151 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="apue.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">高级IO</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#sec-1">非阻塞IO</a>
+<ul>
+<li><a href="#sec-1-1">轮询</a></li>
+</ul>
+</li>
+<li><a href="#sec-2">流机制</a></li>
+<li><a href="#sec-3">I/O多路转接</a></li>
+<li><a href="#sec-4">readv和writev</a></li>
+<li><a href="#sec-5">mmap</a></li>
+<li><a href="#sec-6">记录锁</a></li>
+</ul>
+</div>
+</div>
+<p>
+本章内容包括：
+</p>
+<ul class="org-ul">
+<li>非阻塞IO
+</li>
+<li>SVR4的流机制
+</li>
+<li>IO多路转接(select和poll函数)
+</li>
+<li>readv和writev函数
+</li>
+<li>存储映照I/O(mmap)
+</li>
+<li>记录锁
+</li>
+</ul>
+
+<p>
+接下来的进程间通信(IPC)要使用这里所述的很多概念和函数
+</p>
+<div id="outline-container-sec-1" class="outline-2">
+<h2 id="sec-1">非阻塞IO</h2>
+<div class="outline-text-2" id="text-1">
+<p>
+在上一章曾将系统调用分成两类：低速系统调用和其他。低速系统调用是可能会使进程永远阻塞的一类系统调用，比如读写未准备好的伪终端，网络，管道等
+</p>
+
+<p>
+虽然读、写磁盘文件会使调用在短暂时间内阻塞，但并不能将它们视为“低速”。
+</p>
+
+<p>
+非阻塞I/O：是使调用不会永远阻塞的I/O操作，如果这种操作不能完成，则立即出错返回，表示该操作如继续执行将继续阻塞下去
+</p>
+
+<p>
+对于一个给定的描述符有两种方法对其指定非阻塞I/O: 
+</p>
+<ol class="org-ol">
+<li>如果是调用open以获得该描述符，则可指定O_NONBLOCK标志
+</li>
+<li>对于已经打开的一个描述符，则可调用fcntl打开O_NONBLOCK文件状态标志
+</li>
+</ol>
+
+<p>
+对于一个非阻塞的文件描述符，如果没有数据可读写，则read和write将直接返回-1，并设置errno为EAGAIN
+</p>
+</div>
+<div id="outline-container-sec-1-1" class="outline-3">
+<h3 id="sec-1-1">轮询</h3>
+<div class="outline-text-3" id="text-1-1">
+<p>
+下面程序从标准输入读100000字节，并试图将它们写到标准输出上。该程序先将标准输出设置为非阻塞的，然后用轮询进行输出，每次写的结果都在标准出错上打印。函数clr-fl清除一个或多个标志位：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;errno.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;fcntl.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+
+<span style="color: #98fb98;">char</span> <span style="color: #eedd82;">buf</span>[100000];
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">void</span>)
+{
+    <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">ntowrite</span>, <span style="color: #eedd82;">nwrite</span>;
+    <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">ptr</span>;
+
+    ntowrite = read(STDIN_FILENO, buf, <span style="color: #00ffff;">sizeof</span>(buf));
+    fprintf(stderr, <span style="color: #ffa07a;">"read %d bytes\n"</span>, ntowrite);
+
+    set_fl(STDOUT_FILENO, O_NONBLOCK);  <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">set nonblocking </span><span style="color: #ff4500;">*/</span>
+
+    ptr = buf;
+    <span style="color: #00ffff;">while</span> (ntowrite &gt; 0) {
+        errno = 0;
+        nwrite = write(STDOUT_FILENO, ptr, ntowrite);
+        fprintf(stderr, <span style="color: #ffa07a;">"nwrite = %d, errno = %d\n"</span>, nwrite, errno);
+
+        <span style="color: #00ffff;">if</span> (nwrite &gt; 0) {
+            ptr += nwrite;
+            ntowrite -= nwrite;
+        }
+    }
+
+    clr_fl(STDOUT_FILENO, O_NONBLOCK);  <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">clear nonblocking </span><span style="color: #ff4500;">*/</span>
+
+    exit(0);
+}
+</pre>
+</div>
+
+<p>
+注意：在linux上的测试结果显示并没有如想象中的调用多次非阻塞写操作，而是只有一次写操作
+</p>
+
+<p>
+虽然关于非阻塞IO内容可能已经过时，但是程序中出现的轮询却还一直被用在各种非阻塞操作中。轮询往往会导致浪费CPU时间，一种更加有效的方法是使用非阻塞描述符的I/O多路转接
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2" class="outline-2">
+<h2 id="sec-2">流机制</h2>
+<div class="outline-text-2" id="text-2">
+<p>
+除了SVR4及其后代如Solaris之外流机制并不是很常用，现在更多被使用的是BSD的socket机制
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-3" class="outline-2">
+<h2 id="sec-3">I/O多路转接</h2>
+</div>
+
+<div id="outline-container-sec-4" class="outline-2">
+<h2 id="sec-4">readv和writev</h2>
+</div>
+
+<div id="outline-container-sec-5" class="outline-2">
+<h2 id="sec-5">mmap</h2>
+</div>
+
+<div id="outline-container-sec-6" class="outline-2">
+<h2 id="sec-6">记录锁</h2>
+</div>
 </div>
 <div id="postamble" class="status">
 

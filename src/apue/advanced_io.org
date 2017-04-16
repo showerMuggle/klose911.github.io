@@ -3,3 +3,75 @@
 #+HTML_LINK_UP: signal.html   
 #+HTML_LINK_HOME: apue.html
 #+OPTIONS: num:nil timestamp:nil ^:nil *:nil
+本章内容包括：
++ 非阻塞IO
++ SVR4的流机制
++ IO多路转接(select和poll函数)
++ readv和writev函数
++ 存储映照I/O(mmap)
++ 记录锁
+
+接下来的进程间通信(IPC)要使用这里所述的很多概念和函数
+* 非阻塞IO
+在上一章曾将系统调用分成两类：低速系统调用和其他。低速系统调用是可能会使进程永远阻塞的一类系统调用，比如读写未准备好的伪终端，网络，管道等
+
+虽然读、写磁盘文件会使调用在短暂时间内阻塞，但并不能将它们视为“低速”。
+
+非阻塞I/O：是使调用不会永远阻塞的I/O操作，如果这种操作不能完成，则立即出错返回，表示该操作如继续执行将继续阻塞下去
+
+对于一个给定的描述符有两种方法对其指定非阻塞I/O: 
+1. 如果是调用open以获得该描述符，则可指定O_NONBLOCK标志
+2. 对于已经打开的一个描述符，则可调用fcntl打开O_NONBLOCK文件状态标志
+
+对于一个非阻塞的文件描述符，如果没有数据可读写，则read和write将直接返回-1，并设置errno为EAGAIN
+** 轮询
+下面程序从标准输入读100000字节，并试图将它们写到标准输出上。该程序先将标准输出设置为非阻塞的，然后用轮询进行输出，每次写的结果都在标准出错上打印。函数clr-fl清除一个或多个标志位：
+#+BEGIN_SRC C
+  #include <errno.h>
+  #include <fcntl.h>
+  #include "apue.h"
+
+  char buf[100000];
+
+  int main(void)
+  {
+          int ntowrite, nwrite;
+          char *ptr;
+
+          ntowrite = read(STDIN_FILENO, buf, sizeof(buf));
+          fprintf(stderr, "read %d bytes\n", ntowrite);
+
+          set_fl(STDOUT_FILENO, O_NONBLOCK);  /* set nonblocking */
+
+          ptr = buf;
+          while (ntowrite > 0) {
+                  errno = 0;
+                  nwrite = write(STDOUT_FILENO, ptr, ntowrite);
+                  fprintf(stderr, "nwrite = %d, errno = %d\n", nwrite, errno);
+
+                  if (nwrite > 0) {
+                          ptr += nwrite;
+                          ntowrite -= nwrite;
+                  }
+          }
+
+          clr_fl(STDOUT_FILENO, O_NONBLOCK);  /* clear nonblocking */
+
+          exit(0);
+  }
+#+END_SRC
+
+注意：在linux上的测试结果显示并没有如想象中的调用多次非阻塞写操作，而是只有一次写操作
+
+虽然关于非阻塞IO内容可能已经过时，但是程序中出现的轮询却还一直被用在各种非阻塞操作中。轮询往往会导致浪费CPU时间，一种更加有效的方法是使用非阻塞描述符的I/O多路转接
+
+* 流机制
+除了SVR4及其后代如Solaris之外流机制并不是很常用，现在更多被使用的是BSD的socket机制
+
+* I/O多路转接
+
+* readv和writev
+
+* mmap
+
+* 记录锁
