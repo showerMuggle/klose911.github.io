@@ -152,7 +152,26 @@ for the JavaScript code in this tag.
 </ul>
 </li>
 <li><a href="#sec-2">流机制</a></li>
-<li><a href="#sec-3">I/O多路转接</a></li>
+<li><a href="#sec-3">I/O多路转接</a>
+<ul>
+<li><a href="#sec-3-1">读和写各使用一个进程</a></li>
+<li><a href="#sec-3-2">使用非阻塞IO</a></li>
+<li><a href="#sec-3-3">多路转接</a>
+<ul>
+<li><a href="#sec-3-3-1">select函数</a>
+<ul>
+<li><a href="#sec-3-3-1-1">fd_set数据类型</a></li>
+<li><a href="#sec-3-3-1-2">maxfdp1参数</a></li>
+<li><a href="#sec-3-3-1-3">timeval结构</a></li>
+<li><a href="#sec-3-3-1-4">返回值</a></li>
+<li><a href="#sec-3-3-1-5">pselect函数</a></li>
+</ul>
+</li>
+<li><a href="#sec-3-3-2">poll函数</a></li>
+</ul>
+</li>
+</ul>
+</li>
 <li><a href="#sec-4">readv和writev</a></li>
 <li><a href="#sec-5">mmap</a></li>
 <li><a href="#sec-6">记录锁</a></li>
@@ -274,6 +293,353 @@ for the JavaScript code in this tag.
 
 <div id="outline-container-sec-3" class="outline-2">
 <h2 id="sec-3">I/O多路转接</h2>
+<div class="outline-text-2" id="text-3">
+<p>
+当从一个描述符读，然后又写到另一个描述符时，可以在下列形式的循环中使用阻塞I/O：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #00ffff;">while</span> ( (n = read(STDIN_FILENO, buf, BUFSIZ)) &gt; 0 )
+    <span style="color: #00ffff;">if</span>( write(STDOUT_FILENO, buf, n) != n)
+        err_sys(<span style="color: #ffa07a;">"write error"</span>);
+</pre>
+</div>
+<p>
+这种形式的阻塞I/O到处可见。但是如果必须读两个描述符又将如何呢？　如果仍旧使用阻塞I/O，那么就可能长时间阻塞在一个描述符上，而另一个描述符虽有很多数据却不能得到及时处理。所以为了处理这种情况显然需要另一种不同的技术
+</p>
+
+<p>
+首先观察一个调制解调器拨号程序(telnet)的工作情况。该程序读终端(标准输入)，将所得数据写到调制解调器(telnetd)上，同时读调制解调器，将所得数据写到终端上(标准输出)。图12-1显示这种工作情况：
+</p>
+
+<div class="figure">
+<p><img src="pic/modem-dialer.gif" alt="modem-dialer.gif" width="90%" /> 
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-3-1" class="outline-3">
+<h3 id="sec-3-1">读和写各使用一个进程</h3>
+<div class="outline-text-3" id="text-3-1">
+<p>
+处理这种特殊问题的一种方法是设置两个进程，每个进程处理一条数据通路。图12-2中显示了这种安排：
+</p>
+
+<div class="figure">
+<p><img src="pic/modem-processes.gif" alt="modem-processes.gif" width="90%" /> 
+</p>
+</div>
+
+<p>
+如果使用两个进程，则可使每个进程都执行阻塞read。但是也产生了这两个进程间相互配合问题。如果子进程接收到文件结束符(由于电话线的一端已经挂断，使调制解调器也挂断)，那么该子进程终止，然后父进程接收到SIGCHLD信号。但是，如若父进程终止(用户在终端上键入了文件结束符)，那么父进程应通知子进程停止工作。为此可以使用一个信号(例如SIGUSR1)。这使程序变得更加复杂
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-3-2" class="outline-3">
+<h3 id="sec-3-2">使用非阻塞IO</h3>
+<div class="outline-text-3" id="text-3-2">
+<p>
+另一个方式是仍旧使用一个进程执行该程序，但调用非阻塞I/O读取数据，其基本思想是：将两个输入描述符都设置为非阻塞的，对第一个描述符发一个read。如果该输入上有数据，则读数据并处理它。如果无数据可读，则read立即返回。然后对第二个描述符作用样的处理。在此之后，等待若干秒再读第一个描述符。这种形式的循环称为轮询。
+</p>
+
+<p>
+这种方法的不足之处是浪费CPU时间：
+</p>
+<ul class="org-ul">
+<li>大多数时间实际上是无数据可读，但是仍不断反复执行read，这浪费了CPU时间
+</li>
+<li>在每次循环后要等多长时间再执行下一轮循环也很难确定
+</li>
+</ul>
+
+<p>
+轮询技术在支持非阻塞I/O的系统上都可使用，但是在多任务系统中应当避免使用
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-3-3" class="outline-3">
+<h3 id="sec-3-3">多路转接</h3>
+<div class="outline-text-3" id="text-3-3">
+<p>
+一种比较好的技术是使用I/O多路转接，其基本思想是：先构造一张有关描述符的表，然后调用一个函数，它要到这些描述符中的一个已准备好进行I/O时才返回。 在返回时它告诉进程哪一个描述符已准备好可以进行I/O
+</p>
+</div>
+
+<div id="outline-container-sec-3-3-1" class="outline-4">
+<h4 id="sec-3-3-1">select函数</h4>
+<div class="outline-text-4" id="text-3-3-1">
+<p>
+select函数可以在SVR4和4.3+BSD之下可以执行I/O多路转接，传向select的参数告诉内核:
+</p>
+<ul class="org-ul">
+<li>所关心的描述符
+</li>
+<li>对于每个描述符所关心的条件：是否读一个给定的描述符？是否想写一个给定的描述符？是否关心一个描述符的异常条件？等
+</li>
+<li>希望等待多长时间：永远等待，等待一个固定量时间，或完全不等待
+</li>
+</ul>
+
+<p>
+从select返回时，内核告诉我们：
+</p>
+<ul class="org-ul">
+<li>已准备好的描述符的数量
+</li>
+<li>哪一个描述符已准备好读、写或异常条件
+</li>
+</ul>
+
+<p>
+使用这种返回值，就可调用相应的I/O函数(一般是read或write)，并且确知该函数不会阻塞
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/select.h&gt;</span> 
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#20351;&#29992;select&#20989;&#25968;&#36827;&#34892;IO&#22810;&#36335;&#36716;&#25509;</span>
+
+<span style="color: #ffa07a;">   maxfdp1&#65306;readfds, writefds, exceptfds&#19977;&#20010;&#25551;&#36848;&#31526;&#20013;&#22823;&#30340;fd&#20540;&#21152;1</span>
+<span style="color: #ffa07a;">   readfds&#65306;&#25351;&#21521;&#35835;&#25991;&#20214;&#25551;&#36848;&#31526;&#38598;&#30340;&#25351;&#38024;</span>
+<span style="color: #ffa07a;">   writefds&#65306;&#25351;&#21521;&#20889;&#25991;&#20214;&#25551;&#36848;&#31526;&#38598;&#30340;&#25351;&#38024;</span>
+<span style="color: #ffa07a;">   exceptfds&#65306;&#25351;&#21521;&#24322;&#24120;&#25991;&#20214;&#25551;&#36848;&#31526;&#38598;&#30340;&#25351;&#38024;</span>
+<span style="color: #ffa07a;">   tvptr&#65306;&#25351;&#21521;&#31561;&#24453;&#26102;&#38388;&#32467;&#26500;&#30340;&#25351;&#38024;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#20934;&#22791;&#23601;&#32490;&#30340;&#25551;&#36848;&#31526;&#25968;&#23383;&#65292;&#33509;&#36229;&#26102;&#21017;&#20026;0&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">select</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">maxfdp1</span>,
+       <span style="color: #98fb98;">fd_set</span> *<span style="color: #eedd82;">readfds</span>, <span style="color: #98fb98;">fd_set</span> *<span style="color: #eedd82;">write_fds</span>, <span style="color: #98fb98;">fd_set</span> *<span style="color: #eedd82;">exceptfds</span>,
+       <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">timeval</span> *<span style="color: #eedd82;">tvptr</span>);
+</pre>
+</div>
+</div>
+
+<div id="outline-container-sec-3-3-1-1" class="outline-5">
+<h5 id="sec-3-3-1-1">fd_set数据类型</h5>
+<div class="outline-text-5" id="text-3-3-1-1">
+<p>
+指向描述符集的指针：
+</p>
+<ul class="org-ul">
+<li>readfds：关心的可读的各个描述符
+</li>
+<li>writefds：关心的可写描述符号各个描述符
+</li>
+<li>exceptfds：关心的处于异常条件的各个描述符
+</li>
+</ul>
+
+<p>
+每个描述符集存放在一个fd_set数据类型中，这种数据类型的实现可见图12-9，它为每一可能的描述符保持了一位：
+</p>
+
+<div class="figure">
+<p><img src="pic/fd-set.jpg" alt="fd-set.jpg" width="90%" /> 
+</p>
+</div>
+
+<p>
+对fg_set数据类型可以进行的处理是:
+</p>
+<ul class="org-ul">
+<li>分配一个这种类型的变量
+</li>
+<li>将这种类型的一个变量赋与同类型的另一个变量
+</li>
+<li>对于这种类型的变量使用下列四个宏:
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #98fb98;">int</span> <span style="color: #87cefa;">FD_ISSET</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">fd</span>, <span style="color: #98fb98;">fd_set</span> *<span style="color: #eedd82;">set</span>); <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#27979;&#35797;&#26576;&#25991;&#20214;&#25551;&#36848;&#31526;&#23545;&#24212;&#30340;&#20301;&#26159;&#21542;&#34987;&#35774;&#32622;</span>
+<span style="color: #98fb98;">void</span> <span style="color: #87cefa;">FD_SET</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">fd</span>, <span style="color: #98fb98;">fd_set</span> *<span style="color: #eedd82;">set</span>); <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#35774;&#32622;&#26576;&#25991;&#20214;&#25551;&#36848;&#31526;&#23545;&#24212;&#30340;&#20301;</span>
+<span style="color: #98fb98;">void</span> <span style="color: #87cefa;">FD_CLR</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">fd</span>, <span style="color: #98fb98;">fd_set</span> *<span style="color: #eedd82;">set</span>); <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#28165;&#38500;&#26576;&#25991;&#20214;&#25551;&#36848;&#31526;&#23545;&#24212;&#30340;&#20301;</span>
+<span style="color: #98fb98;">void</span> <span style="color: #87cefa;">FD_ZERO</span>(<span style="color: #98fb98;">fd_set</span> *<span style="color: #eedd82;">set</span>); <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#28165;&#38500;&#20854;&#25152;&#26377;&#20301;</span>
+</pre>
+</div>
+</li>
+</ul>
+<p>
+select中间三个参数中的任意一个(或全部)可以是空指针，这表示对相应条件并不关心。如果所有三个指针都是空指针，则select提供了较sleep更精确的计时器
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-3-3-1-2" class="outline-5">
+<h5 id="sec-3-3-1-2">maxfdp1参数</h5>
+<div class="outline-text-5" id="text-3-3-1-2">
+<p>
+第一个参数maxfdp1的意思是”最大fd加1“，在三个描述符集中找出最高描述符编号值，然后加1。也可将第一个参数设置为FD_SETSIZE，它说明了最大的描述符数(经常是256或1024)。但是对大多数应用程序而言此值太大了，大多数应用程序只使用3~10个描述符。如果将第三个参数设置为最高描述符编号值加1，内核就只需在此范围内寻找打开的位，而不必在数百位的大范围内搜索
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #98fb98;">fd_set</span> <span style="color: #eedd82;">readset</span>, <span style="color: #eedd82;">writeset</span>;
+FD_ZERO(&amp;readset);
+FD_ZERO(&amp;writeset);
+
+FD_SET(0, &amp;readset);
+FD_SET(3, &amp;readset);
+FD_SET(1, &amp;writeset);
+FD_SET(2, &amp;writeset);
+
+select(4, &amp;readset, &amp;writeset, <span style="color: #7fffd4;">NULL</span>, <span style="color: #7fffd4;">NULL</span>);
+</pre>
+</div>
+
+<p>
+图12-10显示了这两个描述符集的情况：
+</p>
+
+<div class="figure">
+<p><img src="pic/fd-set-sample.jpg" alt="fd-set-sample.jpg" width="90%" /> 
+</p>
+</div>
+
+<p>
+因为描述符编号从0开始，所以要在最大描述符编号值上加1，实际上是要检查的描述符数量
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-3-3-1-3" class="outline-5">
+<h5 id="sec-3-3-1-3">timeval结构</h5>
+<div class="outline-text-5" id="text-3-3-1-3">
+<p>
+最后一个参数tvptr是一个指向timeval结构的指针，它指定愿意等待的时间：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">timeval</span>{
+    <span style="color: #98fb98;">long</span> <span style="color: #eedd82;">tv_sec</span>; <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">seconds </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">long</span> <span style="color: #eedd82;">tv_usec</span>; <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">and microseconds </span><span style="color: #ff4500;">*/</span>
+};
+</pre>
+</div>
+
+<p>
+有以下三种情况：
+</p>
+<ul class="org-ul">
+<li>永远等待
+</li>
+</ul>
+<div class="org-src-container">
+
+<pre class="src src-C">tvptr = <span style="color: #7fffd4;">NULL</span>
+</pre>
+</div>
+<p>
+当所指定的描述符中的一个已准备好或捕捉到一个信号则返回，否则无限期等待
+</p>
+
+<ul class="org-ul">
+<li>完全不等待
+</li>
+</ul>
+<div class="org-src-container">
+
+<pre class="src src-C">tvptr-&gt;tv_sec = 0 &amp;&amp; tvptr-&gt;tv_usec = 0
+</pre>
+</div>
+<p>
+测试所有指定的描述符并立即返回。这是得到多个描述符的状态而不阻塞select函数的轮询方法
+</p>
+
+<ul class="org-ul">
+<li>等待指定的秒数和微秒数
+</li>
+</ul>
+<div class="org-src-container">
+
+<pre class="src src-C">tvptr-&gt;tv_sec !=0 || tvptr-&gt;tv_usec != 0
+</pre>
+</div>
+<p>
+当指定的描述符之一已准备好，或当指定的时间值已经超过时立即返回，与第一种情况一样，等待可被捕捉到的信号中断
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-3-3-1-4" class="outline-5">
+<h5 id="sec-3-3-1-4">返回值</h5>
+<div class="outline-text-5" id="text-3-3-1-4">
+<p>
+select有三个可能的返回值：
+</p>
+<ul class="org-ul">
+<li>-1：出错，例如在所指定的描述符都没有准备好时捕捉到一个信号，并且errno设置为EINTR
+</li>
+<li>0：没有描述符准备好，而且指定的时间已经超过
+</li>
+<li>&gt;0：已经准备好的描述符数，在这种情况下三个描述符集中仍旧打开的位是对应于已准备好的描述符位
+</li>
+</ul>
+
+<p>
+对于“准备好”的意思要作一些更具体的说明：
+</p>
+<ul class="org-ul">
+<li>若对读集中的一个描述符的read不会阻塞，则此描述符是准备好的
+</li>
+<li>若对写集中的一个描述符的write不会阻塞，则此描述符是准备好的
+</li>
+<li>若对异常条件集(exceptfds)中的一个描述符有一个未决异常条件，则此描述符是准备好的。而异常条件包括:
+<ul class="org-ul">
+<li>在网络连接上到达指定波特率外的数据
+</li>
+<li>在处于数据包方式的伪终端上发生了某些条件
+</li>
+</ul>
+</li>
+</ul>
+
+<p>
+一个描述符阻塞与否并不影响select是否阻塞，也就是说如果希望读一个非阻塞描述符，并且以超时值为5秒调用select，则select最多阻塞5秒。相类似如果指定一个无限的超时值，则select阻塞到对该描述符数据准备好，或捕捉到一个信号
+</p>
+
+<p>
+如果在一个描述符上碰到了文件结束，则select认为该描述符是可读的。然后调用read，它返回0，这是UNIX指示到达文件结尾处的方法。很多人错误地认为，当到达文件结尾处时，select会指示一个异常条件
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-3-3-1-5" class="outline-5">
+<h5 id="sec-3-3-1-5">pselect函数</h5>
+<div class="outline-text-5" id="text-3-3-1-5">
+<p>
+pselect函数是select的变体：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/select.h&gt;</span>
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">pselect</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">nfds</span>,
+        <span style="color: #98fb98;">fd_set</span> *<span style="color: #eedd82;">readfds</span>, <span style="color: #98fb98;">fd_set</span> *<span style="color: #eedd82;">writefds</span>, <span style="color: #98fb98;">fd_set</span> *<span style="color: #eedd82;">exceptfds</span>,
+        <span style="color: #00ffff;">const</span> <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">timespec</span> *<span style="color: #eedd82;">timeout</span>,
+        <span style="color: #00ffff;">const</span> <span style="color: #98fb98;">sigset_t</span> *<span style="color: #eedd82;">sigmask</span>);
+</pre>
+</div>
+<p>
+主要区别：
+</p>
+<ul class="org-ul">
+<li>定时采用了纳秒级的timespec结构
+</li>
+<li>timespec参数声明为const
+</li>
+<li>使用信号集屏蔽不需要的信号
+</li>
+</ul>
+</div>
+</div>
+</div>
+<div id="outline-container-sec-3-3-2" class="outline-4">
+<h4 id="sec-3-3-2">poll函数</h4>
+</div>
+</div>
 </div>
 
 <div id="outline-container-sec-4" class="outline-2">
