@@ -97,11 +97,6 @@
   
 轮询技术在支持非阻塞I/O的系统上都可使用，但是在多任务系统中应当避免使用
 
-# ** 异步IO
-# 还有一种技术称之为异步I/O，其基本思想是进程告诉内核，当一个描述符已准备好可以进行I/O时，用一个信号通知它。这种技术有两个问题：
-# 1. 并非所有系统都支持这种机制，现在它还不是POSIX的组成部分。SVR4为此技术提供SIGPOLL信号，但是仅当描述符引用流设备时才能工作。4.3+BSD有一个类似的信号SIGIO，但是仅当描述符引用终端设备或网络时才能工作
-# 2. 这种信号对每个进程而言只有1个。如果使该信号对两个描述符都起作用，那么在接到此信号时进程无法判别是哪一个描述符已准备好可以进行I/O。为了确定是哪一个描述符已准备好，仍需将这两个描述符都设置为非阻塞的，并顺序试执行I/O
-
 ** 多路转接
    一种比较好的技术是使用I/O多路转接，其基本思想是：先构造一张有关描述符的表，然后调用一个函数，它要到这些描述符中的一个已准备好进行I/O时才返回。 在返回时它告诉进程哪一个描述符已准备好可以进行I/O
    
@@ -240,7 +235,121 @@ tvptr = NULL
 + timespec参数声明为const
 + 使用信号集屏蔽不需要的信号
 *** poll函数
-    
+SVR4的poll函数类似于select，但是其调用形式则有所不同
+#+BEGIN_SRC C
+  #include <poll.h>
+
+  /**
+     
+   ,*/
+  int poll(struct pollfd *fds, nfds_t nfds, int timeout);
+#+END_SRC
+**** pollfd结构
+与select不同，poll不是为每个条件构造一个描述符集，而是构造一个pollfd结构数组，每个数组元素指定一个描述符编号以及对其所关心的条件：
+#+BEGIN_SRC C
+  struct pollfd
+  {
+          int fd; /* 文件描述符号或<0表示忽略*/
+          short events;      /* 关心的事件,由用户程序设置 */
+          short revents;     /* 已经发生的事件,由系统设置 */
+  }
+#+END_SRC
+events成员应该被设置为表12-1中所示值的一个或几个。这些值告诉内核对该描述符关心的是什么。同样返回时，内核设置revents成员，以说明对该描述符发生了什么事件：
+
+   #+CAPTION: poll的events和revents标志
+   #+ATTR_HTML: :border 1 :rules all :frame boader
+| 名称       | 从events得到的输入 | 从revents得到的结果 | 说明                             |
+| POLLIN     | •                  | •                   | 读取出高优先级之外的数据，不阻塞 |
+| POLLRDNORM | •                  | •                   | 读取普通数据(优先级为0)，不阻塞  |
+| POLLRDBAND | •                  | •                   | 读取非0优先级波段数据，不阻塞    |
+| POLLPRI    | •                  | •                   | 读取高优先级数据，不阻塞         |
+| POLLOUT    | •                  | •                   | 写普通数据，不阻塞               |
+| POLLWRNORM | •                  | •                   | 和POLLOUT相同                    |
+| POLLWRBAND | •                  | •                   | 写非0优先级数据，不阻塞          |
+| POLLERR    |                    | •                   | 已经出错                         |
+| POLLHUP    |                    | •                   | 已经挂断                         |
+| POLLNVAL   |                    | •                   | 描述符无效                       |
+
+头四行测试可读性，接着三行测试可写性，最后三行则是异常条件。最后三行是由内核在返回时设置的。即使在events字段中没有指定这三个值，如果相应条件发生，则在revents中也返回它们
+
+当一个描述符被挂断后(POLLHUP)，就不能再写向该描述符。但是仍可能从该描述符读取到数据
+
+注意：poll没有更改events成员，这与select不同，select修改其参数以指示哪一个描述符已准备好了
+**** nfds参数
+nfds参数表明fds数组的元素数目
+**** timeout参数
+timeout参数说明想要等待多少时间。有三种不同的情形: 
+
++ 永远等待：
+#+BEGIN_SRC C
+  timeout = INFTIM
+#+END_SRC
+常数INFTIM定义在<stropts.h>，其值通常是-1。当所指定的描述符中的一个已准备好，或捕捉到一个信号则返回
+
++ 不等待：
+#+BEGIN_SRC C
+  timeout = 0
+#+END_SRC
+测试所有描述符并立即返回。这是得到很多个描述符的状态而不阻塞poll函数的轮询方法
+
++ 等待timeout毫秒：
+#+BEGIN_SRC C
+  timeout > 0
+#+END_SRC
+当指定的描述符之一已准备好或指定的时间值已超过时立即返回。同样可以被一个信号中断
+**** 返回值
+     poll也有三个可能的返回值：
++ -1：出错，例如在所指定的描述符都没有准备好时捕捉到一个信号，并且errno设置为EINTR
++ 0：没有描述符准备好，而且指定的时间已经超过
++ >0：准备就绪的描述符数，在这种情况下三个描述符集中仍旧打开的位是对应于已准备好的描述符位
+
+不论一个描述符是否阻塞,并不影响poll是否阻塞
+
+文件结束与挂断之间的区别：如果正在终端输入数据，并键入文件结束字符，POLLIN被打开，于是就可读文件结束指示(read返回0)，POLLHUP在revents中没有打开。如果读调制解调器，并且电话线已挂断，则在revents中将接到POLLHUP
+*** 中断性
+中断的系统调用的自动再起动是由4.2+BSD引进的，但当时select函数是不再起动的。这种特性延续到4.3+BSD，即使指定了SA_RESTART也是为此。但是，在SVR4之下，如果指定了SA_RESTART，那么select和poll也是自动再起动的。为了将软件移植到SVR4时阻止这一点，如果信号可能中断select或poll，则总是使用signal_intr函数
+
+** 异步IO
+还有一种技术称之为异步I/O，基本思想是进程告诉内核，当一个描述符已准备好可以进行I/O时，用一个信号通知进程。这种技术有两个问题：
+1. 并非所有系统都支持这种机制，现在它还不是POSIX的组成部分。SVR4为此技术提供SIGPOLL信号，但是仅当描述符引用流设备时才能工作。4.3+BSD有一个类似的信号SIGIO，但是仅当描述符引用终端设备或网络时才能工作
+2. 这种信号对每个进程而言只有1个。如果使该信号对两个描述符都起作用，那么在接到此信号时进程无法判别是哪一个描述符已准备好可以进行I/O。为了确定是哪一个描述符已准备好，仍需将这两个描述符都设置为非阻塞的，并顺序试执行I/O
+
+系统只是告诉某个事件发生在文件描述符，但并不告诉关于文件描述符状态变化的任何信息，需要主动地使用select或poll来查询描述符状态
+
+*** BSD实现
+BSD实现异步IO使用的信号是SIGIO和SIGURG。SIGIO是通用异步信号，而SIGURG是通知进程在网络连接上有非规定波特率数据
+
+为了使用SIGIO的话，需要执行下面三个步骤：
+1. 调用signal为SIGIO建立处理函数
+2. 使用F_SETOWN为fd设置进程和进程组。因为一旦fd触发信号的话，系统是要决定信号投递到哪个进程和进程组的
+3. 使用F_SETFL来设置O_ASYNC文件状态标志，仅仅用于终端或者是网络的描述符
+
+对于SIGURG只需要设置前面两个步骤，信号仅仅是用于支持非规定波特率数据的网络连接描述符产生的
+
+**** 实例
+使用SIGIO信号实现异步IO
+     #+BEGIN_SRC C
+       #include <unistd.h>
+       #include <fcntl.h>
+       #include <signal.h>
+       #include <stdio.h>
+
+       static int id = 0;
+
+       void sig_handler(int signo){
+               printf("%d received(%d)\n",strsignal(signo),id);
+               id++;
+       }
+
+       int main(){
+               signal(SIGIO,sig_handler);
+               fcntl(0,F_SETOWN,getpid());
+               fcntl(0,F_SETFL,fcntl(0,F_GETFL) | O_ASYNC);
+               pause();
+               return 0;
+       }
+     #+END_SRC
+
 * readv和writev
   
 * mmap

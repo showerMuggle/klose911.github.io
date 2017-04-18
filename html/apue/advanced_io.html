@@ -167,7 +167,24 @@ for the JavaScript code in this tag.
 <li><a href="#sec-3-3-1-5">pselect函数</a></li>
 </ul>
 </li>
-<li><a href="#sec-3-3-2">poll函数</a></li>
+<li><a href="#sec-3-3-2">poll函数</a>
+<ul>
+<li><a href="#sec-3-3-2-1">pollfd结构</a></li>
+<li><a href="#sec-3-3-2-2">nfds参数</a></li>
+<li><a href="#sec-3-3-2-3">timeout参数</a></li>
+<li><a href="#sec-3-3-2-4">返回值</a></li>
+</ul>
+</li>
+<li><a href="#sec-3-3-3">中断性</a></li>
+</ul>
+</li>
+<li><a href="#sec-3-4">异步IO</a>
+<ul>
+<li><a href="#sec-3-4-1">BSD实现</a>
+<ul>
+<li><a href="#sec-3-4-1-1">实例</a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -638,6 +655,309 @@ pselect函数是select的变体：
 </div>
 <div id="outline-container-sec-3-3-2" class="outline-4">
 <h4 id="sec-3-3-2">poll函数</h4>
+<div class="outline-text-4" id="text-3-3-2">
+<p>
+SVR4的poll函数类似于select，但是其调用形式则有所不同
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;poll.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+
+<span style="color: #ffa07a;"> */</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">poll</span>(<span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">pollfd</span> *<span style="color: #eedd82;">fds</span>, <span style="color: #98fb98;">nfds_t</span> <span style="color: #eedd82;">nfds</span>, <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">timeout</span>);
+</pre>
+</div>
+</div>
+<div id="outline-container-sec-3-3-2-1" class="outline-5">
+<h5 id="sec-3-3-2-1">pollfd结构</h5>
+<div class="outline-text-5" id="text-3-3-2-1">
+<p>
+与select不同，poll不是为每个条件构造一个描述符集，而是构造一个pollfd结构数组，每个数组元素指定一个描述符编号以及对其所关心的条件：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">pollfd</span>
+{
+    <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">fd</span>; <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">&#25991;&#20214;&#25551;&#36848;&#31526;&#21495;&#25110;&lt;0&#34920;&#31034;&#24573;&#30053;</span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">short</span> <span style="color: #eedd82;">events</span>;      <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">&#20851;&#24515;&#30340;&#20107;&#20214;,&#30001;&#29992;&#25143;&#31243;&#24207;&#35774;&#32622; </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">short</span> <span style="color: #eedd82;">revents</span>;     <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">&#24050;&#32463;&#21457;&#29983;&#30340;&#20107;&#20214;,&#30001;&#31995;&#32479;&#35774;&#32622; </span><span style="color: #ff4500;">*/</span>
+}
+</pre>
+</div>
+<p>
+events成员应该被设置为表12-1中所示值的一个或几个。这些值告诉内核对该描述符关心的是什么。同样返回时，内核设置revents成员，以说明对该描述符发生了什么事件：
+</p>
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 1:</span> poll的events和revents标志</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">名称</td>
+<td class="left">从events得到的输入</td>
+<td class="left">从revents得到的结果</td>
+<td class="left">说明</td>
+</tr>
+
+<tr>
+<td class="left">POLLIN</td>
+<td class="left">•</td>
+<td class="left">•</td>
+<td class="left">读取出高优先级之外的数据，不阻塞</td>
+</tr>
+
+<tr>
+<td class="left">POLLRDNORM</td>
+<td class="left">•</td>
+<td class="left">•</td>
+<td class="left">读取普通数据(优先级为0)，不阻塞</td>
+</tr>
+
+<tr>
+<td class="left">POLLRDBAND</td>
+<td class="left">•</td>
+<td class="left">•</td>
+<td class="left">读取非0优先级波段数据，不阻塞</td>
+</tr>
+
+<tr>
+<td class="left">POLLPRI</td>
+<td class="left">•</td>
+<td class="left">•</td>
+<td class="left">读取高优先级数据，不阻塞</td>
+</tr>
+
+<tr>
+<td class="left">POLLOUT</td>
+<td class="left">•</td>
+<td class="left">•</td>
+<td class="left">写普通数据，不阻塞</td>
+</tr>
+
+<tr>
+<td class="left">POLLWRNORM</td>
+<td class="left">•</td>
+<td class="left">•</td>
+<td class="left">和POLLOUT相同</td>
+</tr>
+
+<tr>
+<td class="left">POLLWRBAND</td>
+<td class="left">•</td>
+<td class="left">•</td>
+<td class="left">写非0优先级数据，不阻塞</td>
+</tr>
+
+<tr>
+<td class="left">POLLERR</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+<td class="left">已经出错</td>
+</tr>
+
+<tr>
+<td class="left">POLLHUP</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+<td class="left">已经挂断</td>
+</tr>
+
+<tr>
+<td class="left">POLLNVAL</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+<td class="left">描述符无效</td>
+</tr>
+</tbody>
+</table>
+
+<p>
+头四行测试可读性，接着三行测试可写性，最后三行则是异常条件。最后三行是由内核在返回时设置的。即使在events字段中没有指定这三个值，如果相应条件发生，则在revents中也返回它们
+</p>
+
+<p>
+当一个描述符被挂断后(POLLHUP)，就不能再写向该描述符。但是仍可能从该描述符读取到数据
+</p>
+
+<p>
+注意：poll没有更改events成员，这与select不同，select修改其参数以指示哪一个描述符已准备好了
+</p>
+</div>
+</div>
+<div id="outline-container-sec-3-3-2-2" class="outline-5">
+<h5 id="sec-3-3-2-2">nfds参数</h5>
+<div class="outline-text-5" id="text-3-3-2-2">
+<p>
+nfds参数表明fds数组的元素数目
+</p>
+</div>
+</div>
+<div id="outline-container-sec-3-3-2-3" class="outline-5">
+<h5 id="sec-3-3-2-3">timeout参数</h5>
+<div class="outline-text-5" id="text-3-3-2-3">
+<p>
+timeout参数说明想要等待多少时间。有三种不同的情形: 
+</p>
+
+<ul class="org-ul">
+<li>永远等待：
+</li>
+</ul>
+<div class="org-src-container">
+
+<pre class="src src-C">timeout = INFTIM
+</pre>
+</div>
+<p>
+常数INFTIM定义在&lt;stropts.h&gt;，其值通常是-1。当所指定的描述符中的一个已准备好，或捕捉到一个信号则返回
+</p>
+
+<ul class="org-ul">
+<li>不等待：
+</li>
+</ul>
+<div class="org-src-container">
+
+<pre class="src src-C">timeout = 0
+</pre>
+</div>
+<p>
+测试所有描述符并立即返回。这是得到很多个描述符的状态而不阻塞poll函数的轮询方法
+</p>
+
+<ul class="org-ul">
+<li>等待timeout毫秒：
+</li>
+</ul>
+<div class="org-src-container">
+
+<pre class="src src-C">timeout &gt; 0
+</pre>
+</div>
+<p>
+当指定的描述符之一已准备好或指定的时间值已超过时立即返回。同样可以被一个信号中断
+</p>
+</div>
+</div>
+<div id="outline-container-sec-3-3-2-4" class="outline-5">
+<h5 id="sec-3-3-2-4">返回值</h5>
+<div class="outline-text-5" id="text-3-3-2-4">
+<p>
+poll也有三个可能的返回值：
+</p>
+<ul class="org-ul">
+<li>-1：出错，例如在所指定的描述符都没有准备好时捕捉到一个信号，并且errno设置为EINTR
+</li>
+<li>0：没有描述符准备好，而且指定的时间已经超过
+</li>
+<li>&gt;0：准备就绪的描述符数，在这种情况下三个描述符集中仍旧打开的位是对应于已准备好的描述符位
+</li>
+</ul>
+
+<p>
+不论一个描述符是否阻塞,并不影响poll是否阻塞
+</p>
+
+<p>
+文件结束与挂断之间的区别：如果正在终端输入数据，并键入文件结束字符，POLLIN被打开，于是就可读文件结束指示(read返回0)，POLLHUP在revents中没有打开。如果读调制解调器，并且电话线已挂断，则在revents中将接到POLLHUP
+</p>
+</div>
+</div>
+</div>
+<div id="outline-container-sec-3-3-3" class="outline-4">
+<h4 id="sec-3-3-3">中断性</h4>
+<div class="outline-text-4" id="text-3-3-3">
+<p>
+中断的系统调用的自动再起动是由4.2+BSD引进的，但当时select函数是不再起动的。这种特性延续到4.3+BSD，即使指定了SA_RESTART也是为此。但是，在SVR4之下，如果指定了SA_RESTART，那么select和poll也是自动再起动的。为了将软件移植到SVR4时阻止这一点，如果信号可能中断select或poll，则总是使用signal_intr函数
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-3-4" class="outline-3">
+<h3 id="sec-3-4">异步IO</h3>
+<div class="outline-text-3" id="text-3-4">
+<p>
+还有一种技术称之为异步I/O，基本思想是进程告诉内核，当一个描述符已准备好可以进行I/O时，用一个信号通知进程。这种技术有两个问题：
+</p>
+<ol class="org-ol">
+<li>并非所有系统都支持这种机制，现在它还不是POSIX的组成部分。SVR4为此技术提供SIGPOLL信号，但是仅当描述符引用流设备时才能工作。4.3+BSD有一个类似的信号SIGIO，但是仅当描述符引用终端设备或网络时才能工作
+</li>
+<li>这种信号对每个进程而言只有1个。如果使该信号对两个描述符都起作用，那么在接到此信号时进程无法判别是哪一个描述符已准备好可以进行I/O。为了确定是哪一个描述符已准备好，仍需将这两个描述符都设置为非阻塞的，并顺序试执行I/O
+</li>
+</ol>
+
+<p>
+系统只是告诉某个事件发生在文件描述符，但并不告诉关于文件描述符状态变化的任何信息，需要主动地使用select或poll来查询描述符状态
+</p>
+</div>
+
+<div id="outline-container-sec-3-4-1" class="outline-4">
+<h4 id="sec-3-4-1">BSD实现</h4>
+<div class="outline-text-4" id="text-3-4-1">
+<p>
+BSD实现异步IO使用的信号是SIGIO和SIGURG。SIGIO是通用异步信号，而SIGURG是通知进程在网络连接上有非规定波特率数据
+</p>
+
+<p>
+为了使用SIGIO的话，需要执行下面三个步骤：
+</p>
+<ol class="org-ol">
+<li>调用signal为SIGIO建立处理函数
+</li>
+<li>使用F_SETOWN为fd设置进程和进程组。因为一旦fd触发信号的话，系统是要决定信号投递到哪个进程和进程组的
+</li>
+<li>使用F_SETFL来设置O_ASYNC文件状态标志，仅仅用于终端或者是网络的描述符
+</li>
+</ol>
+
+<p>
+对于SIGURG只需要设置前面两个步骤，信号仅仅是用于支持非规定波特率数据的网络连接描述符产生的
+</p>
+</div>
+
+<div id="outline-container-sec-3-4-1-1" class="outline-5">
+<h5 id="sec-3-4-1-1">实例</h5>
+<div class="outline-text-5" id="text-3-4-1-1">
+<p>
+使用SIGIO信号实现异步IO
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;unistd.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;fcntl.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;signal.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;stdio.h&gt;</span>
+
+<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">id</span> = 0;
+
+<span style="color: #98fb98;">void</span> <span style="color: #87cefa;">sig_handler</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">signo</span>){
+    printf(<span style="color: #ffa07a;">"%d received(%d)\n"</span>,strsignal(signo),id);
+    id++;
+}
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(){
+    signal(SIGIO,sig_handler);
+    fcntl(0,F_SETOWN,getpid());
+    fcntl(0,F_SETFL,fcntl(0,F_GETFL) | O_ASYNC);
+    pause();
+    <span style="color: #00ffff;">return</span> 0;
+}
+</pre>
+</div>
+</div>
+</div>
 </div>
 </div>
 </div>
