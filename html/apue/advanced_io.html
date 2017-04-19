@@ -189,8 +189,31 @@ for the JavaScript code in this tag.
 </li>
 </ul>
 </li>
-<li><a href="#sec-4">readv和writev</a></li>
-<li><a href="#sec-5">mmap</a></li>
+<li><a href="#sec-4">readv和writev</a>
+<ul>
+<li><a href="#sec-4-1">iovec结构</a></li>
+<li><a href="#sec-4-2">性能测试</a></li>
+</ul>
+</li>
+<li><a href="#sec-5">存储映射IO</a>
+<ul>
+<li><a href="#sec-5-1">mmap函数</a>
+<ul>
+<li><a href="#sec-5-1-1">参数说明</a>
+<ul>
+<li><a href="#sec-5-1-1-1">prot参数</a></li>
+<li><a href="#sec-5-1-1-2">flag参数</a></li>
+<li><a href="#sec-5-1-1-3">off和addr参数限制</a></li>
+</ul>
+</li>
+<li><a href="#sec-5-1-2">信号和进程</a></li>
+</ul>
+</li>
+<li><a href="#sec-5-2">munmap函数</a></li>
+<li><a href="#sec-5-3">msync函数</a></li>
+<li><a href="#sec-5-4">使用内存映射拷贝文件</a></li>
+</ul>
+</li>
 <li><a href="#sec-6">记录锁</a></li>
 </ul>
 </div>
@@ -964,10 +987,407 @@ BSD实现异步IO使用的信号是SIGIO和SIGURG。SIGIO是通用异步信号�
 
 <div id="outline-container-sec-4" class="outline-2">
 <h2 id="sec-4">readv和writev</h2>
+<div class="outline-text-2" id="text-4">
+<p>
+readv和writev函数用于在一个函数调用中读、写多个非连续缓存
+</p>
+<ul class="org-ul">
+<li>readv：散布读
+</li>
+<li>writev：聚集写
+</li>
+</ul>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span> 
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/uio.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#20174;fileds&#20013;&#35835;&#20837;&#30340;&#25968;&#25454;&#25353;&#39034;&#24207;&#36880;&#22359;&#20998;&#25955;&#23384;&#20648;&#22312;iov&#25351;&#21521;&#30340;iovcnt&#20010;&#32531;&#20914;&#21306;&#20013;</span>
+
+<span style="color: #ffa07a;">   fileds&#65306;&#25991;&#20214;&#25551;&#36848;&#31526;</span>
+<span style="color: #ffa07a;">   iov&#65306;&#25351;&#21521;&#32531;&#23384;&#21306;&#32467;&#26500;&#25968;&#32452;&#30340;&#31532;&#19968;&#20010;&#20803;&#32032;</span>
+<span style="color: #ffa07a;">   iovcnt&#65306;&#32531;&#23384;&#21306;&#32467;&#26500;&#25968;&#32452;&#30340;&#20803;&#32032;&#25968;&#30446;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#24050;&#35835;&#21462;&#30340;&#23383;&#33410;&#25968;&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">ssize_t</span> <span style="color: #87cefa;">readv</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">filedes</span>, <span style="color: #00ffff;">const</span> <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">iovec</span> *<span style="color: #eedd82;">iov</span>, <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">iovcnt</span>);
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#23558;iovcnt&#20010;&#32531;&#20914;&#21306;&#30340;&#25968;&#25454;&#25353;&#39034;&#24207;&#36880;&#22359;&#36830;&#32493;&#30340;&#20889;&#20837;fileds</span>
+
+<span style="color: #ffa07a;">   fileds&#65306;&#25991;&#20214;&#25551;&#36848;&#31526;</span>
+<span style="color: #ffa07a;">   iov&#65306;&#25351;&#21521;&#32531;&#23384;&#21306;&#32467;&#26500;&#25968;&#32452;&#30340;&#31532;&#19968;&#20010;&#20803;&#32032;</span>
+<span style="color: #ffa07a;">   iovcnt&#65306;&#32531;&#23384;&#21306;&#32467;&#26500;&#25968;&#32452;&#30340;&#20803;&#32032;&#25968;&#30446;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#24050;&#20889;&#20986;&#30340;&#23383;&#33410;&#25968;&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">ssize_t</span> <span style="color: #87cefa;">writev</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">filedes</span>, <span style="color: #00ffff;">const</span> <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">iovec</span> *<span style="color: #eedd82;">iov</span>, <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">iovcnt</span>);
+</pre>
+</div>
+</div>
+
+<div id="outline-container-sec-4-1" class="outline-3">
+<h3 id="sec-4-1">iovec结构</h3>
+<div class="outline-text-3" id="text-4-1">
+<p>
+iovec结构用来说明缓存区：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">iovec</span>
+{
+    <span style="color: #98fb98;">void</span> *<span style="color: #eedd82;">iov_base</span>;    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">&#32531;&#20914;&#21306;&#36215;&#22987;&#22320;&#22336; </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">size_t</span> <span style="color: #eedd82;">iov_len</span>;    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">&#32531;&#20914;&#21306;&#38271;&#24230; </span><span style="color: #ff4500;">*/</span>
+}
+</pre>
+</div>
+<p>
+图12-11显示了readv和writev的参数和iovec结构之间的关系：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/iovec.png" alt="iovec.png" width="90%" /> 
+</p>
+</div>
+
+<ul class="org-ul">
+<li>writev以顺序iov[ 0 ]，iov[ 1 ]至iov[ iovcnt-1 ]从缓存中聚集输出数据。writev返回输出的字节总数，等于所有缓存长度之和
+</li>
+<li>readv则将读入的数据按上述同样顺序散布到缓存中，总是先填满一个缓存，然后再填写下一个。readv返回读得的总字节数，如果遇到文件结尾，已无数据可读，则返回0
+</li>
+</ul>
+</div>
+</div>
+
+
+<div id="outline-container-sec-4-2" class="outline-3">
+<h3 id="sec-4-2">性能测试</h3>
+<div class="outline-text-3" id="text-4-2">
+<p>
+有三种方法可以实现从两个缓存区写入一个文件:
+</p>
+<ol class="org-ol">
+<li>调用write两次，一次一个缓存
+</li>
+<li>分配一个大到足以包含两个缓存的新缓存。将两个缓存的内容复制到新缓存中。然后对该缓存调用wrtre一次
+</li>
+<li>调用writev输出两缓存
+</li>
+</ol>
+
+<p>
+测试结果显示：调用两次write几乎是另外两种方法的2倍时间，采用缓存复制后用一个write与采用一个writev所用CPU时间几乎一样，但一般说来，因为前者还需要分配一个临时缓存用于存储及复制，所以后者更复杂
+</p>
+</div>
+</div>
 </div>
 
 <div id="outline-container-sec-5" class="outline-2">
-<h2 id="sec-5">mmap</h2>
+<h2 id="sec-5">存储映射IO</h2>
+<div class="outline-text-2" id="text-5">
+<p>
+存储映射I/O使一个磁盘文件与存储空间中的一个缓存相映射。于是当从缓存中取数据就相当于读文件中的相应字节，而将数据存入缓存，则相应字节就自动地写入文件。这样，就可以在不使用read和write的情况下执行I/O
+</p>
+</div>
+
+<div id="outline-container-sec-5-1" class="outline-3">
+<h3 id="sec-5-1">mmap函数</h3>
+<div class="outline-text-3" id="text-5-1">
+<p>
+mmap函数：告诉内核将一个给定的文件映射到一个存储区域中
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/mman.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#30913;&#30424;&#25991;&#20214;&#26144;&#23556;&#21040;&#20869;&#23384;&#20013;&#30340;&#32531;&#20914;&#21306;</span>
+
+<span style="color: #ffa07a;">   addr&#65306;&#32531;&#23384;&#21306;&#30340;&#39318;&#22320;&#22336;&#65292;&#19968;&#33324;&#20026;NULL&#65292;&#34920;&#31034;&#31995;&#32479;&#33258;&#24049;&#20998;&#37197;&#65292;&#24212;&#20026;&#31995;&#32479;&#34394;&#25311;&#20869;&#23384;&#39029;&#30340;&#25972;&#25968;&#20493;</span>
+<span style="color: #ffa07a;">   len&#65306;&#32531;&#23384;&#21306;&#38271;&#24230;</span>
+<span style="color: #ffa07a;">   prot&#65306;&#25991;&#20214;&#20445;&#25252;&#27169;&#24335;&#65292;PROT_NONE, PROT_READ, PROT_WRITE, PROT_EXEC&#30340;&#20219;&#24847;&#25110;&#36923;&#36753;&#30340;&#32452;&#21512;</span>
+<span style="color: #ffa07a;">   flag&#65306;MAP_FIXED &#35201;&#27714;&#31995;&#32479;&#20351;&#29992;&#25351;&#23450;&#30340; addr,&#19981;&#24314;&#35758;&#20351;&#29992;&#27492;&#26631;&#24535;</span>
+<span style="color: #ffa07a;">     MAP_SHARED &#20462;&#25913;&#32531;&#20914;&#21306;&#21363;&#20026;&#30452;&#25509;&#20462;&#25913;&#25991;&#20214;</span>
+<span style="color: #ffa07a;">     MAP_PRIVATE(&#32531;&#20914;&#21306;&#20165;&#20165;&#26159;&#25991;&#20214;&#30340;&#21103;&#26412;</span>
+<span style="color: #ffa07a;">   filedes&#65306;&#25991;&#20214;&#25551;&#36848;&#31526;</span>
+<span style="color: #ffa07a;">   off&#65306;&#25991;&#20214;&#20013;&#30340;&#36215;&#22987;&#20301;&#32622;&#65292;&#24212;&#20026;&#31995;&#32479;&#34394;&#25311;&#20869;&#23384;&#39029;&#30340;&#25972;&#25968;&#20493;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;&#26144;&#23556;&#21306;&#30340;&#36215;&#22987;&#22320;&#22336;&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">void</span> *<span style="color: #87cefa;">mmap</span>(<span style="color: #98fb98;">void</span> *<span style="color: #eedd82;">addr</span>, <span style="color: #98fb98;">size_t</span> <span style="color: #eedd82;">len</span>, <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">prot</span>, <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">flag</span>, <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">filedes</span>, <span style="color: #98fb98;">off_t</span> <span style="color: #eedd82;">off</span>);
+</pre>
+</div>
+<p>
+返回值：该映射区的起始地址
+</p>
+</div>
+<div id="outline-container-sec-5-1-1" class="outline-4">
+<h4 id="sec-5-1-1">参数说明</h4>
+<div class="outline-text-4" id="text-5-1-1">
+<ul class="org-ul">
+<li>addr：映射存储区的起始地址，通常将其设置为NULL，这表示由系统选择该映射区的起始地址
+</li>
+<li>filedes：要被映射文件的描述符。在映射该文件到一个地址空间之前，先要打开该文件
+</li>
+<li>len：映射的字节数
+</li>
+<li>off：要映射字节在文件中的起始位移量
+</li>
+</ul>
+</div>
+
+<div id="outline-container-sec-5-1-1-1" class="outline-5">
+<h5 id="sec-5-1-1-1">prot参数</h5>
+<div class="outline-text-5" id="text-5-1-1-1">
+<p>
+prot参数说明映射存储区的保护要求：
+</p>
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 2:</span> 存储映射区的保护</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">prot</td>
+<td class="left">说明</td>
+</tr>
+
+<tr>
+<td class="left">PROT_READ</td>
+<td class="left">区域可读</td>
+</tr>
+
+<tr>
+<td class="left">PROT_WRITE</td>
+<td class="left">区域可写</td>
+</tr>
+
+<tr>
+<td class="left">PROT_EXEC</td>
+<td class="left">区域可执行</td>
+</tr>
+
+<tr>
+<td class="left">PROT_NONE</td>
+<td class="left">区域可存取(BSD无此选项)</td>
+</tr>
+</tbody>
+</table>
+
+<p>
+对于映射存储区所指定的保护要求与文件的open方法匹配。例如，若该文件是只读打开的，那么对映射存储区就不能指定PROT_WRITE 
+</p>
+</div>
+</div>
+<div id="outline-container-sec-5-1-1-2" class="outline-5">
+<h5 id="sec-5-1-1-2">flag参数</h5>
+<div class="outline-text-5" id="text-5-1-1-2">
+<p>
+flag参数影响映射存储区的多种属性：
+</p>
+<ul class="org-ul">
+<li>MAP_FIXED：返回值必须等于addr。因为这不利于可移植性，所以不鼓励使用此标志。如果未指定此标志，而且addr非0，则内核只把addr视为何处设置映射区的一种建议。通过将addr指定为NULL可获得最大可移植性
+</li>
+<li>MAP_SHARED：本进程对映射区所进行的存储操作的配置。指定存储操作修改映射文件，这意味着存储操作相当于对该文件write
+</li>
+<li>MAP_PRIVATE：对映射区的存储操作导致创建该映射文件的一个副本。所有后来对该映射区的存访都是存访该副本，而不是原始文件
+</li>
+</ul>
+</div>
+</div>
+<div id="outline-container-sec-5-1-1-3" class="outline-5">
+<h5 id="sec-5-1-1-3">off和addr参数限制</h5>
+<div class="outline-text-5" id="text-5-1-1-3">
+<p>
+下图显示了一个存储映射文件：
+</p>
+
+<div class="figure">
+<p><img src="pic/mmap.png" alt="mmap.png" width="90%" /> 
+</p>
+</div>
+
+<p>
+off和addr的值通常应当是系统虚存页长度的倍数，一般这2个值都是NULL或0，所以这不会造成太大的问题 
+</p>
+
+<p>
+因为映射文件的起动位移量受系统虚存页长度的限制，那么如果映射区的长度不是页长度的整数倍时，将如何呢？假定文件长12字节，系统页长为512字节，则系统通常提供512字节的映射区，其中后500字节被设为0。可以修改这500字节，但任何变动都不会在文件中反映出来
+</p>
+</div>
+</div>
+</div>
+<div id="outline-container-sec-5-1-2" class="outline-4">
+<h4 id="sec-5-1-2">信号和进程</h4>
+<div class="outline-text-4" id="text-5-1-2">
+<p>
+与映射存储区相关有两个信号：
+</p>
+<ul class="org-ul">
+<li>SIGSEGV：通常用于指示进程试图存取它不能存取的存储区。如果进程企图存数据到用mmap指定为只读的映射存储区，那么也产生此信号
+</li>
+<li>SIGBUS：如果存取映射区的某个部分，而在存储时这一部分已不存在，则产生此信号。例如用文件长度映射一个文件，但在存访该映射区之前，另一个进程已将该文件截短，此时如果进程企图存取对应于该文件尾端部分的映射区，则接收到SIGBUS信号
+</li>
+</ul>
+
+<p>
+进程在fork和exec后：
+</p>
+<ul class="org-ul">
+<li>fork：子进程继承存储映射区，这是因为子进程复制父进程地址空间，而存储映射区是该地址空间中的一部分
+</li>
+<li>exec：新程序则不继承此存储映射区
+</li>
+</ul>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-5-2" class="outline-3">
+<h3 id="sec-5-2">munmap函数</h3>
+<div class="outline-text-3" id="text-5-2">
+<p>
+munmap函数：解除内存映射
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/mman.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#35299;&#38500;&#23384;&#20648;&#26144;&#23556;</span>
+
+<span style="color: #ffa07a;">   addr&#65306;&#32531;&#23384;&#21306;&#39318;&#22320;&#22336;</span>
+<span style="color: #ffa07a;">   len&#65306;&#32531;&#23384;&#21306;&#38271;&#24230;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;0&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">munmap</span>(<span style="color: #98fb98;">caddr_t</span> <span style="color: #eedd82;">addr</span>, <span style="color: #98fb98;">size_t</span> <span style="color: #eedd82;">len</span>);
+</pre>
+</div>
+<p>
+进程终止时或调用了munmap之后，存储映射区就被自动去除
+</p>
+
+<p>
+注意：关闭文件描述符filedes并不解除映射区
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-5-3" class="outline-3">
+<h3 id="sec-5-3">msync函数</h3>
+<div class="outline-text-3" id="text-5-3">
+<p>
+调用munmap并不使映射区的内容写到磁盘文件上，调用msync函数才使修改后的数据反应到映射的磁盘文件中　
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/mman.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#20351;&#20462;&#25913;&#21518;&#30340;&#25968;&#25454;&#26356;&#26032;&#21040;&#26144;&#23556;&#30340;&#30913;&#30424;&#25991;&#20214;&#20013;</span>
+
+<span style="color: #ffa07a;">   addr&#65306;&#26144;&#23556;&#32531;&#23384;&#21306;&#39318;&#22320;&#22336;</span>
+<span style="color: #ffa07a;">   len&#65306;&#26144;&#23556;&#32531;&#23384;&#21306;&#38271;&#24230;</span>
+<span style="color: #ffa07a;">   flags&#65306;&#26356;&#26032;&#26041;&#24335; MS_ASYNC(&#24322;&#27493;&#26356;&#26032;&#65292;&#31435;&#21363;&#36820;&#22238;)&#65292;MS_SYNC(&#21516;&#27493;&#26356;&#26032;&#65292;&#26356;&#26032;&#23436;&#25104;&#21518;&#25165;&#36820;&#22238;)</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">void</span> <span style="color: #87cefa;">msync</span>(<span style="color: #98fb98;">void</span> *<span style="color: #eedd82;">addr</span>, <span style="color: #98fb98;">size_t</span> <span style="color: #eedd82;">len</span>, <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">flags</span>);
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-5-4" class="outline-3">
+<h3 id="sec-5-4">使用内存映射拷贝文件</h3>
+<div class="outline-text-3" id="text-5-4">
+<p>
+下面程序用存储映射I/O复制一个文件。首先打开两个文件，然后调用fstat得到输入文件的长度。在调用mmap和设置输出文件长度时都需使用输入文件长度，因此调用lseek，然后写一个字节以设置输出文件的长度。如果不设置输出文件的长度，则对输出文件调用mmap也可以，但是对相关存储区的第一次存访会产生SIGBUS。也可使用ftruncate函数来设置输出文件的长度，但是并非所有系统都支持该函数扩充文件长度
+</p>
+
+<p>
+然后对每个文件调用mmap，将文件映射到存储区，最后调用memcpy将输入缓存的内容复制到输出缓存。在从输入缓存(src)取数据字节时，内核自动读输入文件，同样在将数据存入输出缓存(dst)时，内核自动将数据写到输出文件中
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;fcntl.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/mman.h&gt;</span>
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">argc</span>, <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">argv</span>[])
+{
+    <span style="color: #98fb98;">int</span>         <span style="color: #eedd82;">fdin</span>, <span style="color: #eedd82;">fdout</span>;
+    <span style="color: #98fb98;">void</span>        *<span style="color: #eedd82;">src</span>, *<span style="color: #eedd82;">dst</span>;
+    <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">stat</span> <span style="color: #eedd82;">statbuf</span>;
+
+    <span style="color: #00ffff;">if</span> (argc != 3)
+        err_quit(<span style="color: #ffa07a;">"usage: %s &lt;fromfile&gt; &lt;tofile&gt;"</span>, argv[0]);
+
+    <span style="color: #00ffff;">if</span> ((fdin = open(argv[1], O_RDONLY)) &lt; 0)
+        err_sys(<span style="color: #ffa07a;">"can't open %s for reading"</span>, argv[1]);
+
+    <span style="color: #00ffff;">if</span> ((fdout = open(argv[2], O_RDWR | O_CREAT | O_TRUNC,
+              FILE_MODE)) &lt; 0)
+        err_sys(<span style="color: #ffa07a;">"can't creat %s for writing"</span>, argv[2]);
+
+    <span style="color: #00ffff;">if</span> (fstat(fdin, &amp;statbuf) &lt; 0)  <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">need size of input file </span><span style="color: #ff4500;">*/</span>
+        err_sys(<span style="color: #ffa07a;">"fstat error"</span>);
+
+    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">set size of output file </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #00ffff;">if</span> (lseek(fdout, statbuf.st_size - 1, SEEK_SET) == -1)
+        err_sys(<span style="color: #ffa07a;">"lseek error"</span>);
+    <span style="color: #00ffff;">if</span> (write(fdout, <span style="color: #ffa07a;">""</span>, 1) != 1)
+        err_sys(<span style="color: #ffa07a;">"write error"</span>);
+
+    <span style="color: #00ffff;">if</span> ((src = mmap(0, statbuf.st_size, PROT_READ, MAP_SHARED,
+            fdin, 0)) == MAP_FAILED)
+        err_sys(<span style="color: #ffa07a;">"mmap error for input"</span>);
+
+    <span style="color: #00ffff;">if</span> ((dst = mmap(0, statbuf.st_size, PROT_READ | PROT_WRITE,
+            MAP_SHARED, fdout, 0)) == MAP_FAILED)
+        err_sys(<span style="color: #ffa07a;">"mmap error for output"</span>);
+
+    memcpy(dst, src, statbuf.st_size);  <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">does the file copy </span><span style="color: #ff4500;">*/</span>
+    exit(0);
+}
+</pre>
+</div>
+
+<p>
+测试：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh"><span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#20351;&#29992;cp&#21644;mmap&#25335;&#36125;&#19968;&#20010;1.2G&#38271;&#24230;&#30340;&#25991;&#20214;</span>
+$ time cp ~/Movie/La<span style="color: #ffa07a;">\ </span>La<span style="color: #ffa07a;">\ </span>Land/La<span style="color: #ffa07a;">\ </span>La<span style="color: #ffa07a;">\ </span>Land.mkv ./ 
+
+real    0m23.824s
+user    0m0.010s
+sys     0m2.170s
+
+$ time ./mcopy ~/Movie/La<span style="color: #ffa07a;">\ </span>La<span style="color: #ffa07a;">\ </span>Land/La<span style="color: #ffa07a;">\ </span>La<span style="color: #ffa07a;">\ </span>Land.mkv ./a.mkv
+
+real    0m16.796s
+user    0m0.186s
+sys     0m1.079s
+</pre>
+</div>
+
+<p>
+测试结果显示将一个普通文件复制到另一个普通文件中时，存储映射I/O比较快。但是有一些限制，如不能用在某些设备之间(例如网络设备或终端设备)进行复制。并且对被复制的文件进行映射后，也要注意该文件的长度是否改变。尽管如此有很多应用程序会从存储映射I/O得到好处，因为它处理的是内存而不是读、写一个文件，所以常常可以简化算法
+</p>
+</div>
+</div>
 </div>
 
 <div id="outline-container-sec-6" class="outline-2">
