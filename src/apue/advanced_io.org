@@ -576,3 +576,262 @@ munmap函数：解除内存映射
 测试结果显示将一个普通文件复制到另一个普通文件中时，存储映射I/O比较快。但是有一些限制，如不能用在某些设备之间(例如网络设备或终端设备)进行复制。并且对被复制的文件进行映射后，也要注意该文件的长度是否改变。尽管如此有很多应用程序会从存储映射I/O得到好处，因为它处理的是内存而不是读、写一个文件，所以常常可以简化算法
 
 * 记录锁
+当两个人同时编辑一个文件时，其后果将如何呢？在很多UNIX系统中，该文件的最后状态取决于写该文件的最后一个进程。但是对于有些应用程序，例如数据库，有时进程需要确保它正在单独写一个文件。为了向进程提供这种功能，较新的UNIX系统提供了记录锁机制
+
+记录锁的功能是：一个进程正在读或修改文件的某个部分时，可以阻止其他进程修改同一文件区。对于UNIX，“记录”这个定语也是误用，因为UNIX内核根本没有使用文件记录这种概念。一个更适合的术语可能是“区域锁”，因为它锁定的只是文件的一个区域(也可能是整个文件)
+
+** 历史
+下面表列出了各种UNIX系统提供的不同形式的记录锁：
+   #+CAPTION: 各种UNIX系统支持的记录锁形式
+   #+ATTR_HTML: :border 1 :rules all :frame boader
+| 系统        | 建议性 | 强制性 | fcntl | lockf | flock |
+| POSIX.1     | •      |        | •     |       |       |
+| XPG3        | •      |        | •     |       |       |
+| SVR2        | •      |        | •     | •     |       |
+| SVR3,SVR4   | •      | •      | •     | •     |       |
+| 4.3BSD      | •      |        |       |       | •     |
+| 4.3BSD Reno | •      |        | •     |       | •     |
+
+POSIX.1选择了以fcntl函数为基础的系统V风格的记录锁，这种风格也得到4.3BSDReno版本的支持:
+
++ fcntl函数可以锁文件中的任一区域，大至整个文件，小至单个字节
++ 早期的伯克利版只支持flock函数，此函数只锁整个文件，而不锁文件中的一个区域
++ 系统V的lockf函数只是fcntl函数的一个界面
+
+** fcntl记录锁
+第三章已经给出了fcntl函数的原型：
+#+BEGIN_SRC C
+  #include <sys/types.h>
+  #include <unistd.h>
+  #include <fcntl.h>
+
+  /**
+     改变已经打开文件的性质
+
+     filedes：文件描述符
+     cmd：功能
+     args：可选参数
+
+     return：成功依赖于cmd，失败-1
+  ,*/
+  int fcntl(int filedes, int cmd, .../* int arg*/);
+#+END_SRC
+对于记录锁：
++ cmd：
+  1. F_GETLK
+  2. F_SETLK
+  3. F_SETLKW
++ 第三个参数flockptr是一个指向flock结构的指针
+
+*** flock结构
+记录锁结构：
+    #+BEGIN_SRC C
+      struct flock {
+              short l_type;      /* 包括 F_RDLOCK, F_WRLOCK, F_UNLOCK */
+              off_t l_start;     /* 锁的起点 */
+              short l_whence;    /* 包括 SEEK_SET, SEEK_CUR, SEEK_END */
+              off_t l_len;       /* 为 0 时,表示从起点到 EOF */
+              pid_t l_pid;       /* 拥有此锁的进程 PID */
+      }
+    #+END_SRC
+
+**** 锁类型
+锁类型：
+  1. F_RDLCK：共享读锁
+  2. F_WRLCK：独占性写锁
+  3. F_UNLCK：解锁一个区域
+
+多个进程在一个给定的字节上可以有一把共享的读锁，但是在一个给定字节上的写锁则只能由一个进程独用。更进一步，如果在一个给定字节上已经有一把或多把读锁，则不能在该字节上再加写锁，如果在一个字节上已经有一把独占性的写锁，则不能再对它加任何读锁。下表中示出了这些规则：
+  +----------+---------------------+
+  |          |        锁类型       |
+  | 区域当前 +----------+----------+
+  |          |   读锁   |    写锁  |
+  +----------+----------+----------+
+  |   无锁   |   允许   |   允许   |
+  +----------+----------+----------+
+  |一至多把读|   允许   |   拒绝   |
+  +----------+----------+----------+
+  | 一把写锁 |   拒绝   |   拒绝   |
+  +----------+----------+----------+
+
++ 加读锁时，该文件描述符必须是读打开
++ 加写锁时，该文件描述符必须是写打开
+
+**** 锁区域
++ 要加锁或解锁的区域的起始地址由l_start和l_whence两者决定：
+  1. l_start是相对位移量(字节)
+  2. l_whence则决定了相对位移量的起点
++ 区域的长度由l_len表示
+
+注意：
++ 该区域可以在当前文件尾端处开始或越过其尾端处开始，但是不能在文件起始位置之前开始或越过该起始位置
++ 如果l_len为0，则表示锁的区域从其起点开始直至最大可能位置为止。不管添写到该文件中多少数据，都处于锁的范围
++ 为了锁整个文件，通常的方法是将l_start说明为0，l_whence说明为SEEK_SET，l_len说明为0
+
+*** cmd命令
+以下说明fcntl函数的三种命令：
+1. F_GETLK：测试由flockptr所描述的锁是否被另外一把锁所排斥(阻塞)
+  - 如果存在一把锁，它阻止创建由flockptr所描述的锁，则这把现存的锁的信息写到flockptr指向的结构中
+  - 如果不存在这种情况，则除了将l_type设置为F_UNLCK之外，flockptr所指向结构中的其他信息保持不变
+2. F_SETLK：设置由flockptr所描述的锁
+  - 如果试图建立一把按上述兼容性规则并不允许的锁，则fcntl立即出错返回，此时errno设置为EACCES或EAGAIN
+  - 也用来清除由flockptr说明的锁(l_type为F_UNLCK)
+3. F_SETLKW：F_SETLK的阻塞版本
+  - 如果由于存在其他锁，那么按兼容性规则由flockptr所要求的锁不能被创建，则调用进程睡眠，如果捕捉到信号则睡眠中断
+
+使用过程中要注意：
++ 用F_GETLK测试能否建立一把锁，然后用F_SETLK和F_SETLKW企图建立一把锁，这两者不是一个原子操作。在这两个操作之间可能会有另一个进程插入并建立一把相关的锁，使原来测试到的情况发生变化
++ 如果不希望在建立锁时可能产生的长期阻塞，则应使用F_SETLK，并对返回结果进行测试，以判别是否成功地建立了所要求的锁
++ 在设置或释放文件上的一把锁时，系统按需组合或裂开相邻区：
+  + 若对字节0~99设置一把读锁，然后对字节0~49设置一把写锁，则有两个加锁区:0~49字节(写锁)及50~99(读锁)
+  + 若100~199字节是加锁的区，需解锁第150字节，则内核将维持两把锁，一把用于100~149字节，另一把用于151~199字节
+
+**** 要求和释放一把锁
+为了避免每次分配flock结构，然后又填入各项信息，可以用函数lock_reg来处理这些细节：
+#+BEGIN_SRC C
+  #include "apue.h"
+  #include <fcntl.h>
+
+  int lock_reg(int fd, int cmd, int type,
+               off_t offset, int whence, off_t len)
+  {
+          struct flock    lock;
+
+          lock.l_type = type;     /* F_RDLCK, F_WRLCK, F_UNLCK */
+          lock.l_start = offset;  /* byte offset, relative to l_whence */
+          lock.l_whence = whence; /* SEEK_SET, SEEK_CUR, SEEK_END */
+          lock.l_len = len;       /* #bytes (0 means to EOF) */
+
+          return(fcntl(fd, cmd, &lock));
+  }
+#+END_SRC
+使用下面五个宏来简化调用：
+#+BEGIN_SRC C
+  #define read_lock(fd, offset, whence, len)                          \
+          lock_reg((fd), F_SETLK, F_RDLCK, (offset), (whence), (len))
+  #define readw_lock(fd, offset, whence, len)                             \
+          lock_reg((fd), F_SETLKW, F_RDLCK, (offset), (whence), (len))
+  #define write_lock(fd, offset, whence, len)                         \
+          lock_reg((fd), F_SETLK, F_WRLCK, (offset), (whence), (len))
+  #define writew_lock(fd, offset, whence, len)                            \
+          lock_reg((fd), F_SETLKW, F_WRLCK, (offset), (whence), (len))
+  #define un_lock(fd, offset, whence, len)                            \
+          lock_reg((fd), F_SETLK, F_UNLCK, (offset), (whence), (len))
+#+END_SRC
+用与lseek函数同样的顺序定义这些宏中的三个参数
+
+**** 测试一把锁
+lock_test函数用来测试一把锁：
+#+BEGIN_SRC C
+  #include "apue.h"
+  #include <fcntl.h>
+
+  pid_t lock_test(int fd, int type, off_t offset, int whence, off_t len)
+  {
+          struct flock    lock;
+
+          lock.l_type = type;     /* F_RDLCK or F_WRLCK */
+          lock.l_start = offset;  /* byte offset, relative to l_whence */
+          lock.l_whence = whence; /* SEEK_SET, SEEK_CUR, SEEK_END */
+          lock.l_len = len;       /* #bytes (0 means to EOF) */
+
+          if (fcntl(fd, F_GETLK, &lock) < 0)
+                  err_sys("fcntl error");
+
+          if (lock.l_type == F_UNLCK)
+                  return(0);      /* false, region isn't locked by another proc */
+          return(lock.l_pid); /* true, return pid of lock owner */
+  }
+#+END_SRC
+如果存在一把锁阻止由参数说明的锁，则此函数返回持有这把现存锁的进程的ID，否则此函数返回0。通常用下面两个宏来调用此函数：
+#+BEGIN_SRC C
+  #define is_read_lockable(fd, offset, whence, len)                   \
+          (lock_test((fd), F_RDLCK, (offset), (whence), (len)) == 0)
+  #define is_write_lockable(fd, offset, whence, len)                  \
+          (lock_test((fd), F_WRLCK, (offset), (whence), (len)) == 0)
+#+END_SRC
+
+*** 死锁
+如果两个进程相互等待对方持有并且不释放(锁定)的资源时，则这两个进程就处于死锁状态。如果一个进程已经控制了文件中的一个加锁区域，然后它又试图对另一个进程控制的区域加锁，则它就会睡眠，在这种情况下，有发生死锁的可能性
+
+**** 死锁实例
+子进程锁字节0，父进程锁字节1。然后它们中的每一个又试图锁对方已经加锁的字节。在该程序中使用了父子进程同步方法(TELL_xxx和WAIT_xxx)，使得对方都能建立第一把锁：
+#+BEGIN_SRC C
+  #include "apue.h"
+  #include <fcntl.h>
+
+  static void lockabyte(const char *name, int fd, off_t offset)
+  {
+          if (writew_lock(fd, offset, SEEK_SET, 1) < 0)
+                  err_sys("%s: writew_lock error", name);
+          printf("%s: got the lock, byte %ld\n", name, offset);
+  }
+
+  int main(void)
+  {
+          int     fd;
+          pid_t   pid;
+
+          /*
+           ,* Create a file and write two bytes to it.
+           ,*/
+          if ((fd = creat("templock", FILE_MODE)) < 0)
+                  err_sys("creat error");
+          if (write(fd, "ab", 2) != 2)
+                  err_sys("write error");
+
+          TELL_WAIT();
+          if ((pid = fork()) < 0) {
+                  err_sys("fork error");
+          } else if (pid == 0) {          /* child */
+                  lockabyte("child", fd, 0);
+                  TELL_PARENT(getppid()); // 等待父进程
+                  WAIT_PARENT();
+                  lockabyte("child", fd, 1);
+          } else {                        /* parent */
+                  lockabyte("parent", fd, 1);
+                  TELL_CHILD(pid); //等待子进程
+                  WAIT_CHILD();
+                  lockabyte("parent", fd, 0);
+          }
+          exit(0);
+  }
+#+END_SRC
+
+测试结果：
+#+BEGIN_SRC sh
+  $ ./deadlock 
+  parent: got the lock, byte 1
+  child: got the lock, byte 0
+  parent: writew_lock error: Resource deadlock avoided 
+  child: got the lock, byte 1
+
+#+END_SRC
+检测到死锁时，内核必须选择一个进程收到出错返回。在本例中，选择了父进程，这是一个实现细节。当此程序在另一个系统上运行时有可能是子进程接到出错信息
+
+** 锁的隐含继承和释放
+关于记录锁的自动继承和释放有三条规则:
++ 锁与进程、文件两方面有关：
+   1. 当一个进程终止时，它所建立的锁全部释放
+   2. 任何时候关闭一个描述符时，则该进程通过这一描述符可以存访的文件上的任何一把锁都被释放(这些锁都是该进程设置的)
+
+如果执行下列四步:
+#+BEGIN_SRC C
+  fd1 = open(pathname /*, ...*/);
+  read_lock(fd1 /*, ...*/);
+  fd2 = dup(fd1) ;
+  close(fd2) ;
+#+END_SRC
+则在close(fd2)后，在fd1上设置的锁被释放。如果将dup代换为open，其效果也一样:
+#+BEGIN_SRC C
+    fd1 = open(pathname /*, ...*/);
+    read_lock(fd1 /*, ...*/);
+    fd2 = open(fd1) ;
+    close(fd2) ;
+#+END_SRC
+
++ 由fork产生的子程序不继承父进程所设置的锁：若一个进程得到一把锁，然后调用fork，那么对于父进程获得的锁而言，子进程被视为另一个进程，对于从父进程处继承过来的任一描述符，子进程要调用fcntl以获得它自己的锁。如果子进程继承父进程的锁，则父、子进程就可以同时写同一个文件，而锁的作用就是为了阻止多个进程同时写同一个文件(或同一文件区域)。
+
++ 在执行exec后，新程序可以继承原执行程序的锁
+
+** BSD的实现

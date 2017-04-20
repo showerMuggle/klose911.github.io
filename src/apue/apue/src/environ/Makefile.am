@@ -1,0 +1,11 @@
+noinst_PROGRAMS=volatileExample doatexit arg hello rlimitExample
+volatileExample_SOURCES= volatileExample.c 
+volatileExample_LDADD=$(top_srcdir)/src/lib/libapue.a 
+doatexit_SOURCES= doatexit.c 
+doatexit_LDADD=$(top_srcdir)/src/lib/libapue.a 
+arg_SOURCES= arg.c 
+arg_LDADD=$(top_srcdir)/src/lib/libapue.a 
+hello_SOURCES= hello.c 
+hello_LDADD=$(top_srcdir)/src/lib/libapue.a 
+rlimitExample_SOURCES= rlimitExample.c 
+rlimitExample_LDADD=$(top_srcdir)/src/lib/libapue.a 
