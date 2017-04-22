@@ -5,7 +5,6 @@
 #+OPTIONS: num:nil timestamp:nil ^:nil *:nil
 本章内容包括：
 + 非阻塞IO
-+ SVR4的流机制
 + IO多路转接(select和poll函数)
 + readv和writev函数
 + 存储映照I/O(mmap)
@@ -835,3 +834,240 @@ lock_test函数用来测试一把锁：
 + 在执行exec后，新程序可以继承原执行程序的锁
 
 ** BSD的实现
+考虑一个进程，它执行下列语句(忽略出错返回)：
+#+BEGIN_SRC C
+  fd1 = open(pathname/*,...*/);
+  write_lock(fd1, 0, SEEK_SET, 1); /*parent write locks byte 0*/
+  if(fork() > 0) { /*parent*/
+          fd2 = dup(fd1);
+          fd3 = open(pathname/*,...*/);
+          pause();
+  } else {
+          read_lock(fd1, 1, SEEK_SET, 1); /*child read locks byte 1*/
+          pause();
+  }
+#+END_SRC
+图12-1显示了父、子进程暂停(执行pause())后的数据结构情况：
+#+ATTR_HTML: image :width 90% 
+[[file:pic/flock.png]] 
+
+有了记录锁后，在原来的这些图上新加了flock结构，它们由i节点结构开始相互连接起来。注意：每个flock结构说明了一个给定进程的一个加锁区域。图中显示了两个flock结构，一个是由父进程调用write_lock形成的，另一个则是由子进程调用read_lock形成的。每一个结构都包含了相应进程ID
+
+在父进程中关闭fd1、fd2和fd3中的任意一个都将释放由父进程设置的写锁。在关闭这三个描述符中的任意一个时，内核会从该描述符所关连的i节点开始逐个检查flock连接表中各项，并释放由调用进程持有的各把锁。内核并不清楚也不关心父进程是用哪一个描述符来设置这把锁的
+
+*** 守护进程号加锁
+守护进程使用建议性锁以保证该守护进程只有一个副本在运行。起动时很多守护进程都把它们的进程ID写到一个各自专用的PID文件上。系统停机时，可以从这些文件中取用这些守护进程的进程ID。防止一个守护进程有多份副本同时运行的方法是:在守护进程开始运行时，在它的进程ID文件上设置一把写锁。如果在它运行时一直保持这把锁，则不可能再起动它的其他副本：
+#+BEGIN_SRC C
+  #include <unistd.h>
+  #include <stdlib.h>
+  #include <fcntl.h>
+  #include <syslog.h>
+  #include <string.h>
+  #include <errno.h>
+  #include <stdio.h>
+  #include <sys/stat.h>
+
+  #define LOCKFILE "/var/run/deamon.pid"
+  #define LOCKMODE (S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH)
+
+  int already_running(void)
+  {
+          int fd; 
+          char buf[16];
+
+          fd = open(LOCKFILE, O_RDWR|O_CREAT, LOCKMODE);
+
+          if(fd < 0) {
+                  err_sys("open error");
+                  exit(1);
+          }   
+
+          // try and set write lock 
+          if( write_lock(fd, 0, SEEK_SET, 0) < 0) {
+                  if(errno == EACCES || errno == EAGAIN) {
+                          close(fd); //daemon is already running
+                          return (1);
+                  }                        
+
+                  err_sys("write lock error");
+                  exit(1);
+          }   
+
+          //we have the lock now, truncate the file length to zero
+          if( ftruncate(fd, 0) < 0)
+                  err_sys("ftruncate error");
+          //write our process id
+          sprintf(buf, "%ld", (long)getpid());
+          if( write(fd, buf, strlen(buf)) != strlen(buf))
+                  err_sys("write error");
+          
+          return (0);
+  }
+
+#+END_SRC
+
+因为进程ID文件可能包含以前的守护进程ID，而且其长度可能长于当前进程的ID，例如该文件中以前的内容可能是12345\n，而现在的进程ID是654，我们希望该文件现在只包含654\n，而不是654\n5\n，所以在写该文件时，先将其截短为0。 注意： 要在设置了锁之后再调用截短文件长度的函数ftruncate。在调用open时不能指定O_TRUNC，因为这样做会在有一个守护进程运行并对该文件加锁时也会使该文件截短为0
+ 
+*** 文件末尾加锁
+在相对文件尾端加锁或解锁时需要特别小心。大多数实现按照l_whence的SEEK_CUR或SEEK_END值，用文件当前位置或当前长度以及l_start得到绝对的文件位移量。但是，通常需要相对于文件的当前位置或当前长度指定一把锁
+
+下面程序写一个大文件，一次一个字节。在每次循环中，从文件当前尾端开始处加锁直到将来可能扩充到的尾端为止(最后一个参数，长度指定为0)，并写1个字节。然后解除这把锁，写另一个字节。如果系统用“从当前尾端开始，直到将来可能扩充的尾端”这种记法来跟踪锁，那么这段程序能够正常工作。但是如果系统将相对位移量变换成绝对位移量就会有问题：
+#+BEGIN_SRC C
+  #include "apue.h"
+  #include <fcntl.h>
+
+  int main(void)
+  {
+          int i, fd;
+          
+
+          if( (fd = open("temp.lock", O_RDWR | O_CREAT | O_TRUNC, FILE_MODE)) < 0)
+                  err_sys("open error");
+
+          for(i = 0; i < 1000000; i++) {
+                  //lock from current EOF to EOF
+                  if(writew_lock(fd, 0, SEEK_END, 0) < 0)
+                          err_sys("write lock error");
+
+                  if(write(fd, &fd, 1) != 1)
+                          err_sys("write error");
+
+                  if(un_lock(fd, 0, SEEK_END, 0) < 0)
+                          err_sys("unlock error");
+
+                  if(write(fd, &fd, 1) != 1)
+                          err_sys("write error");
+          }
+
+          exit(0);
+  }
+#+END_SRC
+
+测试结果：
+#+BEGIN_SRC sh
+  $ ./lockeof
+
+  writew_lock error: No record locks available
+#+END_SRC
+第一次调用writew_lock指定“直至将来可能扩充到尾端”，所以图中锁定区域超过了所写的第一个字节。然后调用un_lock，从当前尾端处开始直至将来可能扩充到的尾端为止解锁，箭头的右端缩回到第一字节位置端部，然后将第二个字节写到文件中：
+#+ATTR_HTML: image :width 90% 
+[[file:pic/flock-eof.jpg]]
+ 
+这样每次循环，都会分配一个新的flock结构，这种情况不断重复，直至内核为该进程用完了锁结构。此时fcntl出错返回，errno设置为ENOLCK
+
+在此程序中每次写的字节数是已知的，所以可将un_lock的第二个参数(其值将赋与l_start)改换成所写字节数的负值(在本程序中是-1)。这就使得un_lock去除上次加的锁
+
+** 建议性锁和强制性锁
+考虑数据库存取例程序。如果该库中所有函数都以一致的方法处理记录锁，则称使用这些函数存取数据库的任何进程集为合作进程。如果这些函数是唯一的用来存取数据库的函数，那么它们使用建议性锁是可行的。但是建议性锁并不能阻止对数据库文件有写许可权的任何其他进程写数据库文件。不使用协同一致的方法来存取数据库的进程是一个非合作进程
+
+SVR4的强制性锁机制中，内核对每一个open、read和write都要检查调用进程对正在存取的文件是否违背了某一把锁的作用：对一个特定文件打开其设置-组-ID位，关闭其组-执行位则对该文件启动了强制性锁机制。因为当组-执行位关闭时，设置-组-ID位不再有意义，所以设计者借用两者的这种组合来指定对一个文件的锁是强制性的而非建议性的
+
+如果一个进程试图读、写一个强制性锁起作用的文件，而欲读、写的部分又由其他进程加上了读、写锁，此时会发生什么呢?对这一问题的回答取决于三方面的因素:操作类型(read或write)，其他进程保有的锁的类型(读锁或写锁)，以及有关描述符是阻塞还是非阻塞的。下表列出了这8种可能性：
+  +----------+---------------------+---------------------+
+  |          |      阻塞描述符     |     非阻塞描述符    |
+  |区域上的锁+----------+----------+----------+----------+
+  |          |   读     |    写    |    读    |    写    |
+  +----------+----------+----------+----------+----------+
+  |强制性读锁|   可以   |   阻塞   |   可以   |  EAGAIN  |
+  +----------+----------+----------+----------+----------+
+  |强制性写锁|   阻塞   |   阻塞   |  EAGAIN  | EAGAIN   |
+  +----------+----------+----------+----------+----------+
+
+除了表中的read，write函数，其他进程的强制性锁也会对open函数产生影响。通常即使正在打开的文件具有强制性记录锁，该打开操作也会成功。下面的read或write依从于中所示的规则。但是如果欲打开的文件具有强制性锁(读锁或写锁)，而且open调用中的flag为O_TRUNC或O_CREAT，则不论是否指定O_NONBLOCK，open都立即出错返回，errno设置为EAGAIN。对O_TRUNC情况出错返回是有意义的，因为其他进程对该文件持有读、写锁，所以不能将其截短为0。对O_CREAT情况在返回时也设置errno则无意义，因为该标志的意义是如果该文件不存在则创建，由于其他进程对该文件持有记录锁，因而该文件肯定是存在的
+
+这种处理方式可能导致令人惊异的结果。例如某个程序打开一个文件(其模式指定为强制性锁)，然后对该文件的整体设置一把读锁，然后进入睡眠一段时间。在这段睡眠时间内，用某些常规的UNIX程序和操作符对该文件进行处理，发现下列情况:
++ 可用ed编辑程序对该文件进行编辑操作，而且编辑结果可以写回磁盘!强制性记录锁对此毫无影响。对ed操作进行跟踪分析发现，ed将新内容写到一个临时文件中，然后删除原文件，最后将临时文件名改名为原文件名。于是，发现强制性锁机制对unlink函数没有影响
++ 不能用vi编辑程序编辑该文件。vi可以读该文件，但是如果试图将新的数据写到该文件中，则出错返回(EAGAIN)。如果试图将新数据添加到该文件中，则write阻塞。vi的这种行为与所希望的一样
++ 使用KornShell的>和>>算符重写或添写到该文件中，产生出错信息“cannotcreat”
++ 在Bourneshell下使用>算符出错，但是使用>>算符则阻塞，在删除了强制性锁后再继续进行处理。执行添加操作所产生的区别是因为:KornShell以O_CREAT和O_APPEND标志打开文件，而上面已提及指定O_CREAT会产生出错返回。但是Bourneshell在该文件已存在时并不指定O_CREAT，所以open成功，而下一个write则阻塞
+
+一个别有用心的用户可以对大家都可读的文件加一把读锁(强制性)，这样就能阻止任何其他人写该文件。当然该文件应当是强制性锁机制起作用的，这可能要求该用户能够更改该文件的许可权位。所以使用强制性锁的时候必须小心谨慎
+
+*** 校验系统是否支持强制性锁
+下面程序检查当前系统是否支持强制性锁：
+    #+BEGIN_SRC C
+      #include "apue.h"
+      #include <errno.h>
+      #include <fcntl.h>
+      #include <sys/wait.h>
+
+      int main(int argc, char *argv[])
+      {
+              int             fd;
+              pid_t           pid;
+              char            buf[5];
+              struct stat     statbuf;
+
+              if (argc != 2) {
+                      fprintf(stderr, "usage: %s filename\n", argv[0]);
+                      exit(1);
+              }
+              if ((fd = open(argv[1], O_RDWR | O_CREAT | O_TRUNC, FILE_MODE)) < 0)
+                      err_sys("open error");
+              if (write(fd, "abcdef", 6) != 6)
+                      err_sys("write error");
+
+              /* turn on set-group-ID and turn off group-execute */
+              if (fstat(fd, &statbuf) < 0)
+                      err_sys("fstat error");
+              if (fchmod(fd, (statbuf.st_mode & ~S_IXGRP) | S_ISGID) < 0)
+                      err_sys("fchmod error");
+
+              TELL_WAIT();
+
+              if ((pid = fork()) < 0) {
+                      err_sys("fork error");
+              } else if (pid > 0) {   /* parent */
+                      /* write lock entire file */
+                      if (write_lock(fd, 0, SEEK_SET, 0) < 0)
+                              err_sys("write_lock error");
+
+                      TELL_CHILD(pid);
+
+                      if (waitpid(pid, NULL, 0) < 0)
+                              err_sys("waitpid error");
+              } else {                /* child */
+                      WAIT_PARENT();      /* wait for parent to set lock */
+
+                      set_fl(fd, O_NONBLOCK);
+
+                      /* first let's see what error we get if region is locked */
+                      if (read_lock(fd, 0, SEEK_SET, 0) != -1)    /* no wait */
+                              err_sys("child: read_lock succeeded");
+                      printf("read_lock of already-locked region returns %d\n",
+                             errno);
+
+                      /* now try to read the mandatory locked file */
+                      if (lseek(fd, 0, SEEK_SET) == -1)
+                              err_sys("lseek error");
+                      if (read(fd, buf, 2) < 0)
+                              err_ret("read failed (mandatory locking works)");
+                      else
+                              printf("read OK (no mandatory locking), buf = %2.2s\n",
+                                     buf);
+              }
+              exit(0);
+      }
+    #+END_SRC
+首先创建一个文件，并使强制性锁机制对其起作用。然后fork一个子进程。父进程对整个文件设置一把写锁，子进程则将该文件的描述符设置为非阻塞的，然后企图对该文件设置一把读锁，期望这会出错返回，并希望看到系统返回值是EACCES或EAGAIN。接着子进程将文件读、写位置调整到文件起点，并试图读该文件。如果系统提供强制性锁机制，则read应返回EACCES或EAGAIN(因为该描述符是非阻塞的)。否则read返回所读的数据
+
+测试结果显示linux并不支持强制锁
+#+BEGIN_SRC sh
+  $ ./src/aio/mandatory temp.lock
+
+  read_lock of already-locked region returns 11 #EAGAIN
+  read OK (no mandatory locking), buf = ab
+#+END_SRC
+
+*** 两人编辑同一文件
+当两个人同时编辑同一个文件将会怎样呢？一般的UNIX文本编辑器并不使用记录锁，所以对此问题的回答仍然是：该文件的最后结果取决于写该文件的最后一个进程。即使我们在一个编辑器，例如vi中使用了建议性锁，可是这把锁并不能阻止其他用户使用另一个没有使用建议性记录锁的编辑器
+
+若系统提供强制性记录锁，那么可以修改常用的编辑器。如没有该编辑器的源代码，那么可以试一试下述方法。编写一个vi的前端程序。该程序立即调用fork，然后父进程等待子进程终止，子进程打开在命令行中指定的文件，使强制性锁起作用，对整个文件设置一把写锁，然后运行vi。在vi运行时，该文件是加了写锁的，所以其他用户不能修改它。当vi结束时，父进程从wait返回，此时自编的前端程序也就结束。本例中假定锁能跨越exec，这正是前面所说的SVR4的情况(SVR4是提供强制性锁的唯一系统)
+
+这种类型的前端程序是可以编写的，但却往往不能起作用。问题出在大多数编辑器读它们的输入文件，然后关闭它。只要引用被编辑文件的描述符关闭了，那么加在该文件上的锁就被释放了。这意味着在编辑器读了该文件的内容，然后关闭了它，那么锁也就不存在了。前端程序中没有任何方法可以阻止这一点
+
+[[file:daemon.org][Next：守护进程]]
+
+[[file:signal.org][Previous：信号]]
+
+[[file:apue.org][Home：目录]]
