@@ -3,3 +3,244 @@
 #+HTML_LINK_UP: advanced_io.html   
 #+HTML_LINK_HOME: apue.html
 #+OPTIONS: num:nil timestamp:nil ^:nil *:nil
+* 守护进程
+守护进程是生存期长的一种进程。它们常常在系统引导装入时起动，在系统关闭时终止。因为它们没有控制终端，所以说它们是在后台运行的。UNIX系统有很多守护进程，它们执行日常事物活动
+
+本章说明守护进程结构，以及如何编写守护进程程序，因为守护没有控制终端，需要了解在有关事物出问题时，守护进程如何报告出错情况
+
+** 特征
+在linux下执行ps命令观察守护进程，各列标题的意义是：父进程ID、进程ID、进程组ID、终端名称、终端进程组ID(与该控制终端相关的前台进程组)、用户ID以及实际命令字符串
+  #+BEGIN_SRC sh
+    $ pa -axj
+
+    PPID  PID  PGID   SID TTY      TPGID COMMAND 
+    0     1     1     1   ?        -1    init [3]
+    0     2     0     0   ?        -1    [kthreadd]
+    2     3     0     0   ?        -1    [ksoftirqd/0]
+    2     4     0     0   ?        -1    [kworker/0:0]
+    2     5     0     0   ?        -1    [kworker/0:0H]
+    2     7     0     0   ?        -1    [rcu_sched]
+    2     8     0     0   ?        -1    [rcu_bh]
+    2     9     0     0   ?        -1    [migration/0]
+    2    10     0     0   ?        -1    [lru-add-drain]
+    2    11     0     0   ?        -1    [cpuhp/0]
+    2    12     0     0   ?        -1    [cpuhp/1]
+    2    13     0     0   ?        -1    [migration/1]
+    2    14     0     0   ?        -1    [ksoftirqd/1]
+    2    16     0     0   ?        -1    [kworker/1:0H]
+    2    17     0     0   ?        -1    [kdevtmpfs]
+    2    18     0     0   ?        -1    [netns] 
+  #+END_SRC
++ 所有守护进程都以超级用户：用户ID为0的优先权运行
++ 守护进程不拥有控制终端：终端名称设置为问号?，终端前台进程组ID设置为-1。缺少控制终端可能是守护进程调用了setsid的结果
++ 一般守护进程都是进程组的首进程，对话期的首进程，而且是这些进程组和对话期中的唯一进程
++ 守护进程的父进程都是init进程
+
+** 编程规则
+在编写守护进程程序时需遵循一些基本规则，以便防止产生并不希望的交互作用：
+1. 首先做的是调用fork，然后使父进程exit。这样做实现了下面几点:
+   + 如果该守护进程是由一条简单shell命令起动的，那么使父进程终止使得shell认为这条命令已经执行完成
+   + 子进程继承了父进程的进程组ID，但具有一个新的进程ID，这就保证了子进程不是一个进程组的首进程。这对于下面就要做的setsid调用是必要的前提条件
+2. 调用setsid以创建一个新对话期。然后执行9.5节中列举的三个操作，使调用进程:
+   + 成为新对话期的首进程
+   + 成为一个新进程组的首进程
+   + 没有控制终端
+3. 将当前工作目录更改为根目录。从父进程继承过来的当前工作目录可能在一个装载的文件系统中。因为守护进程通常在系统再引导之前是一直存在的，所以如果守护进程的当前工作目录在一个装载的文件系统中，那么该文件系统就不能被卸载。另外，某些守护进程可能会把当前工作目录更改到某个指定位置，在此位置做它们的工作。例如，行式打印机假脱机守护进程常常将其工作目录更改到它们的spool目录上
+4. 将文件方式创建屏蔽字设置为0。由继承得来的文件方式创建屏蔽字可能会拒绝设置某些许可权。例如，若守护进程要创建一个组可读、写的文件，而继承的文件方式创建屏蔽字，屏蔽了这两种许可权，则所要求的组可读、写就不能起作用
+5.关闭不再需要的文件描述符。这样使守护进程就不再持有从其父进程继承来的某些文 件描述符(父进程可能是shell进程，或某个其他进程)。但是，究竟关闭哪些描述符则与具体的守护进程有关
+
+*** 实例
+daemon_init函数,可由想初始化成为一个守护进程的程序调用
+   #+BEGIN_SRC C
+     #include <sys/types.h>
+     #include <sys/stat.h>
+     #include <fcntl.h>
+     #include "apue.h"
+
+     int daemon_init(void)
+     {
+             pid_t pid;
+
+             if((pid = fork()) < 0)
+                     err_sys("for error");
+
+             else if(pid > 0)
+                     exit(0); // parent says good bye
+
+             //child continues
+             setsid(); //become session leader 
+
+             if(chdir("/") <0) // change work directory
+                     err_sys("chdir error");
+             
+             umask(0); // clear file creation mask
+
+             // @TODO close unnessagry file desciptors
+             return 0;
+     }
+
+     int main(void)
+     {
+             daemon_init();
+             for(; ;)
+                     pause();
+
+             exit(0);
+     }
+   #+END_SRC
+测试结果：
+#+BEGIN_SRC C
+  $ ./src/daemon/daemonize
+
+  $  ps -axj | grep daemonize
+
+  PPID  PID   PGID   SID TTY      TPGID UID  COMMAND 
+  1     16992 16992 16992 ?       -1    1001 ./src/daemon/daemonize
+#+END_SRC
+由此可见，除了运行的用户ID不是超级用户，新创建的新进程完全满足守护进程的特征：
+1. 无控制终端
+2. 会话组首进程，唯一进程
+3. 父进程为init进程
+
+** 日志
+与守护进程有关的一个问题是如何处理出错消息。因为它没有控制终端，所以不能只是写到标准出错输出上。在很多工作站上，控制台设备运行一个窗口系统，所以不希望所有精灵进程都写到控制台设备上。也不希望每个守护进程将它自己的出错消息写到一个单独的文件中。对系统管理人员而言，如果要关心哪一个守护进程写到哪一个记录文件中，并定期地检查这些文件，那么一定会使他感到头痛。所以，需要有一个集中的守护进程出错记录机制
+
+*** syslog机制
+自4.2BSD以来广泛地应用了BSD的syslog机制。大多数守护进程使用这一机制。图13-2显示了syslog机制的详细组织结构：
+#+ATTR_HTML: image :width 90% 
+[[file:pic/syslog.png]]  
+
+有三种方法产生记录消息:
+1. 内核例程可以调用log函数。任何一个用户进程通过打开和读/dev/klog设备就可以读取这些消息。因为无意编写内核中的例程，所以不再进一步说明此函数
+2. 大多数用户进程(守护进程)调用syslog(3)函数以产生记录消息。将在下面说明其调用序列。这使消息发送至UNIX域数据报套接口/dev/log
+3. 在此主机上或通过TCP/IP网络连接到此主机的某一其他主机上的一个用户进程可将记录消息发向UDP端口514。注意:syslog函数并不产生这些UDP数据报文件，它们要求产生此记录消息的进程具有显式的网络编程，在此也不详细描述
+
+通常syslogd守护进程读取三种格式的记录消息。此守护进程在起动时读一个配置文件。一般其文件名为/etc/syslog.conf，该文件决定了不同种类的消息应送向何处。例如，紧急消息可被送向系统管理员(若已登录)，并在控制台上显示，而警告消息则可记录到一个文件中等
+
+**** openlog函数
+openlog函数：打开日志文件
+     #+BEGIN_SRC C
+       #include <syslog.h>
+
+       /**
+          打开日志文件
+
+          ident：日志消息的前缀字符串，通常为程序名
+          option：日志消息选项
+          facility：日志消息功能分类与严重等级
+
+          return：无
+       ,*/
+       void openlog(const char *ident, int option, int facility);
+     #+END_SRC
+调用openlog是可选择的。如果不调用openlog，则在第一次调用syslog时，自动调用openlog
+
+调用openlog可以指定一个ident，以后此ident将被加至每则记录消息中。ident一般是程序的名称(例如，cron、inetd等)
+
+表13-1说明了4种可能的option：
+   #+CAPTION: openlog的option参数
+   #+ATTR_HTML: :border 1 :rules all :frame boader
+| option     | 说明                                                                               |
+| LOG_CONS   | 如果不能够通过unix domain socket传递到syslogd，那么直接输出到控制台 |
+| LOG_NDELAY | 立即打开至syslogd的unix domain socket，通常来说默认是syslog第一条记录之后再建立连接 |
+| LOG_PERROR | 日志消息不仅仅发送给syslog，同时写到标准错误上                 |
+| LOG_PID    | 每个消息都包含pid                                                                  |
+
+openlog中的参数facility可以选取表13-2中列举的值，设置facility参数的目的是让配置文件可以说明来自不同设施的消息以不同的方式进行处理：
+   #+CAPTION: openlog的facilty参数
+   #+ATTR_HTML: :border 1 :rules all :frame boader
+| facility   | 说明                           |
+| LOG_AUTH   | 授权程序:login.su，getty，...  |
+| LOG_CRON   | cron和at                       |
+| LOG_DAEMON | 系统精灵进程:ftpd，routed，... |
+| LOG_KERN   | 系统精灵进程:ftpd，routed，... |
+| LOG_LOCAL0 | 系统精灵进程:ftpd，routed，... |
+| LOG_LOCAL1 | 内核产生的消息                 |
+| LOG_LOCAL2 | 保留由本地使用                 |
+| LOG_LOCAL3 | 保留由本地使用                 |
+| LOG_LOCAL4 | 保留由本地使用                 |
+| LOG_LOCAL5 | 保留由本地使用                 |
+| LOG_LOCAL6 | 保留由本地使用                 |
+| LOG_LOCAL7 | 保留由本地使用                 |
+| LOG_LPR    | 行打系统:lpd，lpc，...         |
+| LOG_MAIL   | 邮件系统                       |
+| LOG_NEWS   | Usenet网络新闻系统             |
+| LOG_SYSLOG | syslogd精灵进程本身            |
+| LOG_USER   | 来自其他用户进程的消息         |
+| LOG_UUCP   | UUCP系统                       |
+
+**** syslog函数
+syslog函数：产生一个日志记录消息
+     #+BEGIN_SRC C
+       #include <syslog.h> 
+
+       /**
+          记录日志消息
+          
+          priorty：facilty和level的逻辑和
+          format：日志消息格式
+
+          return：无
+       ,*/
+       void syslog(int priorty, const char *format, ...);
+     #+END_SRC
+
+priority参数是facility和level的组合，可选取的值分别列于facility(见表13-2)和level(见表13-3)中。level值按优先级从最高到最低按序排列：
+   #+CAPTION: syslog的option参数
+   #+ATTR_HTML: :border 1 :rules all :frame boader
+| level | 说明 | 
+| LOG_EMERG  | 紧急状态(系统不可使用),最高优先级 |
+| LOG_ALERT  | 必须立即修复的状态 |
+| LOG_CRIT   | 严重状态 |
+| LOG_ERR        | 出错状态 |
+| LOG_WARNING    | 警告状态 |
+| LOG_NOTICE     | 正常状态 |
+| LOG_INFO   | 信息性消息 |
+| LOG_DEBUG  | 调试消息 |
+
+format参数以及其他参数传至vsprintf函数以便进行格式化：在format中每个%m都被代换成对应于errno值的出错消息字符串(strerror) 
+
+**** closelog函数
+closelog函数：关闭日志消息
+#+BEGIN_SRC C
+  #include <syslog.h>
+
+  /**
+     关闭日志消息
+
+     return：无
+   ,*/
+  void closelog(void)
+#+END_SRC
+调用closelog也是可选择的，它只是关闭被用于与syslogd精灵进程通信的描述符
+
+**** 实例
+将前缀字符串“test log”和PID的日志信息送到标准出错，同时记录到记录LOG_INFO以上等级的日志文件中：
+     #+BEGIN_SRC C
+       #include <syslog.h> 
+
+       int main(void) 
+       { 
+               openlog("test log", LOG_PID | LOG_PERROR, LOG_USER); 
+               syslog(LOG_INFO, "%s %m\n", "Log me, man.\n"); 
+               closelog(); 
+               return 0; 
+       }
+     #+END_SRC
+
+SVR4和4.3+BSD都提供logger(1)程序，以其作为向syslog设施发送出错消息的方法。送至该程序的可选择参数可以指定facility、level以及ident。logger的意图是用于以非交互方式运行，又要产生记录消息的shell过程
+
+** 注意事项
+守护进程通常单实例运行的，为了保证是单例运行的话，可以通过文件标记或者是文件锁来完成。 在Unix下面守护进程通常有下面这些惯例：
++ 守护进程的锁文件，通常存放在/var/run/<name>.pid
++ 如果守护进程有配置文件的话，那么文件存放在/etc/<name>.conf
++ 守护进程可以使用命令行启动，但是通常是在系统初始化脚本之一存放在/etc/init.d/*下面
++ 守护进程终止的话通常希望重启。而守护进程的父进程通常为init。在/etc/inittab里面为守护进程包含respawn选项的话，那么守护进程终止的话init会自动重启
++ 因为守护进程和终端不连接，所以永远接收不到SIGHUP信号。可以使用SIGHUP信号来通知守护进程重新载入配置文件。守护进程必须支持这个功能
+
+[[file:ipc.org][Next：进程间通信]]
+
+[[file:advanced_io.org][Previous：高级I/O]]
+
+[[file:apue.org][Home：目录]]
+
