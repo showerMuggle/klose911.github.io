@@ -142,7 +142,557 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="apue.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">进程间通信</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#sec-1">管道</a>
+<ul>
+<li><a href="#sec-1-1">pipe函数</a>
+<ul>
+<li><a href="#sec-1-1-1">实例：创建管道</a></li>
+<li><a href="#sec-1-1-2">文件复制到分页程序</a></li>
+<li><a href="#sec-1-1-3">进程间同步</a></li>
+</ul>
+</li>
+<li><a href="#sec-1-2">FIFO</a></li>
+</ul>
+</li>
+<li><a href="#sec-2">系统V IPC</a>
+<ul>
+<li><a href="#sec-2-1">消息队列</a></li>
+<li><a href="#sec-2-2">信号量</a></li>
+<li><a href="#sec-2-3">共享内存</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<p>
+第8章说明了进程控制原语并且观察了如何调用多个进程。但是这些进程之间交换信息的唯一方法是经由fork或exec传送打开文件，或通过文件系统。本章将说明进程之间相互通信的其他技术IPC
+</p>
 
+<p>
+UNIX IPC已经是而且继续是各种进程通信方式的统称，其中极少能在所有UNIX的实现中进行移植。表14-1列出了不同实现所支持的不同形式的IPC：
+</p>
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 1:</span> UNIX IPC</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">IPC类型</td>
+<td class="left">POSIX.1</td>
+<td class="left">XPG3</td>
+<td class="left">V7</td>
+<td class="left">SVR2</td>
+<td class="left">SVR3.2</td>
+<td class="left">SVR4</td>
+<td class="left">4.3BSD</td>
+<td class="left">4.3+BSD</td>
+</tr>
+
+<tr>
+<td class="left">管道(半双工)</td>
+<td class="left">•</td>
+<td class="left">•</td>
+<td class="left">•</td>
+<td class="left">•</td>
+<td class="left">•</td>
+<td class="left">•</td>
+<td class="left">•</td>
+<td class="left">•</td>
+</tr>
+
+<tr>
+<td class="left">FIFO(命令管道)</td>
+<td class="left">•</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+<td class="left">•</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+</tr>
+
+<tr>
+<td class="left">流管道(全双工)</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+<td class="left">•</td>
+<td class="left">•</td>
+<td class="left">•</td>
+</tr>
+
+<tr>
+<td class="left">命令流管道</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+<td class="left">•</td>
+<td class="left">•</td>
+<td class="left">•</td>
+</tr>
+
+<tr>
+<td class="left">消息队列</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+<td class="left">•</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+</tr>
+
+<tr>
+<td class="left">信号量</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+<td class="left">•</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+</tr>
+
+<tr>
+<td class="left">共享内存</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+<td class="left">•</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+</tr>
+
+<tr>
+<td class="left">套接口</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+<td class="left">•</td>
+<td class="left">•</td>
+</tr>
+
+<tr>
+<td class="left">流</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+<td class="left">•</td>
+<td class="left">•</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+</tr>
+</tbody>
+</table>
+<p>
+正如上表所示，不管哪一种UNIX实现，都可依靠的唯一一种IPC是半双工的管道。表中前7种IPC通常限于同一台主机的各个进程间的IPC。最后两种：套接口和流，则支持不同主机上各个进程间IPC。虽然中间三种形式的IPC(消息队列、信号量以及共享存储器)在表中说明为只受到系统V的支持，但是在大多数制造商所支持的，从伯克利UNIX导出的UNIX系统中(例如，SunOS以及Ultrix)已经添加了这三种形式的IPC
+</p>
+
+<p>
+本章将讨论经典的IPC：
+</p>
+<ul class="org-ul">
+<li>管道
+</li>
+<li>FIFO
+</li>
+<li>消息队列
+</li>
+<li>信号量
+</li>
+<li>共享内存
+</li>
+</ul>
+
+<div id="outline-container-sec-1" class="outline-2">
+<h2 id="sec-1">管道</h2>
+<div class="outline-text-2" id="text-1">
+<p>
+管道是UNIX IPC的最老形式，并且所有UNIX系统都提供此种通信机制，管道有两种限制; 
+</p>
+<ol class="org-ol">
+<li>半双工的：数据只能在一个方向上流动
+</li>
+<li>只能在具有公共祖先的进程之间使用：通常一个管道由一个进程创建，然后该进程调用fork，此后父、子进程之间就可应用该管道
+</li>
+</ol>
+
+<p>
+尽管有这两种限制，半双工管道仍是最常用的IPC形式
+</p>
+</div>
+
+<div id="outline-container-sec-1-1" class="outline-3">
+<h3 id="sec-1-1">pipe函数</h3>
+<div class="outline-text-3" id="text-1-1">
+<p>
+pipe函数：创建管道
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;unistd.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#21019;&#24314;&#31649;&#36947;</span>
+
+<span style="color: #ffa07a;">   filedes&#65306;&#25991;&#20214;&#25551;&#36848;&#31526;&#25968;&#32452;&#65292;iledes[0]&#20026;&#35835;&#32780;&#25171;&#24320;&#65292;filedes[1]&#20026;&#20889;&#32780;&#25171;&#24320;&#65292;</span>
+<span style="color: #ffa07a;">        filedes[1]&#30340;&#36755;&#20986;&#26159;filedes[0]&#30340;&#36755;&#20837;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;0&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">pipe</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">filedes</span>[2]);
+</pre>
+</div>
+<p>
+由参数filedes数组返回两个文件描述符：
+</p>
+<ul class="org-ul">
+<li>filedes[0]为读而打开
+</li>
+<li>filedes[1]为写而打开，filedes[1]的输出正好是filedes[0]的输入
+</li>
+</ul>
+
+<p>
+有两种方法来描绘一个管道，左半图显示了管道的两端在一个进程中相互连接，右半图则说明数据通过内核在管道中流动：
+</p>
+
+<div class="figure">
+<p><img src="pic/pipe.jpg" alt="pipe.jpg" width="90%" /> 
+</p>
+</div>
+
+<p>
+fstat函数对管道的每一端都返回一个FIFO类型的文件描述符，可以用S_ISFIFO宏来测试管道
+</p>
+
+<p>
+单个进程中的管道几乎没有任何用处。通常调用pipe的进程接着调用fork，这样就创建了从父进程到子进程或反之的IPC通道。下图显示了这种情况：
+</p>
+
+<div class="figure">
+<p><img src="pic/pipe-fork.jpg" alt="pipe-fork.jpg" width="70%" /> 
+</p>
+</div>
+
+<p>
+fork之后做什么取决于我们想要有的数据流的方向。对于从父进程到子进程的管道，父进程关闭管道的读端(fd[0])，子进程则关闭写端(fd[1])。图14-3显示了描述符的最后安排：
+</p>
+
+<div class="figure">
+<p><img src="pic/pipe-fork-close.jpg" alt="pipe-fork-close.jpg" width="70%" /> 
+</p>
+</div>
+
+<p>
+当管道的一端被关闭后，下列规则起作用：
+</p>
+<ol class="org-ol">
+<li>当读一个写端已被关闭的管道时，在所有数据都被读取后，read返回0，以指示达到了文件结束处(从技术方面考虑，管道的写端还有进程时，就不会产生文件的结束。可以复制一个管道的描述符，使得有多个进程具有写打开文件描述符。但是，通常一个管道只有一个读进程，一个写进程)
+</li>
+<li>如果写一个读端已被关闭的管道，则产生信号SIGPIPE。如果忽略该信号或者捕捉该信号并从其处理程序返回，则write出错返回，errno设置为EPIPE
+</li>
+</ol>
+
+<p>
+注意：在写管道时，常数PIPE_BUF规定了内核中管道缓存器的大小。如果对管道进行write调用，而且要求写的字节数小于等于PIPE_BUF，则此操作不会与其他进程对同一管道(或FIFO)的write操作穿插进行。但是若有多个进程同时写一个管道(FIFO)，而且某个或某些进程要求写的字节数超过PIPE_BUF字节数，则数据可能会与其他写操作的数据相穿插
+</p>
+</div>
+
+<div id="outline-container-sec-1-1-1" class="outline-4">
+<h4 id="sec-1-1-1">实例：创建管道</h4>
+<div class="outline-text-4" id="text-1-1-1">
+<p>
+创建了一个从父进程到子进程的管道，并且父进程经由该管道向子进程传送数据：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">void</span>)
+{
+    <span style="color: #98fb98;">int</span>     <span style="color: #eedd82;">n</span>;
+    <span style="color: #98fb98;">int</span>     <span style="color: #eedd82;">fd</span>[2];
+    <span style="color: #98fb98;">pid_t</span>   <span style="color: #eedd82;">pid</span>;
+    <span style="color: #98fb98;">char</span>    <span style="color: #eedd82;">line</span>[MAXLINE];
+
+    <span style="color: #00ffff;">if</span> (pipe(fd) &lt; 0)
+        err_sys(<span style="color: #ffa07a;">"pipe error"</span>);
+
+    <span style="color: #00ffff;">if</span> ((pid = fork()) &lt; 0) {
+        err_sys(<span style="color: #ffa07a;">"fork error"</span>);
+    } <span style="color: #00ffff;">else</span> <span style="color: #00ffff;">if</span> (pid &gt; 0) {       <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">parent </span><span style="color: #ff4500;">*/</span>
+        close(fd[0]);<span style="color: #ff4500;">// </span><span style="color: #ff4500;">close read tunnel of pipe in parent process</span>
+        <span style="color: #00ffff;">if</span>(write(fd[1], <span style="color: #ffa07a;">"hello world\n"</span>, 12) &lt; 0)
+            err_sys(<span style="color: #ffa07a;">"write to pipe error"</span>);
+    } <span style="color: #00ffff;">else</span> {                <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">child </span><span style="color: #ff4500;">*/</span>
+        close(fd[1]); <span style="color: #ff4500;">// </span><span style="color: #ff4500;">close write tunnel of pipe in child process</span>
+        n = read(fd[0], line, MAXLINE);
+        <span style="color: #00ffff;">if</span>(write(STDOUT_FILENO, line, n) &lt; 0)
+            err_sys(<span style="color: #ffa07a;">"write to console error"</span>);
+    }
+
+    exit(0);
+}
+</pre>
+</div>
+<p>
+上面程序对管道描述符调用read和write。更为普遍的是将管道描述符复制为标准输入和标准输出。在此之后通常子进程调用exec，执行另一个程序，该程序从标准输入(已创建的管道)或将数据写至其标准输出(管道)
+</p>
+
+<p>
+测试结果：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ ./src/ipc/pipe1
+
+hello world
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-1-1-2" class="outline-4">
+<h4 id="sec-1-1-2">文件复制到分页程序</h4>
+<div class="outline-text-4" id="text-1-1-2">
+<p>
+下面程序的功能是每次一页显示已产生的输出。已经有很多UNIX公用程序具有分页功能，因此无需再构造一个新的分页程序，而是调用用户最喜爱的分页程序。为了避免先将所有数据写到一个临时文件中，然后再调用系统中的有关程序显示该文件，将输出通过管道直接送到分页程序。为此先创建一个管道，一个子进程，使子进程的标准输入成为管道的读端，然后exec用户喜爱的分页程序:
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/wait.h&gt;</span>
+
+<span style="color: #7fffd4;">#define</span> <span style="color: #eedd82;">DEF_PAGER</span>   <span style="color: #ffa07a;">"/usr/bin/less"</span>     <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">default pager program </span><span style="color: #ff4500;">*/</span>
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">argc</span>, <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">argv</span>[])
+{
+    <span style="color: #98fb98;">int</span>     <span style="color: #eedd82;">n</span>;
+    <span style="color: #98fb98;">int</span>     <span style="color: #eedd82;">fd</span>[2];
+    <span style="color: #98fb98;">pid_t</span>   <span style="color: #eedd82;">pid</span>;
+    <span style="color: #98fb98;">char</span>    *<span style="color: #eedd82;">pager</span>, *<span style="color: #eedd82;">argv0</span>;
+    <span style="color: #98fb98;">char</span>    <span style="color: #eedd82;">line</span>[MAXLINE];
+    <span style="color: #98fb98;">FILE</span>    *<span style="color: #eedd82;">fp</span>;
+
+    <span style="color: #00ffff;">if</span> (argc != 2)
+        err_quit(<span style="color: #ffa07a;">"usage: a.out &lt;pathname&gt;"</span>);
+
+    <span style="color: #00ffff;">if</span> ((fp = fopen(argv[1], <span style="color: #ffa07a;">"r"</span>)) == <span style="color: #7fffd4;">NULL</span>)
+        err_sys(<span style="color: #ffa07a;">"can't open %s"</span>, argv[1]);
+    <span style="color: #00ffff;">if</span> (pipe(fd) &lt; 0)
+        err_sys(<span style="color: #ffa07a;">"pipe error"</span>);
+
+    <span style="color: #00ffff;">if</span> ((pid = fork()) &lt; 0) {
+        err_sys(<span style="color: #ffa07a;">"fork error"</span>);
+    } <span style="color: #00ffff;">else</span> <span style="color: #00ffff;">if</span> (pid &gt; 0) {                               <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">parent </span><span style="color: #ff4500;">*/</span>
+        close(fd[0]);       <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">close read end </span><span style="color: #ff4500;">*/</span>
+
+        <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">parent copies argv[1] to pipe </span><span style="color: #ff4500;">*/</span>
+        <span style="color: #00ffff;">while</span> (fgets(line, MAXLINE, fp) != <span style="color: #7fffd4;">NULL</span>) {
+            n = strlen(line);
+            <span style="color: #00ffff;">if</span> (write(fd[1], line, n) != n)
+                err_sys(<span style="color: #ffa07a;">"write error to pipe"</span>);
+        }
+        <span style="color: #00ffff;">if</span> (ferror(fp))
+            err_sys(<span style="color: #ffa07a;">"fgets error"</span>);
+
+        close(fd[1]);   <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">close write end of pipe for reader </span><span style="color: #ff4500;">*/</span>
+
+        <span style="color: #00ffff;">if</span> (waitpid(pid, <span style="color: #7fffd4;">NULL</span>, 0) &lt; 0)
+            err_sys(<span style="color: #ffa07a;">"waitpid error"</span>);
+        exit(0);
+    } <span style="color: #00ffff;">else</span> {                                        <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">child </span><span style="color: #ff4500;">*/</span>
+        close(fd[1]);   <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">close write end </span><span style="color: #ff4500;">*/</span>
+        <span style="color: #00ffff;">if</span> (fd[0] != STDIN_FILENO) { <span style="color: #ff4500;">// </span><span style="color: #ff4500;">standard input descriptor point to fd[0]</span>
+            <span style="color: #00ffff;">if</span> (dup2(fd[0], STDIN_FILENO) != STDIN_FILENO)
+                err_sys(<span style="color: #ffa07a;">"dup2 error to stdin"</span>);
+            close(fd[0]);   <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">don't need this after dup2 </span><span style="color: #ff4500;">*/</span>
+        }
+
+        <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">get arguments for execl() </span><span style="color: #ff4500;">*/</span>
+        <span style="color: #00ffff;">if</span> ((pager = getenv(<span style="color: #ffa07a;">"PAGER"</span>)) == <span style="color: #7fffd4;">NULL</span>)
+            pager = DEF_PAGER;
+        <span style="color: #00ffff;">if</span> ((argv0 = strrchr(pager, <span style="color: #ffa07a;">'/'</span>)) != <span style="color: #7fffd4;">NULL</span>)
+            argv0++;        <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">step past rightmost slash </span><span style="color: #ff4500;">*/</span>
+        <span style="color: #00ffff;">else</span>
+            argv0 = pager;  <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">no slash in pager </span><span style="color: #ff4500;">*/</span>
+
+        <span style="color: #00ffff;">if</span> (execl(pager, argv0, (<span style="color: #98fb98;">char</span> *)0) &lt; 0)
+            err_sys(<span style="color: #ffa07a;">"execl error for %s"</span>, pager);
+    }
+    exit(0);
+}
+</pre>
+</div>
+<p>
+在调用fork之前先创建一个管道。fork之后父进程关闭其读端，子进程关闭其写端。子进程然后调用dup2，使其标准输入指向管道的读端。当执行分页程序时，其标准输入将是管道的读端：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">$ ./src/ipc/most2 Makefile
+
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">Makefile.in generated by automake 1.15 from Makefile.am.</span>
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">Makefile.  Generated from Makefile.in by configure.</span>
+
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">Copyright (C) 1994-2014 Free Software Foundation, Inc.</span>
+
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">This Makefile.in is free software; the Free Software Foundation</span>
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">gives unlimited permission to copy and/or distribute it,</span>
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">with or without modifications, as long as this notice is preserved.</span>
+
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">This program is distributed in the hope that it will be useful,</span>
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">but WITHOUT ANY WARRANTY, to the extent permitted by law; without</span>
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">even the implied warranty of MERCHANTABILITY or FITNESS FOR A</span>
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">PARTICULAR PURPOSE.</span>
+
+
+
+am__is_gnu_make = { <span style="color: #ffa07a;">\</span>
+  <span style="color: #00ffff;">if </span><span style="color: #b0c4de;">test</span> -z <span style="color: #ffa07a;">'$(</span><span style="color: #fa8072;">MAKELEVEL</span><span style="color: #ffa07a;">)'</span>; <span style="color: #00ffff;">then</span> <span style="color: #ffa07a;">\</span>
+    false; <span style="color: #ffa07a;">\</span>
+  <span style="color: #00ffff;">elif </span><span style="color: #b0c4de;">test</span> -n <span style="color: #ffa07a;">'$(</span><span style="color: #fa8072;">MAKE_HOST</span><span style="color: #ffa07a;">)'</span>; <span style="color: #00ffff;">then</span> <span style="color: #ffa07a;">\</span>
+    true; <span style="color: #ffa07a;">\</span>
+  <span style="color: #00ffff;">elif </span><span style="color: #b0c4de;">test</span> -n <span style="color: #ffa07a;">'$(</span><span style="color: #fa8072;">MAKE_VERSION</span><span style="color: #ffa07a;">)'</span> &amp;&amp; <span style="color: #b0c4de;">test</span> -n <span style="color: #ffa07a;">'$(</span><span style="color: #fa8072;">CURDIR</span><span style="color: #ffa07a;">)'</span>; <span style="color: #00ffff;">then</span> <span style="color: #ffa07a;">\</span>
+: <span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#20998;&#39029;&#24320;&#22987;</span>
+</pre>
+</div>
+
+<p>
+将一个描述符复制到另一个时，在子进程中，fd[0]复制到标准输入，应当注意该描述符的值并不已经是所希望的值。如果该描述符已经具有所希望的值，并且我们先调用dup2，然后调用close则将关闭此进程中只有该单个描述符所代表的打开文件。在本程序中，如果shell没有打开标准输入，那么程序开始处的fopen应已使用描述符0，也就是最小未使用的描述符，所以fd[0]决不会等于标准输入。尽管如此，只要先调用dup2，然后调用close以复制一个描述符到另一个，作为一种保护性的编程措施，总是先将两个描述符进行比较
+</p>
+
+<p>
+先使用环境变量PAGER获得用户分页程序名称的。如果操作没有成功，则使用系统默认值。这是环境变量的常见用法
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-1-1-3" class="outline-4">
+<h4 id="sec-1-1-3">进程间同步</h4>
+<div class="outline-text-4" id="text-1-1-3">
+<p>
+以前使用信号实现了TELL_WAIT、TELL_PARENT、TELL_CHILD、WAIT_PARENT以及WAIT_CHILD。下面则是一个使用管道的实现：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+
+<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">int</span>  <span style="color: #eedd82;">pfd1</span>[2], <span style="color: #eedd82;">pfd2</span>[2];
+
+<span style="color: #98fb98;">void</span> <span style="color: #87cefa;">TELL_WAIT</span>(<span style="color: #98fb98;">void</span>)
+{
+    <span style="color: #00ffff;">if</span> (pipe(pfd1) &lt; 0 || pipe(pfd2) &lt; 0)
+        err_sys(<span style="color: #ffa07a;">"pipe error"</span>);
+}
+
+<span style="color: #98fb98;">void</span> <span style="color: #87cefa;">TELL_PARENT</span>(<span style="color: #98fb98;">pid_t</span> <span style="color: #eedd82;">pid</span>)
+{
+    <span style="color: #00ffff;">if</span> (write(pfd2[1], <span style="color: #ffa07a;">"c"</span>, 1) != 1)
+        err_sys(<span style="color: #ffa07a;">"write error"</span>);
+}
+
+<span style="color: #98fb98;">void</span> <span style="color: #87cefa;">WAIT_PARENT</span>(<span style="color: #98fb98;">void</span>)
+{
+    <span style="color: #98fb98;">char</span>    <span style="color: #eedd82;">c</span>;
+
+    <span style="color: #00ffff;">if</span> (read(pfd1[0], &amp;c, 1) != 1)
+        err_sys(<span style="color: #ffa07a;">"read error"</span>);
+
+    <span style="color: #00ffff;">if</span> (c != <span style="color: #ffa07a;">'p'</span>)
+        err_quit(<span style="color: #ffa07a;">"WAIT_PARENT: incorrect data"</span>);
+}
+
+<span style="color: #98fb98;">void</span> <span style="color: #87cefa;">TELL_CHILD</span>(<span style="color: #98fb98;">pid_t</span> <span style="color: #eedd82;">pid</span>)
+{
+    <span style="color: #00ffff;">if</span> (write(pfd1[1], <span style="color: #ffa07a;">"p"</span>, 1) != 1)
+        err_sys(<span style="color: #ffa07a;">"write error"</span>);
+}
+
+<span style="color: #98fb98;">void</span> <span style="color: #87cefa;">WAIT_CHILD</span>(<span style="color: #98fb98;">void</span>)
+{
+    <span style="color: #98fb98;">char</span>    <span style="color: #eedd82;">c</span>;
+
+    <span style="color: #00ffff;">if</span> (read(pfd2[0], &amp;c, 1) != 1)
+        err_sys(<span style="color: #ffa07a;">"read error"</span>);
+
+    <span style="color: #00ffff;">if</span> (c != <span style="color: #ffa07a;">'c'</span>)
+        err_quit(<span style="color: #ffa07a;">"WAIT_CHILD: incorrect data"</span>);
+}
+</pre>
+</div>
+<p>
+在fork之前创建了两个管道。父进程在调用TELL_CHILD时经由上一个管道写一个字符'P'，子进程在调用TELL_PARENT时，经由下一个管道写一个字符'C'。相应的WAIT_XXX函数调用read读一个字符，没有读到字符时阻塞(睡眠等待)：
+</p>
+
+<div class="figure">
+<p><img src="pic/pipe-tell-wait.jpg" alt="pipe-tell-wait.jpg" width="70%" /> 
+</p>
+</div>
+
+<p>
+注意：每一个管道都有一个额外的读取进程，这没有关系。也就是说除了子进程从pfd1[0]读取，父进程也有上一个管道的读端。因为父进程并没有执行对该管道的读操作，所以这不会产生任何影响
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-1-2" class="outline-3">
+<h3 id="sec-1-2">FIFO</h3>
+</div>
+</div>
+
+<div id="outline-container-sec-2" class="outline-2">
+<h2 id="sec-2">系统V IPC</h2>
+<div class="outline-text-2" id="text-2">
+</div><div id="outline-container-sec-2-1" class="outline-3">
+<h3 id="sec-2-1">消息队列</h3>
+</div>
+
+<div id="outline-container-sec-2-2" class="outline-3">
+<h3 id="sec-2-2">信号量</h3>
+</div>
+
+<div id="outline-container-sec-2-3" class="outline-3">
+<h3 id="sec-2-3">共享内存</h3>
+</div>
+</div>
 </div>
 <div id="postamble" class="status">
 
