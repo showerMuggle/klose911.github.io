@@ -155,16 +155,26 @@ for the JavaScript code in this tag.
 <li><a href="#sec-1-1-3">实例：父子进程同步</a></li>
 </ul>
 </li>
-<li><a href="#sec-1-2">FIFO</a></li>
-</ul>
-</li>
-<li><a href="#sec-2">系统V IPC</a>
+<li><a href="#sec-1-2">popen和pclose函数</a>
 <ul>
-<li><a href="#sec-2-1">消息队列</a></li>
-<li><a href="#sec-2-2">信号量</a></li>
-<li><a href="#sec-2-3">共享内存</a></li>
+<li><a href="#sec-1-2-1">使用popen实现分页读取文件</a></li>
+<li><a href="#sec-1-2-2">实现popen和pclose函数</a></li>
+<li><a href="#sec-1-2-3">用popen变换输入</a></li>
 </ul>
 </li>
+<li><a href="#sec-1-3">协同进程</a>
+<ul>
+<li><a href="#sec-1-3-1">对两个数求和的简单过滤</a>
+<ul>
+<li><a href="#sec-1-3-1-1">使用标准IO改写add2</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#sec-1-4">FIFO</a></li>
+</ul>
+</li>
+<li><a href="#sec-2">系统V IPC</a></li>
 </ul>
 </div>
 </div>
@@ -382,9 +392,9 @@ pipe函数：创建管道
 由参数filedes数组返回两个文件描述符：
 </p>
 <ul class="org-ul">
-<li>filedes[0]为读而打开
+<li>filedes<sup><a id="fnr.1" name="fnr.1" class="footref" href="#fn.1">1</a></sup>为读而打开
 </li>
-<li>filedes[1]为写而打开，filedes[1]的输出正好是filedes[0]的输入
+<li>filedes<sup><a id="fnr.2" name="fnr.2" class="footref" href="#fn.2">2</a></sup>为写而打开，filedes<sup><a id="fnr.2.100" name="fnr.2.100" class="footref" href="#fn.2">2</a></sup>的输出正好是filedes<sup><a id="fnr.1.100" name="fnr.1.100" class="footref" href="#fn.1">1</a></sup>的输入
 </li>
 </ul>
 
@@ -411,7 +421,7 @@ fstat函数对管道的每一端都返回一个FIFO类型的文件描述符，�
 </div>
 
 <p>
-fork之后做什么取决于我们想要有的数据流的方向。对于从父进程到子进程的管道，父进程关闭管道的读端(fd[0])，子进程则关闭写端(fd[1])。图14-3显示了描述符的最后安排：
+fork之后做什么取决于我们想要有的数据流的方向。对于从父进程到子进程的管道，父进程关闭管道的读端(fd<sup><a id="fnr.1.100" name="fnr.1.100" class="footref" href="#fn.1">1</a></sup>)，子进程则关闭写端(fd<sup><a id="fnr.2.100" name="fnr.2.100" class="footref" href="#fn.2">2</a></sup>)。图14-3显示了描述符的最后安排：
 </p>
 
 <div class="figure">
@@ -595,7 +605,7 @@ am__is_gnu_make = { <span style="color: #ffa07a;">\</span>
 </div>
 
 <p>
-将一个描述符复制到另一个时，在子进程中，fd[0]复制到标准输入，应当注意该描述符的值并不已经是所希望的值。如果该描述符已经具有所希望的值，并且我们先调用dup2，然后调用close则将关闭此进程中只有该单个描述符所代表的打开文件。在本程序中，如果shell没有打开标准输入，那么程序开始处的fopen应已使用描述符0，也就是最小未使用的描述符，所以fd[0]决不会等于标准输入。尽管如此，只要先调用dup2，然后调用close以复制一个描述符到另一个，作为一种保护性的编程措施，总是先将两个描述符进行比较
+将一个描述符复制到另一个时，在子进程中，fd<sup><a id="fnr.1.100" name="fnr.1.100" class="footref" href="#fn.1">1</a></sup>复制到标准输入，应当注意该描述符的值并不已经是所希望的值。如果该描述符已经具有所希望的值，并且我们先调用dup2，然后调用close则将关闭此进程中只有该单个描述符所代表的打开文件。在本程序中，如果shell没有打开标准输入，那么程序开始处的fopen应已使用描述符0，也就是最小未使用的描述符，所以fd<sup><a id="fnr.1.100" name="fnr.1.100" class="footref" href="#fn.1">1</a></sup>决不会等于标准输入。尽管如此，只要先调用dup2，然后调用close以复制一个描述符到另一个，作为一种保护性的编程措施，总是先将两个描述符进行比较
 </p>
 
 <p>
@@ -667,60 +677,637 @@ am__is_gnu_make = { <span style="color: #ffa07a;">\</span>
 </div>
 
 <p>
-注意：每一个管道都有一个额外的读取进程，这没有关系。也就是说除了子进程从pfd1[0]读取，父进程也有上一个管道的读端。因为父进程并没有执行对该管道的读操作，所以这不会产生任何影响
+注意：每一个管道都有一个额外的读取进程，这没有关系。也就是说除了子进程从pfd1<sup><a id="fnr.1.100" name="fnr.1.100" class="footref" href="#fn.1">1</a></sup>读取，父进程也有上一个管道的读端。因为父进程并没有执行对该管道的读操作，所以这不会产生任何影响
 </p>
 </div>
 </div>
 </div>
 
 <div id="outline-container-sec-1-2" class="outline-3">
-<h3 id="sec-1-2">FIFO</h3>
+<h3 id="sec-1-2">popen和pclose函数</h3>
+<div class="outline-text-3" id="text-1-2">
+<p>
+常见的操作是创建一个连接到另一个进程的管道，然后读其输出或向其发送输入，标准I/O库为实现这些操作提供了两个函数popen和pclose
+</p>
+
+<p>
+popen实现的操作是：
+</p>
+<ol class="org-ol">
+<li>创建一个管道
+</li>
+<li>fork一个子进程
+</li>
+<li>关闭管道的不使用端
+</li>
+<li>exec一个shell以执行命令
+</li>
+<li>等待命令终止
+</li>
+</ol>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;stdio.h&gt;</span>
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#21019;&#24314;&#19968;&#20010;&#23376;&#36827;&#31243;&#65292;&#29992;&#20110;&#25191;&#34892;&#25351;&#23450;&#30340;shell&#21629;&#20196;</span>
+<span style="color: #ffa07a;">   &#21487;&#20197;&#23558;&#27492;&#23376;&#36827;&#31243;&#30340;&#26631;&#20934;&#36755;&#20837;&#25110;&#26631;&#20934;&#36755;&#20986;&#20026;&#31649;&#36947;,&#35813;&#31649;&#36947;&#30340;&#21478;&#19968;&#31471;&#20026;&#35843;&#29992;&#36827;&#31243;&#20013;&#36820;&#22238;&#30340;&#31649;&#36947;&#25991;&#20214;&#27969;&#25351;&#38024;&#25152;&#24341;&#29992;</span>
+
+<span style="color: #ffa07a;">   cmdstring&#65306;&#35201;&#25191;&#34892;&#30340;shell&#21629;&#20196;</span>
+<span style="color: #ffa07a;">   type&#65306;&#20026;"r"&#26102;&#65292;&#23376;&#36827;&#31243;&#25152;&#25191;&#34892;&#21629;&#20196;&#30340;&#26631;&#20934;&#36755;&#20986;&#20026;&#31649;&#36947;&#30340;&#36755;&#20837;&#31471;,&#35813;&#31649;&#36947;&#30340;&#36755;&#20986;&#31471;&#20026;popen&#30340;&#36820;&#22238;&#20540;</span>
+<span style="color: #ffa07a;">   &#20026;"w"&#26102;&#65292;&#23376;&#36827;&#31243;&#25191;&#34892;&#30340;&#21629;&#20196;&#30340;&#26631;&#20934;&#36755;&#20837;&#20026;&#31649;&#36947;&#30340;&#36755;&#20986;&#31471;,&#35813;&#31649;&#36947;&#30340;&#36755;&#20837;&#31471;&#20026;popen&#30340;&#36820;&#22238;&#20540;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;&#25991;&#20214;&#25351;&#38024;&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;NULL</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">FILE</span> *<span style="color: #87cefa;">popen</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">cmdstring</span>, <span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">type</span>);
+</pre>
+</div>
+<p>
+函数popen先执行fork，然后调用exec以执行cmdstring，并且返回一个标准I/O文件指针：
+</p>
+<ul class="org-ul">
+<li>如果type是"r"，则文件指针连接到cmdstring的标准输出(见图14-5)
+</li>
+<li>如果type是"w"，则文件指针连接到cmdstring的标准输入(见图14-6)
+</li>
+</ul>
+
+<div class="figure">
+<p><img src="pic/popen.jpg" alt="popen.jpg" width="90%" /> 
+</p>
+</div>
+
+<p>
+pclose函数关闭标准I/O流：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;stdio.h&gt;</span>
+
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#20851;&#38381;popen&#25171;&#24320;&#30340;&#25991;&#20214;&#25351;&#38024;</span>
+
+<span style="color: #ffa07a;">   fp&#65306;popen&#25171;&#24320;&#30340;&#25991;&#20214;&#25351;&#38024;</span>
+
+<span style="color: #ffa07a;">   return&#65306;cmdstring&#30340;&#32456;&#27490;&#29366;&#24577;&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffa07a;">   ,*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">pclose</span>(<span style="color: #98fb98;">FILE</span> *<span style="color: #eedd82;">fp</span>);
+</pre>
+</div>
+<p>
+pclose函数会等待命令执行结束，然后返回shell的终止状态。如果shell不能被执行，则pclose返回的终止状态与shell执行exit(127)一样
+</p>
+
+<p>
+cmdstring由Bourne shell以下列方式执行：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ sh -c cmdstring
+</pre>
+</div>
+<p>
+这表示shell将扩展cmdstring中的任何特殊字符。例如可以使用：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C">fp = popen(<span style="color: #ffa07a;">"ls *.c"</span>, <span style="color: #ffa07a;">"r"</span>);
+</pre>
+</div>
+<p>
+或者
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C">fp = popen(<span style="color: #ffa07a;">"cmd 2&gt;&amp;1"</span>, <span style="color: #ffa07a;">"w"</span>);
+</pre>
+</div>
+</div>
+
+<div id="outline-container-sec-1-2-1" class="outline-4">
+<h4 id="sec-1-2-1">使用popen实现分页读取文件</h4>
+<div class="outline-text-4" id="text-1-2-1">
+<p>
+shell命令${PAGER:-more}的意思是：如果shell变量PAGER已经定义，且其值非空，则使用其值，否则使用字符串more
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/wait.h&gt;</span>
+
+<span style="color: #7fffd4;">#define</span> <span style="color: #eedd82;">PAGER</span>   <span style="color: #ffa07a;">"${PAGER:-more}"</span> <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">environment variable, or default </span><span style="color: #ff4500;">*/</span>
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">argc</span>, <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">argv</span>[])
+{
+    <span style="color: #98fb98;">char</span>    <span style="color: #eedd82;">line</span>[MAXLINE];
+    <span style="color: #98fb98;">FILE</span>    *<span style="color: #eedd82;">fpin</span>, *<span style="color: #eedd82;">fpout</span>;
+
+    <span style="color: #00ffff;">if</span> (argc != 2)
+        err_quit(<span style="color: #ffa07a;">"usage: a.out &lt;pathname&gt;"</span>);
+    <span style="color: #00ffff;">if</span> ((fpin = fopen(argv[1], <span style="color: #ffa07a;">"r"</span>)) == <span style="color: #7fffd4;">NULL</span>)
+        err_sys(<span style="color: #ffa07a;">"can't open %s"</span>, argv[1]);
+
+    <span style="color: #00ffff;">if</span> ((fpout = popen(PAGER, <span style="color: #ffa07a;">"w"</span>)) == <span style="color: #7fffd4;">NULL</span>)
+        err_sys(<span style="color: #ffa07a;">"popen error"</span>);
+
+    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">copy argv[1] to pager </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #00ffff;">while</span> (fgets(line, MAXLINE, fpin) != <span style="color: #7fffd4;">NULL</span>) {
+        <span style="color: #00ffff;">if</span> (fputs(line, fpout) == EOF)
+            err_sys(<span style="color: #ffa07a;">"fputs error to pipe"</span>);
+    }
+    <span style="color: #00ffff;">if</span> (ferror(fpin))
+        err_sys(<span style="color: #ffa07a;">"fgets error"</span>);
+    <span style="color: #00ffff;">if</span> (pclose(fpout) == -1)
+        err_sys(<span style="color: #ffa07a;">"pclose error"</span>);
+
+    exit(0);
+}
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-sec-1-2-2" class="outline-4">
+<h4 id="sec-1-2-2">实现popen和pclose函数</h4>
+<div class="outline-text-4" id="text-1-2-2">
+<p>
+实现popen和pclose函数需要考虑很多细节：
+</p>
+<ul class="org-ul">
+<li>每次调用popen时，应当记住所创建的子进程的进程ID，以及其文件描述符或FILE指针。因此选择在数组childpid中保存子进程ID，并用文件描述符作为其下标
+</li>
+<li>当以FILE指针作为参数调用pclose时，可以调用标准I/O函数fileno以得到文件描述符，然后取得子进程ID，并用于调用waitpid
+</li>
+<li>因为一个进程可能调用popen多次，所以在动态分配childpid数组时(第一次调用popen时)，其长度必须容纳与文件描述符数相同的进程数
+</li>
+</ul>
+
+<p>
+根据POSIX要求子进程必须从头逐个检查childpid数组的各元素，关闭仍旧打开的任一描述符，因为fork的子进程可能继承了父进程以前popen所形成的管道
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;errno.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;fcntl.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/wait.h&gt;</span>
+
+<span style="color: #ff4500;">/*</span>
+<span style="color: #ff4500;"> * Pointer to array allocated at run-time.</span>
+<span style="color: #ff4500;"> </span><span style="color: #ff4500;">*/</span>
+<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">pid_t</span> *<span style="color: #eedd82;">childpid</span> = <span style="color: #7fffd4;">NULL</span>;
+
+<span style="color: #ff4500;">/*</span>
+<span style="color: #ff4500;"> * From our open_max(), {Prog openmax}.</span>
+<span style="color: #ff4500;"> </span><span style="color: #ff4500;">*/</span>
+<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">maxfd</span>;
+
+<span style="color: #98fb98;">FILE</span> *<span style="color: #87cefa;">popen</span>(<span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">cmdstring</span>, <span style="color: #00ffff;">const</span> <span style="color: #98fb98;">char</span> *<span style="color: #eedd82;">type</span>)
+{
+    <span style="color: #98fb98;">int</span>     <span style="color: #eedd82;">i</span>;
+    <span style="color: #98fb98;">int</span>     <span style="color: #eedd82;">pfd</span>[2];
+    <span style="color: #98fb98;">pid_t</span>   <span style="color: #eedd82;">pid</span>;
+    <span style="color: #98fb98;">FILE</span>    *<span style="color: #eedd82;">fp</span>;
+
+    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">only allow "r" or "w" </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #00ffff;">if</span> ((type[0] != <span style="color: #ffa07a;">'r'</span> &amp;&amp; type[0] != <span style="color: #ffa07a;">'w'</span>) || type[1] != 0) {
+        errno = EINVAL;     <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">required by POSIX </span><span style="color: #ff4500;">*/</span>
+        <span style="color: #00ffff;">return</span>(<span style="color: #7fffd4;">NULL</span>);
+    }
+
+    <span style="color: #00ffff;">if</span> (childpid == <span style="color: #7fffd4;">NULL</span>) {     <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">first time through </span><span style="color: #ff4500;">*/</span>
+        <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">allocate zeroed out array for child pids </span><span style="color: #ff4500;">*/</span>
+        maxfd = open_max();
+        <span style="color: #00ffff;">if</span> ((childpid = calloc(maxfd, <span style="color: #00ffff;">sizeof</span>(pid_t))) == <span style="color: #7fffd4;">NULL</span>)
+            <span style="color: #00ffff;">return</span>(<span style="color: #7fffd4;">NULL</span>);
+    }
+
+    <span style="color: #00ffff;">if</span> (pipe(pfd) &lt; 0)
+        <span style="color: #00ffff;">return</span>(<span style="color: #7fffd4;">NULL</span>);   <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">errno set by pipe() </span><span style="color: #ff4500;">*/</span>
+
+    <span style="color: #00ffff;">if</span> ((pid = fork()) &lt; 0) {
+        <span style="color: #00ffff;">return</span>(<span style="color: #7fffd4;">NULL</span>);   <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">errno set by fork() </span><span style="color: #ff4500;">*/</span>
+    } <span style="color: #00ffff;">else</span> <span style="color: #00ffff;">if</span> (pid == 0) {                          <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">child </span><span style="color: #ff4500;">*/</span>
+        <span style="color: #00ffff;">if</span> (*type == <span style="color: #ffa07a;">'r'</span>) {
+            close(pfd[0]);
+            <span style="color: #00ffff;">if</span> (pfd[1] != STDOUT_FILENO) {
+                dup2(pfd[1], STDOUT_FILENO);
+                close(pfd[1]);
+            }
+        } <span style="color: #00ffff;">else</span> {
+            close(pfd[1]);
+            <span style="color: #00ffff;">if</span> (pfd[0] != STDIN_FILENO) {
+                dup2(pfd[0], STDIN_FILENO);
+                close(pfd[0]);
+            }
+        }
+
+        <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">close all descriptors in childpid[] </span><span style="color: #ff4500;">*/</span>
+        <span style="color: #00ffff;">for</span> (i = 0; i &lt; maxfd; i++)
+            <span style="color: #00ffff;">if</span> (childpid[i] &gt; 0)
+                close(i);
+
+        execl(<span style="color: #ffa07a;">"/bin/sh"</span>, <span style="color: #ffa07a;">"sh"</span>, <span style="color: #ffa07a;">"-c"</span>, cmdstring, (<span style="color: #98fb98;">char</span> *)0);
+        _exit(127);
+    }
+
+    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">parent continues... </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #00ffff;">if</span> (*type == <span style="color: #ffa07a;">'r'</span>) {
+        close(pfd[1]);
+        <span style="color: #00ffff;">if</span> ((fp = fdopen(pfd[0], type)) == <span style="color: #7fffd4;">NULL</span>)
+            <span style="color: #00ffff;">return</span>(<span style="color: #7fffd4;">NULL</span>);
+    } <span style="color: #00ffff;">else</span> {
+        close(pfd[0]);
+        <span style="color: #00ffff;">if</span> ((fp = fdopen(pfd[1], type)) == <span style="color: #7fffd4;">NULL</span>)
+            <span style="color: #00ffff;">return</span>(<span style="color: #7fffd4;">NULL</span>);
+    }
+
+    childpid[fileno(fp)] = pid; <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">remember child pid for this fd </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #00ffff;">return</span>(fp);
+}
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">pclose</span>(<span style="color: #98fb98;">FILE</span> *<span style="color: #eedd82;">fp</span>)
+{
+    <span style="color: #98fb98;">int</span>     <span style="color: #eedd82;">fd</span>, <span style="color: #eedd82;">stat</span>;
+    <span style="color: #98fb98;">pid_t</span>   <span style="color: #eedd82;">pid</span>;
+
+    <span style="color: #00ffff;">if</span> (childpid == <span style="color: #7fffd4;">NULL</span>) {
+        errno = EINVAL;
+        <span style="color: #00ffff;">return</span>(-1);     <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">popen() has never been called </span><span style="color: #ff4500;">*/</span>
+    }
+
+    fd = fileno(fp);
+    <span style="color: #00ffff;">if</span> ((pid = childpid[fd]) == 0) {
+        errno = EINVAL;
+        <span style="color: #00ffff;">return</span>(-1);     <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">fp wasn't opened by popen() </span><span style="color: #ff4500;">*/</span>
+    }
+
+    childpid[fd] = <span style="color: #7fffd4;">NULL</span>;
+    <span style="color: #00ffff;">if</span> (fclose(fp) == EOF)
+        <span style="color: #00ffff;">return</span>(-1);
+
+    <span style="color: #00ffff;">while</span> (waitpid(pid, &amp;stat, 0) &lt; 0)
+        <span style="color: #00ffff;">if</span> (errno != EINTR)
+            <span style="color: #00ffff;">return</span>(-1); <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">error other than EINTR from waitpid() </span><span style="color: #ff4500;">*/</span>
+
+    <span style="color: #00ffff;">return</span>(stat);   <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">return child's termination status </span><span style="color: #ff4500;">*/</span>
+}
+</pre>
+</div>
+<p>
+若pclose的调用者已经为信号SIGCHLD设置了一个信号处理程序，则waitpid将返回一个EINTR。因为允许调用者捕捉此信号(或者任何其他可能中断waitpid调用的信号)，所以当waitpid被一个捕捉到的信号中断时，那就必须再次调用waitpid
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-1-2-3" class="outline-4">
+<h4 id="sec-1-2-3">用popen变换输入</h4>
+<div class="outline-text-4" id="text-1-2-3">
+<p>
+考虑一个应用程序，它向标准输出写一个提示，然后从标准输入读1行。使用popen可以在应用程序和输入之间插入一个程序以对输入进行变换处
+理。图14-7显示了进程的安排：
+</p>
+
+<div class="figure">
+<p><img src="pic/filter-input.jpg" alt="filter-input.jpg" width="70%" /> 
+</p>
+</div>
+
+<p>
+下面是一个简单的过滤程序，它只是将输入复制到输出，在复制时将任一大写字符变换为小写字符。在写了一行之后，对标准输出进行了刷清(用fflush)：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;ctype.h&gt;</span>
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">void</span>)
+{
+    <span style="color: #98fb98;">int</span>     <span style="color: #eedd82;">c</span>;
+
+    <span style="color: #00ffff;">while</span> ((c = getchar()) != EOF) {
+        <span style="color: #00ffff;">if</span> (isupper(c))
+            c = tolower(c);
+        <span style="color: #00ffff;">if</span> (putchar(c) == EOF)
+            err_sys(<span style="color: #ffa07a;">"output error"</span>);
+        <span style="color: #00ffff;">if</span> (c == <span style="color: #ffa07a;">'\n'</span>)
+            fflush(stdout);
+    }
+    exit(0);
+}
+</pre>
+</div>
+<p>
+对该过滤程序进行编译，其可执行目标代码存放在文件myuclc中。在下面程序中通过popen调用myuclc完成对输入的过滤：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/wait.h&gt;</span>
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">void</span>)
+{
+    <span style="color: #98fb98;">char</span>    <span style="color: #eedd82;">line</span>[MAXLINE];
+    <span style="color: #98fb98;">FILE</span>    *<span style="color: #eedd82;">fpin</span>;
+
+    <span style="color: #00ffff;">if</span> ((fpin = popen(<span style="color: #ffa07a;">"myuclc"</span>, <span style="color: #ffa07a;">"r"</span>)) == <span style="color: #7fffd4;">NULL</span>)
+    err_sys(<span style="color: #ffa07a;">"popen error"</span>);
+    <span style="color: #00ffff;">for</span> ( ; ; ) {
+    fputs(<span style="color: #ffa07a;">"prompt&gt; "</span>, stdout);
+    fflush(stdout);
+    <span style="color: #00ffff;">if</span> (fgets(line, MAXLINE, fpin) == <span style="color: #7fffd4;">NULL</span>) <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">read from pipe </span><span style="color: #ff4500;">*/</span>
+        <span style="color: #00ffff;">break</span>;
+    <span style="color: #00ffff;">if</span> (fputs(line, stdout) == EOF)
+        err_sys(<span style="color: #ffa07a;">"fputs error to pipe"</span>);
+    }
+    <span style="color: #00ffff;">if</span> (pclose(fpin) == -1)
+    err_sys(<span style="color: #ffa07a;">"pclose error"</span>);
+    putchar(<span style="color: #ffa07a;">'\n'</span>);
+    exit(0);
+}
+</pre>
+</div>
+<p>
+测试结果：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ ./src/ipc/popen1 
+prompt&gt; HELLO WORLD
+hello world
+prompt&gt; ^C
+</pre>
+</div>
+<p>
+因为标准输出通常是按行进行缓存的，而提示并不包含新行符，所以在写了提示之后，需要调用fflush
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-1-3" class="outline-3">
+<h3 id="sec-1-3">协同进程</h3>
+<div class="outline-text-3" id="text-1-3">
+<p>
+UNIX过滤程序从标准输入读取数据，对其进行适当处理后写到标准输出。几个过滤进程通常在shell管道命令中线性地连接。当同一个程序产生某个过滤程序的输入，同时又读取该过
+滤程序的输出时，则该过滤程序就成为协同进程：
+</p>
+
+<p>
+协同进程通常在shell的后台运行，其标准输入和标准输出通过管道连接到另一个程序。虽然要求初始化一个协同进程，并将其输入和输出连接到另一个进程的shell语法是十分奇特的，但是协同进程的工作方式在C程序中也是非常有用的
+</p>
+
+<p>
+进程先创建两个管道，协同进程的标准输入和协同进程的标准输出。图14-8显示了这种安排：
+</p>
+
+<div class="figure">
+<p><img src="pic/coprocess.jpg" alt="coprocess.jpg" width="90%" /> 
+</p>
+</div>
+
+<ul class="org-ul">
+<li>popen提供连接到另一个进程的标准输入或标准输出的一个单行管道
+</li>
+<li>协同进程有连接到另一个进程的两个单行管道
+</li>
+</ul>
+</div>
+
+<div id="outline-container-sec-1-3-1" class="outline-4">
+<h4 id="sec-1-3-1">对两个数求和的简单过滤</h4>
+<div class="outline-text-4" id="text-1-3-1">
+<p>
+下面程序从标准输入读两个数，计算它们的和，然后将结果写至标准输出:
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">void</span>)
+{
+    <span style="color: #98fb98;">int</span>     <span style="color: #eedd82;">n</span>, <span style="color: #eedd82;">int1</span>, <span style="color: #eedd82;">int2</span>;
+    <span style="color: #98fb98;">char</span>    <span style="color: #eedd82;">line</span>[MAXLINE];
+
+    <span style="color: #00ffff;">while</span> ((n = read(STDIN_FILENO, line, MAXLINE)) &gt; 0) {
+        line[n] = 0;        <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">null terminate </span><span style="color: #ff4500;">*/</span>
+        <span style="color: #00ffff;">if</span> (sscanf(line, <span style="color: #ffa07a;">"%d%d"</span>, &amp;int1, &amp;int2) == 2) {
+            sprintf(line, <span style="color: #ffa07a;">"%d\n"</span>, int1 + int2);
+            n = strlen(line);
+            <span style="color: #00ffff;">if</span> (write(STDOUT_FILENO, line, n) != n)
+                err_sys(<span style="color: #ffa07a;">"write error"</span>);
+        } <span style="color: #00ffff;">else</span> {
+            <span style="color: #00ffff;">if</span> (write(STDOUT_FILENO, <span style="color: #ffa07a;">"invalid args\n"</span>, 13) != 13)
+                err_sys(<span style="color: #ffa07a;">"write error"</span>);
+        }
+    }
+    exit(0);
+}
+</pre>
+</div>
+<p>
+从其标准输入读入两个数之后调用add2协同进程，从协同进程送来的值则写到其标准输出，在程序中创建了两个管道，父、子进程各自关闭它们不需使用的端口。创建两个管道的理由是:一个用做协同进程的标准输入，另一个则用做它的标准输出。然后在调用execl之前，子进程调用dup2使管道描述符移至其标准输入和输出： 
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+
+<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">sig_pipe</span>(<span style="color: #98fb98;">int</span>);      <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">our signal handler </span><span style="color: #ff4500;">*/</span>
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">void</span>)
+{
+    <span style="color: #98fb98;">int</span>     <span style="color: #eedd82;">n</span>, <span style="color: #eedd82;">fd1</span>[2], <span style="color: #eedd82;">fd2</span>[2];
+    <span style="color: #98fb98;">pid_t</span>   <span style="color: #eedd82;">pid</span>;
+    <span style="color: #98fb98;">char</span>    <span style="color: #eedd82;">line</span>[MAXLINE];
+
+    <span style="color: #00ffff;">if</span> (signal(SIGPIPE, sig_pipe) == SIG_ERR)
+        err_sys(<span style="color: #ffa07a;">"signal error"</span>);
+
+    <span style="color: #00ffff;">if</span> (pipe(fd1) &lt; 0 || pipe(fd2) &lt; 0)
+        err_sys(<span style="color: #ffa07a;">"pipe error"</span>);
+
+    <span style="color: #00ffff;">if</span> ((pid = fork()) &lt; 0) {
+        err_sys(<span style="color: #ffa07a;">"fork error"</span>);
+    } <span style="color: #00ffff;">else</span> <span style="color: #00ffff;">if</span> (pid &gt; 0) {                           <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">parent </span><span style="color: #ff4500;">*/</span>
+        close(fd1[0]);
+        close(fd2[1]);
+
+        <span style="color: #00ffff;">while</span> (fgets(line, MAXLINE, stdin) != <span style="color: #7fffd4;">NULL</span>) {
+            n = strlen(line);
+            <span style="color: #00ffff;">if</span> (write(fd1[1], line, n) != n)
+                err_sys(<span style="color: #ffa07a;">"write error to pipe"</span>);
+            <span style="color: #00ffff;">if</span> ((n = read(fd2[0], line, MAXLINE)) &lt; 0)
+                err_sys(<span style="color: #ffa07a;">"read error from pipe"</span>);
+            <span style="color: #00ffff;">if</span> (n == 0) {
+                err_msg(<span style="color: #ffa07a;">"child closed pipe"</span>);
+                <span style="color: #00ffff;">break</span>;
+            }
+            line[n] = 0;    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">null terminate </span><span style="color: #ff4500;">*/</span>
+            <span style="color: #00ffff;">if</span> (fputs(line, stdout) == EOF)
+                err_sys(<span style="color: #ffa07a;">"fputs error"</span>);
+        }
+
+        <span style="color: #00ffff;">if</span> (ferror(stdin))
+            err_sys(<span style="color: #ffa07a;">"fgets error on stdin"</span>);
+        exit(0);
+    } <span style="color: #00ffff;">else</span> {                                    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">child </span><span style="color: #ff4500;">*/</span>
+        close(fd1[1]);
+        close(fd2[0]);
+        <span style="color: #00ffff;">if</span> (fd1[0] != STDIN_FILENO) {
+            <span style="color: #00ffff;">if</span> (dup2(fd1[0], STDIN_FILENO) != STDIN_FILENO)
+                err_sys(<span style="color: #ffa07a;">"dup2 error to stdin"</span>);
+            close(fd1[0]);
+        }
+
+        <span style="color: #00ffff;">if</span> (fd2[1] != STDOUT_FILENO) {
+            <span style="color: #00ffff;">if</span> (dup2(fd2[1], STDOUT_FILENO) != STDOUT_FILENO)
+                err_sys(<span style="color: #ffa07a;">"dup2 error to stdout"</span>);
+            close(fd2[1]);
+        }
+        <span style="color: #00ffff;">if</span> (execl(<span style="color: #ffa07a;">"./add2"</span>, <span style="color: #ffa07a;">"add2"</span>, (<span style="color: #98fb98;">char</span> *)0) &lt; 0)
+            err_sys(<span style="color: #ffa07a;">"execl error"</span>);
+    }
+    exit(0);
+}
+
+<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">sig_pipe</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">signo</span>)
+{
+    printf(<span style="color: #ffa07a;">"SIGPIPE caught\n"</span>);
+    exit(1);
+}
+</pre>
+</div>
+<p>
+测试：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ ./pipe4  
+1
+invalid args
+2 3
+5
+4 5
+SIGPIPE caught
+</pre>
+</div>
+<p>
+当pipe4进程正等待输入时杀死add2协同进程，然后输入两个数，进行写操作时，由于该管道无读进程，于是调用信号处理函数sig_pipe
+</p>
+</div>
+
+<div id="outline-container-sec-1-3-1-1" class="outline-5">
+<h5 id="sec-1-3-1-1">使用标准IO改写add2</h5>
+<div class="outline-text-5" id="text-1-3-1-1">
+<p>
+在协同进程add2中，使用了UNIX的I/O:read和write。现在使用标准I/O改写该协同进程：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">void</span>)
+{
+    <span style="color: #98fb98;">int</span>     <span style="color: #eedd82;">int1</span>, <span style="color: #eedd82;">int2</span>;
+    <span style="color: #98fb98;">char</span>    <span style="color: #eedd82;">line</span>[MAXLINE];
+
+    <span style="color: #00ffff;">while</span> (fgets(line, MAXLINE, stdin) != <span style="color: #7fffd4;">NULL</span>) {
+    <span style="color: #00ffff;">if</span> (sscanf(line, <span style="color: #ffa07a;">"%d%d"</span>, &amp;int1, &amp;int2) == 2) {
+        <span style="color: #00ffff;">if</span> (printf(<span style="color: #ffa07a;">"%d\n"</span>, int1 + int2) == EOF)
+        err_sys(<span style="color: #ffa07a;">"printf error"</span>);
+    } <span style="color: #00ffff;">else</span> {
+        <span style="color: #00ffff;">if</span> (printf(<span style="color: #ffa07a;">"invalid args\n"</span>) == EOF)
+        err_sys(<span style="color: #ffa07a;">"printf error"</span>);
+    }
+    }
+    exit(0);
+}
+</pre>
+</div>
+
+<p>
+测试结果：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ ./spipe4 
+1 2 <span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#27515;&#38145;</span>
+</pre>
+</div>
+<p>
+若pipe4调用此新的协同进程，则它不再工作。问题出在系统默认的标准I/O缓存机制上：当add2stdio被调用时，对标准输入的第一个fgets引起标准I/O库分配一个缓存，并选择缓
+存的类型。因为标准输入是个管道，所以isatty为假，于是标准I/O库由系统默认是全缓存的。对标准输出也有同样的处理。当add2stdio从其标准输入读取而发生堵塞时，pipe4从管道读时也
+发生堵塞，于是产生了死锁
+</p>
+
+<p>
+对将要执行的这样一个协同进程可以设置buf，可以在add2stdio程序的while循环之前加上如下代码:
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #00ffff;">if</span> (setvbuf(stdin, <span style="color: #7fffd4;">NULL</span>, _IOLBF, 0) != 0)
+    err_sys(<span style="color: #ffa07a;">"setvbuf error"</span>);
+
+<span style="color: #00ffff;">if</span> (setvbuf(stdout, <span style="color: #7fffd4;">NULL</span>, _IOLBF, 0)!= 0)
+    err_sys(<span style="color: #ffa07a;">"setvbuf error"</span>);
+</pre>
+</div>
+<p>
+这使得当有一行可用时fgets即返回，并使得当输出一新行符时，printf即执行fflush操作
+</p>
+
+<p>
+这种设置往往要求对协同进程进程代码修改，但在使用一个第三方的协同进程时不一定可以满足，更一般解决方法是使被调用的协同进程认为它的标准输入和输出被连接到一个伪终端。这使得协同进程中的标准I/O例程对这两个I/O流进行行缓存
+</p>
+</div>
+</div>
+</div>
+</div>
+<div id="outline-container-sec-1-4" class="outline-3">
+<h3 id="sec-1-4">FIFO</h3>
 </div>
 </div>
 
 <div id="outline-container-sec-2" class="outline-2">
 <h2 id="sec-2">系统V IPC</h2>
-<div class="outline-text-2" id="text-2">
-</div><div id="outline-container-sec-2-1" class="outline-3">
-<h3 id="sec-2-1">消息队列</h3>
 </div>
+<div id="footnotes">
+<h2 class="footnotes">Footnotes: </h2>
+<div id="text-footnotes">
 
-<div id="outline-container-sec-2-2" class="outline-3">
-<h3 id="sec-2-2">信号量</h3>
-</div>
+<div class="footdef"><sup><a id="fn.1" name="fn.1" class="footnum" href="#fnr.1">1</a></sup> <p>DEFINITION NOT FOUND.</p></div>
 
-<div id="outline-container-sec-2-3" class="outline-3">
-<h3 id="sec-2-3">共享内存</h3>
+<div class="footdef"><sup><a id="fn.2" name="fn.2" class="footnum" href="#fnr.2">2</a></sup> <p>DEFINITION NOT FOUND.</p></div>
+
+
 </div>
-</div>
-</div>
+</div></div>
 <div id="postamble" class="status">
 
-     <br/>
-    <div class='ds-thread'></div>
-<script>
-var duoshuoQuery = {short_name:'klose911'};
-(function() {
-	 var dsThread = document.getElementsByClassName('ds-thread')[0];
-         dsThread.setAttribute('data-thread-key', document.title);
-         dsThread.setAttribute('data-title', document.title);
-         dsThread.setAttribute('data-url', window.location.href);
-	 var ds = document.createElement('script');
-	 ds.type = 'text/javascript';ds.async = true;
-	 ds.src = (document.location.protocol == 'https:' ? 'https:' : 'http:') + '//static.duoshuo.com/embed.js';
-	 ds.charset = 'UTF-8';
-	 (document.getElementsByTagName('head')[0] 
-				       || document.getElementsByTagName('body')[0]).appendChild(ds);
-				       })();
-</script>
-<script>
-  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
-  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
-  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
-  })(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
-  ga('create', 'UA-90850421-1', 'auto');
-  ga('send', 'pageview');
-</script>
+		  <br/>
+		  <div class='ds-thread'></div>
+		  <script>
+		  var duoshuoQuery = {short_name:'klose911'};
+		  (function() {
+					  var dsThread = document.getElementsByClassName('ds-thread')[0];
+					  dsThread.setAttribute('data-thread-key', document.title);
+					  dsThread.setAttribute('data-title', document.title);
+					  dsThread.setAttribute('data-url', window.location.href);
+					  var ds = document.createElement('script');
+					  ds.type = 'text/javascript';ds.async = true;
+					  ds.src = (document.location.protocol == 'https:' ? 'https:' : 'http:') + '//static.duoshuo.com/embed.js';
+					  ds.charset = 'UTF-8';
+					  (document.getElementsByTagName('head')[0] 
+						|| document.getElementsByTagName('body')[0]).appendChild(ds);
+					  })();
+		  </script>
+		  <script>
+		  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+			(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+			m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+			})(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+		  ga('create', 'UA-90850421-1', 'auto');
+		  ga('send', 'pageview');
+		  </script>
 </div>
 </body>
 </html>

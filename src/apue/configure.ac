@@ -53,5 +53,6 @@ AC_CONFIG_FILES([Makefile
                  src/stdio/Makefile
                  src/termios/Makefile
                  src/aio/Makefile
+                 src/ipc/Makefile
 				 ])
 AC_OUTPUT
