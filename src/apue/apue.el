@@ -41,6 +41,18 @@
         )
       )
 
+(setq org-footnote-re
+      (concat "\\[\\(?:"
+	      ;; Match inline footnotes.
+	      (org-re "fn:\\([-_[:word:]]+\\)?:\\|")
+	      ;; Match other footnotes.
+	      ;; "\\(?:\\([0-9]+\\)\\]\\)\\|"
+	      (org-re "\\(fn:[-_[:word:]]+\\)")
+	      "\\)"))
+
+(setq org-footnote-definition-re
+      (org-re "^\\[\\(fn:[-_[:word:]]+\\)\\]"))
+
 (defun apue-publish (no-cache)
   "Publish apue"
   (interactive "sno-cache?[y/n] ")
@@ -48,3 +60,4 @@
           (string= no-cache "Y"))
       (org-publish "apue" t)
     (org-publish "apue" nil)))
+
