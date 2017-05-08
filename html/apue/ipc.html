@@ -187,9 +187,32 @@ for the JavaScript code in this tag.
 </li>
 <li><a href="#sec-2">系统V IPC</a>
 <ul>
-<li><a href="#sec-2-1">消息队列</a></li>
-<li><a href="#sec-2-2">信号量</a></li>
-<li><a href="#sec-2-3">共享内存</a></li>
+<li><a href="#sec-2-1">相似特征</a>
+<ul>
+<li><a href="#sec-2-1-1">标识符和关键字</a>
+<ul>
+<li><a href="#sec-2-1-1-1">客户机和服务器使用同一IPC结构</a></li>
+<li><a href="#sec-2-1-1-2">创建IPC结构</a></li>
+</ul>
+</li>
+<li><a href="#sec-2-1-2">权限结构</a>
+<ul>
+<li><a href="#sec-2-1-2-1">mod字段</a></li>
+</ul>
+</li>
+<li><a href="#sec-2-1-3">资源限制</a></li>
+<li><a href="#sec-2-1-4">优点和缺点</a>
+<ul>
+<li><a href="#sec-2-1-4-1">系统V IPC的缺点</a></li>
+<li><a href="#sec-2-1-4-2">消息队列的优点</a></li>
+<li><a href="#sec-2-1-4-3">总结</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#sec-2-2">消息队列</a></li>
+<li><a href="#sec-2-3">信号量</a></li>
+<li><a href="#sec-2-4">共享内存</a></li>
 </ul>
 </li>
 </ul>
@@ -1442,16 +1465,351 @@ FIFO的另一个应用是在客户机和服务器之间传送数据。如果有�
 <div id="outline-container-sec-2" class="outline-2">
 <h2 id="sec-2">系统V IPC</h2>
 <div class="outline-text-2" id="text-2">
-</div><div id="outline-container-sec-2-1" class="outline-3">
-<h3 id="sec-2-1">消息队列</h3>
+<ul class="org-ul">
+<li>消息队列
+</li>
+<li>信号量
+</li>
+<li>共享内存
+</li>
+</ul>
+</div>
+
+
+<div id="outline-container-sec-2-1" class="outline-3">
+<h3 id="sec-2-1">相似特征</h3>
+<div class="outline-text-3" id="text-2-1">
+</div><div id="outline-container-sec-2-1-1" class="outline-4">
+<h4 id="sec-2-1-1">标识符和关键字</h4>
+<div class="outline-text-4" id="text-2-1-1">
+<p>
+每个内核中的IPC结构(消息队列、信号量或共享存储段)都用一个非负整数的标识符加以引用。例如，为了对一个消息队列发送或取消息，只需知道其队列标识符。与文件描述符不同，IPC标识符不是小的整数。当一个IPC结构被创建，以后又被删除时，与这种结构相关的标识符连续加1，直至达到一个整型数的最大正值，然后又回转到0。(即使在IPC结构被删除后也记住该值，每次使用此结构时则增1，该值被称为“槽使用顺序号”。它在ipc_perm结构中)
+</p>
+
+<p>
+无论何时创建IPC结构，都应指定一个关键字，关键字的数据类型由系统规定为key_t，通常在头文件&lt;sys/types.h&gt;中被规定为长整型。关键字由内核变换成标识符
+</p>
+</div>
+
+<div id="outline-container-sec-2-1-1-1" class="outline-5">
+<h5 id="sec-2-1-1-1">客户机和服务器使用同一IPC结构</h5>
+<div class="outline-text-5" id="text-2-1-1-1">
+<p>
+有多种方法使客户机和服务器在同一IPC结构上会合：
+</p>
+<ul class="org-ul">
+<li>服务器可以指定关键字IPC_PRIVATE创建一个新IPC结构，将返回的标识符存放在某处(例如一个文件)以便客户机取用。关键字IPC_PRIVATE保证服务器创建一个新IPC结构。缺点是服务器要将整型标识符写到文件中，然后客户机在此后又要读文件取得此标识符
+</li>
+</ul>
+
+<p>
+IPC_PRIVATE关键字也可用于父、子关系进程。父进程指定IPC_PRIVATE创建一个新IPC结构，所返回的标识符在fork后可由子进程使用。子进程可将此标识符作为exec函数的一个参数传给一个新程序
+</p>
+
+<ul class="org-ul">
+<li>在一个公用头文件中定义一个客户机和服务器都认可的关键字。然后服务器指定此关键字创建一个新的IPC结构。问题是该关键字可能已与一个IPC结构相结合，在此情况下，get函数(msgget、semget或shmget)出错返回。服务器必须处理这一错误，删除已存在的IPC结构，然后试着再创建它
+</li>
+
+<li>客户机和服务器认同一个路径名和课题ID(课题ID是0~255之间的字符值)，然后调用函数ftok将这两个值变换为一个关键字。然后在第二种方法中使用此关键字。ftok提供的唯一服务就是由一个路径名和课题ID产生一个关键字。因为一般来说，客户机和服务器至少共享一个头文件，所以一个比较简单的方法是避免使用ftok，而只是在该头文件中存放一个大家都知道的关键字。这样做还避免了使用另一个函数
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-2-1-1-2" class="outline-5">
+<h5 id="sec-2-1-1-2">创建IPC结构</h5>
+<div class="outline-text-5" id="text-2-1-1-2">
+<p>
+三个get函数(msgget、semget和shmget)都有两个类似的参数key和一个整型的flag。如若满足下列条件，则创建一个新的IPC结构(通常由服务器创建)：
+</p>
+<ol class="org-ol">
+<li>key是IPC_PRIVATE
+</li>
+<li>key当前未与特定类型的IPC结构相结合，flag中指定了IPC_CREAT位。为访问现存的队列(通常由客户机进行)，key必须等于创建该队列时所指定的关键字，并且不应指定IPC_CREAT
+</li>
+</ol>
+
+<p>
+注意，为了访问一个现存队列，决不能指定IPC_PRIVATE作为关键字。因为这是一个特殊的键值，它总是用于创建一个新队列。为了访问一个用IPC_PRIVATE关键字创建的现存队列，一定要知道与该队列相结合的标识符，然后在其他IPC调用中(例如msgsnd、msgrcv)使用该标识符
+</p>
+
+<p>
+如果希望创建一个新的IPC结构，保证不是引用具有同一标识符的一个现行IPC结构，那么必须在flag中同时指定IPC_CREAT和IPC_EXCL位。这样做了以后，如果IPC结构已经存在就会造成出错，返回EEXIST(这与指定了O_CREAT和O_EXCL标志的open相类似)
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-1-2" class="outline-4">
+<h4 id="sec-2-1-2">权限结构</h4>
+<div class="outline-text-4" id="text-2-1-2">
+<p>
+系统VIPC为每一个IPC结构设置了一个ipc_perm结构。该结构规定了许可权和所有者：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/ipc.h&gt;</span>
+<span style="color: #ff4500;">/* </span><span style="color: #ff4500;">Data structure used to pass permission information to IPC operations.  </span><span style="color: #ff4500;">*/</span>
+<span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">ipc_perm</span>
+{
+    <span style="color: #98fb98;">__key_t</span> <span style="color: #eedd82;">__key</span>;                      <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">Key.  </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">__uid_t</span> <span style="color: #eedd82;">uid</span>;                        <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">Owner's user ID.  </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">__gid_t</span> <span style="color: #eedd82;">gid</span>;                        <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">Owner's group ID.  </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">__uid_t</span> <span style="color: #eedd82;">cuid</span>;                       <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">Creator's user ID.  </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">__gid_t</span> <span style="color: #eedd82;">cgid</span>;                       <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">Creator's group ID.  </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">unsigned</span> <span style="color: #98fb98;">short</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">mode</span>;            <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">Read/write permission.  </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">unsigned</span> <span style="color: #98fb98;">short</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">__pad1</span>;
+    <span style="color: #98fb98;">unsigned</span> <span style="color: #98fb98;">short</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">__seq</span>;           <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">Sequence number.  </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">unsigned</span> <span style="color: #98fb98;">short</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">__pad2</span>;
+    <span style="color: #98fb98;">unsigned</span> <span style="color: #98fb98;">long</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">__unused1</span>;
+    <span style="color: #98fb98;">unsigned</span> <span style="color: #98fb98;">long</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">__unused2</span>;
+};
+</pre>
+</div>
+<p>
+在创建IPC结构时，除seq以外的所有字段都赋初值。以后，可以调用msgctl、semctl或shmctl修改uid、gid和mode字段。为了改变这些值，调用进程必须是IPC结构的创建者或超级用户。更改这些字段类似于对文件调用chown和chmod
+</p>
+</div>
+
+<div id="outline-container-sec-2-1-2-1" class="outline-5">
+<h5 id="sec-2-1-2-1">mod字段</h5>
+<div class="outline-text-5" id="text-2-1-2-1">
+<p>
+mode字段的值类似于文件权限的，但是对于任何IPC结构都不存在执行许可权。另外消息队列和共享存储使用术语“读”和“写”，而信号量则用术语“读”和“更改”。表14-2中对每种IPC说明了6种许可权：
+</p>
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 2:</span> 系统V IPC权限</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">权限</td>
+<td class="left">消息队列</td>
+<td class="left">信号量</td>
+<td class="left">共享内存</td>
+</tr>
+
+<tr>
+<td class="left">用户读</td>
+<td class="left">MSG_R</td>
+<td class="left">SEM_R</td>
+<td class="left">SHM_R</td>
+</tr>
+
+<tr>
+<td class="left">用户写(更改)</td>
+<td class="left">MSG_W</td>
+<td class="left">SEM_A</td>
+<td class="left">SHM_W</td>
+</tr>
+
+<tr>
+<td class="left">组读</td>
+<td class="left">MSG_R &gt;&gt; 3</td>
+<td class="left">SEM_R &gt;&gt; 3</td>
+<td class="left">SHM_R &gt;&gt; 3</td>
+</tr>
+
+<tr>
+<td class="left">组写(更改)</td>
+<td class="left">MSG_W &gt;&gt; 3</td>
+<td class="left">SEM_A &gt;&gt; 3</td>
+<td class="left">SHM_W &gt;&gt; 3</td>
+</tr>
+
+<tr>
+<td class="left">其他读</td>
+<td class="left">MSG_R &gt;&gt; 6</td>
+<td class="left">SEM_R &gt;&gt; 6</td>
+<td class="left">SHM_R &gt;&gt; 6</td>
+</tr>
+
+<tr>
+<td class="left">其他写(更改)</td>
+<td class="left">MSG_W &gt;&gt; 6</td>
+<td class="left">SEM_A &gt;&gt; 6</td>
+<td class="left">SHM_R &gt;&gt; 6</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-1-3" class="outline-4">
+<h4 id="sec-2-1-3">资源限制</h4>
+<div class="outline-text-4" id="text-2-1-3">
+<p>
+三种形式的系统VIPC都有可能会遇到的资源限制。这些限制的大多数可以通过重新配置而加以更改。当描述每种IPC时，都会指出它的限制
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-1-4" class="outline-4">
+<h4 id="sec-2-1-4">优点和缺点</h4>
+<div class="outline-text-4" id="text-2-1-4">
+</div><div id="outline-container-sec-2-1-4-1" class="outline-5">
+<h5 id="sec-2-1-4-1">系统V IPC的缺点</h5>
+<div class="outline-text-5" id="text-2-1-4-1">
+<ul class="org-ul">
+<li>IPC结构是在系统范围内起作用的，没有访问计数。如果创建了一个消息队列，在该队列中放入了几则消息，然后终止，但是该消息队列及其内容并不被删除。它们余留在系统中直至：
+<ul class="org-ul">
+<li>由某个进程调用msgrcv或msgctl读消息或删除消息队列
+</li>
+<li>某个进程执行ipcrm(1)命令删除消息队列
+</li>
+<li>由正在再起动的系统删除消息队列
+</li>
+</ul>
+</li>
+</ul>
+<p>
+与管道pipe相比，那么当最后一个访问管道的进程终止时，管道就被完全地删除了。对于FIFO而言虽然当最后一个引用FIFO的进程终止时其名字仍保留在系统中，直至显式地删除它，但是留在FIFO中的数据却在此时全部删除
+</p>
+
+<ul class="org-ul">
+<li>这些IPC结构并不按名字为文件系统所知。我们不能用以前的函数来存取它们或修改它们的特性。为了支持它们不得不增加了十多个全新的系统调用(msgget、semop、shmat等)。我们不能用ls命令见到它们，不能用rm命令删除它们，不能用chmod命令更改它们的存取权。于是，也不得不增加了全新的命令ipcs和ipcrm。 
+</li>
+</ul>
+
+<p>
+因为这些IPC不使用文件描述符，所以不能对它们使用多路转接I/O函数：select和poll。这就使得一次使用多个IPC结构，以及用文件或设备I/O来使用IPC结构很难做到。例如，没有某种形式的忙-等待循环，就不能使一个服务器等待一个消息放在两个消息队列的任一一个中
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-1-4-2" class="outline-5">
+<h5 id="sec-2-1-4-2">消息队列的优点</h5>
+<div class="outline-text-5" id="text-2-1-4-2">
+<ul class="org-ul">
+<li>避免多次open, write, close调用
+</li>
+<li>可靠的
+</li>
+<li>流是受到控制的
+</li>
+<li>面向记录
+</li>
+<li>支持非先进先出
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-2-1-4-3" class="outline-5">
+<h5 id="sec-2-1-4-3">总结</h5>
+<div class="outline-text-5" id="text-2-1-4-3">
+<p>
+下表对不同形式的IPC的某些特征进行了比较：
+</p>
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 3:</span> 不同形式IPC之间特征的比较</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">类型</td>
+<td class="left">无连接</td>
+<td class="left">可靠</td>
+<td class="left">流控制</td>
+<td class="left">记录</td>
+<td class="left">消息类型或优先权</td>
+</tr>
+
+<tr>
+<td class="left">消息队列</td>
+<td class="left">否</td>
+<td class="left">是</td>
+<td class="left">是</td>
+<td class="left">是</td>
+<td class="left">是</td>
+</tr>
+
+<tr>
+<td class="left">流</td>
+<td class="left">否</td>
+<td class="left">是</td>
+<td class="left">是</td>
+<td class="left">是</td>
+<td class="left">是</td>
+</tr>
+
+<tr>
+<td class="left">UNIX流套接字</td>
+<td class="left">否</td>
+<td class="left">是</td>
+<td class="left">是</td>
+<td class="left">否</td>
+<td class="left">否</td>
+</tr>
+
+<tr>
+<td class="left">UNIX数据套接字</td>
+<td class="left">是</td>
+<td class="left">是</td>
+<td class="left">否</td>
+<td class="left">是</td>
+<td class="left">否</td>
+</tr>
+
+<tr>
+<td class="left">FIFO</td>
+<td class="left">否</td>
+<td class="left">是</td>
+<td class="left">是</td>
+<td class="left">否</td>
+<td class="left">否</td>
+</tr>
+</tbody>
+</table>
+
+<ul class="org-ul">
+<li>“无连接”指的是无需先调用某种形式的open，就能发送消息的能力。正如前述因为需要有某种技术以获得队列标识符，所以并不认为消息队列具有无连接特性
+</li>
+<li>因为所有这些形式的IPC都限制用在单主机上，所以它们都是可靠的。当消息通过网络传送时，丢失消息的可能性就要加以考虑
+</li>
+<li>流控制的意思是：如果系统资源短缺(缓存)或者如果接收进程不能再接收更多消息，则发送进程就要睡眠。当流控制条件消失时，发送进程应自动地被唤醒。
+</li>
+</ul>
+
+<p>
+表中没有表示的一个特征是：IPC设施能否自动地为每个客户机自动地创建一个到服务器的唯一连接。实际上流以及UNIX流套接口可以提供这种能力
+</p>
+</div>
+</div>
+</div>
 </div>
 
 <div id="outline-container-sec-2-2" class="outline-3">
-<h3 id="sec-2-2">信号量</h3>
+<h3 id="sec-2-2">消息队列</h3>
 </div>
 
 <div id="outline-container-sec-2-3" class="outline-3">
-<h3 id="sec-2-3">共享内存</h3>
+<h3 id="sec-2-3">信号量</h3>
+</div>
+
+<div id="outline-container-sec-2-4" class="outline-3">
+<h3 id="sec-2-4">共享内存</h3>
 </div>
 </div>
 </div>
