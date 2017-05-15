@@ -360,11 +360,11 @@ cmdstring由Bourne shell以下列方式执行：
       }
     #+END_SRC    
 *** 实现popen和pclose函数
-实现popen和pclose函数需要考虑很多细节：
+    实现popen和pclose函数需要考虑很多细节：
 + 每次调用popen时，应当记住所创建的子进程的进程ID，以及其文件描述符或FILE指针。因此选择在数组childpid中保存子进程ID，并用文件描述符作为其下标
 + 当以FILE指针作为参数调用pclose时，可以调用标准I/O函数fileno以得到文件描述符，然后取得子进程ID，并用于调用waitpid
 + 因为一个进程可能调用popen多次，所以在动态分配childpid数组时(第一次调用popen时)，其长度必须容纳与文件描述符数相同的进程数
-
+  
 根据POSIX要求子进程必须从头逐个检查childpid数组的各元素，关闭仍旧打开的任一描述符，因为fork的子进程可能继承了父进程以前popen所形成的管道
 #+BEGIN_SRC C
   #include "apue.h"
@@ -476,13 +476,13 @@ cmdstring由Bourne shell以下列方式执行：
 若pclose的调用者已经为信号SIGCHLD设置了一个信号处理程序，则waitpid将返回一个EINTR。因为允许调用者捕捉此信号(或者任何其他可能中断waitpid调用的信号)，所以当waitpid被一个捕捉到的信号中断时，那就必须再次调用waitpid
 
 *** 用popen变换输入
-考虑一个应用程序，它向标准输出写一个提示，然后从标准输入读1行。使用popen可以在应用程序和输入之间插入一个程序以对输入进行变换处
-理。图14-7显示了进程的安排：
-#+ATTR_HTML: image :width 70% 
-[[file:pic/filter-input.jpg]] 
-
-下面是一个简单的过滤程序，它只是将输入复制到输出，在复制时将任一大写字符变换为小写字符。在写了一行之后，对标准输出进行了刷清(用fflush)：
-#+BEGIN_SRC C
+    考虑一个应用程序，它向标准输出写一个提示，然后从标准输入读1行。使用popen可以在应用程序和输入之间插入一个程序以对输入进行变换处
+    理。图14-7显示了进程的安排：
+    #+ATTR_HTML: image :width 70% 
+    [[file:pic/filter-input.jpg]] 
+    
+    下面是一个简单的过滤程序，它只是将输入复制到输出，在复制时将任一大写字符变换为小写字符。在写了一行之后，对标准输出进行了刷清(用fflush)：
+    #+BEGIN_SRC C
   #include "apue.h"
   #include <ctype.h>
 
@@ -500,9 +500,9 @@ cmdstring由Bourne shell以下列方式执行：
           }
           exit(0);
   }
-#+END_SRC
-对该过滤程序进行编译，其可执行目标代码存放在文件myuclc中。在下面程序中通过popen调用myuclc完成对输入的过滤：
-#+BEGIN_SRC C
+    #+END_SRC
+    对该过滤程序进行编译，其可执行目标代码存放在文件myuclc中。在下面程序中通过popen调用myuclc完成对输入的过滤：
+    #+BEGIN_SRC C
   #include "apue.h"
   #include <sys/wait.h>
 
@@ -526,31 +526,31 @@ cmdstring由Bourne shell以下列方式执行：
       putchar('\n');
       exit(0);
   }
-#+END_SRC
-测试结果：
-#+BEGIN_SRC sh
+    #+END_SRC
+    测试结果：
+    #+BEGIN_SRC sh
   $ ./src/ipc/popen1 
   prompt> HELLO WORLD
   hello world
   prompt> ^C
-#+END_SRC
-因为标准输出通常是按行进行缓存的，而提示并不包含新行符，所以在写了提示之后，需要调用fflush
-
+    #+END_SRC
+    因为标准输出通常是按行进行缓存的，而提示并不包含新行符，所以在写了提示之后，需要调用fflush
+    
 ** 协同进程
-UNIX过滤程序从标准输入读取数据，对其进行适当处理后写到标准输出。几个过滤进程通常在shell管道命令中线性地连接。当同一个程序产生某个过滤程序的输入，同时又读取该过
-滤程序的输出时，则该过滤程序就成为协同进程：
-
-协同进程通常在shell的后台运行，其标准输入和标准输出通过管道连接到另一个程序。虽然要求初始化一个协同进程，并将其输入和输出连接到另一个进程的shell语法是十分奇特的，但是协同进程的工作方式在C程序中也是非常有用的
-
-进程先创建两个管道，协同进程的标准输入和协同进程的标准输出。图14-8显示了这种安排：
-#+ATTR_HTML: image :width 90% 
-[[file:pic/coprocess.jpg]] 
-
+   UNIX过滤程序从标准输入读取数据，对其进行适当处理后写到标准输出。几个过滤进程通常在shell管道命令中线性地连接。当同一个程序产生某个过滤程序的输入，同时又读取该过
+   滤程序的输出时，则该过滤程序就成为协同进程：
+   
+   协同进程通常在shell的后台运行，其标准输入和标准输出通过管道连接到另一个程序。虽然要求初始化一个协同进程，并将其输入和输出连接到另一个进程的shell语法是十分奇特的，但是协同进程的工作方式在C程序中也是非常有用的
+   
+   进程先创建两个管道，协同进程的标准输入和协同进程的标准输出。图14-8显示了这种安排：
+   #+ATTR_HTML: image :width 90% 
+   [[file:pic/coprocess.jpg]] 
+   
 + popen提供连接到另一个进程的标准输入或标准输出的一个单行管道
 + 协同进程有连接到另一个进程的两个单行管道
-
+  
 *** 对两个数求和的简单过滤
-下面程序从标准输入读两个数，计算它们的和，然后将结果写至标准输出:
+    下面程序从标准输入读两个数，计算它们的和，然后将结果写至标准输出:
     #+BEGIN_SRC C
       #include "apue.h"
 
@@ -574,8 +574,8 @@ UNIX过滤程序从标准输入读取数据，对其进行适当处理后写到�
               exit(0);
       }
     #+END_SRC
-从其标准输入读入两个数之后调用add2协同进程，从协同进程送来的值则写到其标准输出，在程序中创建了两个管道，父、子进程各自关闭它们不需使用的端口。创建两个管道的理由是:一个用做协同进程的标准输入，另一个则用做它的标准输出。然后在调用execl之前，子进程调用dup2使管道描述符移至其标准输入和输出： 
-#+BEGIN_SRC C
+    从其标准输入读入两个数之后调用add2协同进程，从协同进程送来的值则写到其标准输出，在程序中创建了两个管道，父、子进程各自关闭它们不需使用的端口。创建两个管道的理由是:一个用做协同进程的标准输入，另一个则用做它的标准输出。然后在调用execl之前，子进程调用dup2使管道描述符移至其标准输入和输出： 
+    #+BEGIN_SRC C
   #include "apue.h"
 
   static void sig_pipe(int);      /* our signal handler */
@@ -641,9 +641,9 @@ UNIX过滤程序从标准输入读取数据，对其进行适当处理后写到�
           printf("SIGPIPE caught\n");
           exit(1);
   }
-#+END_SRC
-测试：
-#+BEGIN_SRC sh
+    #+END_SRC
+    测试：
+    #+BEGIN_SRC sh
   $ ./pipe4  
   1
   invalid args
@@ -651,12 +651,12 @@ UNIX过滤程序从标准输入读取数据，对其进行适当处理后写到�
   5
   4 5
   SIGPIPE caught
-#+END_SRC
-当pipe4进程正等待输入时杀死add2协同进程，然后输入两个数，进行写操作时，由于该管道无读进程，于是调用信号处理函数sig_pipe
-
+    #+END_SRC
+    当pipe4进程正等待输入时杀死add2协同进程，然后输入两个数，进行写操作时，由于该管道无读进程，于是调用信号处理函数sig_pipe
+    
 **** 使用标准IO改写add2
-在协同进程add2中，使用了UNIX的I/O:read和write。现在使用标准I/O改写该协同进程：
-#+BEGIN_SRC C
+     在协同进程add2中，使用了UNIX的I/O:read和write。现在使用标准I/O改写该协同进程：
+     #+BEGIN_SRC C
   #include "apue.h"
 
   int main(void)
@@ -675,37 +675,37 @@ UNIX过滤程序从标准输入读取数据，对其进行适当处理后写到�
       }
       exit(0);
   }
-#+END_SRC
-
-测试结果：
-#+BEGIN_SRC sh
+     #+END_SRC
+     
+     测试结果：
+     #+BEGIN_SRC sh
   $ ./spipe4 
   1 2 #死锁
-#+END_SRC
-若pipe4调用此新的协同进程，则它不再工作。问题出在系统默认的标准I/O缓存机制上：当add2stdio被调用时，对标准输入的第一个fgets引起标准I/O库分配一个缓存，并选择缓
-存的类型。因为标准输入是个管道，所以isatty为假，于是标准I/O库由系统默认是全缓存的。对标准输出也有同样的处理。当add2stdio从其标准输入读取而发生堵塞时，pipe4从管道读时也
-发生堵塞，于是产生了死锁
-
-对将要执行的这样一个协同进程可以设置buf，可以在add2stdio程序的while循环之前加上如下代码:
-#+BEGIN_SRC C
+     #+END_SRC
+     若pipe4调用此新的协同进程，则它不再工作。问题出在系统默认的标准I/O缓存机制上：当add2stdio被调用时，对标准输入的第一个fgets引起标准I/O库分配一个缓存，并选择缓
+     存的类型。因为标准输入是个管道，所以isatty为假，于是标准I/O库由系统默认是全缓存的。对标准输出也有同样的处理。当add2stdio从其标准输入读取而发生堵塞时，pipe4从管道读时也
+     发生堵塞，于是产生了死锁
+     
+     对将要执行的这样一个协同进程可以设置buf，可以在add2stdio程序的while循环之前加上如下代码:
+     #+BEGIN_SRC C
   if (setvbuf(stdin, NULL, _IOLBF, 0) != 0)
           err_sys("setvbuf error");
 
   if (setvbuf(stdout, NULL, _IOLBF, 0)!= 0)
           err_sys("setvbuf error");
-#+END_SRC
-这使得当有一行可用时fgets即返回，并使得当输出一新行符时，printf即执行fflush操作
-
-这种设置往往要求对协同进程进程代码修改，但在使用一个第三方的协同进程时不一定可以满足，更一般解决方法是使被调用的协同进程认为它的标准输入和输出被连接到一个伪终端。这使得协同进程中的标准I/O例程对这两个I/O流进行行缓存
-
+     #+END_SRC
+     这使得当有一行可用时fgets即返回，并使得当输出一新行符时，printf即执行fflush操作
+     
+     这种设置往往要求对协同进程进程代码修改，但在使用一个第三方的协同进程时不一定可以满足，更一般解决方法是使被调用的协同进程认为它的标准输入和输出被连接到一个伪终端。这使得协同进程中的标准I/O例程对这两个I/O流进行行缓存
+     
 ** FIFO
-FIFO被称为命名管道。管道只能由相关进程使用，它们共同的祖先进程创建了管道，但是通过FIFO不相关的进程也能交换数据
-
+   FIFO被称为命名管道。管道只能由相关进程使用，它们共同的祖先进程创建了管道，但是通过FIFO不相关的进程也能交换数据
+   
 *** mkfifo函数
-曾经提及FIFO是一种文件类型，而stat结构的成员st_mode的编码指明文件是否是FIFO类型，并且可以用S_ISFIFO宏对此进行测试
-
-mkfifo函数：创建命名管道，类似于创建文件，事实上FIFO的路径名存在于文件系统中
-#+BEGIN_SRC C
+    曾经提及FIFO是一种文件类型，而stat结构的成员st_mode的编码指明文件是否是FIFO类型，并且可以用S_ISFIFO宏对此进行测试
+    
+    mkfifo函数：创建命名管道，类似于创建文件，事实上FIFO的路径名存在于文件系统中
+    #+BEGIN_SRC C
   #include <sys/stat.h>
   /**
      创建命名管道
@@ -716,17 +716,17 @@ mkfifo函数：创建命名管道，类似于创建文件，事实上FIFO的路�
      return：若成功则为0，若出错则为-1
   ,*/
   int mkfifo(const char *pathname, mode_t mode);
-#+END_SRC
+    #+END_SRC
 + mode参数：规格说明与open函数中的mode相同
 + FIFO文件的用户和组的所有权与第四章所描述的相同
-
+  
 *** FIFO文件
-一旦已经用mkfifo创建了一个FIFO，就可用open打开它。确实，一般的文件I/O函数close、read、write、unlink等都可用于FIFO
- 
-当打开一个FIFO时，非阻塞标志(O_NONBLOCK)产生下列影响:
+    一旦已经用mkfifo创建了一个FIFO，就可用open打开它。确实，一般的文件I/O函数close、read、write、unlink等都可用于FIFO
+    
+    当打开一个FIFO时，非阻塞标志(O_NONBLOCK)产生下列影响:
 + 在一般情况中(没有说明O_NONBLOCK)，只读打开要阻塞到某个其他进程为写打开此FIFO。类似为写而打开一个FIFO要阻塞到某个其他进程为读而打开它
 + 如果指定了O_NONBLOCK，则只读打开立即返回。但是如果没有进程已经为读而打开一个FIFO，那么只写打开将出错返回，其errno是ENXIO。 
-
+  
 类似于管道，如果写一个尚无进程为读而打开的FIFO，则产生信号SIGPIPE。若某个FIFO的最后一个写进程关闭了该FIFO，则将为该FIFO的读进程产生一个文件结束标志
 
 一个给定的FIFO有多个写进程是常见的。这就意味着如果不希望多个进程所写的数据互相穿插，则需考虑原子写操作。正如对于管道一样，常数PIPE_BUF说明了可被原子写到FIFO的最大数据量
@@ -734,77 +734,77 @@ mkfifo函数：创建命名管道，类似于创建文件，事实上FIFO的路�
 *** FIFO用途
 + shell命令使用以便将数据从一条管道线传送到另一条，为此无需创建中间临时文件
 + 用于客户机-服务器应用程序中，以在客户机和服务器之间传递数据
-
-
+  
+  
 **** 复制输出流
-FIFO可被用于复制串行管道命令之间的输出流，于是也就不需要写数据到中间磁盘文件中，类似于使用管道以避免中间磁盘文件。但是管道只能用于进程间的线性连接，而FIFO因为具有名字，所以它可用于非线性连接
-
-考虑这样一个操作过程，它需要对一个经过过滤的输入流进行两次处理。图14-9表示了这种安排：
-#+ATTR_HTML: image :width 60% 
-[[file:pic/fifo-two-handler.jpg]] 
-
-使用FIFO以及UNIX程序tee(1)，就可以实现这样的过程而无需使用临时文件。tee程序将其标准输入同时复制到其标准输出以及其命令行中包含的命名文件中：
-#+BEGIN_SRC sh
+     FIFO可被用于复制串行管道命令之间的输出流，于是也就不需要写数据到中间磁盘文件中，类似于使用管道以避免中间磁盘文件。但是管道只能用于进程间的线性连接，而FIFO因为具有名字，所以它可用于非线性连接
+     
+     考虑这样一个操作过程，它需要对一个经过过滤的输入流进行两次处理。图14-9表示了这种安排：
+     #+ATTR_HTML: image :width 60% 
+     [[file:pic/fifo-two-handler.jpg]] 
+     
+     使用FIFO以及UNIX程序tee(1)，就可以实现这样的过程而无需使用临时文件。tee程序将其标准输入同时复制到其标准输出以及其命令行中包含的命名文件中：
+     #+BEGIN_SRC sh
   $ mkfifo fifo1 # 创建管道文件fifo1
   $ prog3 < fifo1 & # 后台启动prog3等待fifo1的输出
   $ prog1 < infile | tee fifo1 | prog2 # 启动progl, 用tee将其输出发送到fifo1和prog2
-#+END_SRC
-创建FIFO，然后在后台起动prog3，它从FIFO读数据。然后起动progl，用tee将其输出发送到FIFO和prog2。图14-10显示了有关安排：
-#+ATTR_HTML: image :width 60% 
-[[file:pic/fifo-tee.jpg]]  
-
+     #+END_SRC
+     创建FIFO，然后在后台起动prog3，它从FIFO读数据。然后起动progl，用tee将其输出发送到FIFO和prog2。图14-10显示了有关安排：
+     #+ATTR_HTML: image :width 60% 
+     [[file:pic/fifo-tee.jpg]]  
+     
 **** 简单客户-服务器通信
-FIFO的另一个应用是在客户机和服务器之间传送数据。如果有一个服务器，它与很多客户机有关，每个客户机都可将其请求写到一个该服务器创建的众所周知的FIFO中(所有需与服务器联系的客户机都知道该FIFO的路径名)。因为对于该FIFO有多个写进程，客户机发送给服务器的请求其长度要小于PIPE_BUF字节。这样就能避免客户机各次写之间的穿插。图14-11显示了这种安排：
-#+ATTR_HTML: image :width 60% 
-[[file:pic/fifo-client-send-request.jpg]]  
-
-在这种类型的客户机-服务器通信中使用FIFO的问题是：服务器如何将回答送回各个客户机。不能使用单个FIFO，因为服务器会发出对各个客户机请求的响应，而请求者却不可能知
-道什么时候去读才能恰恰得到对它的响应。一种解决方法是每个客户机都在其请求中发送其进程ID。然后服务器为每个客户机创建一个FIFO，所使用的路径名是以客户机的进程ID为基础
-的。例如，服务器可以用名字/tmp/serv1.XXXXX创建FIFO，其中XXXXX被替换成客户机的进程ID。图14-12显示了这种安排：
-#+ATTR_HTML: image :width 60% 
-[[file:pic/fifo-client-server.jpg]]  
-
-这种安排可以工作，但也有一些不足之处：
+     FIFO的另一个应用是在客户机和服务器之间传送数据。如果有一个服务器，它与很多客户机有关，每个客户机都可将其请求写到一个该服务器创建的众所周知的FIFO中(所有需与服务器联系的客户机都知道该FIFO的路径名)。因为对于该FIFO有多个写进程，客户机发送给服务器的请求其长度要小于PIPE_BUF字节。这样就能避免客户机各次写之间的穿插。图14-11显示了这种安排：
+     #+ATTR_HTML: image :width 60% 
+     [[file:pic/fifo-client-send-request.jpg]]  
+     
+     在这种类型的客户机-服务器通信中使用FIFO的问题是：服务器如何将回答送回各个客户机。不能使用单个FIFO，因为服务器会发出对各个客户机请求的响应，而请求者却不可能知
+     道什么时候去读才能恰恰得到对它的响应。一种解决方法是每个客户机都在其请求中发送其进程ID。然后服务器为每个客户机创建一个FIFO，所使用的路径名是以客户机的进程ID为基础
+     的。例如，服务器可以用名字/tmp/serv1.XXXXX创建FIFO，其中XXXXX被替换成客户机的进程ID。图14-12显示了这种安排：
+     #+ATTR_HTML: image :width 60% 
+     [[file:pic/fifo-client-server.jpg]]  
+     
+     这种安排可以工作，但也有一些不足之处：
 + 是服务器不能判断一个客户机是否崩溃终止，这就使得客户机专用的FIFO会遗留在文件系统中
 + 服务器必须捕捉SIGPIPE信号，因为客户机在发送一个请求后没有读取响应就可能终止，于是留下一个有写进程(服务器)而无读进程的客户机专用FIFO
-
+  
 按照图14-12中的安排，如果服务器以只读方式打开众所周知的FIFO(因为它只需读该FIFO)，则每次客户机数从1变成0，服务器就将在FIFO中读到一个文件结束标记。为使服务器免于处理这种情况，一种常见的技巧是使服务器以读-写方式打开该FIFO
 
 * 系统V IPC
 + 消息队列
 + 信号量
 + 共享内存
-
-
+  
+  
 ** 相似特征
-
+   
 *** 标识符和关键字
-每个内核中的IPC结构(消息队列、信号量或共享存储段)都用一个非负整数的标识符加以引用。例如，为了对一个消息队列发送或取消息，只需知道其队列标识符。与文件描述符不同，IPC标识符不是小的整数。当一个IPC结构被创建，以后又被删除时，与这种结构相关的标识符连续加1，直至达到一个整型数的最大正值，然后又回转到0。(即使在IPC结构被删除后也记住该值，每次使用此结构时则增1，该值被称为“槽使用顺序号”。它在ipc_perm结构中)
-
-无论何时创建IPC结构，都应指定一个关键字，关键字的数据类型由系统规定为key_t，通常在头文件<sys/types.h>中被规定为长整型。关键字由内核变换成标识符
-
+    每个内核中的IPC结构(消息队列、信号量或共享存储段)都用一个非负整数的标识符加以引用。例如，为了对一个消息队列发送或取消息，只需知道其队列标识符。与文件描述符不同，IPC标识符不是小的整数。当一个IPC结构被创建，以后又被删除时，与这种结构相关的标识符连续加1，直至达到一个整型数的最大正值，然后又回转到0。(即使在IPC结构被删除后也记住该值，每次使用此结构时则增1，该值被称为“槽使用顺序号”。它在ipc_perm结构中)
+    
+    无论何时创建IPC结构，都应指定一个关键字，关键字的数据类型由系统规定为key_t，通常在头文件<sys/types.h>中被规定为长整型。关键字由内核变换成标识符
+    
 **** 客户机和服务器使用同一IPC结构
-有多种方法使客户机和服务器在同一IPC结构上会合：
+     有多种方法使客户机和服务器在同一IPC结构上会合：
 + 服务器可以指定关键字IPC_PRIVATE创建一个新IPC结构，将返回的标识符存放在某处(例如一个文件)以便客户机取用。关键字IPC_PRIVATE保证服务器创建一个新IPC结构。缺点是服务器要将整型标识符写到文件中，然后客户机在此后又要读文件取得此标识符
-
+  
 IPC_PRIVATE关键字也可用于父、子关系进程。父进程指定IPC_PRIVATE创建一个新IPC结构，所返回的标识符在fork后可由子进程使用。子进程可将此标识符作为exec函数的一个参数传给一个新程序
 
 + 在一个公用头文件中定义一个客户机和服务器都认可的关键字。然后服务器指定此关键字创建一个新的IPC结构。问题是该关键字可能已与一个IPC结构相结合，在此情况下，get函数(msgget、semget或shmget)出错返回。服务器必须处理这一错误，删除已存在的IPC结构，然后试着再创建它
-
+  
 + 客户机和服务器认同一个路径名和课题ID(课题ID是0~255之间的字符值)，然后调用函数ftok将这两个值变换为一个关键字。然后在第二种方法中使用此关键字。ftok提供的唯一服务就是由一个路径名和课题ID产生一个关键字。因为一般来说，客户机和服务器至少共享一个头文件，所以一个比较简单的方法是避免使用ftok，而只是在该头文件中存放一个大家都知道的关键字。这样做还避免了使用另一个函数
-
+  
 **** 创建IPC结构
-三个get函数(msgget、semget和shmget)都有两个类似的参数key和一个整型的flag。如若满足下列条件，则创建一个新的IPC结构(通常由服务器创建)：
+     三个get函数(msgget、semget和shmget)都有两个类似的参数key和一个整型的flag。如若满足下列条件，则创建一个新的IPC结构(通常由服务器创建)：
 1. key是IPC_PRIVATE
 2. key当前未与特定类型的IPC结构相结合，flag中指定了IPC_CREAT位。为访问现存的队列(通常由客户机进行)，key必须等于创建该队列时所指定的关键字，并且不应指定IPC_CREAT
-
+   
 注意，为了访问一个现存队列，决不能指定IPC_PRIVATE作为关键字。因为这是一个特殊的键值，它总是用于创建一个新队列。为了访问一个用IPC_PRIVATE关键字创建的现存队列，一定要知道与该队列相结合的标识符，然后在其他IPC调用中(例如msgsnd、msgrcv)使用该标识符
 
 如果希望创建一个新的IPC结构，保证不是引用具有同一标识符的一个现行IPC结构，那么必须在flag中同时指定IPC_CREAT和IPC_EXCL位。这样做了以后，如果IPC结构已经存在就会造成出错，返回EEXIST(这与指定了O_CREAT和O_EXCL标志的open相类似)
 
 *** 权限结构
-系统VIPC为每一个IPC结构设置了一个ipc_perm结构。该结构规定了许可权和所有者：
-#+BEGIN_SRC C
+    系统VIPC为每一个IPC结构设置了一个ipc_perm结构。该结构规定了许可权和所有者：
+    #+BEGIN_SRC C
   #include <sys/ipc.h>
   /* Data structure used to pass permission information to IPC operations.  */
   struct ipc_perm
@@ -821,26 +821,26 @@ IPC_PRIVATE关键字也可用于父、子关系进程。父进程指定IPC_PRIVA
           unsigned long int __unused1;
           unsigned long int __unused2;
   };
-#+END_SRC
-在创建IPC结构时，除seq以外的所有字段都赋初值。以后，可以调用msgctl、semctl或shmctl修改uid、gid和mode字段。为了改变这些值，调用进程必须是IPC结构的创建者或超级用户。更改这些字段类似于对文件调用chown和chmod
-
-**** mod字段
-mode字段的值类似于文件权限的，但是对于任何IPC结构都不存在执行许可权。另外消息队列和共享存储使用术语“读”和“写”，而信号量则用术语“读”和“更改”。表14-2中对每种IPC说明了6种许可权：
-#+CAPTION: 系统V IPC权限
-#+ATTR_HTML: :border 1 :rules all :frame boader
-| 权限         | 消息队列   | 信号量     | 共享内存   |
-| 用户读       | MSG_R      | SEM_R      | SHM_R      |
-| 用户写(更改) | MSG_W      | SEM_A      | SHM_W      |
-| 组读         | MSG_R >> 3 | SEM_R >> 3 | SHM_R >> 3 |
-| 组写(更改)   | MSG_W >> 3 | SEM_A >> 3 | SHM_W >> 3 |
-| 其他读       | MSG_R >> 6 | SEM_R >> 6 | SHM_R >> 6 |
-| 其他写(更改) | MSG_W >> 6 | SEM_A >> 6 | SHM_R >> 6 |
-
+    #+END_SRC
+    在创建IPC结构时，除seq以外的所有字段都赋初值。以后，可以调用msgctl、semctl或shmctl修改uid、gid和mode字段。为了改变这些值，调用进程必须是IPC结构的创建者或超级用户。更改这些字段类似于对文件调用chown和chmod
+    
+**** mode字段
+     mode字段的值类似于文件权限的，但是对于任何IPC结构都不存在执行许可权。另外消息队列和共享存储使用术语“读”和“写”，而信号量则用术语“读”和“更改”。表14-2中对每种IPC说明了6种许可权：
+     #+CAPTION: 系统V IPC权限
+     #+ATTR_HTML: :border 1 :rules all :frame boader
+     | 权限         | 消息队列   | 信号量     | 共享内存   |
+     | 用户读       | MSG_R      | SEM_R      | SHM_R      |
+     | 用户写(更改) | MSG_W      | SEM_A      | SHM_W      |
+     | 组读         | MSG_R >> 3 | SEM_R >> 3 | SHM_R >> 3 |
+     | 组写(更改)   | MSG_W >> 3 | SEM_A >> 3 | SHM_W >> 3 |
+     | 其他读       | MSG_R >> 6 | SEM_R >> 6 | SHM_R >> 6 |
+     | 其他写(更改) | MSG_W >> 6 | SEM_A >> 6 | SHM_R >> 6 |
+     
 *** 资源限制
-三种形式的系统VIPC都有可能会遇到的资源限制。这些限制的大多数可以通过重新配置而加以更改。当描述每种IPC时，都会指出它的限制
-
+    三种形式的系统VIPC都有可能会遇到的资源限制。这些限制的大多数可以通过重新配置而加以更改。当描述每种IPC时，都会指出它的限制
+    
 *** 优点和缺点
-
+    
 **** 系统V IPC的缺点
 + IPC结构是在系统范围内起作用的，没有访问计数。如果创建了一个消息队列，在该队列中放入了几则消息，然后终止，但是该消息队列及其内容并不被删除。它们余留在系统中直至：
   + 由某个进程调用msgrcv或msgctl读消息或删除消息队列
@@ -849,35 +849,279 @@ mode字段的值类似于文件权限的，但是对于任何IPC结构都不存�
 与管道pipe相比，那么当最后一个访问管道的进程终止时，管道就被完全地删除了。对于FIFO而言虽然当最后一个引用FIFO的进程终止时其名字仍保留在系统中，直至显式地删除它，但是留在FIFO中的数据却在此时全部删除
 
 + 这些IPC结构并不按名字为文件系统所知。我们不能用以前的函数来存取它们或修改它们的特性。为了支持它们不得不增加了十多个全新的系统调用(msgget、semop、shmat等)。我们不能用ls命令见到它们，不能用rm命令删除它们，不能用chmod命令更改它们的存取权。于是，也不得不增加了全新的命令ipcs和ipcrm。 
-
+  
 因为这些IPC不使用文件描述符，所以不能对它们使用多路转接I/O函数：select和poll。这就使得一次使用多个IPC结构，以及用文件或设备I/O来使用IPC结构很难做到。例如，没有某种形式的忙-等待循环，就不能使一个服务器等待一个消息放在两个消息队列的任一一个中
- 
+
 **** 消息队列的优点
 + 避免多次open, write, close调用
 + 可靠的
 + 流是受到控制的
 + 面向记录
 + 支持非先进先出
-
+  
 **** 总结
-下表对不同形式的IPC的某些特征进行了比较：
-#+CAPTION: 不同形式IPC之间特征的比较
-#+ATTR_HTML: :border 1 :rules all :frame boader
-| 类型 | 无连接 | 可靠 | 流控制 | 记录 | 消息类型或优先权 |
-| 消息队列 | 否     | 是   | 是     | 是   | 是               |
-| 流      | 否     | 是   | 是     | 是   | 是               |
-| UNIX流套接字 | 否     | 是   | 是     | 否   | 否               |
-| UNIX数据套接字 | 是     | 是   | 否     | 是   | 否               |
-| FIFO           | 否     | 是   | 是     | 否   | 否               |
-
+     下表对不同形式的IPC的某些特征进行了比较：
+     #+CAPTION: 不同形式IPC之间特征的比较
+     #+ATTR_HTML: :border 1 :rules all :frame boader
+     | 类型 | 无连接 | 可靠 | 流控制 | 记录 | 消息类型或优先权 |
+     | 消息队列 | 否     | 是   | 是     | 是   | 是               |
+     | 流      | 否     | 是   | 是     | 是   | 是               |
+     | UNIX流套接字 | 否     | 是   | 是     | 否   | 否               |
+     | UNIX数据套接字 | 是     | 是   | 否     | 是   | 否               |
+     | FIFO           | 否     | 是   | 是     | 否   | 否               |
+     
 + “无连接”指的是无需先调用某种形式的open，就能发送消息的能力。正如前述因为需要有某种技术以获得队列标识符，所以并不认为消息队列具有无连接特性
 + 因为所有这些形式的IPC都限制用在单主机上，所以它们都是可靠的。当消息通过网络传送时，丢失消息的可能性就要加以考虑
 + 流控制的意思是：如果系统资源短缺(缓存)或者如果接收进程不能再接收更多消息，则发送进程就要睡眠。当流控制条件消失时，发送进程应自动地被唤醒。
-
+  
 表中没有表示的一个特征是：IPC设施能否自动地为每个客户机自动地创建一个到服务器的唯一连接。实际上流以及UNIX流套接口可以提供这种能力
 
 ** 消息队列
+   消息队列是消息的链接表，存放在内核中并由消息队列标识符标识。我们将称消息队列为"队列"，其标识符为“队列ID”
    
++ msgget函数：创建一个新队列或打开一个现存的队列
++ msgsnd函数：将新消息添加到队列尾端。每个消息包含一个正长整型类型字段，一个非负长度以及实际数据字节
++ msgrcv函数：从队列中取消息。并不一定要以先进先出次序取消息，也可以按消息的类型字段取消息
+  
+  
+*** msqid_ds结构
+    每个队列都有一个msqid_ds结构与其相关。此结构规定了队列的当前状态：
+    #+BEGIN_SRC C
+  /* Structure of record for one message inside the kernel.
+     The type `struct msg' is opaque.  */
+  struct msqid_ds
+  {
+          struct ipc_perm msg_perm;   /* structure describing operation permission */
+          struct msg *msg_first;      /* ptr to first message on queue */
+          struct msg *msg_last;       /* ptr to last message on queue */
+          time_t msg_stime;           /* time of last msgsnd command */
+          time_t msg_rtime;           /* time of last msgrcv command */
+          time_t msg_ctime;           /* time of last change */
+          unsigned long int msg_cbytes; /* current number of bytes on queue */
+          msgqnum_t msg_qnum;           /* number of messages currently on queue */
+          msglen_t msg_qbytes;          /* max number of bytes allowed on queue */
+          pid_t msg_lspid;            /* pid of last msgsnd() */
+          pid_t msg_lrpid;            /* pid of last msgrcv() */
+  };
+    #+END_SRC
+    两个指针msg-first和msg-last分别指向相应消息在内核中的存放位置，所以它们对用户进程而言是无价值的。结构的其他成员是自定义的
+    
+*** 资源限制
+    #+CAPTION: 影响消息队列的系统限制
+    #+ATTR_HTML: :border 1 :rules all :frame boader
+    | 名字   | 说明                                           | 典型值 |
+    | MSGMAX | 可发送的最长消息的字节长度        |   2048 |
+    | MSGMNB | 特定队列的最大字节长度(亦即队列中所有消息之和) |   4096 |
+    | MSGMNI | 系统中最大消息队列数                 |     50 |
+    | MSGTOL | 系统中最大消息数                       |     50 |
+    
+*** msgget函数
++ msgget函数：打开一个现存队列或创建一个新队列
+  #+BEGIN_SRC C
+    #include <sys/types.h>
+    #include <sys/ipc.h>
+    #include <sys/msg.h>
+
+    /**
+       新建或打开一个消息队列
+
+       key：消息队列关键字，内核根据规则转换为标识符
+       flag：消息队列权限
+
+       return：若成功则为消息队列ID，若出错则为-1
+    ,*/
+    int msgget(key_t key, int flag);
+  #+END_SRC
+当创建一个新队列时，初始化msqid-ds结构的下列成员:
++ ipc-perm结构按上节中所述进行初始化。该结构中mode按flag中的相应许可权位设置
++ msg_qnum，msg_lspid、msg_lrpid、msg_stime和msg_rtime都设置为0
++ msg_ctime设置为当前时间
++ msg_qbytes设置为系统限制值
+  
+*** msgctl函数
++ msgctl函数：对队列执行多种操作，类似于ioctl函数
+  #+BEGIN_SRC C
+    #include <sys/types.h>
+    #include <sys/ipc.h>
+    #include <sys/msg.h>
+
+    /**
+       管理一个消息队列
+
+       msgid：消息队列ID
+       cmd：管理命令
+       buf：消息队列指针
+
+       return：若成功则为0，出错则为-1
+    ,*/
+    int msgctl(int msqid, int cmd, struct mdqid_ds *buf);
+  #+END_SRC
+
+**** cmd参数
+cmd参数指定对于由msqid规定的队列要执行的命令：
++ IPC_STAT：取此队列的msqid_ds结构，并将其存放在buf指向的结构中
+  
++ IPC_SET：由buf指向的结构中的值，设置与此队列相关的结构中的下列四个字段: 
+  1. msg_perm.uid
+  2. msg_perm.gid
+  3. msg_perm.mode
+  4. msg_qbytes
+     
+此命令只能由下列两种进程执行: 其有效用户ID等于msg_perm.cuid或msg_perm.uid或具有超级用户特权的进程。只有超级用户才能增加msg_qbytes的值 
+
++ IPC_RMID：从系统中删除该消息队列以及仍在该队列上的所有数据。这种删除立即生效。仍在使用这一消息队列的其他进程在它们下一次试图对此队列进行操作时，将出错返回EIDRM
+  
+此命令只能由下列两种进程执行：其有效用户ID等于msg_perm.cuid或msg_perm.uid或具有超级用户特权的进程
+
+
+*** msgsnd函数
++ msgsnd函数：将数据放到消息队列上
+  #+BEGIN_SRC C
+    #include <sys/types.h>
+    #include <sys/ipc.h>
+    #include <sys/msg.h>
+
+    /**
+       往队列末尾添加一个消息
+
+       msqid：消息队列标识符
+       ptr：消息指针
+       nbytes：实际数据字节
+       flag：读取方式标志
+
+       return：成功则为0，若出错则为-1
+    ,*/
+    int msgsnd(int msqid, const void *ptr, size_t nbytes, int flag);
+  #+END_SRC
+  
+**** ptr指针
+     ptr指向的消息结构中包含了正整型消息类型，在其后立即跟随了消息数据(若nbytes是0，则无消息数据)。假设发送的最长消息是512字节，则可定义下列结构:
+     #+BEGIN_SRC C
+  struct mymesg
+  {
+          long mtype; /* positive message type */
+          char mtext[512]; /* message data of length nbytes */
+  };
+     #+END_SRC
+     而ptr就是一个指向mymesg结构的指针。接收者可以使用消息类型以非先进先出的次序取消息
+     
+**** flag标记
++ flag的值可以指定为IPC_NOWAIT：这类似于文件I/O的非阻塞I/O标志。若消息队列已满(或者是队列中的消息总数等于系统限制值，或队列中的字节总数等于系统限制值)，则指定IPC_NOWAIT使得msgsnd立即出错返回EAGAIN
+  
++ 如果没有指定IPC_NOWAIT，则进程阻塞直到：
+  1. 有空间可以容纳要发送的消息
+  2. 从系统中删除了此队列，返回EIDRM(“标志符被删除”)报错
+  3. 捕捉到一个信号，并从信号处理程序返回。返回EINTR报错
+     
+注意：对消息队列删除的处理不是很完善。因为对每个消息队列并没有设置一个引用计数器(对打开文件则有这种计数器)，所以删除一个队列使得仍在使用这一队列的进程在下次对队列进行操作时出错返回。信号量机构也以同样方式处理其删除。而删除一个文件则要等到使用该文件的最后一个进程关闭了它，才能删除文件的内容
+
+*** msgrcv函数
++ msgrcv函数：从队列中取消息  
+  #+BEGIN_SRC C
+    #include <sys/types.h>
+    #include <sys/ipc.h>
+    #include <sys/msg.h>
+
+    /**
+       从队列中取走一个消息，这意味着消息会被移出链表
+
+       msqid：消息标识符
+       ptr：消息指针
+       nbytes：消息实际字节长度
+       type：消息类型
+       flag：取走标志
+
+       return：若成功则为消息数据部分的长度，若出错则为-1
+    ,*/
+    int msgrcv(int msqid, void *ptr, size_t nbytes, long type, int flag);
+  #+END_SRC
+如同msgsnd中一样：
++ ptr参数指向一个长整型数(返回的消息类型存放在其中)，跟随其后的是存放实际消息数据的缓存
++ nbytes说明数据缓存的长度。若返回的消息大于nbytes:
+  + 在flag中设置了MSG_NOERROR，则该消息被截短(在这种情况下，不通知我们消息截短了:-()
+  + 如果没有设置这一标志，而消息又太长，则出错返回E2BIG(消息仍留在队列中)
++ flag值指定IPC_NOWAIT，使操作不阻塞。这使得如果没有所指定类型的消息，则msgrcv出错返回ENOMSG
++ 如果flag没有指定IPC_NOWAIT，则进程阻塞直至：
+  + 有了指定类型的消息
+  + 从系统中删除了此队列(出错返回EIDRM)
+  + 捕捉到一个信号并从信号处理程序返回(出错返回EINTR)。
+**** type参数
+参数type可以指定想要哪一种消息：
++ type == 0： 返回队列中的第一个消息
++ type > 0：返回队列中消息类型为type的第一个消息
++ type < 0：返回队列中消息类型值小于或等于type绝对值，而且在这种消息中，其类型值又是最小的消息
+
+非零的type用于以非先进先出次序读消息。例如，若应用程序对消息赋优先权，那么type就可以是优先权值。如果一个消息队列由多个客户机和一个服务器使用，那么type字段可以用来包
+含客户机进程ID。 
+*** 实例
+向一个消息队列写入消息，读取出对应类型的消息
+    #+BEGIN_SRC C
+      #include <unistd.h>
+      #include <sys/msg.h>
+      #include <stdio.h>
+      #include "apue.h"
+
+      //消息结构
+      struct message{
+              long int mtype;
+              char mtext[512];
+      };
+
+      int main(void)
+      {
+              //创建消息队列
+              int msgid = msgget(IPC_PRIVATE,0666);
+              //创建消息结构
+              struct message snd;
+              //消息类型
+              snd.mtype = 911;
+              //消息内容
+              strcpy(snd.mtext,"help");
+              //发送消息到队列
+              if(msgsnd(msgid,&snd,5,0) == -1){
+                      printf("msgsnd %m\n");
+                      return -1;
+              }
+              
+              //读取消息队列信息
+              struct msqid_ds ds;
+              if(msgctl(msgid, IPC_STAT, &ds) == -1){
+                      printf("msgctl IPC_STAT %m\n");
+                      return -1;
+              }
+              printf("current bytes:%d ,current number:%d ,max bytes:%d \n",
+                     ds.msg_cbytes, ds.msg_qnum, ds.msg_qbytes);
+
+              struct message rcv;
+              //非阻塞读取消息类型为910的消息，出错返回
+              if(msgrcv(msgid, &rcv, 512, 910, IPC_NOWAIT) == -1){
+                      printf("msgrcv1 %m\n");
+              }
+              //阻塞读取消息类型为911的消息
+              if(msgrcv(msgid, &rcv, 521, 911, 0) == -1){
+                      printf("msgrcv2 %m\n");
+                      return -1;
+              }
+              //打印读取的消息
+              printf("%s\n",rcv.mtext);
+              //清除消息队列
+              if(msgctl(msgid,IPC_RMID,NULL)==-1){
+                      printf("msgctl IPC_RMID %m\n");
+              }
+              return 0;
+      }
+    #+END_SRC
+测试结果：
+#+BEGIN_SRC sh
+  $ ./src/ipc/msg1 
+
+  current bytes:5 ,current number:1 ,max bytes:16384 #当前消息队列信息：写入5个字节，拥有1个消息，最大可写入字节数是16384 
+  msgrcv1 No message of desired type # 无法读取类型为910的消息
+  help #读取出的消息
+#+END_SRC
+*** 消息队列VS流管道
+如若需要客户机和服务器之间的双向数据流，可以使用消息队列或流管道(用UNIX域套接字来实现)。消息队列原来的实施目的是提供比一般IPC更高速度的进程通信方法，而现在这个优点已经不复存在，所以不推荐使用消息队列！ 
+
 ** 信号量
    
 ** 共享内存

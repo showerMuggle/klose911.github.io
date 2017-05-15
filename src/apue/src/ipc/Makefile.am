@@ -1,4 +1,4 @@
-noinst_PROGRAMS=pipe1 more1 more2 myuclc popen1 add2 pipe4 add2stdio spipe4
+noinst_PROGRAMS=pipe1 more1 more2 myuclc popen1 add2 pipe4 add2stdio spipe4 msg1
 
 pipe1_SOURCES= pipe1.c 
 pipe1_LDADD=$(top_srcdir)/src/lib/libapue.a
@@ -26,3 +26,6 @@ add2stdio_LDADD=$(top_srcdir)/src/lib/libapue.a
 
 spipe4_SOURCES= spipe4.c 
 spipe4_LDADD=$(top_srcdir)/src/lib/libapue.a
+
+msg1_SOURCES= msg1.c 
+msg1_LDADD=$(top_srcdir)/src/lib/libapue.a

@@ -197,7 +197,7 @@ for the JavaScript code in this tag.
 </li>
 <li><a href="#sec-2-1-2">权限结构</a>
 <ul>
-<li><a href="#sec-2-1-2-1">mod字段</a></li>
+<li><a href="#sec-2-1-2-1">mode字段</a></li>
 </ul>
 </li>
 <li><a href="#sec-2-1-3">资源限制</a></li>
@@ -210,7 +210,31 @@ for the JavaScript code in this tag.
 </li>
 </ul>
 </li>
-<li><a href="#sec-2-2">消息队列</a></li>
+<li><a href="#sec-2-2">消息队列</a>
+<ul>
+<li><a href="#sec-2-2-1">msqid_ds结构</a></li>
+<li><a href="#sec-2-2-2">资源限制</a></li>
+<li><a href="#sec-2-2-3">msgget函数</a></li>
+<li><a href="#sec-2-2-4">msgctl函数</a>
+<ul>
+<li><a href="#sec-2-2-4-1">cmd参数</a></li>
+</ul>
+</li>
+<li><a href="#sec-2-2-5">msgsnd函数</a>
+<ul>
+<li><a href="#sec-2-2-5-1">ptr指针</a></li>
+<li><a href="#sec-2-2-5-2">flag标记</a></li>
+</ul>
+</li>
+<li><a href="#sec-2-2-6">msgrcv函数</a>
+<ul>
+<li><a href="#sec-2-2-6-1">type参数</a></li>
+</ul>
+</li>
+<li><a href="#sec-2-2-7">实例</a></li>
+<li><a href="#sec-2-2-8">消息队列VS流管道</a></li>
+</ul>
+</li>
 <li><a href="#sec-2-3">信号量</a></li>
 <li><a href="#sec-2-4">共享内存</a></li>
 </ul>
@@ -1572,7 +1596,7 @@ IPC_PRIVATE关键字也可用于父、子关系进程。父进程指定IPC_PRIVA
 </div>
 
 <div id="outline-container-sec-2-1-2-1" class="outline-5">
-<h5 id="sec-2-1-2-1">mod字段</h5>
+<h5 id="sec-2-1-2-1">mode字段</h5>
 <div class="outline-text-5" id="text-2-1-2-1">
 <p>
 mode字段的值类似于文件权限的，但是对于任何IPC结构都不存在执行许可权。另外消息队列和共享存储使用术语“读”和“写”，而信号量则用术语“读”和“更改”。表14-2中对每种IPC说明了6种许可权：
@@ -1802,6 +1826,448 @@ mode字段的值类似于文件权限的，但是对于任何IPC结构都不存�
 
 <div id="outline-container-sec-2-2" class="outline-3">
 <h3 id="sec-2-2">消息队列</h3>
+<div class="outline-text-3" id="text-2-2">
+<p>
+消息队列是消息的链接表，存放在内核中并由消息队列标识符标识。我们将称消息队列为"队列"，其标识符为“队列ID”
+</p>
+
+<ul class="org-ul">
+<li>msgget函数：创建一个新队列或打开一个现存的队列
+</li>
+<li>msgsnd函数：将新消息添加到队列尾端。每个消息包含一个正长整型类型字段，一个非负长度以及实际数据字节
+</li>
+<li>msgrcv函数：从队列中取消息。并不一定要以先进先出次序取消息，也可以按消息的类型字段取消息
+</li>
+</ul>
+</div>
+
+
+<div id="outline-container-sec-2-2-1" class="outline-4">
+<h4 id="sec-2-2-1">msqid_ds结构</h4>
+<div class="outline-text-4" id="text-2-2-1">
+<p>
+每个队列都有一个msqid_ds结构与其相关。此结构规定了队列的当前状态：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #ff4500;">/* </span><span style="color: #ff4500;">Structure of record for one message inside the kernel.</span>
+<span style="color: #ff4500;">   The type `struct msg' is opaque.  </span><span style="color: #ff4500;">*/</span>
+<span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">msqid_ds</span>
+{
+    <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">ipc_perm</span> <span style="color: #eedd82;">msg_perm</span>;   <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">structure describing operation permission </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">msg</span> *<span style="color: #eedd82;">msg_first</span>;      <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">ptr to first message on queue </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">msg</span> *<span style="color: #eedd82;">msg_last</span>;       <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">ptr to last message on queue </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">time_t</span> <span style="color: #eedd82;">msg_stime</span>;           <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">time of last msgsnd command </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">time_t</span> <span style="color: #eedd82;">msg_rtime</span>;           <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">time of last msgrcv command </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">time_t</span> <span style="color: #eedd82;">msg_ctime</span>;           <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">time of last change </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">unsigned</span> <span style="color: #98fb98;">long</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">msg_cbytes</span>; <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">current number of bytes on queue </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">msgqnum_t</span> <span style="color: #eedd82;">msg_qnum</span>;           <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">number of messages currently on queue </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">msglen_t</span> <span style="color: #eedd82;">msg_qbytes</span>;          <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">max number of bytes allowed on queue </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">pid_t</span> <span style="color: #eedd82;">msg_lspid</span>;            <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">pid of last msgsnd() </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">pid_t</span> <span style="color: #eedd82;">msg_lrpid</span>;            <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">pid of last msgrcv() </span><span style="color: #ff4500;">*/</span>
+};
+</pre>
+</div>
+<p>
+两个指针msg-first和msg-last分别指向相应消息在内核中的存放位置，所以它们对用户进程而言是无价值的。结构的其他成员是自定义的
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-2-2" class="outline-4">
+<h4 id="sec-2-2-2">资源限制</h4>
+<div class="outline-text-4" id="text-2-2-2">
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 4:</span> 影响消息队列的系统限制</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="right" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">名字</td>
+<td class="left">说明</td>
+<td class="right">典型值</td>
+</tr>
+
+<tr>
+<td class="left">MSGMAX</td>
+<td class="left">可发送的最长消息的字节长度</td>
+<td class="right">2048</td>
+</tr>
+
+<tr>
+<td class="left">MSGMNB</td>
+<td class="left">特定队列的最大字节长度(亦即队列中所有消息之和)</td>
+<td class="right">4096</td>
+</tr>
+
+<tr>
+<td class="left">MSGMNI</td>
+<td class="left">系统中最大消息队列数</td>
+<td class="right">50</td>
+</tr>
+
+<tr>
+<td class="left">MSGTOL</td>
+<td class="left">系统中最大消息数</td>
+<td class="right">50</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+
+<div id="outline-container-sec-2-2-3" class="outline-4">
+<h4 id="sec-2-2-3">msgget函数</h4>
+<div class="outline-text-4" id="text-2-2-3">
+<ul class="org-ul">
+<li>msgget函数：打开一个现存队列或创建一个新队列
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/ipc.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/msg.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#26032;&#24314;&#25110;&#25171;&#24320;&#19968;&#20010;&#28040;&#24687;&#38431;&#21015;</span>
+
+<span style="color: #ffa07a;">   key&#65306;&#28040;&#24687;&#38431;&#21015;&#20851;&#38190;&#23383;&#65292;&#20869;&#26680;&#26681;&#25454;&#35268;&#21017;&#36716;&#25442;&#20026;&#26631;&#35782;&#31526;</span>
+<span style="color: #ffa07a;">   flag&#65306;&#28040;&#24687;&#38431;&#21015;&#26435;&#38480;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;&#28040;&#24687;&#38431;&#21015;ID&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">msgget</span>(<span style="color: #98fb98;">key_t</span> <span style="color: #eedd82;">key</span>, <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">flag</span>);
+</pre>
+</div>
+</li>
+</ul>
+<p>
+当创建一个新队列时，初始化msqid-ds结构的下列成员:
+</p>
+<ul class="org-ul">
+<li>ipc-perm结构按上节中所述进行初始化。该结构中mode按flag中的相应许可权位设置
+</li>
+<li>msg_qnum，msg_lspid、msg_lrpid、msg_stime和msg_rtime都设置为0
+</li>
+<li>msg_ctime设置为当前时间
+</li>
+<li>msg_qbytes设置为系统限制值
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-2-2-4" class="outline-4">
+<h4 id="sec-2-2-4">msgctl函数</h4>
+<div class="outline-text-4" id="text-2-2-4">
+<ul class="org-ul">
+<li>msgctl函数：对队列执行多种操作，类似于ioctl函数
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/ipc.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/msg.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#31649;&#29702;&#19968;&#20010;&#28040;&#24687;&#38431;&#21015;</span>
+
+<span style="color: #ffa07a;">   msgid&#65306;&#28040;&#24687;&#38431;&#21015;ID</span>
+<span style="color: #ffa07a;">   cmd&#65306;&#31649;&#29702;&#21629;&#20196;</span>
+<span style="color: #ffa07a;">   buf&#65306;&#28040;&#24687;&#38431;&#21015;&#25351;&#38024;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;0&#65292;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">msgctl</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">msqid</span>, <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">cmd</span>, <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">mdqid_ds</span> *<span style="color: #eedd82;">buf</span>);
+</pre>
+</div>
+</li>
+</ul>
+</div>
+
+<div id="outline-container-sec-2-2-4-1" class="outline-5">
+<h5 id="sec-2-2-4-1">cmd参数</h5>
+<div class="outline-text-5" id="text-2-2-4-1">
+<p>
+cmd参数指定对于由msqid规定的队列要执行的命令：
+</p>
+<ul class="org-ul">
+<li>IPC_STAT：取此队列的msqid_ds结构，并将其存放在buf指向的结构中
+</li>
+
+<li>IPC_SET：由buf指向的结构中的值，设置与此队列相关的结构中的下列四个字段: 
+<ol class="org-ol">
+<li>msg_perm.uid
+</li>
+<li>msg_perm.gid
+</li>
+<li>msg_perm.mode
+</li>
+<li>msg_qbytes
+</li>
+</ol>
+</li>
+</ul>
+
+<p>
+此命令只能由下列两种进程执行: 其有效用户ID等于msg_perm.cuid或msg_perm.uid或具有超级用户特权的进程。只有超级用户才能增加msg_qbytes的值 
+</p>
+
+<ul class="org-ul">
+<li>IPC_RMID：从系统中删除该消息队列以及仍在该队列上的所有数据。这种删除立即生效。仍在使用这一消息队列的其他进程在它们下一次试图对此队列进行操作时，将出错返回EIDRM
+</li>
+</ul>
+
+<p>
+此命令只能由下列两种进程执行：其有效用户ID等于msg_perm.cuid或msg_perm.uid或具有超级用户特权的进程
+</p>
+</div>
+</div>
+</div>
+
+
+<div id="outline-container-sec-2-2-5" class="outline-4">
+<h4 id="sec-2-2-5">msgsnd函数</h4>
+<div class="outline-text-4" id="text-2-2-5">
+<ul class="org-ul">
+<li>msgsnd函数：将数据放到消息队列上
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/ipc.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/msg.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#24448;&#38431;&#21015;&#26411;&#23614;&#28155;&#21152;&#19968;&#20010;&#28040;&#24687;</span>
+
+<span style="color: #ffa07a;">   msqid&#65306;&#28040;&#24687;&#38431;&#21015;&#26631;&#35782;&#31526;</span>
+<span style="color: #ffa07a;">   ptr&#65306;&#28040;&#24687;&#25351;&#38024;</span>
+<span style="color: #ffa07a;">   nbytes&#65306;&#23454;&#38469;&#25968;&#25454;&#23383;&#33410;</span>
+<span style="color: #ffa07a;">   flag&#65306;&#35835;&#21462;&#26041;&#24335;&#26631;&#24535;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#25104;&#21151;&#21017;&#20026;0&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">msgsnd</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">msqid</span>, <span style="color: #00ffff;">const</span> <span style="color: #98fb98;">void</span> *<span style="color: #eedd82;">ptr</span>, <span style="color: #98fb98;">size_t</span> <span style="color: #eedd82;">nbytes</span>, <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">flag</span>);
+</pre>
+</div>
+</li>
+</ul>
+</div>
+
+<div id="outline-container-sec-2-2-5-1" class="outline-5">
+<h5 id="sec-2-2-5-1">ptr指针</h5>
+<div class="outline-text-5" id="text-2-2-5-1">
+<p>
+ptr指向的消息结构中包含了正整型消息类型，在其后立即跟随了消息数据(若nbytes是0，则无消息数据)。假设发送的最长消息是512字节，则可定义下列结构:
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">mymesg</span>
+{
+    <span style="color: #98fb98;">long</span> <span style="color: #eedd82;">mtype</span>; <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">positive message type </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">char</span> <span style="color: #eedd82;">mtext</span>[512]; <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">message data of length nbytes </span><span style="color: #ff4500;">*/</span>
+};
+</pre>
+</div>
+<p>
+而ptr就是一个指向mymesg结构的指针。接收者可以使用消息类型以非先进先出的次序取消息
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-2-5-2" class="outline-5">
+<h5 id="sec-2-2-5-2">flag标记</h5>
+<div class="outline-text-5" id="text-2-2-5-2">
+<ul class="org-ul">
+<li>flag的值可以指定为IPC_NOWAIT：这类似于文件I/O的非阻塞I/O标志。若消息队列已满(或者是队列中的消息总数等于系统限制值，或队列中的字节总数等于系统限制值)，则指定IPC_NOWAIT使得msgsnd立即出错返回EAGAIN
+</li>
+
+<li>如果没有指定IPC_NOWAIT，则进程阻塞直到：
+<ol class="org-ol">
+<li>有空间可以容纳要发送的消息
+</li>
+<li>从系统中删除了此队列，返回EIDRM(“标志符被删除”)报错
+</li>
+<li>捕捉到一个信号，并从信号处理程序返回。返回EINTR报错
+</li>
+</ol>
+</li>
+</ul>
+
+<p>
+注意：对消息队列删除的处理不是很完善。因为对每个消息队列并没有设置一个引用计数器(对打开文件则有这种计数器)，所以删除一个队列使得仍在使用这一队列的进程在下次对队列进行操作时出错返回。信号量机构也以同样方式处理其删除。而删除一个文件则要等到使用该文件的最后一个进程关闭了它，才能删除文件的内容
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-2-6" class="outline-4">
+<h4 id="sec-2-2-6">msgrcv函数</h4>
+<div class="outline-text-4" id="text-2-2-6">
+<ul class="org-ul">
+<li>msgrcv函数：从队列中取消息  
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/ipc.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/msg.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#20174;&#38431;&#21015;&#20013;&#21462;&#36208;&#19968;&#20010;&#28040;&#24687;&#65292;&#36825;&#24847;&#21619;&#30528;&#28040;&#24687;&#20250;&#34987;&#31227;&#20986;&#38142;&#34920;</span>
+
+<span style="color: #ffa07a;">   msqid&#65306;&#28040;&#24687;&#26631;&#35782;&#31526;</span>
+<span style="color: #ffa07a;">   ptr&#65306;&#28040;&#24687;&#25351;&#38024;</span>
+<span style="color: #ffa07a;">   nbytes&#65306;&#28040;&#24687;&#23454;&#38469;&#23383;&#33410;&#38271;&#24230;</span>
+<span style="color: #ffa07a;">   type&#65306;&#28040;&#24687;&#31867;&#22411;</span>
+<span style="color: #ffa07a;">   flag&#65306;&#21462;&#36208;&#26631;&#24535;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;&#28040;&#24687;&#25968;&#25454;&#37096;&#20998;&#30340;&#38271;&#24230;&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">msgrcv</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">msqid</span>, <span style="color: #98fb98;">void</span> *<span style="color: #eedd82;">ptr</span>, <span style="color: #98fb98;">size_t</span> <span style="color: #eedd82;">nbytes</span>, <span style="color: #98fb98;">long</span> <span style="color: #eedd82;">type</span>, <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">flag</span>);
+</pre>
+</div>
+</li>
+</ul>
+<p>
+如同msgsnd中一样：
+</p>
+<ul class="org-ul">
+<li>ptr参数指向一个长整型数(返回的消息类型存放在其中)，跟随其后的是存放实际消息数据的缓存
+</li>
+<li>nbytes说明数据缓存的长度。若返回的消息大于nbytes:
+<ul class="org-ul">
+<li>在flag中设置了MSG_NOERROR，则该消息被截短(在这种情况下，不通知我们消息截短了:-()
+</li>
+<li>如果没有设置这一标志，而消息又太长，则出错返回E2BIG(消息仍留在队列中)
+</li>
+</ul>
+</li>
+<li>flag值指定IPC_NOWAIT，使操作不阻塞。这使得如果没有所指定类型的消息，则msgrcv出错返回ENOMSG
+</li>
+<li>如果flag没有指定IPC_NOWAIT，则进程阻塞直至：
+<ul class="org-ul">
+<li>有了指定类型的消息
+</li>
+<li>从系统中删除了此队列(出错返回EIDRM)
+</li>
+<li>捕捉到一个信号并从信号处理程序返回(出错返回EINTR)。
+</li>
+</ul>
+</li>
+</ul>
+</div>
+<div id="outline-container-sec-2-2-6-1" class="outline-5">
+<h5 id="sec-2-2-6-1">type参数</h5>
+<div class="outline-text-5" id="text-2-2-6-1">
+<p>
+参数type可以指定想要哪一种消息：
+</p>
+<ul class="org-ul">
+<li>type == 0： 返回队列中的第一个消息
+</li>
+<li>type &gt; 0：返回队列中消息类型为type的第一个消息
+</li>
+<li>type &lt; 0：返回队列中消息类型值小于或等于type绝对值，而且在这种消息中，其类型值又是最小的消息
+</li>
+</ul>
+
+<p>
+非零的type用于以非先进先出次序读消息。例如，若应用程序对消息赋优先权，那么type就可以是优先权值。如果一个消息队列由多个客户机和一个服务器使用，那么type字段可以用来包
+含客户机进程ID。 
+</p>
+</div>
+</div>
+</div>
+<div id="outline-container-sec-2-2-7" class="outline-4">
+<h4 id="sec-2-2-7">实例</h4>
+<div class="outline-text-4" id="text-2-2-7">
+<p>
+向一个消息队列写入消息，读取出对应类型的消息
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;unistd.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/msg.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;stdio.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+
+<span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#28040;&#24687;&#32467;&#26500;</span>
+<span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">message</span>{
+    <span style="color: #98fb98;">long</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">mtype</span>;
+    <span style="color: #98fb98;">char</span> <span style="color: #eedd82;">mtext</span>[512];
+};
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">void</span>)
+{
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#21019;&#24314;&#28040;&#24687;&#38431;&#21015;</span>
+    <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">msgid</span> = msgget(IPC_PRIVATE,0666);
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#21019;&#24314;&#28040;&#24687;&#32467;&#26500;</span>
+    <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">message</span> <span style="color: #eedd82;">snd</span>;
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#28040;&#24687;&#31867;&#22411;</span>
+    snd.mtype = 911;
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#28040;&#24687;&#20869;&#23481;</span>
+    strcpy(snd.mtext,<span style="color: #ffa07a;">"help"</span>);
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#21457;&#36865;&#28040;&#24687;&#21040;&#38431;&#21015;</span>
+    <span style="color: #00ffff;">if</span>(msgsnd(msgid,&amp;snd,5,0) == -1){
+        printf(<span style="color: #ffa07a;">"msgsnd %m\n"</span>);
+        <span style="color: #00ffff;">return</span> -1;
+    }
+
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#35835;&#21462;&#28040;&#24687;&#38431;&#21015;&#20449;&#24687;</span>
+    <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">msqid_ds</span> <span style="color: #eedd82;">ds</span>;
+    <span style="color: #00ffff;">if</span>(msgctl(msgid, IPC_STAT, &amp;ds) == -1){
+        printf(<span style="color: #ffa07a;">"msgctl IPC_STAT %m\n"</span>);
+        <span style="color: #00ffff;">return</span> -1;
+    }
+    printf(<span style="color: #ffa07a;">"current bytes:%d ,current number:%d ,max bytes:%d \n"</span>,
+           ds.msg_cbytes, ds.msg_qnum, ds.msg_qbytes);
+
+    <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">message</span> <span style="color: #eedd82;">rcv</span>;
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#38750;&#38459;&#22622;&#35835;&#21462;&#28040;&#24687;&#31867;&#22411;&#20026;910&#30340;&#28040;&#24687;&#65292;&#20986;&#38169;&#36820;&#22238;</span>
+    <span style="color: #00ffff;">if</span>(msgrcv(msgid, &amp;rcv, 512, 910, IPC_NOWAIT) == -1){
+        printf(<span style="color: #ffa07a;">"msgrcv1 %m\n"</span>);
+    }
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#38459;&#22622;&#35835;&#21462;&#28040;&#24687;&#31867;&#22411;&#20026;911&#30340;&#28040;&#24687;</span>
+    <span style="color: #00ffff;">if</span>(msgrcv(msgid, &amp;rcv, 521, 911, 0) == -1){
+        printf(<span style="color: #ffa07a;">"msgrcv2 %m\n"</span>);
+        <span style="color: #00ffff;">return</span> -1;
+    }
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#25171;&#21360;&#35835;&#21462;&#30340;&#28040;&#24687;</span>
+    printf(<span style="color: #ffa07a;">"%s\n"</span>,rcv.mtext);
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#28165;&#38500;&#28040;&#24687;&#38431;&#21015;</span>
+    <span style="color: #00ffff;">if</span>(msgctl(msgid,IPC_RMID,<span style="color: #7fffd4;">NULL</span>)==-1){
+        printf(<span style="color: #ffa07a;">"msgctl IPC_RMID %m\n"</span>);
+    }
+    <span style="color: #00ffff;">return</span> 0;
+}
+</pre>
+</div>
+<p>
+测试结果：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ ./src/ipc/msg1 
+
+current bytes:5 ,current number:1 ,max bytes:16384 <span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#24403;&#21069;&#28040;&#24687;&#38431;&#21015;&#20449;&#24687;&#65306;&#20889;&#20837;5&#20010;&#23383;&#33410;&#65292;&#25317;&#26377;1&#20010;&#28040;&#24687;&#65292;&#26368;&#22823;&#21487;&#20889;&#20837;&#23383;&#33410;&#25968;&#26159;16384 </span>
+msgrcv1 No message of desired type <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#26080;&#27861;&#35835;&#21462;&#31867;&#22411;&#20026;910&#30340;&#28040;&#24687;</span>
+<span style="color: #b0c4de;">help</span> <span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#35835;&#21462;&#20986;&#30340;&#28040;&#24687;</span>
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-sec-2-2-8" class="outline-4">
+<h4 id="sec-2-2-8">消息队列VS流管道</h4>
+<div class="outline-text-4" id="text-2-2-8">
+<p>
+如若需要客户机和服务器之间的双向数据流，可以使用消息队列或流管道(用UNIX域套接字来实现)。消息队列原来的实施目的是提供比一般IPC更高速度的进程通信方法，而现在这个优点已经不复存在，所以不推荐使用消息队列！ 
+</p>
+</div>
+</div>
 </div>
 
 <div id="outline-container-sec-2-3" class="outline-3">
