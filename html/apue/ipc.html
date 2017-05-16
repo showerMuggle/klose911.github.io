@@ -235,10 +235,31 @@ for the JavaScript code in this tag.
 <li><a href="#sec-2-2-8">消息队列VS流管道</a></li>
 </ul>
 </li>
-<li><a href="#sec-2-3">信号量</a></li>
+<li><a href="#sec-2-3">信号量</a>
+<ul>
+<li><a href="#sec-2-3-1">实现</a></li>
+<li><a href="#sec-2-3-2">semid_ds结构</a></li>
+<li><a href="#sec-2-3-3">资源限制</a></li>
+<li><a href="#sec-2-3-4">semget函数</a></li>
+<li><a href="#sec-2-3-5">semctl函数</a>
+<ul>
+<li><a href="#sec-2-3-5-1">cmd参数</a></li>
+</ul>
+</li>
+<li><a href="#sec-2-3-6">semop函数</a>
+<ul>
+<li><a href="#sec-2-3-6-1">semoarray参数</a></li>
+<li><a href="#sec-2-3-6-2">exit时的信号量调整</a></li>
+</ul>
+</li>
+<li><a href="#sec-2-3-7">实例</a></li>
+<li><a href="#sec-2-3-8">信号量VS文件锁</a></li>
+</ul>
+</li>
 <li><a href="#sec-2-4">共享内存</a></li>
 </ul>
 </li>
+<li><a href="#sec-3">客户机-服务器属性</a></li>
 </ul>
 </div>
 </div>
@@ -2246,6 +2267,7 @@ ptr指向的消息结构中包含了正整型消息类型，在其后立即跟�
 }
 </pre>
 </div>
+
 <p>
 测试结果：
 </p>
@@ -2260,6 +2282,7 @@ msgrcv1 No message of desired type <span style="color: #ff4500;"># </span><span 
 </div>
 </div>
 </div>
+
 <div id="outline-container-sec-2-2-8" class="outline-4">
 <h4 id="sec-2-2-8">消息队列VS流管道</h4>
 <div class="outline-text-4" id="text-2-2-8">
@@ -2272,11 +2295,512 @@ msgrcv1 No message of desired type <span style="color: #ff4500;"># </span><span 
 
 <div id="outline-container-sec-2-3" class="outline-3">
 <h3 id="sec-2-3">信号量</h3>
+<div class="outline-text-3" id="text-2-3">
+<p>
+信号量与已经介绍过的IPC(管道、FIFO以及消息列队)不同。它是一个计数器，用于多进程对共享数据对象的存取。为了获得共享资源，进程需要执行下列操作：
+</p>
+<ol class="org-ol">
+<li>测试控制该资源的信号量
+</li>
+<li>若此信号量的值为正，则进程可以使用该资源。进程将信号量值减1，表示它使用了一个资源单位
+</li>
+<li>若此信号量的值为0，则进程进入睡眠状态，直至信号量值大于0。若进程被唤醒后， 它返回至第1步
+</li>
+</ol>
+
+<p>
+当进程不再使用由一个信息量控制的共享资源时，该信号量值增1。如果有进程正在睡眠等待此信号量，则唤醒它们 
+</p>
+</div>
+
+<div id="outline-container-sec-2-3-1" class="outline-4">
+<h4 id="sec-2-3-1">实现</h4>
+<div class="outline-text-4" id="text-2-3-1">
+<p>
+为了正确地实现信息量，信号量值的测试及减1操作应当是原子操作。为此，信号量通常是在内核中实现的
+</p>
+
+<p>
+常用的信号量形式被称之为双态信号量(binary semaphore)。它控制单个资源，其初始值为1。但是，一般而言，信号量的初值可以是任一正值，该值说明有多少个共享资源单位可供共享应用。
+</p>
+
+<p>
+不幸的是，系统V的信号量与此相比要复杂得多。三种特性造成了这种并非必要的复杂性:
+</p>
+<ol class="org-ol">
+<li>信号量并非是一个非负值，而必需将信号量定义为含有一个或多个信号量值的集合。当创建一个信号量时，要指定该集合中的各个值
+</li>
+<li>创建信息量(semget)与对其赋初值(semctl)分开。这是一个致命的弱点，因为不能原子地创建一个信号量集合，并且对该集合中的所有值赋初值
+</li>
+<li>即使没有进程正在使用各种形式的IPC，它们仍然是存在的，所以不得不为这种程序担心，它在终止时并没有释放已经分配给它的信号量。下面将要说明的undo功能就是假定要处理这种情况的
+</li>
+</ol>
+</div>
+</div>
+
+<div id="outline-container-sec-2-3-2" class="outline-4">
+<h4 id="sec-2-3-2">semid_ds结构</h4>
+<div class="outline-text-4" id="text-2-3-2">
+<p>
+内核为每个信号量设置了一个semid_ds结构：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">semid_ds</span>
+{
+    <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">ipc_perm</span> <span style="color: #eedd82;">sem_perm</span>; <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">see Section 14.6.2 </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">sem</span> *<span style="color: #eedd82;">sem_base</span>; <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">ptr to first semaphore in set </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">ushort</span> <span style="color: #eedd82;">sem_nsems</span>; <span style="color: #ff4500;">/* </span><span style="color: #ff4500;"># of semaphores in set </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">time_t</span> <span style="color: #eedd82;">sem_otime</span>; <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">last-semop() time </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">time_t</span> <span style="color: #eedd82;">sem_ctime</span>; <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">last-change time </span><span style="color: #ff4500;">*/</span>
+};
+</pre>
+</div>
+<p>
+对用户而言，sem_base指针是没有价值的，它指向内核中的sem结构数组，该数组中包含了sem_nsems个元素，每个元素各对应于集合中的一个信号量值
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">sem</span>
+{
+    <span style="color: #98fb98;">ushort</span> <span style="color: #eedd82;">semval</span>; <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">semaphore value always &gt;= 0</span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">pid_t</span> <span style="color: #eedd82;">sempid</span>; <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">pid for last operation </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">ushort</span> <span style="color: #eedd82;">semncnt</span>; <span style="color: #ff4500;">/* </span><span style="color: #ff4500;"># processes awaiting semval &gt; currentval </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">ushort</span> <span style="color: #eedd82;">semzcnt</span>; <span style="color: #ff4500;">/* </span><span style="color: #ff4500;"># processes awaiting semval = 0 </span><span style="color: #ff4500;">*/</span>
+};
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-3-3" class="outline-4">
+<h4 id="sec-2-3-3">资源限制</h4>
+<div class="outline-text-4" id="text-2-3-3">
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 5:</span> 影响信号量的系统限制</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="right" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">名字</td>
+<td class="left">说明</td>
+<td class="right">典型值</td>
+</tr>
+
+<tr>
+<td class="left">SEMVMX</td>
+<td class="left">任一信号量的最大值</td>
+<td class="right">32767</td>
+</tr>
+
+<tr>
+<td class="left">SEMAEM</td>
+<td class="left">任一信号量的最大终止时调整值</td>
+<td class="right">16384</td>
+</tr>
+
+<tr>
+<td class="left">SEMMNI</td>
+<td class="left">系统中信号量集的最大数</td>
+<td class="right">10</td>
+</tr>
+
+<tr>
+<td class="left">SEMMNS</td>
+<td class="left">系统中信号量集的最大数</td>
+<td class="right">60</td>
+</tr>
+
+<tr>
+<td class="left">SEMMSL</td>
+<td class="left">每个信号量集中的最大信号量数</td>
+<td class="right">25</td>
+</tr>
+
+<tr>
+<td class="left">SEMMNU</td>
+<td class="left">系统中undo结构的最大数</td>
+<td class="right">30</td>
+</tr>
+
+<tr>
+<td class="left">SEMUME</td>
+<td class="left">每个undo结构中的最大undo项数</td>
+<td class="right">10</td>
+</tr>
+
+<tr>
+<td class="left">SEMOPM</td>
+<td class="left">每个semop调用所包含的最大操作数</td>
+<td class="right">10</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+
+<div id="outline-container-sec-2-3-4" class="outline-4">
+<h4 id="sec-2-3-4">semget函数</h4>
+<div class="outline-text-4" id="text-2-3-4">
+<ul class="org-ul">
+<li>semget函数：获得一个信号量ID
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/ipc.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/sem.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#26032;&#24314;&#25110;&#25171;&#24320;&#19968;&#20010;&#20449;&#21495;&#37327;&#38598;</span>
+
+<span style="color: #ffa07a;">   key&#65306;&#20449;&#21495;&#37327;&#20851;&#38190;&#23383;&#65292;&#20869;&#26680;&#26681;&#25454;&#35268;&#21017;&#36716;&#25442;&#20026;&#26631;&#35782;&#31526;</span>
+<span style="color: #ffa07a;">   nsems&#65306;&#20449;&#21495;&#37327;&#38598;&#20013;&#30340;&#20449;&#21495;&#25968;&#65292;&#22914;&#26524;&#35843;&#29992;&#35813;&#20989;&#25968;&#26159;&#20026;&#20102;&#24341;&#29992;&#19968;&#20010;&#29616;&#23384;&#30340;&#20449;&#21495;&#37327;&#38598;&#65292;&#21017;&#24212;&#35774;&#20026; 0</span>
+<span style="color: #ffa07a;">   flag&#65306;&#20462;&#25913;&#26631;&#35760;&#20301;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#36820;&#22238;&#20449;&#21495;&#37327;&#26631;&#35782;&#31526;&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">semget</span>(<span style="color: #98fb98;">key_t</span> <span style="color: #eedd82;">key</span>, <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">nsems</span>, <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">flag</span>);
+</pre>
+</div>
+</li>
+</ul>
+<p>
+创建一个新集合时，对semid_ds结构的下列成员赋初值：
+</p>
+<ul class="org-ul">
+<li>对ipc_perm结构赋初值。该结构中的mode被设置为flag中的相应许可权位
+</li>
+<li>sem_otime设置为0
+</li>
+<li>sem_ctime设置为当前时间
+</li>
+<li>sem_nsems设置为nsems。
+</li>
+</ul>
+
+<p>
+nsems是该集合中的信号量数。如果是创建新集合(一般在服务器中)，则必须指定nsems。如果引用一个现存的集合(一个客户机)，则将nsems指定为0
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-3-5" class="outline-4">
+<h4 id="sec-2-3-5">semctl函数</h4>
+<div class="outline-text-4" id="text-2-3-5">
+<ul class="org-ul">
+<li>semctl函数：信号量操作函数
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/ipc.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/sem.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#31649;&#29702;&#19968;&#20010;&#20449;&#21495;&#37327;&#38598;</span>
+
+<span style="color: #ffa07a;">   semid&#65306;&#25351;&#23450;&#30340;&#20449;&#21495;&#37327;&#26631;&#35782;&#31526;</span>
+<span style="color: #ffa07a;">   semnum&#65306;&#38598;&#21512;&#20013;&#25351;&#23450;&#30340;&#20449;&#21495;&#37327;&#65292;&#21462;&#20540;&#33539;&#22260;&#20026;0&#21040;&#24635;&#25968;-1</span>
+<span style="color: #ffa07a;">   cmd&#65306;&#25351;&#23450;&#30340;&#25805;&#20316;</span>
+<span style="color: #ffa07a;">   arg&#65306;&#23450;&#30340;&#25968;&#25454;&#28304;,&#23427;&#26159;&#19968;&#20010;&#32852;&#21512;&#20307;union semun&#31867;&#22411;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#26681;&#25454;cmd&#19981;&#21516;&#65292;&#36820;&#22238;&#19981;&#21516;</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">semctl</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">semid</span>, <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">semnum</span>, <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">cmd</span>, ... <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">union semun arg </span><span style="color: #ff4500;">*/</span>);
+
+<span style="color: #00ffff;">union</span> <span style="color: #98fb98;">semun</span>
+{
+    <span style="color: #98fb98;">int</span>              <span style="color: #eedd82;">val</span>;    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">cmd &#20026; SETVAL &#26102;&#20316;&#20026;&#25968;&#25454;&#28304; </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">semid_ds</span> *<span style="color: #eedd82;">buf</span>;    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">cmd &#20026; IPC_STAT &#21644; IPC_SET &#26102;&#30340;&#25968;&#25454;&#28304; </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">unsigned</span> <span style="color: #98fb98;">short</span>  *<span style="color: #eedd82;">array</span>;  <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">cmd &#20026; GETALL &#21644; SETALL &#26102;&#30340;&#25968;&#25454;&#28304; </span><span style="color: #ff4500;">*/</span>
+}
+</pre>
+</div>
+</li>
+</ul>
+</div>
+
+<div id="outline-container-sec-2-3-5-1" class="outline-5">
+<h5 id="sec-2-3-5-1">cmd参数</h5>
+<div class="outline-text-5" id="text-2-3-5-1">
+<p>
+cmd参数指定下列十种命令中的一种，使其在semid指定的信号量集合上执行此命令。其中有五条命令是针对一个特定的信号量值的，它们用semnum指定该集合中的一个成员。semnum值在0和nsems-1之间(包括0和nsems-1)：
+</p>
+<ul class="org-ul">
+<li>IPC_STAT：对此集合取semid_ds结构，并存放在由arg.buf指向的结构中
+</li>
+<li>IPC_SET：由arg.buf指向的结构中的值设置与此集合相关结构中的下列三个字段值:
+<ol class="org-ol">
+<li>sem_perm.uid
+</li>
+<li>sem_perm.gid
+</li>
+<li>sem_perm.mode
+</li>
+</ol>
+</li>
+</ul>
+
+<p>
+此命令只能由下列两种进程执行：其有效用户ID等于sem_perm.cuid或sem_perm.uid的进程或是具有超级用户特权的进程
+</p>
+
+<ul class="org-ul">
+<li>IPC_RMID：从系统中删除该信号量集合。这种删除是立即的。仍在使用此信号量的其他进程在它们下次意图对此信号量进行操作时，将出错返回EIDRM
+</li>
+</ul>
+
+<p>
+此命令只能由下列两种进程执行：有效用户ID等于sem_perm.cuid或sem_perm.uid的进程或是具有超级用户特权的进程
+</p>
+
+<ul class="org-ul">
+<li>GETVAL：返回成员semnum的semval值
+</li>
+<li>SETVAL：设置成员semnum的semval值，该值由arg.val指定
+</li>
+<li>GETPID：返回成员semnum的sempid值
+</li>
+<li>GETNCNT：返回成员semnum的semncnt值
+</li>
+<li>GETZCNT：返回成员semnum的semzcnt值
+</li>
+<li>GETALL：取该集合中所有信号量的值，并将它们存放在由arg.array指向的数组中
+</li>
+<li>SETALL：按arg.array指向的数组中的值设置该集合中所有信号量的值
+</li>
+</ul>
+
+<p>
+对于除GETALL以外的所有GET命令，semctl函数都返回相应值。其他命令的返回值为0
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-3-6" class="outline-4">
+<h4 id="sec-2-3-6">semop函数</h4>
+<div class="outline-text-4" id="text-2-3-6">
+<ul class="org-ul">
+<li>semop函数：自动执行信号量集合上的操作数组
+
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/ipc.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/sem.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#20351;&#29992;&#20449;&#21495;&#37327;</span>
+
+<span style="color: #ffa07a;">   semid&#65306;&#20449;&#21495;&#37327;&#26631;&#35782;&#31526;</span>
+<span style="color: #ffa07a;">   semoarray&#65306;&#19968;&#32452;sembuf&#23545;&#35937;</span>
+<span style="color: #ffa07a;">   nops&#65306;semoarray&#30340;&#20803;&#32032;&#20010;&#25968;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;0&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">semop</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">semid</span>, <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">sembuf</span> <span style="color: #eedd82;">semoparray</span>[], <span style="color: #98fb98;">size_t</span> <span style="color: #eedd82;">nops</span>);
+</pre>
+</div>
+</li>
+</ul>
+</div>
+
+
+<div id="outline-container-sec-2-3-6-1" class="outline-5">
+<h5 id="sec-2-3-6-1">semoarray参数</h5>
+<div class="outline-text-5" id="text-2-3-6-1">
+<p>
+semoparray是一个指针，它指向一个信号量操作sembuf结构数组：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">sembuf</span>
+{
+    <span style="color: #98fb98;">unsigned</span> <span style="color: #98fb98;">short</span> <span style="color: #eedd82;">sem_num</span>;   <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">&#25351;&#23450;&#38598;&#21512;&#20013;&#30340;&#20449;&#21495;&#37327;,&#21462;&#20540; 0 ~ nsems-1 </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">short</span>          <span style="color: #eedd82;">sem_op</span>;    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">&#25351;&#23450;&#25805;&#20316;&#25968; </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">short</span>          <span style="color: #eedd82;">sem_flg</span>;   <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">&#21253;&#25324; IPC_NOWAIT &#21644; SEM_UNDO </span><span style="color: #ff4500;">*/</span>
+}
+</pre>
+</div>
+<p>
+nops规定该数组中操作的数量(元素数)
+</p>
+</div>
+
+<ul class="org-ul"><li><a id="sec-2-3-6-1-1" name="sec-2-3-6-1-1"></a>sem_op成员<br  /><div class="outline-text-6" id="text-2-3-6-1-1">
+<p>
+对集合中每个成员的操作由相应的sem_op规定。此值可以是负值、0或正值。其undo标志对应于相应sem_flg成员的SEM_UNDO位：
+</p>
+<ul class="org-ul">
+<li>sem_op &gt; 0：这对应于释放进程占用的资源。sem_op值加到信号量的值上。如果指定了undo标志，则也从该进程的此信号量调整值中减去sem_op
+</li>
+
+<li>若sem_op &lt; 0：则表示要获取由该信号量控制的资源
+<ul class="org-ul">
+<li>如若该信号量的值大于或等于sem_op的绝对值(具有所需的资源)，则从信号量值中减去sem_op的绝对值。这保证信号量的结果值大于或等于0。如果指定了undo标志，则sem_op的绝对值也加到该进程的此信号量调整值上
+</li>
+<li>如果信号量值小于sem_op的绝对值(资源不能满足要求)，则:
+<ul class="org-ul">
+<li>若指定了IPC_NOWAIT：则出错返回EAGAIN
+</li>
+<li>若未指定IPC_NOWAIT：则该信号量的semncnt值加1(因为将进入睡眠状态)，然后调用进程被挂起直至下列事件之一发生:
+<ul class="org-ul">
+<li>此信号量变成大于或等于sem_op的绝对值(即某个进程已释放了某些资源)。此信号量的semncnt值减1(因为已结束等待)，并且从信号量值中减去sem_op的绝对值。如果指定了undo标志，则sem_op的绝对值也加到该进程的此信号量调整值上
+</li>
+<li>从系统中删除了此信号量。在此情况下，函数出错返回ERMID
+</li>
+<li>进程捕捉到一个信号，并从信号处理程序返回，在此情况下，此信号量的semncnt值减1(因为不再等待)，并且函数出错返回EINTR
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+
+<li>若sem_op为0，这表示希望等待到该信号量值变成0：
+<ul class="org-ul">
+<li>如果信号量值当前是0，则此函数立即返回
+</li>
+<li>如果信号量值非0，则:
+<ul class="org-ul">
+<li>若指定了IPC_NOWAIT，则出错返回EAGAIN
+</li>
+<li>若未指定IPC_NOWAIT，则该信号量的semncnt值加1(因为将进入睡眠状态)，然后调用进程被挂起，直至下列事件之一发生：
+<ul class="org-ul">
+<li>此信号量值变成0。此信号量的semzcnt值减1(因为已结束等待)
+</li>
+<li>从系统中删除了此信号量。在此情况下，函数出错返回ERMID
+</li>
+<li>进程捕捉到一个信号，并从信号处理程序返回。在此情况下，此信号量的semzcnt值减1(因为不再等待)，并且函数出错返回EINTR
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+<p>
+semop具有原子性，因为它或者执行数组中的所有操作，或者一个也不做
+</p>
+</div>
+</li></ul>
+</div>
+<div id="outline-container-sec-2-3-6-2" class="outline-5">
+<h5 id="sec-2-3-6-2">exit时的信号量调整</h5>
+<div class="outline-text-5" id="text-2-3-6-2">
+<p>
+如果在进程终止时，它占用了经由信号量分配的资源，那么就会成为一个问题。无论何时只要为信号量操作指定了SEM_UNDO标志，然后分配资源(sem_op值小于0)，那么内核就会记住对于该特定信号量，分配给我们多少资源(sem_op的绝对值)。当该进程终止时，不论自愿或者不自愿，内核都将检验该进程是否还有尚未处理的信号量调整值，如果有，则按调整值对相应量值进行调整
+</p>
+
+<p>
+如果用带SETVAL或SETALL命令的semctl设置一信号量的值，则在所有进程中，对于该信号量的调整值都设置为0
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-3-7" class="outline-4">
+<h4 id="sec-2-3-7">实例</h4>
+<div class="outline-text-4" id="text-2-3-7">
+<p>
+通过信号量来同步父子进程：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;unistd.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/sem.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/wait.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">void</span>){
+
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#21019;&#24314;&#20449;&#21495;&#37327;&#38598;</span>
+    <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">semid</span> = semget(IPC_PRIVATE, 1, 0666);
+    <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">value</span> = 0;
+
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#21021;&#22987;&#21270;&#20449;&#21495;&#37327;&#65292;&#35774;&#32622;&#20449;&#21495;&#37327;&#38598;&#30340;&#31532;&#19968;&#20010;&#20449;&#21495;&#37327;&#30340;&#24403;&#21069;&#20540;&#20026;0</span>
+    semctl(semid, 0, SETVAL, &amp;value);
+
+    <span style="color: #98fb98;">pid_t</span> <span style="color: #eedd82;">pid</span>=fork();
+    <span style="color: #00ffff;">if</span>(pid==0){<span style="color: #ff4500;">//</span><span style="color: #ff4500;">child</span>
+        <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">sembuf</span> <span style="color: #eedd82;">buf</span>;
+        buf.sem_num = 0;
+        buf.sem_op = -1;
+        printf(<span style="color: #ffa07a;">"child wait to exit\n"</span>);
+        <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#20174;&#20449;&#21495;&#37327;&#38598;&#30340;&#31532;&#19968;&#20010;&#20449;&#21495;&#37327;&#33719;&#21462;&#19968;&#20010;&#36164;&#28304;</span>
+        semop(semid, &amp;buf, 1);
+        printf(<span style="color: #ffa07a;">"child about to exit\n"</span>);
+        <span style="color: #00ffff;">return</span> 0;
+    }
+
+    sleep(2);
+    <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">sembuf</span> <span style="color: #eedd82;">buf</span>;
+    buf.sem_num = 0;
+    buf.sem_op = 1;
+    printf(<span style="color: #ffa07a;">"tell child ready\n"</span>);
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#21521;&#20449;&#21495;&#37327;&#38598;&#30340;&#31532;&#19968;&#20010;&#20449;&#21495;&#37327;&#22686;&#21152;&#19968;&#20010;&#36164;&#28304;</span>
+    semop(semid,&amp;buf,1);
+    wait(<span style="color: #7fffd4;">NULL</span>);
+
+    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#28165;&#29702;&#20449;&#21495;&#37327;&#38598;</span>
+    semctl(semid, 0, IPC_RMID);
+    <span style="color: #00ffff;">return</span> 0;
+}
+</pre>
+</div>
+
+<p>
+测试结果：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ ./src/ipc/semp1
+
+child wait to exit
+child about to exit
+tell child ready
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-3-8" class="outline-4">
+<h4 id="sec-2-3-8">信号量VS文件锁</h4>
+<div class="outline-text-4" id="text-2-3-8">
+<p>
+如果多个进程共享一个资源，则可使用信号量或记录锁
+</p>
+
+<p>
+虽然实际上记录锁稍慢于信号量锁，但如果只需锁一个资源并且不需要使用信号量的所有花哨的功能，则宁可使用记录锁。理由是：
+</p>
+<ul class="org-ul">
+<li>使用简易
+</li>
+<li>进程终止时，会处理任一遗留下的锁
+</li>
+</ul>
+</div>
+</div>
 </div>
 
 <div id="outline-container-sec-2-4" class="outline-3">
 <h3 id="sec-2-4">共享内存</h3>
 </div>
+</div>
+
+<div id="outline-container-sec-3" class="outline-2">
+<h2 id="sec-3">客户机-服务器属性</h2>
 </div>
 </div>
 <div id="postamble" class="status">
