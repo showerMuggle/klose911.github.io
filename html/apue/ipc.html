@@ -232,7 +232,7 @@ for the JavaScript code in this tag.
 </ul>
 </li>
 <li><a href="#sec-2-2-7">实例</a></li>
-<li><a href="#sec-2-2-8">消息队列VS流管道</a></li>
+<li><a href="#sec-2-2-8">消息队列 VS 流管道</a></li>
 </ul>
 </li>
 <li><a href="#sec-2-3">信号量</a>
@@ -253,13 +253,33 @@ for the JavaScript code in this tag.
 </ul>
 </li>
 <li><a href="#sec-2-3-7">实例</a></li>
-<li><a href="#sec-2-3-8">信号量VS文件锁</a></li>
+<li><a href="#sec-2-3-8">信号量 VS 文件锁</a></li>
 </ul>
 </li>
-<li><a href="#sec-2-4">共享内存</a></li>
+<li><a href="#sec-2-4">共享内存</a>
+<ul>
+<li><a href="#sec-2-4-1">shmid_ds结构</a></li>
+<li><a href="#sec-2-4-2">资源限制</a></li>
+<li><a href="#sec-2-4-3">shmget函数</a></li>
+<li><a href="#sec-2-4-4">shmctl函数</a>
+<ul>
+<li><a href="#sec-2-4-4-1">cmd参数</a></li>
 </ul>
 </li>
-<li><a href="#sec-3">客户机-服务器属性</a></li>
+<li><a href="#sec-2-4-5">shmat函数</a></li>
+<li><a href="#sec-2-4-6">shmdt函数</a></li>
+<li><a href="#sec-2-4-7">打印不同类型的数据所存放的位置</a></li>
+<li><a href="#sec-2-4-8">/dev/zero的存储映射</a>
+<ul>
+<li><a href="#sec-2-4-8-1">匿名存储映射</a></li>
+<li><a href="#sec-2-4-8-2">共享存储 VS mmap</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#sec-3">客户机-服务器模型</a></li>
 </ul>
 </div>
 </div>
@@ -2284,7 +2304,7 @@ msgrcv1 No message of desired type <span style="color: #ff4500;"># </span><span 
 </div>
 
 <div id="outline-container-sec-2-2-8" class="outline-4">
-<h4 id="sec-2-2-8">消息队列VS流管道</h4>
+<h4 id="sec-2-2-8">消息队列 VS 流管道</h4>
 <div class="outline-text-4" id="text-2-2-8">
 <p>
 如若需要客户机和服务器之间的双向数据流，可以使用消息队列或流管道(用UNIX域套接字来实现)。消息队列原来的实施目的是提供比一般IPC更高速度的进程通信方法，而现在这个优点已经不复存在，所以不推荐使用消息队列！ 
@@ -2508,7 +2528,7 @@ nsems是该集合中的信号量数。如果是创建新集合(一般在服务�
 <span style="color: #ffa07a;">   semid&#65306;&#25351;&#23450;&#30340;&#20449;&#21495;&#37327;&#26631;&#35782;&#31526;</span>
 <span style="color: #ffa07a;">   semnum&#65306;&#38598;&#21512;&#20013;&#25351;&#23450;&#30340;&#20449;&#21495;&#37327;&#65292;&#21462;&#20540;&#33539;&#22260;&#20026;0&#21040;&#24635;&#25968;-1</span>
 <span style="color: #ffa07a;">   cmd&#65306;&#25351;&#23450;&#30340;&#25805;&#20316;</span>
-<span style="color: #ffa07a;">   arg&#65306;&#23450;&#30340;&#25968;&#25454;&#28304;,&#23427;&#26159;&#19968;&#20010;&#32852;&#21512;&#20307;union semun&#31867;&#22411;</span>
+<span style="color: #ffa07a;">   arg&#65306;&#25968;&#25454;&#28304;,&#23427;&#26159;&#19968;&#20010;&#32852;&#21512;&#20307;union semun&#31867;&#22411;</span>
 
 <span style="color: #ffa07a;">   return&#65306;&#26681;&#25454;cmd&#19981;&#21516;&#65292;&#36820;&#22238;&#19981;&#21516;</span>
 <span style="color: #ffa07a;">*/</span>
@@ -2775,7 +2795,7 @@ tell child ready
 </div>
 
 <div id="outline-container-sec-2-3-8" class="outline-4">
-<h4 id="sec-2-3-8">信号量VS文件锁</h4>
+<h4 id="sec-2-3-8">信号量 VS 文件锁</h4>
 <div class="outline-text-4" id="text-2-3-8">
 <p>
 如果多个进程共享一个资源，则可使用信号量或记录锁
@@ -2796,11 +2816,496 @@ tell child ready
 
 <div id="outline-container-sec-2-4" class="outline-3">
 <h3 id="sec-2-4">共享内存</h3>
+<div class="outline-text-3" id="text-2-4">
+<p>
+共享存储允许两个或多个进程共享一给定的存储区。因为数据不需要在客户机和服务器之间复制，所以这是最快的一种IPC。使用共享存储的唯一窍门是多个进程之间对一给定存储区 
+的同步存取。若服务器将数据放入共享存储区，则在服务器做完这一操作之前，客户机不应当去取这些数据。通常信号量被用来实现对共享存储存取的同步
+</p>
+</div>
+
+<div id="outline-container-sec-2-4-1" class="outline-4">
+<h4 id="sec-2-4-1">shmid_ds结构</h4>
+<div class="outline-text-4" id="text-2-4-1">
+<p>
+内核为每个共享存储段设置了一个shmid_ds结构：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">shmid_ds</span>
+{
+    <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">ipc_perm</span> <span style="color: #eedd82;">shm_perm</span>;           <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">operation permission struct </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">anop_map</span> *<span style="color: #eedd82;">shm_amp</span>;           <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">pointer in kernel </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">size_t</span> <span style="color: #eedd82;">shm_segsz</span>;                   <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">size of segment in bytes </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">time_t</span> <span style="color: #eedd82;">shm_atime</span>;                 <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">time of last shmat() </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">time_t</span> <span style="color: #eedd82;">shm_dtime</span>;                 <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">time of last shmdt() </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">time_t</span> <span style="color: #eedd82;">shm_ctime</span>;                 <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">time of last change by shmctl() </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">pid_t</span> <span style="color: #eedd82;">shm_cpid</span>;                   <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">pid of creator </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">pid_t</span> <span style="color: #eedd82;">shm_lpid</span>;                   <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">pid of last shmop </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">shmatt_t</span> <span style="color: #eedd82;">shm_nattch</span>;                <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">number of current attaches </span><span style="color: #ff4500;">*/</span>
+    <span style="color: #98fb98;">shmatt_t</span> <span style="color: #eedd82;">shm_cattch</span>;              <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">used only for shminfo </span><span style="color: #ff4500;">*/</span>
+};
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-4-2" class="outline-4">
+<h4 id="sec-2-4-2">资源限制</h4>
+<div class="outline-text-4" id="text-2-4-2">
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 6:</span> 影响共享内存的系统限制</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="right" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">名字</td>
+<td class="left">说明</td>
+<td class="right">典型值</td>
+</tr>
+
+<tr>
+<td class="left">shmmax</td>
+<td class="left">共享存储段的最大字节数</td>
+<td class="right">131072</td>
+</tr>
+
+<tr>
+<td class="left">shmmin</td>
+<td class="left">共享存储段的最小字节数</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">shmmni</td>
+<td class="left">系统中共享存储段的最大段数</td>
+<td class="right">100</td>
+</tr>
+
+<tr>
+<td class="left">shmseg</td>
+<td class="left">每个进程,共享存储段的最大段数</td>
+<td class="right">6</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+
+<div id="outline-container-sec-2-4-3" class="outline-4">
+<h4 id="sec-2-4-3">shmget函数</h4>
+<div class="outline-text-4" id="text-2-4-3">
+<ul class="org-ul">
+<li>shmget函数：获得一个共享存储标识符
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/ipc.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/shm.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#26032;&#24314;&#25110;&#25171;&#24320;&#19968;&#20010;&#20849;&#20139;&#20869;&#23384;&#23545;&#35937;</span>
+
+<span style="color: #ffa07a;">   key&#65306;&#20849;&#20139;&#20869;&#23384;&#20851;&#38190;&#23383;&#65292;&#20869;&#26680;&#26681;&#25454;&#35268;&#21017;&#36716;&#25442;&#20026;&#26631;&#35782;&#31526;</span>
+<span style="color: #ffa07a;">   size&#65306;&#26032;&#24314;&#24212;&#21462;PAGESIZE&#30340;&#25972;&#25968;&#20493;&#65292;&#29992;&#20316;&#25171;&#24320;&#29616;&#23384;&#30340;&#20849;&#20139;&#20869;&#23384;&#23545;&#35937;&#26102;&#65292;size&#24212;&#35774;&#20026;0</span>
+<span style="color: #ffa07a;">   flag&#65306;&#20849;&#20139;&#20869;&#23384;&#23384;&#21462;&#36873;&#39033;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;&#20849;&#20139;&#20869;&#23384;&#26631;&#35782;&#31526;&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">shmget</span>(<span style="color: #98fb98;">key_t</span> <span style="color: #eedd82;">key</span>, <span style="color: #98fb98;">size_t</span> <span style="color: #eedd82;">size</span>, <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">flag</span>);
+</pre>
+</div>
+</li>
+</ul>
+<p>
+当创建一个新共享内存段时，初始化shmid_ds结构的下列成员:
+</p>
+<ul class="org-ul">
+<li>ipc_perm结构按前面所述进行初始化，该结构中的mode按flag中的相应许可权位设置
+</li>
+<li>shm_lpid、shm_nattach、shm_atime、以及shm_dtime都设置为0
+</li>
+<li>shm_ctime设置为当前时间
+</li>
+</ul>
+
+<p>
+size是该共享存储段的最小值。如果正在创建一个新段(一般在服务器中)，则必须指定其size。如果正在存访一个现存的段(一个客户机)，则将size指定为0
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-4-4" class="outline-4">
+<h4 id="sec-2-4-4">shmctl函数</h4>
+<div class="outline-text-4" id="text-2-4-4">
+<ul class="org-ul">
+<li>shmctl函数：对共享存储段执行多种操作
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/ipc.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/shm.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#31649;&#29702;&#20849;&#20139;&#20869;&#23384;&#23545;&#35937;</span>
+
+<span style="color: #ffa07a;">   shmid&#65306;&#20849;&#20139;&#20869;&#23384;&#26631;&#35782;&#31526;</span>
+<span style="color: #ffa07a;">   cmd&#65306;&#31649;&#29702;&#21629;&#20196;</span>
+<span style="color: #ffa07a;">   buf&#65306;&#20849;&#20139;&#20869;&#23384;&#25351;&#38024;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;0&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">shmctl</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">shmid</span>, <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">cmd</span>, <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">shmid_ds</span> *<span style="color: #eedd82;">buf</span>);
+</pre>
+</div>
+</li>
+</ul>
+</div>
+
+<div id="outline-container-sec-2-4-4-1" class="outline-5">
+<h5 id="sec-2-4-4-1">cmd参数</h5>
+<div class="outline-text-5" id="text-2-4-4-1">
+<p>
+cmd参数指定下列5种命令中一种，使其在shmid指定的段上执行：
+</p>
+<ul class="org-ul">
+<li>IPC_STAT：对此段取shmid_ds结构，并存放在由buf指向的结构中
+</li>
+<li>IPC_SET：按buf指向的结构中的值设置与此段相关结构中的下列三个字段:
+<ol class="org-ol">
+<li>shm_perm.uid
+</li>
+<li>shm_perm.gid
+</li>
+<li>shm_perm.mode
+</li>
+</ol>
+</li>
+</ul>
+
+<p>
+此命令只能由下列两种进程执行：其有效用户ID等于shm_perm.cuid或shm_perm.uid的进程或具有超级用户特权的进程
+</p>
+
+<ul class="org-ul">
+<li>IPC_RMID：从系统中删除该共享存储段。因为每个共享存储段有一个连接计数(shm_nattch在shmid_ds结构中)，所以除非使用该段的最后一个进程终止或与该段脱接，否则不会实际上删除该存储段。不管此段是否仍在使用，该段标识符立即被删除，所以不能再用shmat与该段连接
+</li>
+</ul>
+
+<p>
+此命令只能由下列两种进程执行：其有效用户ID等于shm_perm.cuid或shm_perm.uid的进程或具有超级用户特权的进程
+</p>
+
+<ul class="org-ul">
+<li>SHM_LOCK：锁住共享存储段。此命令只能由超级用户执行
+</li>
+<li>SHM_UNLOCK：解锁共享存储段。此命令只能由超级用户执行
+</li>
+</ul>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-4-5" class="outline-4">
+<h4 id="sec-2-4-5">shmat函数</h4>
+<div class="outline-text-4" id="text-2-4-5">
+<ul class="org-ul">
+<li>shmat函数：一旦创建了一个共享存储段，进程就可调用shmat将其连接到它的地址空间中
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/ipc.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/shm.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#36830;&#25509;&#20849;&#20139;&#20869;&#23384;&#21040;&#36827;&#31243;&#22320;&#22336;&#31354;&#38388;&#65292;&#19968;&#33324;&#20026;&#22534;&#26632;</span>
+
+<span style="color: #ffa07a;">   shmid&#65306;&#20849;&#20139;&#20869;&#23384;&#26631;&#35782;&#31526;</span>
+<span style="color: #ffa07a;">   addr&#65306;&#25351;&#23450;&#36827;&#31243;&#22320;&#22336;&#31354;&#38388;&#30340;&#39318;&#22336;&#65292;&#20294;&#19968;&#33324;&#24212;&#21462;NULL&#35753;&#31995;&#32479;&#33258;&#34892;&#36873;&#25321;&#22320;&#22336;</span>
+<span style="color: #ffa07a;">   flag&#65306;&#36830;&#25509;&#36873;&#39033;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#36820;&#22238;&#25351;&#21521;&#20849;&#20139;&#23384;&#20648;&#27573;&#30340;&#25351;&#38024;&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffa07a;">*/</span>
+<span style="color: #98fb98;">void</span> *<span style="color: #87cefa;">shmat</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">shmid</span>, <span style="color: #00ffff;">const</span> <span style="color: #98fb98;">void</span> *<span style="color: #eedd82;">addr</span>, <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">flag</span>);
+</pre>
+</div>
+</li>
+</ul>
+<p>
+共享存储段连接到调用进程的哪个地址上与addr参数以及在flag中是否指定SHM_RND位有关：
+</p>
+<ul class="org-ul">
+<li>如果addr为0：则此段连接到由内核选择的第一个可用地址上
+</li>
+<li>如果addr非0：
+<ul class="org-ul">
+<li>没有指定SHM_RND：则此段连接到addr所指定的地址上
+</li>
+<li>指定了SHM_RND：则此段连接到(addr - (addr mod SHMLBA))所表示的地址上。SHM_RND意思是取整，SHMLBA的意思是低边界地址倍数，它总是2的乘方。因此该算式是将地址向下取最近1个SHMLBA的倍数。
+</li>
+</ul>
+</li>
+</ul>
+
+<p>
+除非只计划在一种硬件上运行应用程序，否则不用指定共享段所连接到的地址。所以一般应指定addr为0，以便由内核选择地址
+</p>
+
+<ul class="org-ul">
+<li>如果在flag中指定了SHM_RDONLY位，则以只读方式连接此段。否则以读写方式连接此段 
+</li>
+
+<li>shmat的返回值是该段所连接的实际地址，如果出错则返回-1
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-2-4-6" class="outline-4">
+<h4 id="sec-2-4-6">shmdt函数</h4>
+<div class="outline-text-4" id="text-2-4-6">
+<ul class="org-ul">
+<li>shmdt函数：当对共享存储段的操作已经结束时，则调用shmdt脱接该段
+</li>
+</ul>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/types.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/ipc.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/shm.h&gt;</span>
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   &#35299;&#38500;&#20849;&#20139;&#20869;&#23384;&#30340;&#36830;&#25509;</span>
+
+<span style="color: #ffa07a;">   addr&#65306;&#25351;&#21521;&#20849;&#20139;&#20869;&#23384;&#30340;&#25351;&#38024;&#65292;&#20197;&#21069;&#35843;&#29992;shmat&#26102;&#30340;&#36820;&#22238;&#20540;</span>
+
+<span style="color: #ffa07a;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;0&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffa07a;"> */</span>
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">shmdt</span>(<span style="color: #98fb98;">void</span> *<span style="color: #eedd82;">addr</span>);
+</pre>
+</div>
+<p>
+注意：这并不从系统中删除其标识符以及其数据结构。该标识符仍然存在，直至某个进程(一般是服务器)调用shmctl(带命令IPC_RMID)特地删除它 
+</p>
+</div>
+</div>
+
+
+<div id="outline-container-sec-2-4-7" class="outline-4">
+<h4 id="sec-2-4-7">打印不同类型的数据所存放的位置</h4>
+<div class="outline-text-4" id="text-2-4-7">
+<p>
+内核将以地址0连接的共享存储段放在什么位置上与系统密切相关。下面程序打印一些信息，它们与指定系统将不同类型的数据放在什么位置有关：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/shm.h&gt;</span>
+
+<span style="color: #7fffd4;">#define</span> <span style="color: #eedd82;">ARRAY_SIZE</span>  40000
+<span style="color: #7fffd4;">#define</span> <span style="color: #eedd82;">MALLOC_SIZE</span> 100000
+<span style="color: #7fffd4;">#define</span> <span style="color: #eedd82;">SHM_SIZE</span>    100000
+<span style="color: #7fffd4;">#define</span> <span style="color: #eedd82;">SHM_MODE</span>    ( SHM_R | SHM_W )   <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">user read/write </span><span style="color: #ff4500;">*/</span>
+
+<span style="color: #98fb98;">char</span>    <span style="color: #eedd82;">array</span>[ARRAY_SIZE];  <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">uninitialized data = bss </span><span style="color: #ff4500;">*/</span>
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">void</span>)
+{
+    <span style="color: #98fb98;">int</span>     <span style="color: #eedd82;">shmid</span>;
+    <span style="color: #98fb98;">char</span>    *<span style="color: #eedd82;">ptr</span>, *<span style="color: #eedd82;">shmptr</span>;
+
+    printf(<span style="color: #ffa07a;">"array[] from %lx to %lx\n"</span>, (<span style="color: #98fb98;">unsigned</span> <span style="color: #98fb98;">long</span>)&amp;array[0],
+           (<span style="color: #98fb98;">unsigned</span> <span style="color: #98fb98;">long</span>)&amp;array[ARRAY_SIZE]);
+    printf(<span style="color: #ffa07a;">"stack around %lx\n"</span>, (<span style="color: #98fb98;">unsigned</span> <span style="color: #98fb98;">long</span>)&amp;shmid);
+
+    <span style="color: #00ffff;">if</span> ((ptr = malloc(MALLOC_SIZE)) == <span style="color: #7fffd4;">NULL</span>)
+        err_sys(<span style="color: #ffa07a;">"malloc error"</span>);
+
+    printf(<span style="color: #ffa07a;">"malloced from %lx to %lx\n"</span>, (<span style="color: #98fb98;">unsigned</span> <span style="color: #98fb98;">long</span>)ptr,
+           (<span style="color: #98fb98;">unsigned</span> <span style="color: #98fb98;">long</span>) ptr + MALLOC_SIZE);
+
+    <span style="color: #00ffff;">if</span> ((shmid = shmget(IPC_PRIVATE, SHM_SIZE, SHM_MODE)) &lt; 0)
+        err_sys(<span style="color: #ffa07a;">"shmget error"</span>);
+    <span style="color: #00ffff;">if</span> ((shmptr = shmat(shmid, 0, 0)) == (<span style="color: #98fb98;">void</span> *)-1)
+        err_sys(<span style="color: #ffa07a;">"shmat error"</span>);
+    printf(<span style="color: #ffa07a;">"shared memory attached from %lx to %lx\n"</span>,
+           (<span style="color: #98fb98;">unsigned</span> <span style="color: #98fb98;">long</span>)shmptr, (<span style="color: #98fb98;">unsigned</span> <span style="color: #98fb98;">long</span>)shmptr+SHM_SIZE);
+
+    <span style="color: #00ffff;">if</span> (shmctl(shmid, IPC_RMID, 0) &lt; 0)
+        err_sys(<span style="color: #ffa07a;">"shmctl error"</span>);
+
+    exit(0);
+}
+</pre>
+</div>
+
+<p>
+测试结果与实际系统有关：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ ./src/ipc/tshm
+
+array[] from 602100 to 60bd40 <span style="color: #ff4500;"># </span><span style="color: #ff4500;">bss&#27573;</span>
+stack around 7ffea7bbf2e4 <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#20989;&#25968;&#26632;</span>
+malloced from 220c420 to 2224ac0 <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#22534;</span>
+shared memory attached from 7f6e70571000 to 7f6e705896a0 <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#20849;&#20139;&#20869;&#23384;&#21306;&#22495;</span>
+</pre>
+</div>
+
+<p>
+下图显示了这种情况，这与以前讲述的典型存储区布局类似：
+</p>
+
+<div class="figure">
+<p><img src="pic/shm.png" alt="shm.png" width="60%" />  
+</p>
+</div>
+
+<p>
+注意：共享存储段紧靠在栈之下。实际上在共享存储段和栈之间有大约几M字节的未用地址空间
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-4-8" class="outline-4">
+<h4 id="sec-2-4-8">/dev/zero的存储映射</h4>
+<div class="outline-text-4" id="text-2-4-8">
+<p>
+共享存储可由不相关的进程使用。但是如果进程是相关的，则SVR4提供了一种不同的技术
+</p>
+
+<p>
+设备/dev/zero在读时，是0字节的无限资源。此设备也接收写向它的任何数据，但忽略此数据。我们对此设备作为IPC的兴趣在于，当对其进行存储映射时，它具有一些特殊性质:
+</p>
+<ul class="org-ul">
+<li>创建一个未名存储区，其长度是mmap的第二个参数，将其取整为系统上的最近页长
+</li>
+<li>存储区都初始化为0
+</li>
+<li>如果多个进程的共同祖先进程对mmap指定了MAP_SHARED标志，则这些进程可共享此存储区
+</li>
+</ul>
+
+<p>
+程序14-12是使用此特殊设备的一个例子。它打开此/dev/zero设备，然后指定一个长整型调用mmap。一旦该存储区被映射了，就能关闭此设备。然后，进程创建一个子进程。因为在调用mmap时指定了MAP_SHARED，所以一个进程写到存储映照区的数据可由另一进程见到
+</p>
+
+<p>
+然后父、子进程交替运行，使用父子进程同步函数各自对共享存储映射区中的一个长整型数加1。存储映射区由mmap初始化为0。父进程先对它进行增1操作，使其成为1，然后子
+进程对其进行增1操作，使其成为2，然后父进程使其成为3&#x2026;&#x2026;
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">"apue.h"</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;fcntl.h&gt;</span>
+<span style="color: #7fffd4;">#include</span> <span style="color: #ffa07a;">&lt;sys/mman.h&gt;</span>
+
+<span style="color: #7fffd4;">#define</span> <span style="color: #eedd82;">NLOOPS</span>      1000
+<span style="color: #7fffd4;">#define</span> <span style="color: #eedd82;">SIZE</span>        <span style="color: #00ffff;">sizeof</span>(<span style="color: #98fb98;">long</span>)    <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">size of shared memory area </span><span style="color: #ff4500;">*/</span>
+
+<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">int</span> <span style="color: #87cefa;">update</span>(<span style="color: #98fb98;">long</span> *<span style="color: #eedd82;">ptr</span>)
+{
+    <span style="color: #00ffff;">return</span>((*ptr)++);   <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">return value before increment </span><span style="color: #ff4500;">*/</span>
+}
+
+<span style="color: #98fb98;">int</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">void</span>)
+{
+    <span style="color: #98fb98;">int</span>     <span style="color: #eedd82;">fd</span>, <span style="color: #eedd82;">i</span>, <span style="color: #eedd82;">counter</span>;
+    <span style="color: #98fb98;">pid_t</span>   <span style="color: #eedd82;">pid</span>;
+    <span style="color: #98fb98;">void</span>    *<span style="color: #eedd82;">area</span>;
+
+    <span style="color: #00ffff;">if</span> ((fd = open(<span style="color: #ffa07a;">"/dev/zero"</span>, O_RDWR)) &lt; 0)
+        err_sys(<span style="color: #ffa07a;">"open error"</span>);
+    <span style="color: #00ffff;">if</span> ((area = mmap(0, SIZE, PROT_READ | PROT_WRITE, MAP_SHARED,
+             fd, 0)) == MAP_FAILED)
+        err_sys(<span style="color: #ffa07a;">"mmap error"</span>);
+    close(fd);      <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">can close /dev/zero now that it's mapped </span><span style="color: #ff4500;">*/</span>
+
+    TELL_WAIT();
+
+    <span style="color: #00ffff;">if</span> ((pid = fork()) &lt; 0) {
+        err_sys(<span style="color: #ffa07a;">"fork error"</span>);
+    } <span style="color: #00ffff;">else</span> <span style="color: #00ffff;">if</span> (pid &gt; 0) {           <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">parent </span><span style="color: #ff4500;">*/</span>
+        <span style="color: #00ffff;">for</span> (i = 0; i &lt; NLOOPS; i += 2) {
+            <span style="color: #00ffff;">if</span> ((counter = update((<span style="color: #98fb98;">long</span> *)area)) != i)
+                err_quit(<span style="color: #ffa07a;">"parent: expected %d, got %d"</span>, i, counter);
+
+            <span style="color: #ff4500;">//</span><span style="color: #ff4500;">printf("parent counter: %d \n", counter);</span>
+
+            TELL_CHILD(pid);
+            WAIT_CHILD();
+        }
+    } <span style="color: #00ffff;">else</span> {                        <span style="color: #ff4500;">/* </span><span style="color: #ff4500;">child </span><span style="color: #ff4500;">*/</span>
+        <span style="color: #00ffff;">for</span> (i = 1; i &lt; NLOOPS + 1; i += 2) {
+            WAIT_PARENT();
+
+            <span style="color: #00ffff;">if</span> ((counter = update((<span style="color: #98fb98;">long</span> *)area)) != i)
+                err_quit(<span style="color: #ffa07a;">"child: expected %d, got %d"</span>, i, counter);
+
+            <span style="color: #ff4500;">//</span><span style="color: #ff4500;">printf("child counter: %d \n", counter);</span>
+
+            TELL_PARENT(getppid());
+        }
+    }
+
+    exit(0);
+}
+</pre>
+</div>
+<p>
+注意，当在update函数中，对长整型值增1时，必须使用括号，因为增加的是其值，而不是指针
+</p>
+</div>
+
+<div id="outline-container-sec-2-4-8-1" class="outline-5">
+<h5 id="sec-2-4-8-1">匿名存储映射</h5>
+<div class="outline-text-5" id="text-2-4-8-1">
+<p>
+4.3+BSD提供了一种类似于/dev/zero的施设，称为匿名存储映射。为了使用这种功能，在调用mmap时指定MAP_ANON标志，并将描述符指定为-1。结果得到的区域是匿名的(因为它并不通过一个文件描述符与一个路径名相结合)，并且创建一个存储区，它可与后代进程共享：
+</p>
+
+<p>
+为了使上面程序应用4.3+BSD的这种特征，需要做两个修改：
+</p>
+<ol class="org-ol">
+<li>删除/dev/zero的open条语句
+</li>
+<li>将mmap调用修改成下列形式:
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #00ffff;">if</span> ( (area = mmap(0, SIZE, PROT_READ | PROT_WRITE,
+          MAP_ANON | MAP_SHARED, -1, 0)) == (<span style="color: #98fb98;">caddr_t</span>) -1)
+</pre>
+</div>
+</li>
+</ol>
+</div>
+</div>
+
+<div id="outline-container-sec-2-4-8-2" class="outline-5">
+<h5 id="sec-2-4-8-2">共享存储 VS mmap</h5>
+<div class="outline-text-5" id="text-2-4-8-2">
+<ul class="org-ul">
+<li>mmap的优点：使用简单
+</li>
+<li>mmap的缺点：只能在相关进程间使用，不相关进程只能使用共享存储
+</li>
+</ul>
+</div>
+</div>
+</div>
 </div>
 </div>
 
 <div id="outline-container-sec-3" class="outline-2">
-<h2 id="sec-3">客户机-服务器属性</h2>
+<h2 id="sec-3">客户机-服务器模型</h2>
 </div>
 </div>
 <div id="postamble" class="status">

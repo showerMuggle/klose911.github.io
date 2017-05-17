@@ -1121,7 +1121,7 @@ IPC_PRIVATE关键字也可用于父、子关系进程。父进程指定IPC_PRIVA
   help #读取出的消息
     #+END_SRC
     
-*** 消息队列VS流管道
+*** 消息队列 VS 流管道
     如若需要客户机和服务器之间的双向数据流，可以使用消息队列或流管道(用UNIX域套接字来实现)。消息队列原来的实施目的是提供比一般IPC更高速度的进程通信方法，而现在这个优点已经不复存在，所以不推荐使用消息队列！ 
     
 ** 信号量
@@ -1178,7 +1178,7 @@ IPC_PRIVATE关键字也可用于父、子关系进程。父进程指定IPC_PRIVA
     | SEMMNU | 系统中undo结构的最大数 |    30 |
     | SEMUME | 每个undo结构中的最大undo项数 |    10 |
     | SEMOPM | 每个semop调用所包含的最大操作数 |    10 |
-
+    
 *** semget函数
 + semget函数：获得一个信号量ID
   #+BEGIN_SRC C
@@ -1202,7 +1202,7 @@ IPC_PRIVATE关键字也可用于父、子关系进程。父进程指定IPC_PRIVA
 + sem_otime设置为0
 + sem_ctime设置为当前时间
 + sem_nsems设置为nsems。
-
+  
 nsems是该集合中的信号量数。如果是创建新集合(一般在服务器中)，则必须指定nsems。如果引用一个现存的集合(一个客户机)，则将nsems指定为0
 
 *** semctl函数
@@ -1218,7 +1218,7 @@ nsems是该集合中的信号量数。如果是创建新集合(一般在服务�
        semid：指定的信号量标识符
        semnum：集合中指定的信号量，取值范围为0到总数-1
        cmd：指定的操作
-       arg：定的数据源,它是一个联合体union semun类型
+       arg：数据源,它是一个联合体union semun类型
 
        return：根据cmd不同，返回不同
     ,*/
@@ -1231,19 +1231,19 @@ nsems是该集合中的信号量数。如果是创建新集合(一般在服务�
             unsigned short  *array;  /* cmd 为 GETALL 和 SETALL 时的数据源 */
     }
   #+END_SRC
-
+  
 **** cmd参数
-cmd参数指定下列十种命令中的一种，使其在semid指定的信号量集合上执行此命令。其中有五条命令是针对一个特定的信号量值的，它们用semnum指定该集合中的一个成员。semnum值在0和nsems-1之间(包括0和nsems-1)：
+     cmd参数指定下列十种命令中的一种，使其在semid指定的信号量集合上执行此命令。其中有五条命令是针对一个特定的信号量值的，它们用semnum指定该集合中的一个成员。semnum值在0和nsems-1之间(包括0和nsems-1)：
 + IPC_STAT：对此集合取semid_ds结构，并存放在由arg.buf指向的结构中
 + IPC_SET：由arg.buf指向的结构中的值设置与此集合相关结构中的下列三个字段值:
   1. sem_perm.uid
   2. sem_perm.gid
   3. sem_perm.mode
-
+     
 此命令只能由下列两种进程执行：其有效用户ID等于sem_perm.cuid或sem_perm.uid的进程或是具有超级用户特权的进程
 
 + IPC_RMID：从系统中删除该信号量集合。这种删除是立即的。仍在使用此信号量的其他进程在它们下次意图对此信号量进行操作时，将出错返回EIDRM
-
+  
 此命令只能由下列两种进程执行：有效用户ID等于sem_perm.cuid或sem_perm.uid的进程或是具有超级用户特权的进程
 
 + GETVAL：返回成员semnum的semval值
@@ -1253,12 +1253,12 @@ cmd参数指定下列十种命令中的一种，使其在semid指定的信号量
 + GETZCNT：返回成员semnum的semzcnt值
 + GETALL：取该集合中所有信号量的值，并将它们存放在由arg.array指向的数组中
 + SETALL：按arg.array指向的数组中的值设置该集合中所有信号量的值
-
+  
 对于除GETALL以外的所有GET命令，semctl函数都返回相应值。其他命令的返回值为0
 
 *** semop函数
 + semop函数：自动执行信号量集合上的操作数组
-
+  
   #+BEGIN_SRC C
     #include <sys/types.h>
     #include <sys/ipc.h>
@@ -1275,24 +1275,24 @@ cmd参数指定下列十种命令中的一种，使其在semid指定的信号量
     ,*/
     int semop(int semid, struct sembuf semoparray[], size_t nops);
   #+END_SRC
-
-
+  
+  
 **** semoarray参数
-semoparray是一个指针，它指向一个信号量操作sembuf结构数组：
-#+BEGIN_SRC C
+     semoparray是一个指针，它指向一个信号量操作sembuf结构数组：
+     #+BEGIN_SRC C
   struct sembuf
   {
           unsigned short sem_num;   /* 指定集合中的信号量,取值 0 ~ nsems-1 */
           short          sem_op;    /* 指定操作数 */
           short          sem_flg;   /* 包括 IPC_NOWAIT 和 SEM_UNDO */
   }
-#+END_SRC
-nops规定该数组中操作的数量(元素数)
-
+     #+END_SRC
+     nops规定该数组中操作的数量(元素数)
+     
 ***** sem_op成员
-对集合中每个成员的操作由相应的sem_op规定。此值可以是负值、0或正值。其undo标志对应于相应sem_flg成员的SEM_UNDO位：
+      对集合中每个成员的操作由相应的sem_op规定。此值可以是负值、0或正值。其undo标志对应于相应sem_flg成员的SEM_UNDO位：
 + sem_op > 0：这对应于释放进程占用的资源。sem_op值加到信号量的值上。如果指定了undo标志，则也从该进程的此信号量调整值中减去sem_op
-
+  
 + 若sem_op < 0：则表示要获取由该信号量控制的资源
   + 如若该信号量的值大于或等于sem_op的绝对值(具有所需的资源)，则从信号量值中减去sem_op的绝对值。这保证信号量的结果值大于或等于0。如果指定了undo标志，则sem_op的绝对值也加到该进程的此信号量调整值上
   + 如果信号量值小于sem_op的绝对值(资源不能满足要求)，则:
@@ -1301,7 +1301,7 @@ nops规定该数组中操作的数量(元素数)
       + 此信号量变成大于或等于sem_op的绝对值(即某个进程已释放了某些资源)。此信号量的semncnt值减1(因为已结束等待)，并且从信号量值中减去sem_op的绝对值。如果指定了undo标志，则sem_op的绝对值也加到该进程的此信号量调整值上
       + 从系统中删除了此信号量。在此情况下，函数出错返回ERMID
       + 进程捕捉到一个信号，并从信号处理程序返回，在此情况下，此信号量的semncnt值减1(因为不再等待)，并且函数出错返回EINTR
-
+	
 + 若sem_op为0，这表示希望等待到该信号量值变成0：
   + 如果信号量值当前是0，则此函数立即返回
   + 如果信号量值非0，则:
@@ -1310,15 +1310,15 @@ nops规定该数组中操作的数量(元素数)
       + 此信号量值变成0。此信号量的semzcnt值减1(因为已结束等待)
       + 从系统中删除了此信号量。在此情况下，函数出错返回ERMID
       + 进程捕捉到一个信号，并从信号处理程序返回。在此情况下，此信号量的semzcnt值减1(因为不再等待)，并且函数出错返回EINTR
-
+	
 semop具有原子性，因为它或者执行数组中的所有操作，或者一个也不做
 **** exit时的信号量调整
-如果在进程终止时，它占用了经由信号量分配的资源，那么就会成为一个问题。无论何时只要为信号量操作指定了SEM_UNDO标志，然后分配资源(sem_op值小于0)，那么内核就会记住对于该特定信号量，分配给我们多少资源(sem_op的绝对值)。当该进程终止时，不论自愿或者不自愿，内核都将检验该进程是否还有尚未处理的信号量调整值，如果有，则按调整值对相应量值进行调整
-
-如果用带SETVAL或SETALL命令的semctl设置一信号量的值，则在所有进程中，对于该信号量的调整值都设置为0
-
+     如果在进程终止时，它占用了经由信号量分配的资源，那么就会成为一个问题。无论何时只要为信号量操作指定了SEM_UNDO标志，然后分配资源(sem_op值小于0)，那么内核就会记住对于该特定信号量，分配给我们多少资源(sem_op的绝对值)。当该进程终止时，不论自愿或者不自愿，内核都将检验该进程是否还有尚未处理的信号量调整值，如果有，则按调整值对相应量值进行调整
+     
+     如果用带SETVAL或SETALL命令的semctl设置一信号量的值，则在所有进程中，对于该信号量的调整值都设置为0
+     
 *** 实例
-通过信号量来同步父子进程：
+    通过信号量来同步父子进程：
     #+BEGIN_SRC C
       #include <unistd.h>
       #include <sys/sem.h>
@@ -1360,24 +1360,307 @@ semop具有原子性，因为它或者执行数组中的所有操作，或者一
               return 0;
       }
     #+END_SRC
-
-测试结果：
-#+BEGIN_SRC sh
+    
+    测试结果：
+    #+BEGIN_SRC sh
   $ ./src/ipc/semp1
 
   child wait to exit
   child about to exit
   tell child ready
 
-#+END_SRC
-
-*** 信号量VS文件锁
-如果多个进程共享一个资源，则可使用信号量或记录锁
-
-虽然实际上记录锁稍慢于信号量锁，但如果只需锁一个资源并且不需要使用信号量的所有花哨的功能，则宁可使用记录锁。理由是：
+    #+END_SRC
+    
+*** 信号量 VS 文件锁
+    如果多个进程共享一个资源，则可使用信号量或记录锁
+    
+    虽然实际上记录锁稍慢于信号量锁，但如果只需锁一个资源并且不需要使用信号量的所有花哨的功能，则宁可使用记录锁。理由是：
 + 使用简易
 + 进程终止时，会处理任一遗留下的锁
-
+  
 ** 共享内存
+   共享存储允许两个或多个进程共享一给定的存储区。因为数据不需要在客户机和服务器之间复制，所以这是最快的一种IPC。使用共享存储的唯一窍门是多个进程之间对一给定存储区 
+   的同步存取。若服务器将数据放入共享存储区，则在服务器做完这一操作之前，客户机不应当去取这些数据。通常信号量被用来实现对共享存储存取的同步
+   
+*** shmid_ds结构
+    内核为每个共享存储段设置了一个shmid_ds结构：
+    #+BEGIN_SRC C
+  struct shmid_ds
+  {
+          struct ipc_perm shm_perm;           /* operation permission struct */
+          struct anop_map *shm_amp;           /* pointer in kernel */
+          size_t shm_segsz;                   /* size of segment in bytes */
+          time_t shm_atime;                 /* time of last shmat() */
+          time_t shm_dtime;                 /* time of last shmdt() */
+          time_t shm_ctime;                 /* time of last change by shmctl() */
+          pid_t shm_cpid;                   /* pid of creator */
+          pid_t shm_lpid;                   /* pid of last shmop */
+          shmatt_t shm_nattch;                /* number of current attaches */
+          shmatt_t shm_cattch;              /* used only for shminfo */
+  };
+    #+END_SRC
+    
+*** 资源限制
+    #+CAPTION: 影响共享内存的系统限制
+    #+ATTR_HTML: :border 1 :rules all :frame boader
+    | 名字   | 说明                          | 典型值 |
+    | shmmax | 共享存储段的最大字节数        | 131072 |
+    | shmmin | 共享存储段的最小字节数        |      1 |
+    | shmmni | 系统中共享存储段的最大段数    |    100 |
+    | shmseg | 每个进程,共享存储段的最大段数 |      6 |
+    
+*** shmget函数
++ shmget函数：获得一个共享存储标识符
+  #+BEGIN_SRC C
+    #include <sys/types.h>
+    #include <sys/ipc.h>
+    #include <sys/shm.h>
 
-* 客户机-服务器属性
+    /**
+       新建或打开一个共享内存对象
+
+       key：共享内存关键字，内核根据规则转换为标识符
+       size：新建应取PAGESIZE的整数倍，用作打开现存的共享内存对象时，size应设为0
+       flag：共享内存存取选项
+
+       return：若成功则为共享内存标识符，若出错则为-1
+    ,*/
+    int shmget(key_t key, size_t size, int flag);
+  #+END_SRC
+当创建一个新共享内存段时，初始化shmid_ds结构的下列成员:
++ ipc_perm结构按前面所述进行初始化，该结构中的mode按flag中的相应许可权位设置
++ shm_lpid、shm_nattach、shm_atime、以及shm_dtime都设置为0
++ shm_ctime设置为当前时间
+  
+size是该共享存储段的最小值。如果正在创建一个新段(一般在服务器中)，则必须指定其size。如果正在存访一个现存的段(一个客户机)，则将size指定为0
+
+*** shmctl函数
++ shmctl函数：对共享存储段执行多种操作
+  #+BEGIN_SRC C
+    #include <sys/types.h>
+    #include <sys/ipc.h>
+    #include <sys/shm.h>
+
+    /**
+       管理共享内存对象
+
+       shmid：共享内存标识符
+       cmd：管理命令
+       buf：共享内存指针
+
+       return：若成功则为0，若出错则为-1
+    ,*/
+    int shmctl(int shmid, int cmd, struct shmid_ds *buf);
+  #+END_SRC
+  
+**** cmd参数
+     cmd参数指定下列5种命令中一种，使其在shmid指定的段上执行：
++ IPC_STAT：对此段取shmid_ds结构，并存放在由buf指向的结构中
++ IPC_SET：按buf指向的结构中的值设置与此段相关结构中的下列三个字段:
+  1. shm_perm.uid
+  2. shm_perm.gid
+  3. shm_perm.mode
+     
+此命令只能由下列两种进程执行：其有效用户ID等于shm_perm.cuid或shm_perm.uid的进程或具有超级用户特权的进程
+
++ IPC_RMID：从系统中删除该共享存储段。因为每个共享存储段有一个连接计数(shm_nattch在shmid_ds结构中)，所以除非使用该段的最后一个进程终止或与该段脱接，否则不会实际上删除该存储段。不管此段是否仍在使用，该段标识符立即被删除，所以不能再用shmat与该段连接
+  
+此命令只能由下列两种进程执行：其有效用户ID等于shm_perm.cuid或shm_perm.uid的进程或具有超级用户特权的进程
+
++ SHM_LOCK：锁住共享存储段。此命令只能由超级用户执行
++ SHM_UNLOCK：解锁共享存储段。此命令只能由超级用户执行
+  
+*** shmat函数
++ shmat函数：一旦创建了一个共享存储段，进程就可调用shmat将其连接到它的地址空间中
+  #+BEGIN_SRC C
+    #include <sys/types.h>
+    #include <sys/ipc.h>
+    #include <sys/shm.h>
+
+    /**
+       连接共享内存到进程地址空间，一般为堆栈
+
+       shmid：共享内存标识符
+       addr：指定进程地址空间的首址，但一般应取NULL让系统自行选择地址
+       flag：连接选项
+
+       return：若成功则返回指向共享存储段的指针，若出错则为-1
+    ,*/
+    void *shmat(int shmid, const void *addr, int flag);
+  #+END_SRC
+共享存储段连接到调用进程的哪个地址上与addr参数以及在flag中是否指定SHM_RND位有关：
++ 如果addr为0：则此段连接到由内核选择的第一个可用地址上
++ 如果addr非0：
+   + 没有指定SHM_RND：则此段连接到addr所指定的地址上
+   + 指定了SHM_RND：则此段连接到(addr - (addr mod SHMLBA))所表示的地址上。SHM_RND意思是取整，SHMLBA的意思是低边界地址倍数，它总是2的乘方。因此该算式是将地址向下取最近1个SHMLBA的倍数。
+     
+除非只计划在一种硬件上运行应用程序，否则不用指定共享段所连接到的地址。所以一般应指定addr为0，以便由内核选择地址
+
++ 如果在flag中指定了SHM_RDONLY位，则以只读方式连接此段。否则以读写方式连接此段 
+  
++ shmat的返回值是该段所连接的实际地址，如果出错则返回-1
+  
+*** shmdt函数
++ shmdt函数：当对共享存储段的操作已经结束时，则调用shmdt脱接该段
+#+BEGIN_SRC C
+  #include <sys/types.h>
+  #include <sys/ipc.h>
+  #include <sys/shm.h>
+
+  /**
+     解除共享内存的连接
+
+     addr：指向共享内存的指针，以前调用shmat时的返回值
+
+     return：若成功则为0，若出错则为-1
+   ,*/
+  int shmdt(void *addr);
+#+END_SRC
+注意：这并不从系统中删除其标识符以及其数据结构。该标识符仍然存在，直至某个进程(一般是服务器)调用shmctl(带命令IPC_RMID)特地删除它 
+
+
+*** 打印不同类型的数据所存放的位置 
+    内核将以地址0连接的共享存储段放在什么位置上与系统密切相关。下面程序打印一些信息，它们与指定系统将不同类型的数据放在什么位置有关：
+    #+BEGIN_SRC C
+  #include "apue.h"
+  #include <sys/shm.h>
+
+  #define ARRAY_SIZE  40000
+  #define MALLOC_SIZE 100000
+  #define SHM_SIZE    100000
+  #define SHM_MODE    ( SHM_R | SHM_W )   /* user read/write */
+
+  char    array[ARRAY_SIZE];  /* uninitialized data = bss */
+
+  int main(void)
+  {
+          int     shmid;
+          char    *ptr, *shmptr;
+
+          printf("array[] from %lx to %lx\n", (unsigned long)&array[0],
+                 (unsigned long)&array[ARRAY_SIZE]);
+          printf("stack around %lx\n", (unsigned long)&shmid);
+
+          if ((ptr = malloc(MALLOC_SIZE)) == NULL)
+                  err_sys("malloc error");
+          
+          printf("malloced from %lx to %lx\n", (unsigned long)ptr,
+                 (unsigned long) ptr + MALLOC_SIZE);
+
+          if ((shmid = shmget(IPC_PRIVATE, SHM_SIZE, SHM_MODE)) < 0)
+                  err_sys("shmget error");
+          if ((shmptr = shmat(shmid, 0, 0)) == (void *)-1)
+                  err_sys("shmat error");
+          printf("shared memory attached from %lx to %lx\n",
+                 (unsigned long)shmptr, (unsigned long)shmptr+SHM_SIZE);
+
+          if (shmctl(shmid, IPC_RMID, 0) < 0)
+                  err_sys("shmctl error");
+
+          exit(0);
+  }
+    #+END_SRC
+    
+    测试结果与实际系统有关：
+    #+BEGIN_SRC sh
+  $ ./src/ipc/tshm
+
+  array[] from 602100 to 60bd40 # bss段
+  stack around 7ffea7bbf2e4 # 函数栈
+  malloced from 220c420 to 2224ac0 # 堆
+  shared memory attached from 7f6e70571000 to 7f6e705896a0 # 共享内存区域
+    #+END_SRC
+    
+    下图显示了这种情况，这与以前讲述的典型存储区布局类似：
+    #+ATTR_HTML: image :width 60% 
+    [[file:pic/shm.png]]  
+    
+    注意：共享存储段紧靠在栈之下。实际上在共享存储段和栈之间有大约几M字节的未用地址空间
+    
+*** /dev/zero的存储映射
+    共享存储可由不相关的进程使用。但是如果进程是相关的，则SVR4提供了一种不同的技术
+    
+    设备/dev/zero在读时，是0字节的无限资源。此设备也接收写向它的任何数据，但忽略此数据。我们对此设备作为IPC的兴趣在于，当对其进行存储映射时，它具有一些特殊性质:
++ 创建一个未名存储区，其长度是mmap的第二个参数，将其取整为系统上的最近页长
++ 存储区都初始化为0
++ 如果多个进程的共同祖先进程对mmap指定了MAP_SHARED标志，则这些进程可共享此存储区
+  
+程序14-12是使用此特殊设备的一个例子。它打开此/dev/zero设备，然后指定一个长整型调用mmap。一旦该存储区被映射了，就能关闭此设备。然后，进程创建一个子进程。因为在调用mmap时指定了MAP_SHARED，所以一个进程写到存储映照区的数据可由另一进程见到
+
+然后父、子进程交替运行，使用父子进程同步函数各自对共享存储映射区中的一个长整型数加1。存储映射区由mmap初始化为0。父进程先对它进行增1操作，使其成为1，然后子
+进程对其进行增1操作，使其成为2，然后父进程使其成为3......
+
+#+BEGIN_SRC C
+  #include "apue.h"
+  #include <fcntl.h>
+  #include <sys/mman.h>
+
+  #define NLOOPS      1000
+  #define SIZE        sizeof(long)    /* size of shared memory area */
+
+  static int update(long *ptr)
+  {
+          return((*ptr)++);   /* return value before increment */
+  }
+
+  int main(void)
+  {
+          int     fd, i, counter;
+          pid_t   pid;
+          void    *area;
+
+          if ((fd = open("/dev/zero", O_RDWR)) < 0)
+                  err_sys("open error");
+          if ((area = mmap(0, SIZE, PROT_READ | PROT_WRITE, MAP_SHARED,
+                           fd, 0)) == MAP_FAILED)
+                  err_sys("mmap error");
+          close(fd);      /* can close /dev/zero now that it's mapped */
+
+          TELL_WAIT();
+
+          if ((pid = fork()) < 0) {
+                  err_sys("fork error");
+          } else if (pid > 0) {           /* parent */
+                  for (i = 0; i < NLOOPS; i += 2) {
+                          if ((counter = update((long *)area)) != i)
+                                  err_quit("parent: expected %d, got %d", i, counter);
+
+                          //printf("parent counter: %d \n", counter);
+
+                          TELL_CHILD(pid);
+                          WAIT_CHILD();
+                  }
+          } else {                        /* child */
+                  for (i = 1; i < NLOOPS + 1; i += 2) {
+                          WAIT_PARENT();
+
+                          if ((counter = update((long *)area)) != i)
+                                  err_quit("child: expected %d, got %d", i, counter);
+
+                          //printf("child counter: %d \n", counter);
+
+                          TELL_PARENT(getppid());
+                  }
+          }
+
+          exit(0);
+  }
+#+END_SRC
+注意，当在update函数中，对长整型值增1时，必须使用括号，因为增加的是其值，而不是指针
+
+**** 匿名存储映射
+     4.3+BSD提供了一种类似于/dev/zero的施设，称为匿名存储映射。为了使用这种功能，在调用mmap时指定MAP_ANON标志，并将描述符指定为-1。结果得到的区域是匿名的(因为它并不通过一个文件描述符与一个路径名相结合)，并且创建一个存储区，它可与后代进程共享：
+     
+     为了使上面程序应用4.3+BSD的这种特征，需要做两个修改：
+1. 删除/dev/zero的open条语句
+2. 将mmap调用修改成下列形式:
+   #+BEGIN_SRC C
+     if ( (area = mmap(0, SIZE, PROT_READ | PROT_WRITE,
+                       MAP_ANON | MAP_SHARED, -1, 0)) == (caddr_t) -1)
+   #+END_SRC
+   
+**** 共享存储 VS mmap 
++ mmap的优点：使用简单
++ mmap的缺点：只能在相关进程间使用，不相关进程只能使用共享存储
+  
+* 客户机-服务器模型
