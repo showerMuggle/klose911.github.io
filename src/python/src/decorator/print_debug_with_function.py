@@ -1,6 +1,6 @@
 #!/usr/bin/python
 # -*- coding:utf-8 -*-  
-#Filename: print_debug1.py
+#Filename: print_debug_with_function.py
 def login():
     print('in login')
     
