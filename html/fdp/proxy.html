@@ -3,7 +3,7 @@
 "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
-<title>原型模式</title>
+<title>代理模式</title>
 <meta  http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta  name="generator" content="Org-mode" />
 <meta  name="author" content="Wu, Shanliang" />
@@ -141,37 +141,138 @@ for the JavaScript code in this tag.
  |
  <a accesskey="H" href="fdp.html"> HOME </a>
 </div><div id="content">
-<h1 class="title">原型模式</h1>
+<h1 class="title">代理模式</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#sec-1">UML</a></li>
+<li><a href="#sec-2">Java</a></li>
+<li><a href="#sec-3">Scheme</a></li>
+</ul>
+</div>
+</div>
 <p>
-define-struct内置copy功能：
+当无法直接访问某个对象或访问某个对象存在困难时可以通过一个代理对象来间接访问，为了保证客户端使用的透明性，所访问的真实对象与代理对象需要实现相同的接口：
 </p>
-<div class="org-src-container">
 
-<pre class="src src-scheme">(define-structure (book keyword-constructor copier) 
-  title authors publisher year isbn)
+<div id="outline-container-sec-1" class="outline-2">
+<h2 id="sec-1">UML</h2>
+<div class="outline-text-2" id="text-1">
 
-(<span style="color: #00ffff;">define</span> <span style="color: #87cefa;">bazaar</span> 
-  (make-book 
-   'title <span style="color: #ffa07a;">"The Cathedral and the Bazaar"</span>
-   'authors <span style="color: #ffa07a;">"Eric S. Raymond"</span>
-   'publisher <span style="color: #ffa07a;">"O'Reilly"</span>
-   'year 1999
-   'isbn 0596001088))
-
-<span style="color: #ff4500;">;; </span><span style="color: #ff4500;">"[the name of structure]?": checks if an object is an instance of the structure </span>
-(book? bazaar) <span style="color: #ff4500;">;; </span><span style="color: #ff4500;">#f</span>
-<span style="color: #ff4500;">;; </span><span style="color: #ff4500;">"copy-[structure name]" : copy a structure</span>
-(<span style="color: #00ffff;">define</span> <span style="color: #87cefa;">cathedral</span> (copy-book bazaar)) <span style="color: #ff4500;">;; </span><span style="color: #ff4500;">cathedral</span>
-</pre>
+<div class="figure">
+<p><img src="pic/proxy.png" alt="proxy.png" width="40%" /> 
+</p>
+</div>
+</div>
 </div>
 
+<div id="outline-container-sec-2" class="outline-2">
+<h2 id="sec-2">Java</h2>
+<div class="outline-text-2" id="text-2">
+<ul class="org-ul">
+<li>定义接口Sourceable：
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">interface</span> <span style="color: #98fb98;">Sourceable</span> {
+    <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">method</span>();
+}
+</pre>
+</div>
+</li>
+
+<li>Source实现Sourceable作为被代理的类：
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">Source</span> <span style="color: #00ffff;">implements</span> <span style="color: #98fb98;">Sourceable</span> {
+    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">method</span>() {
+        System.out.println(<span style="color: #ffa07a;">"the original method!"</span>);
+    }
+}
+</pre>
+</div>
+</li>
+
+<li>代理类Proxy注入Source实例，来实现Sourceable接口，作为代理类
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">Proxy</span> <span style="color: #00ffff;">implements</span> <span style="color: #98fb98;">Sourceable</span> {
+    <span style="color: #00ffff;">private</span> <span style="color: #98fb98;">Source</span> <span style="color: #eedd82;">source</span>;
+
+    <span style="color: #00ffff;">public</span> <span style="color: #87cefa;">Proxy</span>() {
+        <span style="color: #00ffff;">super</span>();
+        <span style="color: #00ffff;">this</span>.source = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">Source</span>();
+    }
+
+    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">method</span>() {
+        before();
+        source.method();
+        atfer();
+    }
+
+    <span style="color: #00ffff;">private</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">atfer</span>() {
+        System.out.println(<span style="color: #ffa07a;">"after proxy!"</span>);
+    }
+
+    <span style="color: #00ffff;">private</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">before</span>() {
+        System.out.println(<span style="color: #ffa07a;">"before proxy!"</span>);
+    }
+}
+</pre>
+</div>
+</li>
+
+<li>测试类：
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">ProxyTest</span> {
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">String</span>[] <span style="color: #eedd82;">args</span>) {
+        <span style="color: #98fb98;">Sourceable</span> <span style="color: #eedd82;">source</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">Proxy</span>();
+        source.method();
+    }
+}
+</pre>
+</div>
+</li>
+
+<li>测试结果：
+
+<div class="org-src-container">
+
+<pre class="src src-sh">before proxy!
+the original method!
+after proxy!
+</pre>
+</div>
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-3" class="outline-2">
+<h2 id="sec-3">Scheme</h2>
+<div class="outline-text-2" id="text-3">
 <p>
-<a href="singleton.html">Previous：单例模式</a>
+实现方式和装饰器完全一样，通过高阶函数
+</p>
+
+<p>
+<a href="facade.html">Next：外观模式</a>
+</p>
+
+<p>
+<a href="decorator.html">Previous：装饰器模式</a>
 </p>
 
 <p>
 <a href="fdp.html">Home：目录</a>
 </p>
+</div>
+</div>
 </div>
 <div id="postamble" class="status">
 
