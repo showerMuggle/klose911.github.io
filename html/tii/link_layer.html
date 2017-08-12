@@ -160,8 +160,22 @@ for the JavaScript code in this tag.
 <li><a href="#sec-1-2">尾部</a></li>
 </ul>
 </li>
-<li><a href="#sec-2">SLIP</a></li>
-<li><a href="#sec-3">PPP</a></li>
+<li><a href="#sec-2">SLIP</a>
+<ul>
+<li><a href="#sec-2-1">缺陷</a></li>
+<li><a href="#sec-2-2">CSLIP</a></li>
+</ul>
+</li>
+<li><a href="#sec-3">PPP</a>
+<ul>
+<li><a href="#sec-3-1">数据帧格式</a>
+<ul>
+<li><a href="#sec-3-1-1">字符转义</a></li>
+</ul>
+</li>
+<li><a href="#sec-3-2">优点</a></li>
+</ul>
+</li>
 <li><a href="#sec-4">Loopback</a></li>
 <li><a href="#sec-5">MTU</a></li>
 </ul>
@@ -357,10 +371,167 @@ RFC893描述了另一种用于以太网的封装格式，称作尾部封装。
 
 <div id="outline-container-sec-2" class="outline-2">
 <h2 id="sec-2">SLIP</h2>
+<div class="outline-text-2" id="text-2">
+<p>
+SLIP是一种在串行线路上对IP数据报进行封装的简单形式，在RFC1055中有详细描述。SLIP适用于家庭中每台计算机几乎都有的RS-232串行端口和高速调制解调器接入Internet
+</p>
+
+<p>
+下面的规则描述了SLIP协议定义的帧格式：
+</p>
+<ol class="org-ol">
+<li>IP数据报以一个称作END(0xc0)的特殊字符结束。同时，为了防止数据报到来之前的线路噪声被当成数据报内容，大多数实现在数据报的开始处也传一个END字符(如果有线路噪声，那么END字符将结束这份错误的报文。这样当前的报文得以正确地传输，而前一个错误报文交给上层后，会发现其内容毫无意义而被丢弃)
+</li>
+<li>如果IP报文中某个字符为END，那么就要连续传输两个字节0xdb和0xdc来取代它。0xdb这个特殊字符被称作SLIP的ESC字符，但是它的值与ASCII码的ESC字符(0x1b)不同
+</li>
+<li>如果IP报文中某个字符为SLIP的ESC字符，那么就要连续传输两个字节0xdb和0xdd来取代它
+</li>
+</ol>
+
+<p>
+下图中的例子就是含有一个END字符和一个ESC字符的IP报文，在串行线路上传输的总字节数是原IP报文长度再加4个字节：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/slip.png" alt="slip.png" width="70%" /> 
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-1" class="outline-3">
+<h3 id="sec-2-1">缺陷</h3>
+<div class="outline-text-3" id="text-2-1">
+<ol class="org-ol">
+<li>每一端必须知道对方的IP地址。没有办法把本端的IP地址通知给另一端
+</li>
+<li>数据帧中没有类型字段（类似于以太网中的类型字段）。如果一条串行线路用于SLIP，那么它不能同时使用其他协议
+</li>
+<li>SLIP没有在数据帧中加上检验和（类似于以太网中的CRC字段）。如果SLIP传输的报文被线路噪声影响而发生错误。这样上层协议提供某种形式的CRC就显得很重要
+</li>
+</ol>
+</div>
+</div>
+
+<div id="outline-container-sec-2-2" class="outline-3">
+<h3 id="sec-2-2">CSLIP</h3>
+<div class="outline-text-3" id="text-2-2">
+<p>
+由于串行线路的速率通常较低（19200b/s或更低），而且通信经常是交互式的（如Telnet和Rlogin，二者都使用TCP），因此在SLIP线路上有许多小的TCP分组进行交换。为了传送1个字节的数据需要20个字节的IP首部和20个字节的TCP首部，总数超过40个字节
+</p>
+
+<p>
+既然承认这些性能上的缺陷，于是产生了一个被称作CSLIP（即压缩SLIP）的新协议，它在RFC 1144中被详细描述。CSLIP一般能把上面的40个字节压缩到3或5个字节。它能在CSLIP的每一端维持多达16个TCP连接，并且知道其中每个连接的首部中的某些字段一般不会发生变化。对于那些发生变化的字段，大多数只是一些小的数字和的改变。这些被压缩的首部大大地缩短了交互响应时间
+</p>
+</div>
+</div>
 </div>
 
 <div id="outline-container-sec-3" class="outline-2">
 <h2 id="sec-3">PPP</h2>
+<div class="outline-text-2" id="text-3">
+<p>
+PPP点对点协议修改了SLIP协议中的所有缺陷。PPP包括以下三个部分：
+</p>
+<ol class="org-ol">
+<li>在串行链路上封装IP数据报的方法。PPP既支持数据为8位和无奇偶检验的异步模式，还支持面向比特的同步链接
+</li>
+<li>建立、配置及测试数据链路的链路控制协议（LCP）。它允许通信双方进行协商，以确定不同的选项
+</li>
+<li>针对不同网络层协议的网络控制协议（NCP）体系。当前RFC定义的网络层有IP、OSI网络层、DECnet以及Apple Talk等
+</li>
+</ol>
+</div>
+
+
+<div id="outline-container-sec-3-1" class="outline-3">
+<h3 id="sec-3-1">数据帧格式</h3>
+<div class="outline-text-3" id="text-3-1">
+<p>
+RFC 1548描述了报文封装的方法和链路控制协议。RFC 1332描述了针对IP的网络控制协议
+</p>
+
+<p>
+下图是PPP数据帧的格式：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/ppp.png" alt="ppp.png" width="70%" /> 
+</p>
+</div>
+
+<p>
+每一帧都以标志字符0x7e开始和结束。紧接着是一个地址字节，值始终是0xff，然后是一个值为0x03的控制字节
+</p>
+
+<p>
+接下来是协议字段，类似于以太网中类型字段的功能：
+</p>
+<ul class="org-ul">
+<li>值为0x0021时，表示信息字段是一个IP数据报
+</li>
+<li>值为0xc021时，表示信息字段是链路控制数据
+</li>
+<li>值为0x8021时，表示信息字段是网络控制数据
+</li>
+</ul>
+
+<p>
+CRC字段是一个循环冗余检验码，以检测数据帧中的错误
+</p>
+</div>
+
+<div id="outline-container-sec-3-1-1" class="outline-4">
+<h4 id="sec-3-1-1">字符转义</h4>
+<div class="outline-text-4" id="text-3-1-1">
+<p>
+由于标志字符的值是0x7e，因此当该字符出现在信息字段中时，PPP需要对它进行转义。
+</p>
+
+<p>
+在同步链路中，该过程是通过一种称作比特填充的硬件技术来完成的。在异步链路中，特殊字符0x7d用作转义字符。当它出现在PPP数据帧中时，那么紧接着的字符的第6个比特要取其补码，具体实现过程如下：
+</p>
+<ol class="org-ol">
+<li>当遇到字符0x7e时，需连续传送两个字符0x7d和0x5e，以实现标志字符的转义
+</li>
+<li>当遇到转义字符0x7d时，需连续传送两个字符0x7d和0x5d，以实现转义字符的转义
+</li>
+<li>默认情况下，如果字符的值小于0x20（比如一个ASCII控制字符），一般都要进行转义。例如遇到字符0x01时需连续传送0x7d和0x21两个字符（这时第6个比特取补码后变为1，而前面两种情况均把它变为0）
+</li>
+</ol>
+
+<p>
+这样做的原因是防止它们出现在双方主机的串行接口驱动程序或调制解调器中，因为有时它们会把这些控制字符解释成特殊的含义。另一种可能是用链路控制协议来指定是否需要对这32个字符中的某一些值进行转义。默认情况下是对所有的32个字符都进行转义
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-3-2" class="outline-3">
+<h3 id="sec-3-2">优点</h3>
+<div class="outline-text-3" id="text-3-2">
+<p>
+与SLIP类似，由于PPP经常用于低速的串行链路，因此减少每一帧的字节数可以降低应用程序的交互时延。利用链路控制协议，大多数的产品通过协商可以省略标志符和地址字段，并且把协议字段由2个字节减少到1个字节。如果我们把PPP的帧格式与前面的SLIP的帧格式进行比较会发现， PPP只增加了3个额外的字节：1个字节留给协议字段，另2个给CRC字段使用
+</p>
+
+<p>
+总的来说， PPP比SLIP具有下面这些优点：
+</p>
+<ol class="org-ol">
+<li>PPP支持在单根串行线路上运行多种协议，不只是IP协议
+</li>
+<li>每一帧都有循环冗余检验
+</li>
+<li>通信双方可以进行IP地址的动态协商(使用IP网络控制协议)
+</li>
+<li>与CSLIP类似，对TCP和IP报文首部进行压缩
+</li>
+<li>链路控制协议可以对多个数据链路选项进行设置。为这些优点付出的代价是在每一帧的首部增加3个字节，当建立链路时要发送几帧协商数据，以及更为复杂的实现
+</li>
+</ol>
+</div>
+</div>
 </div>
 
 <div id="outline-container-sec-4" class="outline-2">
