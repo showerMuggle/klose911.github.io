@@ -1,0 +1,283 @@
+#+TITLE: 单节点网关测试
+#+HTML_HEAD: <link rel="stylesheet" type="text/css" href="css/main.css" />
+#+HTML_LINK_UP: zuul_test.html   
+#+HTML_LINK_HOME: zuul_test.html
+#+OPTIONS: num:nil timestamp:nil 
+
+*  测试环境
++ 主机：172.25.17.74
++ 硬件：8核16G内存
++ 部署：网关，auth服务，api-key服务，portal-service等服务，内存消耗在6G左右
+
+* hello world服务测试
+** 网关自身提供hello world服务
+   #+BEGIN_SRC sh
+     ab -t 100 -c 1 http://172.25.17.74:7070/hw 
+     ab -t 100 -c 2 http://172.25.17.74:7070/hw 
+     ab -t 100 -c 4 http://172.25.17.74:7070/hw 
+     ab -t 100 -c 8 http://172.25.17.74:7070/hw 
+     ab -t 100 -c 16 http://172.25.17.74:7070/hw
+     ab -t 100 -c 32 http://172.25.17.74:7070/hw
+     ab -t 100 -c 64 http://172.25.17.74:7070/hw
+     ab -t 100 -c 128 http://172.25.17.74:7070/hw
+     ab -t 100 -c 256 http://172.25.17.74:7070/hw
+   #+END_SRC
+   
+   #+CAPTION: 网关自身提供hello world服务
+   #+ATTR_HTML: :border 1 :rules all :frame boader
+   | 指标                      |  1并发 |  2并发 |  4并发 |  8并发 | 16并发 | 32并发 | 64 并发 | 128并发 | 256并发 |
+   | 发送总请求数              |  21161 |  36094 |  41150 |  41831 |  41700 |  41612 |   41564 |   41418 |   41299 |
+   | 总时间(s)                 |    100 |    100 |    100 |    100 |    100 |    100 |     100 |     100 |     100 |
+   | 平均请求时间(ms)          |  4.726 |  5.541 |  9.722 | 19.125 | 38.381 | 76.901 | 153.980 | 309.110 | 619.883 |
+   | 请求时间中位数（50%<)(ms) |      4 |      4 |      6 |     12 |     28 |     83 |     149 |     326 |     639 |
+   | 请求时间90%< (ms)         |      4 |      6 |     11 |     51 |     75 |    122 |     270 |     519 |     938 |
+   | 最大请求时间(ms)          |   1037 |   1037 |   1044 |   1064 |   1083 |   1153 |    1257 |    1556 |    2205 |
+   | Error                     |      0 |      0 |      0 |      0 |      0 |      0 |       0 |       0 |       0 |
+   | QPS(请求数/秒)            | 211.61 | 360.94 | 411.50 | 418.31 | 416.87 | 416.12 |  415.64 |  414.18 |  412.99 |
+   
+   并发上不去的原因在于：高并发下日志打印太慢
+   #+CAPTION: 修改打印日志级别后
+   #+ATTR_HTML: :border 1 :rules all :frame boader
+   | 指标                      |  1并发 |  2并发 |  4并发 |  8并发 |  16并发 |  32并发 | 64 并发 | 128并发 | 256并发 |
+   | 发送总请求数              |  23907 |  47744 |  50000 |  50000 |   50000 |   50000 |   50000 |   50000 |   50000 |
+   | 总时间(s)                 |    100 |    100 | 54.205 | 65.171 |  42.477 |  26.819 |  23.859 |  23.820 |  23.424 |
+   | 平均请求时间(ms)          |  4.190 |  4.189 |  4.336 | 10.427 |  13.593 |  17.164 |  30.540 |  60.978 | 119.929 |
+   | 请求时间中位数（50%<)(ms) |      3 |      3 |      3 |      4 |       6 |      10 |      13 |      20 |      49 |
+   | 请求时间90%< (ms)         |      6 |      6 |      6 |     11 |      41 |      35 |      75 |     159 |     190 |
+   | 最大请求时间(ms)          |   1040 |   1037 |   1033 |   1074 |    1038 |    1070 |    1100 |    2099 |    1672 |
+   | Error                     |      0 |      0 |      0 |      0 |       0 |       0 |       0 |       0 |       0 |
+   | QPS                       | 238.69 | 477.44 | 922.43 | 767.22 | 1177.10 | 1864.35 | 2095.63 | 2099.10 | 2134.60 |
+   
+** 自动注册应用提供hello world服务，无auth认证
+   
+   #+CAPTION: 直接访问api key management应用hello world服务
+   #+ATTR_HTML: :border 1 :rules all :frame boader
+   | 指标                      |   1并发 |  2并发 |  4并发 |  8并发 |  16并发 |  32并发 | 64 并发 | 128并发 | 256并发 |
+   | 发送总请求数              |   32820 |  50000 |  50000 |  50000 |   50000 |   50000 |   50000 |   50000 |   50000 |
+   | 总时间(s)                 | 100.915 | 79.015 | 52.931 | 65.635 |  38.096 |  24.777 |  23.970 |  23.884 |  24.870 |
+   | 平均请求时间(ms)          |   3.075 |  3.161 |  4.235 | 10.502 |  12.191 |  15.857 |  30.682 |  61.142 | 127.334 |
+   | 请求时间中位数（50%<)(ms) |       3 |      3 |      3 |      3 |       5 |       7 |       9 |      14 |      41 |
+   | 请求时间90%< (ms)         |       3 |      4 |      4 |     20 |      31 |      36 |      80 |     171 |     309 |
+   | 最大请求时间(ms)          |    1035 |   1035 |   1036 |   1057 |    1036 |    1064 |    1068 |    1211 |    1913 |
+   | Error                     |       0 |      0 |      0 |      0 |       0 |       0 |       0 |       0 |       0 |
+   | QPS(请求数/秒)            |  325.23 | 632.79 | 944.62 | 761.79 | 1312.49 | 2018.03 | 2085.91 | 2093.48 | 2010.47 |
+   
+      #+BEGIN_SRC sh
+    ab -t 100 -c 1 http://172.25.17.74:7070/akm-service/apiKey/hw 
+    ab -t 100 -c 2 http://172.25.17.74:7070/akm-service/apiKey/hw 
+    ab -t 100 -c 4 http://172.25.17.74:7070/akm-service/apiKey/hw 
+    ab -t 100 -c 8 http://172.25.17.74:7070/akm-service/apiKey/hw 
+    ab -t 100 -c 16 http://172.25.17.74:7070/akm-service/apiKey/hw 
+    ab -t 100 -c 32 http://172.25.17.74:7070/akm-service/apiKey/hw 
+    ab -t 100 -c 64 http://172.25.17.74:7070/akm-service/apiKey/hw 
+    ab -t 100 -c 128 http://172.25.17.74:7070/akm-service/apiKey/hw 
+    ab -t 100 -c 256 http://172.25.17.74:7070/akm-service/apiKey/hw
+   #+END_SRC
+   
+   #+CAPTION: 通过网关访问自动注册的api key management应用hello world服务
+   #+ATTR_HTML: :border 1 :rules all :frame boader
+   | 指标                      |   1并发 |   2并发 |   4并发 |   8并发 | 16并发 | 32并发 | 64 并发 | 128并发 |  256并发 |
+   | 发送总请求数              |   14310 |   40219 |   43953 |   41921 |  50000 |  50000 |   50000 |   41020 |    11363 |
+   | 总时间(s)                 | 100.001 | 100.001 | 100.001 | 100.024 | 86.916 | 49.743 |  45.481 | 103.918 |  101.969 |
+   | 平均请求时间(ms)          |   6.988 |   4.973 |   9.101 |  19.088 | 27.813 | 31.835 |  58.216 | 324.269 | 2297.280 |
+   | 请求时间中位数（50%<)(ms) |       6 |       5 |       5 |       7 |     11 |     15 |      23 |      27 |       67 |
+   | 请求时间90%< (ms)         |       9 |       6 |       8 |      73 |     77 |     77 |     130 |     370 |     5633 |
+   | 最大请求时间(ms)          |    1026 |    1025 |    1036 |    1029 |   1108 |   1091 |    2386 |    5610 |    16258 |
+   | Error                     |       0 |       0 |       0 |       0 |      0 |      0 |       0 |     106 |        7 |
+   | QPS(请求数/秒)            |  143.10 |  402.19 |  439.53 |  419.11 | 575.27 | 656.70 | 1099.35 |  394.73 |   111.44 |
+   
+   并发超过100以后，发现后台服务无法获得信号量，产生熔断异常
+   
+   #+BEGIN_SRC
+  hystrix.command.default.execution.isolation.strategy=SEMAPHORE
+  hystrix.command.default.execution.isolation.semaphore.maxConcurrentRequests=100000
+  hystrix.command.default.execution.timeout.enabled=false
+  hystrix.command.default.execution.isolation.thread.timeoutInMilliseconds=20000
+   #+END_SRC
+   
+   #+CAPTION: 增加熔断信号量配置
+   #+ATTR_HTML: :border 1 :rules all :frame boader
+   | 指标                      |   1并发 |   2并发 |   4并发 |   8并发 | 16并发 |  32并发 | 64 并发 | 128并发 | 256并发 |
+   | 发送总请求数              |   17057 |   40571 |   43521 |   41810 |  50000 |   50000 |   50000 |   50000 |   50000 |
+   | 总时间(s)                 | 100.000 | 100.002 | 100.045 | 100.063 | 86.713 |  49.131 |  43.806 |  42.358 |  44.288 |
+   | 平均请求时间(ms)          |   5.863 |   4.930 |   9.195 |  19.146 | 27.748 |  31.444 |  56.071 | 108.437 | 226.755 |
+   | 请求时间中位数（50%<)(ms) |       5 |       4 |       5 |       6 |     10 |      15 |      21 |      42 |      60 |
+   | 请求时间90%< (ms)         |       7 |       5 |       8 |      74 |     79 |      75 |     134 |     295 |     651 |
+   | 最大请求时间(ms)          |    1032 |    1036 |    1029 |    1106 |   1098 |    1200 |    2178 |    3030 |    4115 |
+   | Error                     |       0 |       0 |       0 |       0 |      0 |       0 |       0 |       0 |       0 |
+   | QPS(请求数/秒)            |  170.57 |  405.70 |  435.01 |  417.84 | 576.62 | 1017.70 | 1141.41 | 1180.41 | 1128.97 |
+
+经过网关路由后QPS下降了一半   
+** 自动注册应用提供hello world服务，oauth认证
+   
+   #+CAPTION: 通过网关访问自动注册的api key management应用hello world服务, oauth安全认证
+   #+ATTR_HTML: :border 1 :rules all :frame boader
+   | 指标                      |   1并发 |   2并发 |   4并发 |   8并发 |  16并发 |  32并发 | 64 并发 |  128并发 |  256并发 |
+   | 发送总请求数              |    3497 |    6172 |   11120 |   12511 |   12580 |   12561 |   12513 |    12455 |    12278 |
+   | 总时间(s)                 | 100.006 | 100.022 | 100.008 | 100.016 | 100.000 | 100.018 | 100.004 |  100.007 |  100.020 |
+   | 平均请求时间(ms)          |  28.598 |  32.412 |  35.974 |  63.954 | 127.186 | 254.801 | 511.490 | 1027.768 | 2085.444 |
+   | 请求时间中位数（50%<)(ms) |      28 |      31 |      34 |      62 |     127 |     258 |     523 |     1051 |     2105 |
+   | 请求时间90%< (ms)         |      31 |      36 |      44 |      81 |     155 |     307 |     622 |     1248 |     2440 |
+   | 最大请求时间(ms)          |     354 |    1053 |    1071 |    1108 |    1119 |    1307 |    1624 |     2207 |     3676 |
+   | Error                     |       0 |       0 |       0 |       0 |       0 |       0 |       0 |        0 |        0 |
+   | QPS(请求数/秒)            |   34.97 |   61.71 |  111.19 |  125.09 |  125.80 |  125.59 |  125.12 |   124.54 |   122.76 |
+   
+      #+BEGIN_SRC sh
+    ab -H 'authorization: Bearer TGT-117-ei2eTUuee9OndJpbLqowydpby5esHe0qmX7adwDiRQMhCcfusc-cas01.example.org' -t 100 -c 1 http://172.25.17.74:7070/akm-service/apiKey/hw
+    ab -H 'authorization: Bearer TGT-117-ei2eTUuee9OndJpbLqowydpby5esHe0qmX7adwDiRQMhCcfusc-cas01.example.org' -t 100 -c 2 http://172.25.17.74:7070/akm-service/apiKey/hw
+    ab -H 'authorization: Bearer TGT-117-ei2eTUuee9OndJpbLqowydpby5esHe0qmX7adwDiRQMhCcfusc-cas01.example.org' -t 100 -c 4 http://172.25.17.74:7070/akm-service/apiKey/hw
+    ab -H 'authorization: Bearer TGT-117-ei2eTUuee9OndJpbLqowydpby5esHe0qmX7adwDiRQMhCcfusc-cas01.example.org' -t 100 -c 8 http://172.25.17.74:7070/akm-service/apiKey/hw
+    ab -H 'authorization: Bearer TGT-117-ei2eTUuee9OndJpbLqowydpby5esHe0qmX7adwDiRQMhCcfusc-cas01.example.org' -t 100 -c 16 http://172.25.17.74:7070/akm-service/apiKey/hw
+    ab -H 'authorization: Bearer TGT-117-ei2eTUuee9OndJpbLqowydpby5esHe0qmX7adwDiRQMhCcfusc-cas01.example.org' -t 100 -c 32 http://172.25.17.74:7070/akm-service/apiKey/hw
+    ab -H 'authorization: Bearer TGT-117-ei2eTUuee9OndJpbLqowydpby5esHe0qmX7adwDiRQMhCcfusc-cas01.example.org' -t 100 -c 64 http://172.25.17.74:7070/akm-service/apiKey/hw
+    ab -H 'authorization: Bearer TGT-117-ei2eTUuee9OndJpbLqowydpby5esHe0qmX7adwDiRQMhCcfusc-cas01.example.org' -t 100 -c 128 http://172.25.17.74:7070/akm-service/apiKey/hw
+    ab -H 'authorization: Bearer TGT-117-ei2eTUuee9OndJpbLqowydpby5esHe0qmX7adwDiRQMhCcfusc-cas01.example.org' -t 100 -c 256 http://172.25.17.74:7070/akm-service/apiKey/hw
+   #+END_SRC
+
+   #+CAPTION: redis中缓存oauth认证结果，有效期为1个小时
+   #+ATTR_HTML: :border 1 :rules all :frame boader
+   | 指标                      |   1并发 |   2并发 |   4并发 |   8并发 |  16并发 | 32并发 | 64 并发 | 128并发 | 256并发 |
+   | 发送总请求数              |   14433 |   29669 |   48164 |   41777 |   49499 |  50000 |   50000 |   50000 |   50000 |
+   | 总时间(s)                 | 100.000 | 100.000 | 100.043 | 100.000 | 100.000 | 57.528 |  49.028 |  45.796 |  48.216 |
+   | 平均请求时间(ms)          |   6.929 |   6.741 |   8.309 |  19.149 |  32.324 | 36.818 |  62.756 | 117.238 | 246.865 |
+   | 请求时间中位数（50%<)(ms) |       5 |       5 |       6 |       7 |      11 |     19 |      29 |      57 |     164 |
+   | 请求时间90%< (ms)         |       6 |       6 |       7 |      66 |      79 |     88 |     144 |     304 |     571 |
+   | 最大请求时间(ms)          |    1039 |    1034 |    1050 |    1085 |    3298 |   1131 |    1790 |    1959 |    3095 |
+   | Error                     |       0 |       0 |       0 |       0 |       0 |      0 |       0 |       0 |       0 |
+   | QPS(请求数/秒)            |  144.33 |  296.69 |  481.43 |  417.77 |  494.99 | 869.14 | 1019.82 | 1091.79 | 1037.00 |
+   
+   缓存安全认证结果后QPS相比无安全认证稍微有下降
+
+** 数据库精确匹配路由hello world服务, 无auth认证
+   
+   #+CAPTION: 基于数据库配置路由hello world服务, 无auth认证
+   #+ATTR_HTML: :border 1 :rules all :frame boader
+   | 指标                      |   1并发 |   2并发 |   4并发 |   8并发 | 16并发 | 32并发 | 64 并发 | 128并发 | 256并发 |
+   | 发送总请求数              |   20668 |   41126 |   44598 |   42008 |  50000 |  50000 |   50000 |   50000 |   50000 |
+   | 总时间(s)                 | 100.002 | 100.002 | 100.002 | 100.004 | 90.788 | 52.921 |  46.244 |  45.292 |  40.550 |
+   | 平均请求时间(ms)          |   4.839 |   4.863 |   8.969 |  19.045 | 29.052 | 33.870 |  59.192 | 115.946 | 207.616 |
+   | 请求时间中位数（50%<)(ms) |       4 |       4 |       5 |       7 |     11 |     18 |      27 |      46 |     100 |
+   | 请求时间90%< (ms)         |       5 |       5 |       8 |      70 |     79 |     81 |     141 |     265 |     582 |
+   | 最大请求时间(ms)          |    1029 |    1026 |    1018 |    1031 |   1109 |   1116 |    2573 |    4056 |    3666 |
+   | Error                     |       0 |       0 |       2 |       0 |      1 |      0 |       0 |       1 |       0 |
+   | QPS(请求数/秒)            |  206.67 |  411.25 |  445.97 |  420.06 | 550.73 | 944.80 | 1081.23 | 1103.96 | 1233.05 |
+   
+** 数据库精确匹配路由hello world服务, 缓存Oauth认证结果
+   
+   #+CAPTION: 基于数据库配置路由hello world服务, 缓存Oauth认证结果
+   #+ATTR_HTML: :border 1 :rules all :frame boader
+   | 指标                      |   1并发 |   2并发 |   4并发 |   8并发 | 16并发 | 32并发 | 64 并发 | 128并发 | 256并发 |
+   | 发送总请求数              |   17553 |   34038 |   45800 |   42053 |  50000 |  50000 |   50000 |   50000 |   50000 |
+   | 总时间(s)                 | 100.000 | 100.002 | 100.001 | 100.006 | 97.159 | 57.970 |  47.910 |  42.522 |  39.128 |
+   | 平均请求时间(ms)          |   5.697 |   5.876 |   8.734 |  19.025 | 31.091 | 37.101 |  61.325 | 108.857 | 200.337 |
+   | 请求时间中位数（50%<)(ms) |       5 |       5 |       6 |       8 |     13 |     21 |      33 |      56 |     126 |
+   | 请求时间90%< (ms)         |       6 |       6 |       9 |      67 |     79 |     83 |     141 |     262 |     488 |
+   | 最大请求时间(ms)          |    1013 |    1033 |     214 |    1031 |   1060 |   1064 |    1921 |    1683 |    2851 |
+   | Error                     |       0 |       0 |       0 |       0 |      0 |      0 |       0 |       3 |       2 |
+   | QPS(请求数/秒)            |  175.53 |  340.37 |  458.00 |  420.50 | 514.62 | 862.52 | 1043.62 | 1175.85 | 1277.85 |
+   
+** 数据库模糊路径匹配路由hello world服务, 无安全认证
+   
+   #+CAPTION: 数据库路径模糊匹配hello world服务, 无安全认证
+   #+ATTR_HTML: :border 1 :rules all :frame boader
+   | 指标                      |   1并发 |   2并发 |   4并发 |   8并发 | 16并发 | 32并发 | 64 并发 | 128并发 | 256并发 |
+   | 发送总请求数              |   19159 |   36485 |   46210 |   42780 |  50000 |  50000 |   50000 |   50000 |   50000 |
+   | 总时间(s)                 | 100.000 | 100.001 | 100.882 | 100.028 | 91.421 | 53.711 |  44.517 |  38.727 |  46.637 |
+   | 平均请求时间(ms)          |   5.219 |   5.482 |   8.732 |  18.706 | 29.255 | 34.375 |  56.982 |  99.140 | 238.783 |
+   | 请求时间中位数（50%<)(ms) |       5 |       5 |       5 |       7 |     12 |     17 |      26 |      51 |      81 |
+   | 请求时间90%< (ms)         |       6 |       6 |       8 |      69 |     78 |     80 |     129 |     241 |     538 |
+   | 最大请求时间(ms)          |    1029 |    1036 |    1059 |    1035 |   1185 |   1125 |    3189 |    1670 |    5218 |
+   | Error                     |       0 |       0 |       0 |       0 |      0 |      0 |       0 |       0 |       2 |
+   | QPS(请求数/秒)            |  191.59 |  364.85 |  458.06 |  427.68 | 546.92 | 930.91 | 1123.17 | 1291.10 | 1072.10 |
+   
+** 数据库模糊路径匹配路由hello world服务, 缓存Oauth认证结果
+   
+   #+CAPTION: 数据库路径模糊匹配hello world服务, 缓存Oauth认证结果
+   #+ATTR_HTML: :border 1 :rules all :frame boader
+   | 指标                      |   1并发 |   2并发 |   4并发 |   8并发 | 16并发 | 32并发 | 64 并发 | 128并发 | 256并发 |
+   | 发送总请求数              |   16424 |   32172 |   46472 |   42636 |  50000 |  50000 |   50000 |   50000 |   50000 |
+   | 总时间(s)                 | 100.001 | 100.004 | 100.000 | 100.026 | 97.788 | 61.316 |  48.973 |  42.492 |  40.519 |
+   | 平均请求时间(ms)          |   6.089 |   6.217 |   8.607 |  18.768 | 31.292 | 39.242 |  62.685 | 108.780 | 207.459 |
+   | 请求时间中位数（50%<)(ms) |       6 |       6 |       6 |       8 |     13 |     22 |      34 |      60 |     126 |
+   | 请求时间90%< (ms)         |       6 |       7 |       8 |      65 |     79 |     87 |     141 |     256 |     500 |
+   | 最大请求时间(ms)          |    1022 |    1034 |    1037 |    1041 |   1034 |   1452 |    2420 |    1325 |    3832 |
+   | Error                     |       0 |       0 |       0 |       1 |      0 |      0 |       0 |       0 |       2 |
+   | QPS(请求数/秒)            |  164.24 |  321.71 |  464.72 |  426.25 | 511.31 | 815.45 | 1020.98 | 1176.69 | 1233.98 |
+   
+   基于数据库配置的路由和自动注册的应用QPS差不多
+
+* 业务应用测试 
+每次API调用返回数据量7936 bytes 
+** 直接调用后台/portal/products  
+   #+BEGIN_SRC sh
+    ab -t 100 -c 20 http://172.25.12.81:6000/portal/products
+    ab -t 100 -c 50 http://172.25.12.81:6000/portal/products
+    ab -t 100 -c 100 http://172.25.12.81:6000/portal/products
+    ab -t 100 -c 200 http://172.25.12.81:6000/portal/products
+    ab -t 100 -c 300 http://172.25.12.81:6000/portal/products
+    ab -t 100 -c 500 http://172.25.12.81:6000/portal/products
+    ab -t 100 -c 1000 http://172.25.12.81:6000/portal/products
+   #+END_SRC
+   
+   #+CAPTION: 直接调用后台/portal/products
+   #+ATTR_HTML: :border 1 :rules all :frame boader
+   | 指标                      | 20 并发 | 50并发 | 100 并发 | 200 并发 | 300并发 | 500并发 | 1000并发 |
+   | 发送总请求数              |   50000 |  50000 |    50000 |    50000 |   50000 |   50000 |    50000 |
+   | 总时间(s)                 |  78.843 | 71.038 |   60.544 |   53.550 |  45.478 |  43.113 |   38.173 |
+   | 平均请求时间(ms)          |  31.537 | 71.038 |  121.087 |  214.200 | 272.871 | 431.132 |  763.462 |
+   | 请求时间中位数（50%<)(ms) |      28 |     66 |      121 |      232 |     283 |     464 |      851 |
+   | 请求时间90%< (ms)         |      50 |    112 |      199 |      351 |     440 |     700 |     1220 |
+   | 最大请求时间(ms)          |    1065 |   1137 |     1123 |     1373 |    1720 |    4223 |     4593 |
+   | Error                     |       0 |      0 |        0 |        0 |       0 |       0 |        0 |
+   | QPS(请求数/秒)            |  634.17 | 703.85 |   825.85 |   933.71 | 1099.42 | 1159.74 |  1309.82 |
+** 网关优化前调用/portal/products
+   #+BEGIN_SRC sh
+    ab -t 100 -c 20 -H "Authorization: Bearer TGT-156-g7eqzcM5fY167ueeyCuJGSRljrEslehswfY52rjlwX2yQErrx4-cas01.example.org" http://172.25.12.81:7070/portal/products
+    ab -t 100 -c 50  -H "Authorization: Bearer TGT-156-g7eqzcM5fY167ueeyCuJGSRljrEslehswfY52rjlwX2yQErrx4-cas01.example.org" http://172.25.12.81:7070/portal/products
+    ab -t 100 -c 100  -H "Authorization: Bearer TGT-156-g7eqzcM5fY167ueeyCuJGSRljrEslehswfY52rjlwX2yQErrx4-cas01.example.org" http://172.25.12.81:7070/portal/products
+    ab -t 100 -c 200  -H "Authorization: Bearer TGT-156-g7eqzcM5fY167ueeyCuJGSRljrEslehswfY52rjlwX2yQErrx4-cas01.example.org" http://172.25.12.81:7070/portal/products
+   #+END_SRC
+   
+   #+CAPTION: 81环境网关路由后台/portal/products
+   #+ATTR_HTML: :border 1 :rules all :frame boader
+   | 指标                      | 20 并发 |  50并发 | 100 并发 | 200 并发 |
+   | 发送总请求数              |    7805 |    8087 |     8001 |     8069 |
+   | 总时间(s)                 | 100.010 | 100.041 |  100.018 |  100.098 |
+   | 平均请求时间(ms)          | 256.273 | 618.529 | 1250.069 | 2481.047 |
+   | 请求时间中位数（50%<)(ms) |     243 |     596 |     1211 |     2400 |
+   | 请求时间90%< (ms)         |     371 |    1029 |     1897 |     3807 |
+   | 最大请求时间(ms)          |     915 |    1704 |     3908 |     6246 |
+   | Error                     |       0 |       0 |        0 |        0 |
+   | QPS(请求数/秒)            |   78.04 |   80.84 |    80.00 |    80.61 |
+
+** 网关优化后调用/portal/products   
+   #+BEGIN_SRC sh
+        ab -t 100 -c 20 -H "Authorization: Bearer TGT-156-g7eqzcM5fY167ueeyCuJGSRljrEslehswfY52rjlwX2yQErrx4-cas01.example.org" http://172.25.17.74:7070/portal/products
+        ab -t 100 -c 50  -H "Authorization: Bearer TGT-156-g7eqzcM5fY167ueeyCuJGSRljrEslehswfY52rjlwX2yQErrx4-cas01.example.org" http://172.25.17.74:7070/portal/products
+        ab -t 100 -c 100  -H "Authorization: Bearer TGT-156-g7eqzcM5fY167ueeyCuJGSRljrEslehswfY52rjlwX2yQErrx4-cas01.example.org" http://172.25.17.74:7070/portal/products
+        ab -t 100 -c 200  -H "Authorization: Bearer TGT-156-g7eqzcM5fY167ueeyCuJGSRljrEslehswfY52rjlwX2yQErrx4-cas01.example.org" http://172.25.17.74:7070/portal/products
+   #+END_SRC
+   
+   #+CAPTION: 74环境网关路由后台/portal/products
+   #+ATTR_HTML: :border 1 :rules all :frame boader
+   | 指标                      | 20 并发 |  50并发 | 100 并发 | 200 并发 |
+   | 发送总请求数              |   36489 |   38518 |    41546 |    43017 |
+   | 总时间(s)                 | 100.002 | 100.000 |  100.002 |  100.011 |
+   | 平均请求时间(ms)          |  54.812 | 129.810 |  240.701 |  464.982 |
+   | 请求时间中位数（50%<)(ms) |      49 |     122 |      246 |      516 |
+   | 请求时间90%< (ms)         |      84 |     194 |      356 |      674 |
+   | 最大请求时间(ms)          |    1128 |    1302 |     1419 |     2050 |
+   | Error                     |       0 |       0 |        0 |        0 |
+   | QPS(请求数/秒)            |  364.88 |  385.18 |   415.45 |   430.12 |
+
+与直接调用相比QPS下降了一半，并发越高，下降越明显，网关超过100后QPS提高不大
+
+* 单节点测试总结
++ spring boot应用并发超过100以后，QPS基本不会提高，等待时间成比例增长，启动线程的开销，以及线程上下文切换的耗时，开辟线程带来的内存损耗都会影响性能，相比较而言go程序的性能非常好，基本上能支持到上千个并发
++ 在频繁调用的代码中，写日志文件会大大降低并发性能
++ 调用安全认证模块，急剧降低并发性能
++ 经过网关QPS会下降一半以上，随着并发量上升，性能下降越明显
+
+[[file:cluster_test.org][Next：集群群环境测试结果]]
+
+[[file:zuul_test.org][Home：目录]]
