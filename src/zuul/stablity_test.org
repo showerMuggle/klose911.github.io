@@ -4,9 +4,203 @@
 #+HTML_LINK_HOME: zuul_test.html
 #+OPTIONS: num:nil timestamp:nil 
 
-* 稳定性测试
+74环境对单节点网关进行稳定性测试 
 
-** 网关hello world服务
+* 网关hello world服务
+对网关提供的hello world服务分别进行1分钟，5分钟，30分钟，2小时的稳定性测试， 每次测试都是100并发， 测试命令如下：
+
+#+BEGIN_SRC sh
+  $ wrk -c 100 -t 6 -d 60s --latency http://172.25.17.74:7070/hw
+  $ wrk -c 100 -t 6 -d 5m --latency http://172.25.17.74:7070/hw
+  $ wrk -c 100 -t 6 -d 30m --latency http://172.25.17.74:7070/hw
+  $ wrk -c 100 -t 6 -d 2h --latency http://172.25.17.74:7070/hw
+#+END_SRC
+
+   #+CAPTION: 单节点网关hello world服务稳定性测试
+   #+ATTR_HTML: :border 1 :rules all :frame boader
+   | 指标                      |   100并发 |  100并发 | 100并发 | 100并发 |
+   | 发送总请求数              |  129902 |  472296 |        |       |
+   | 总时间(s)                 |      60 |     300 |        |       |
+   | 平均请求时间(ms)          |   51.62 |   47.37 |        |       |
+   | 请求时间中位数（50%<)(ms) |   19.60 |   20.71 |        |       |
+   | 请求时间90%< (ms)         |  109.74 |  119.51 |        |       |
+   | 最大请求时间(ms)          |    1.96 |    1.94 |        |       |
+   | Error                     |       0 |       0 |        |       |
+   | QPS(请求数/秒)            | 2161.46 | 1573.91 |        |       |
+
+程序运行2分钟后，吞吐量降低非常明显，打印gc状态后，几乎每3，4秒都会触发一次Full GC， 而且垃圾回收运行后，只释放了很少的内存。
+
+经过调查发现，在把“链路监控信息”写到redis前，这部分信息会先缓存在内存里，但只开了一个后台进程去负责把这部分信息写入到redis，高并发的情景下，消费缓存的速度远远低于生产缓存的速度，最终导致了严重的内存泄漏
+
+** 修复内存泄漏
+修改业务逻辑，移除“链路监控信息”缓存，直接写到redis内。测试结果如下： 
+
+   #+CAPTION: 单节点网关hello world服务稳定性测试
+   #+ATTR_HTML: :border 1 :rules all :frame boader
+   | 指标                      | 100并发 | 100并发 | 100并发 |  100并发 |
+   | 发送总请求数              |  139737 |  702761 | 4157873 | 16642545 |
+   | 总时间(s)                 |      60 |     300 |    1800 |     7200 |
+   | 平均请求时间(ms)          |   49.56 |   47.98 |   49.01 |    49.16 |
+   | 请求时间中位数（50%<)(ms) |   45.22 |   45.14 |   45.68 |    45.59 |
+   | 请求时间90%< (ms)         |  116.34 |  112.89 |  114.68 |   114.73 |
+   | 最大请求时间(ms)          |  645.91 |  541.65 |  984.90 |     1002 |
+   | Error                     |       0 |       0 |       0 |        0 |
+   | QPS(请求数/秒)            | 2325.79 | 2341.75 | 2309.80 |  2311.44 |
+
++ 结果显示平均，中位数以及90%请求的响应时间和吞吐量波动在1分钟，5分钟，30分钟，2小时的不同时间维度下波动不大
++ 最大请求时间随着运行时间延长而增加，可能是触发了网关垃圾回收导致
+
+
+** CPU 内存
+在2小时100并发稳定性测试中，随机时间点上运行top命令：
+
+    #+BEGIN_SRC sh
+      $ top
+
+      top - 15:51:27 up 111 days, 22:03,  4 users,  load average: 6.80, 6.10, 5.94
+      Tasks: 220 total,   1 running, 219 sleeping,   0 stopped,   0 zombie
+      %Cpu0  : 41.2 us, 11.4 sy,  0.0 ni, 42.9 id,  0.0 wa,  0.0 hi,  3.8 si,  0.7 st
+      %Cpu1  : 40.1 us,  9.1 sy,  0.0 ni, 46.3 id,  0.0 wa,  0.0 hi,  3.5 si,  1.0 st
+      %Cpu2  : 44.4 us, 10.5 sy,  0.0 ni, 23.8 id,  0.0 wa,  0.0 hi, 20.3 si,  1.0 st
+      %Cpu3  : 38.8 us, 10.0 sy,  0.0 ni, 48.1 id,  0.0 wa,  0.0 hi,  2.8 si,  0.3 st
+      %Cpu4  : 35.6 us, 11.4 sy,  0.0 ni, 50.5 id,  0.0 wa,  0.0 hi,  2.1 si,  0.3 st
+      %Cpu5  : 32.6 us,  8.3 sy,  0.0 ni, 56.2 id,  0.0 wa,  0.0 hi,  2.4 si,  0.3 st
+      %Cpu6  : 38.7 us,  9.1 sy,  0.0 ni, 49.8 id,  0.0 wa,  0.0 hi,  2.1 si,  0.3 st
+      %Cpu7  : 38.1 us, 10.7 sy,  0.0 ni, 47.8 id,  0.0 wa,  0.0 hi,  3.1 si,  0.3 st
+      KiB Mem : 16004776 total,   152828 free,  4310704 used, 11541244 buff/cache
+      KiB Swap: 16383992 total, 15614140 free,   769852 used. 11078560 avail Mem
+
+        PID USER      PR  NI    VIRT    RES    SHR    S  %CPU %MEM     TIME+ COMMAND
+      14978 root      20   0 6872052 1.157g 13952 S 405.0    7.6           537:11.20 java
+    #+END_SRC
+
++ 每个CPU核心平均分担了计算负荷， 基本都在35%到45%之间
++ 100并发的情况下，java的网关容器应用内存消耗非常大，大概在1.157G
+ 
+
+*** zabbix监控 
+通过zabbix可以监控2小时内的CPU以及内存消耗的状况： 
+
+   #+ATTR_HTML: image :width 90% 
+  [[file:pic/hw_cpu.png]]
+
+   #+ATTR_HTML: image :width 90% 
+  [[file:pic/hw_memory.png]]
+
+结果显示CPU，内存的消耗状况还是比较稳定的 
+
+* 业务应用
+对网关路由/portal/products分别进行1分钟，5分钟，30分钟，2小时的稳定性测试， 每次测试的都是100并发， 测试命令如下：
+
+  #+BEGIN_SRC sh
+    $ wrk -c 100 -t 6 -d 60s --latency  -H "authorization: Bearer TGT-179-vyGiqy6dDgL0xMXMhofpjwn0Hcw4qfDTmKlvVK4zff1bMyjgLO-cas01.example.org" http://172.25.17.74:7070/portal/products
+    $ wrk -c 100 -t 6 -d 5m --latency  -H "authorization: Bearer TGT-179-vyGiqy6dDgL0xMXMhofpjwn0Hcw4qfDTmKlvVK4zff1bMyjgLO-cas01.example.org" http://172.25.17.74:7070/portal/products
+    $ wrk -c 100 -t 6 -d 30m --latency  -H "authorization: Bearer TGT-179-vyGiqy6dDgL0xMXMhofpjwn0Hcw4qfDTmKlvVK4zff1bMyjgLO-cas01.example.org" http://172.25.17.74:7070/portal/products
+    $ wrk -c 100 -t 6 -d 2h --latency  -H "authorization: Bearer TGT-179-vyGiqy6dDgL0xMXMhofpjwn0Hcw4qfDTmKlvVK4zff1bMyjgLO-cas01.example.org" http://172.25.17.74:7070/portal/products
+  #+END_SRC
+
+   #+CAPTION: 网关路由/portal/products稳定性测试
+   #+ATTR_HTML: :border 1 :rules all :frame boader
+   | 指标                      | 100并发 | 100并发 | 100并发 | 100并发 |
+   | 发送总请求数              |   23637 |   94940 |         |         |
+   | 总时间(s)                 |      60 |     300 |         |         |
+   | 平均请求时间(ms)          |  245.21 |  352.48 |         |         |
+   | 请求时间中位数（50%<)(ms) |  239.58 |  244.89 |         |         |
+   | 请求时间90%< (ms)         |  377.43 |  840.17 |         |         |
+   | 最大请求时间(ms)          |    1110 |    2000 |         |         |
+   | Error                     |       0 |    7694 |         |         |
+   | QPS(请求数/秒)            |  393.35 |  316.36 |         |         |
+
+程序跑了5分钟后，发现有大量数目的报错，检查日志发现：
+#+BEGIN_SRC 
+  org.apache.http.conn.HttpHostConnectException: Connect to 172.25.17.74:6000 [/172.25.17.74] failed: Cannot assign requested address (connect failed)
+#+END_SRC
+
+这说明网关容器无法与172.25.17.74:6000建立新的TCP sokcet连接（172.25.17.74:6000是portal-service容器在宿主机上的端口映射），在容器中执行下列命令：
+#+BEGIN_SRC sh
+  $/application netstat -an
+#+END_SRC
+命令结果显示网关容器和172.25.17.74:6000端口建立了28000左右个的TCP连接，这些连接都处于TIME-WAIT状态
+
+通信双方建立TCP连接后，主动关闭连接的一方就会进入TIME-WAIT状态。客户端主动关闭连接时，会发送最后一个ack后，然后会进入TIME-WAIT状态，再停留2个MSL时间，进入CLOSED状态。下图是以客户端主动关闭连接为例，说明这一过程的：
+
+  #+ATTR_HTML: image :width 40% 
+  [[file:pic/tcp_close.jpg]]
+
+MSL就是maximum segment lifetime(最大分节生命期），这是一个IP数据包能在互联网上生存的最长时间，超过这个时间IP数据包将在网络中消失 。MSL在RFC 1122上建议是2分钟，而源自berkeley的TCP实现传统上使用30秒 
+  
+结合我们的测试，这表示网关主动断开与portal-service的TCP连接，并且这个断开连接也已经成功完成，但是每个连接还必须等待1分钟才能真的进入CLOSE状态。在这个1分钟内，已经断开的连接所占据的端口无法被用来重新建立TCP连接，在高并发的情况下，会在短时间内用光所有可用的端口，这就导致了无法建立新的TCP连接
+
+为什么在测试网关本身的hello world的时候不会报错呢？虽然这个时候网关容器内也会累计大量的TIME-WAIT连接，但是这样的TCP连接中绑定的是网关固定端口7070，因此不会导致网关容器内端口不够而无法建立新的TCP连接 
+
+** 修改系统内核配置
+通过调整内核参数解决大量TIME-WAIT连接，编辑文件/etc/sysctl.conf，加入以下内容：
+  #+BEGIN_SRC
+    net.core.netdev_max_backlog = 4096 # 网络接口接收TCP包的最大设备，默认是1000, 对重负载服务器而言,该值太低
+    net.core.rmem_max = 16777216 # 接收套接字缓冲区大小的最大值，以字节为单位
+    net.core.wmem_max = 16777216 # 送套接字缓冲区大小的最大值，以字节为单位 
+    net.core.somaxconn = 8192 # 监听端口中挂起请求的最大数量，默认是128，对繁忙的服务器，增加该值有助于网络性能
+    net.ipv4.ip_local_port_range = 1025 65535 # 表示用于向外连接的端口范围。缺省情况下很小：32768到61000，改为1024到65000。
+    net.ipv4.tcp_fin_timeout = 30 # 修改系默认FIN的TIMEOUT 时间
+    net.ipv4.tcp_keepalive_time = 1200 # 表示当keepalive起用的时候，TCP发送keepalive消息的频度。缺省是2小时，改为20分钟
+    net.ipv4.tcp_max_syn_backlog = 20480 # 表示SYN队列的长度，默认为1024，加大队列长度为8192，可以容纳更多等待连接的网络连接数
+    net.ipv4.tcp_max_tw_buckets = 5000 # 表示系统同时保持TIME_WAIT套接字的最大数量，如果超过这个数字，TIME_WAIT套接字将立刻被清除并打印警告信息。默认为180000，改为5000
+    net.ipv4.tcp_tw_reuse  =  1 # 允许将TIME-WAIT sockets重新用于新的TCP连接，默认为0，表示关闭，1表示开启。
+    net.ipv4.tcp_tw_recycle  =  1 # 开启TCP连接中TIME-WAIT sockets的快速回收，默认为0，表示关闭，1表示开启
+  #+END_SRC
+
+   #+CAPTION: 优化linux内核中TCP配置
+   #+ATTR_HTML: :border 1 :rules all :frame boader
+   | 指标                      | 100并发 | 100并发 | 100并发 | 100并发 |
+   | 发送总请求数              |   25842 |  120916 |  765207 | 3013185 |
+   | 总时间(s)                 |      60 |     300 |    1800 |    7200 |
+   | 平均请求时间(ms)          |  223.74 |  242.05 |  226.85 |  231.60 |
+   | 请求时间中位数（50%<)(ms) |  220.05 |  232.58 |  221.89 |  225.41 |
+   | 请求时间90%< (ms)         |  338.19 |  363.66 |  340.38 |  346.47 |
+   | 最大请求时间(ms)          |  819.77 |    1720 |  995.37 |    1980 |
+   | Error                     |       0 |       0 |       0 |    5468 |
+   | QPS(请求数/秒)            |  430.11 |  402.95 |  425.09 |  418.49 |
+
++ 结果显示平均，中位数以及90%请求的响应时间和吞吐量波动在1分钟，5分钟，30分钟，2小时的不同时间维度下波动不大
++ 2小时的结果中，有5000+的报错，检查发现：因为在测试最后2分钟内，进行安全认证的token过期了，这导致最后2分钟网关直接返回401报文
+
+** CPU 内存状况
+在2小时100并发稳定性测试中，随机时间点上运行top命令：
+
+    #+BEGIN_SRC sh
+      $ top
+
+      - 13:15:37 up 111 days, 19:28,  4 users,  load average: 17.49, 17.59, 17.03
+      Tasks: 220 total,   5 running, 215 sleeping,   0 stopped,   0 zombie
+      %Cpu0  : 65.6 us, 11.5 sy,  0.0 ni, 17.7 id,  0.0 wa,  0.0 hi,  4.2 si,  1.0 st
+      %Cpu1  : 74.0 us, 11.0 sy,  0.0 ni, 11.0 id,  0.0 wa,  0.0 hi,  4.0 si,  0.0 st
+      %Cpu2  : 60.8 us, 14.4 sy,  0.0 ni,  9.3 id,  0.0 wa,  0.0 hi, 15.5 si,  0.0 st
+      %Cpu3  : 72.4 us, 10.2 sy,  0.0 ni, 14.3 id,  0.0 wa,  0.0 hi,  2.0 si,  1.0 st
+      %Cpu4  : 70.0 us, 16.0 sy,  0.0 ni,  9.0 id,  0.0 wa,  0.0 hi,  5.0 si,  0.0 st
+      %Cpu5  : 68.4 us, 13.3 sy,  0.0 ni, 13.3 id,  0.0 wa,  0.0 hi,  5.1 si,  0.0 st
+      %Cpu6  : 70.7 us, 15.2 sy,  0.0 ni,  9.1 id,  0.0 wa,  0.0 hi,  4.0 si,  1.0 st
+      %Cpu7  : 70.7 us, 12.1 sy,  0.0 ni, 13.1 id,  0.0 wa,  0.0 hi,  4.0 si,  0.0 st
+      KiB Mem : 16004776 total,  1228096 free,  4565792 used, 10210888 buff/cache
+      KiB Swap: 16383992 total, 15660704 free,   723288 used. 10734376 avail Mem
+
+      PID     USER     PR  NI    VIRT    RES      SHR S  %CPU %MEM     TIME+    COMMAND
+      16855 root      20   0  257768 152756   3280 S  405.0    1.0           272:29.30 app
+      14978 root      20   0 6831384 943600  18264 S 171.1   5.9           17:20.56   java
+    #+END_SRC
+
++ 每个CPU核心平均分担了计算负荷， 基本都在65%到75%之间
++ go的后台应用portal-service占据了大部分CPU的运算资源，内存消耗比较小，大概在150M左右
+
+*** zabbix监控
+通过zabbix可以监控2小时内的CPU以及内存消耗的状况： 
+
+   #+ATTR_HTML: image :width 90% 
+  [[file:pic/portal_cpu.png]]
+
+   #+ATTR_HTML: image :width 90% 
+  [[file:pic/portal_memory.png]]
+
+大部分时间下，CPU，内存的消耗状况还算是比较稳定 
 
 [[file:cluster_test.org][Previous：集群环境测试结果]]
 
