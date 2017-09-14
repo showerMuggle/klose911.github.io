@@ -1,0 +1,180 @@
+#+TITLE: 优雅的python代码
+#+HTML_HEAD: <link rel="stylesheet" type="text/css" href="css/main.css" />
+#+OPTIONS: num:nil timestamp:nil ^:nil *:nil
+
+* 循环
+** 遍历一个范围内的数字 
+  #+BEGIN_SRC python
+    for i in [0, 1, 2, 3, 4, 5]:
+        print(i ** 2)
+  #+END_SRC
+
+更好的代码：
+  #+BEGIN_SRC python
+    for i in xrange(6):
+        print(i ** 2)
+  #+END_SRC
+
++ xrange 会返回一个迭代器，用来一次一个值地遍历一个范围。这种方式会比 range 更省内存
++ xrange 在 Python 3 中已经改名为 range
+
+** 遍历一个集合
+
+  #+BEGIN_SRC python
+    colors = [ 'red',  'green',  'blue',  'yellow' ]
+
+    for i in range(len(colors)):
+        print(colors[i])
+  #+END_SRC
+
+更好的写法：
+
+#+BEGIN_SRC python
+  colors = [ 'red',  'green',  'blue',  'yellow' ]
+
+  for color in colors:
+      print(color)
+#+END_SRC
+
+** 反向遍历一个集合
+
+  #+BEGIN_SRC python
+    colors = [ 'red',  'green',  'blue',  'yellow' ]
+
+    for i in range(len(colors) - 1,  -1,  -1):
+            print (colors[i]) 
+  #+END_SRC
+
+更好的写法：
+
+  #+BEGIN_SRC python
+    colors = [ 'red',  'green',  'blue',  'yellow' ]
+
+    for  color in reversed(colors):
+        print (color) 
+  #+END_SRC
+
+这种写法效率高，优雅，而且帮你省去亲自创建和自增下标。当你发现你在操作集合的下标时，你很有可能在做错事
+
+** 遍历两个集合
+
+  #+BEGIN_SRC python
+    names = ['raymond', 'rachel', 'matthew']
+    colors = ['red', 'green', 'blue', 'yellow']
+
+    n = min(len(names), len(colors))
+
+    for i in range(n):
+        print (names[i], '->', colors[i])
+  #+END_SRC
+
+更好的写法：
+
+#+BEGIN_SRC python
+  for name, color in zip(names, colors):
+      print (name, '->', color)
+#+END_SRC
+
+zip 在内存中生成一个新的列表，需要更多的内存。izip 比 zip 效率更高
+
+注意：在 Python 3 中，izip 改名为 zip，并替换了原来的 zip 成为内置函数
+
+** 有序地遍历
++ 顺序遍历：
+
+  #+BEGIN_SRC python
+    colors = [ 'red',  'green',  'blue',  'yellow' ]
+
+    for color in sorted(colors):
+        print (color)
+  #+END_SRC
+
++ 倒序遍历：
+
+  #+BEGIN_SRC python
+    for color in sorted(colors, reverse=True):
+        print (color)
+  #+END_SRC
+
+*** 自定义排序顺序 
+
+   #+BEGIN_SRC python
+     def compare_length(c1, c2):
+         if len(c1) < len(c2):
+             return -1
+         if len(c1) > len(c2):
+             return 1
+         return 0
+
+     for color in sorted(colors, cmp=compare_length):
+         print (color)
+   #+END_SRC
+
+更好的写法：
+#+BEGIN_SRC python
+  print (sorted(colors, key=len)) 
+#+END_SRC
+
+** 调用一个函数直到遇到标记值
+
+  #+BEGIN_SRC python
+    blocks = []
+
+    while True:
+        block = f.read(32)
+        if block == '':
+            break
+        blocks.append(block)
+  #+END_SRC
+
+更好的写法：
+  #+BEGIN_SRC python
+    blocks = []
+
+    for block in iter(partial(f.read, 32),  ''):
+        blocks.append(block)
+  #+END_SRC
+
+iter 接受两个参数：第一个是你反复调用的函数，第二个是标记值。第二种写法的优势：
++ iter 的返回值是个迭代器，迭代器能用在各种地方，set，sorted，min，max，heapq，sum等
+
+** 在循环内识别多个退出点
+
+  #+BEGIN_SRC python
+    seq = [0, 1, 2, 3, 4, 5, 6]
+
+    def find(seq, target):
+        found = False
+
+        for i, value in enumerate(seq):
+            if value == target:
+                found = True
+                break
+            
+        if not found:
+            return -1
+
+        return i
+
+    print (find(seq, 3)) # 3 
+    print (find(seq, 8)) # -1 
+  #+END_SRC
+
+更好的写法，for 执行完所有的循环后就会执行 else：
+#+BEGIN_SRC python
+  def find(seq, target):
+      for i, value in enumerate(seq):
+          if value == target:
+              break
+          
+      else:
+          return -1
+      
+      return i
+#+END_SRC
+
+有两种方法去理解 for-else：
++ 传统的方法是把 for 看作 if，当 for 后面的条件为 False 时执行 else。其实条件为 False 时，就是 for 循环没被 break 出去，把所有循环都跑完的时候
++ 另一种方法就是把 else 记成 nobreak，当 for 没有被 break，那么循环结束时会进入到 else
+
+* 字典
