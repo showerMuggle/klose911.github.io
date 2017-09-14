@@ -1,6 +1,6 @@
 #!/usr/bin/python
 # -*- coding:utf-8 -*-  
-#Filename: block_iter.py
+#Filename: iter_break.py
 
 
 blocks = []
@@ -18,3 +18,4 @@ blocks = []
 for block in iter(partial(f.read, 32),  ''):
     blocks.append(block)
 
+print(blocks) 
