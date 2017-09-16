@@ -178,3 +178,266 @@ iter 接受两个参数：第一个是你反复调用的函数，第二个是标
 + 另一种方法就是把 else 记成 nobreak，当 for 没有被 break，那么循环结束时会进入到 else
 
 * 字典
+
+** 遍历字典的 key 
+
+   #+BEGIN_SRC python
+     d = {'matthew': 'blue', 'rachel': 'green', 'raymond': 'red'}
+
+     for k in d:
+         print (k)
+   #+END_SRC
+
+在迭代中修改容器是非常危险的： 
+   #+BEGIN_SRC python
+     d = {'matthew': 'blue', 'rachel': 'green', 'raymond': 'red'}
+
+          for k in list(d.keys()):
+              if k.startswith('r'):
+                  del (d[k])
+
+     # >>> matthew
+   #+END_SRC
+
+ list(d.keys()): 把字典里所有的 key 都复制到一个列表里。然后就可以修改字典
+
+** 遍历一个字典的 key 和 value
+
+   #+BEGIN_SRC python
+     d = {'matthew': 'blue', 'rachel': 'green', 'raymond': 'red'}
+
+     # 并不快，每次必须要重新哈希并做一次查找 
+     for k in d:
+         print (k, '->', d[k]) 
+         # >>> matthew -> blue
+         # rachel -> green
+         # raymond -> red
+   #+END_SRC
+更好的写法：
+
+#+BEGIN_SRC python
+  # for k, v in d.iteritems():
+  #     print (k, '->', v) 
+
+  for k, v in d.items():
+      print (k, '->', v)
+#+END_SRC
+
+注意：Python 3 已经没有 iteritems() 了，items() 的行为和 iteritems() 很接近，返回一个迭代器
+
+** 用 key-value 对构建字典
+   #+BEGIN_SRC python
+     names = ['raymond', 'rachel', 'matthew']
+     colors = ['red', 'green', 'blue']
+     # d = dict(izip(names, colors))
+
+     d = dict(zip(names, colors)) 
+     print (d)
+     # >>> {'raymond': 'red', 'rachel': 'green', 'matthew': 'blue'}
+   #+END_SRC
+
+** 用字典计数
+简单，基本的计数方法。适合初学者起步时学习：
+   #+BEGIN_SRC python
+     colors = ['red', 'green', 'red', 'blue', 'green', 'red']
+
+     d = {}
+     for color in colors:
+         if color not in d:
+             d[color] = 0
+         d[color] += 1
+
+     # >>>{'red': 3, 'green': 2, 'blue': 1} 
+   #+END_SRC
+
+更好的写法，使用初始值：
+
+#+BEGIN_SRC python
+  d = {}
+
+  for color in colors:
+      d[color] = d.get(color, 0) + 1
+  # >>> {'red': 3, 'green': 2, 'blue': 1}
+#+END_SRC
+
+更新潮的方法：
+
+#+BEGIN_SRC python
+  from collections import defaultdict
+
+  d = defaultdict(int)
+  # >>> defaultdict(<class 'int'>, {})
+
+  for color in colors:
+      d[color] += 1
+  # >>> defaultdict(<class 'int'>, {'red': 3, 'green': 2, 'blue': 1})
+#+END_SRC
+
+** 用字典分组 
+按 name 的长度分组：
+   #+BEGIN_SRC python
+     names = ['raymond', 'rachel', 'matthew', 'roger',
+              'betty', 'melissa', 'judith', 'charlie']
+
+     d = {}
+
+     for name in names:
+         key = len(name)
+         if key not in d:
+             d[key] = []
+         d[key].append(name)
+     # >>> {7: ['raymond', 'matthew', 'melissa', 'charlie'], 6: ['rachel', 'judith'], 5: ['roger', 'betty']}
+   #+END_SRC
+
+更好的写法：
+#+BEGIN_SRC python
+  d = {}
+
+  for name in names:
+      key = len(name)
+      d.setdefault(key, []).append(name)
+  # >>> {7: ['raymond', 'matthew', 'melissa', 'charlie'], 6: ['rachel', 'judith'], 5: ['roger', 'betty']}
+#+END_SRC
+
+更新潮的写法：
+#+BEGIN_SRC python
+  from collections import defaultdict
+
+  d = defaultdict(list)
+  #>>> defaultdict(<class 'list'>, {})
+
+  for name in names:
+      key = len(name)
+      d[key].append(name)
+  #defaultdict(<class 'list'>, {7: ['raymond', 'matthew', 'melissa', 'charlie'], 6: ['rachel', 'judith'], 5: ['roger', 'betty']})
+#+END_SRC
+
+** 原子操作popitem
+popitem 是原子的，所以多线程的时候没必要用锁包着它：
+   #+BEGIN_SRC python
+     d = {'matthew': 'blue', 'rachel': 'green', 'raymond': 'red'}
+
+     while d:
+         key, value = d.popitem()
+         print(key, '->', value)
+
+     # raymond -> red
+     # rachel -> green
+     # matthew -> blue
+
+     print(d)
+     # {} 
+   #+END_SRC
+
+** 连接字典
+处理配置参数： 默认使用第一个字典（从配置文件读取），接着用环境变量覆盖它，最后用命令行参数覆盖它，不幸的是，这种方法拷贝数据太疯狂！
+   #+BEGIN_SRC python
+     defaults = {'color': 'red',
+                 'USERNAME': 'guest'}
+
+     d = defaults.copy()
+     for k, v in d.items():
+         print(k, '->', v)
+     # color -> red
+     # USERNAME -> guest
+
+     d.update(os.environ)
+     for k, v in d.items():
+         print(k, '->', v)
+     # color -> red
+     # USERNAME -> klose.wu
+     # .......
+     # TMP -> C:\Users\klose.wu\AppData\Local\Temp
+     # TMPDIR -> C:\Users\klose.wu\AppData\Local\Temp
+     # USERDNSDOMAIN -> EBAOTECH.COM
+     # USERDOMAIN -> EBAOTECH
+     # USERPROFILE -> C:\Users\klose.wu
+     # WINDIR -> C:\Windows
+
+     import argparse
+     parser = argparse.ArgumentParser()
+     parser.add_argument('-u', '-user')
+     parser.add_argument('-c', '-color')
+
+     namespace = parser.parse_args([])
+     command_line_args = {k: v for k, v in vars(namespace).items() if v}
+
+     d.update(command_line_args)
+     for k, v in d.items():
+         print(k, '->', v)
+   #+END_SRC
+
+更高效优雅的写法：
+#+BEGIN_SRC python
+  d = ChainMap(command_line_args, os.environ, defaults)
+  for k, v in d.items():
+      print(k, '->', v) 
+#+END_SRC
+
+* 可读性
+位置参数和下标很漂亮，但关键字和名称更好：
++ 第一种方法对计算机来说很便利
++ 第二种方法和人类思考方式一致
+
+** 用关键字参数提高函数调用的可读性
+   #+BEGIN_SRC python
+     twitter_search('@obama', False, 20, True) 
+   #+END_SRC
+
+更好地做法：
+
+#+BEGIN_SRC python
+  twitter_search('@obama', retweets=False, numtweets=20, popular=True)
+#+END_SRC
+第二种方法稍微慢一点，但为了代码的可读性和开发时间，值得。
+
+** 用 namedtuple 提高多个返回值的可读性
+测试结果是好是坏？你看不出来，因为返回值不清晰：
+   #+BEGIN_SRC python
+     doctest.testmod()
+     # (0, 4) 
+   #+END_SRC
+
+更好的写法，使用一个 namedtuple 作为返回值：
+#+BEGIN_SRC python
+  doctest.testmod()
+  # TestResults(failed=0, attempted=4)
+#+END_SRC
+
+namedtuple 是 tuple 的子类，所以仍适用正常的元组操作，但它更友好 
+
+*** 创建namedtuple
+
+    #+BEGIN_SRC python
+      from collections import namedtuple
+
+      TestResults = namedtuple('TestResults', ['failed', 'attempted'])
+      testResult = TestResults(failed=0, attempted=4)
+      #TestResults(failed=0, attempted=4)
+    #+END_SRC
+
+** unpack 序列 
+
+** 更新多个变量的状态
+
+** 同时状态更新
+
+* 效率
+
+** 连接字符串
+
+** 更新序列
+
+* 装饰器和上下文管理
+
+** 使用装饰器分离出管理逻辑
+
+** 分离临时上下文
+
+** 文件操作
+
+** 使用锁
+
+* 简洁的单句表达 
+
+** 列表解析和生成器

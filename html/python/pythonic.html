@@ -157,7 +157,49 @@ for the JavaScript code in this tag.
 <li><a href="#sec-1-7">在循环内识别多个退出点</a></li>
 </ul>
 </li>
-<li><a href="#sec-2">字典</a></li>
+<li><a href="#sec-2">字典</a>
+<ul>
+<li><a href="#sec-2-1">遍历字典的 key</a></li>
+<li><a href="#sec-2-2">遍历一个字典的 key 和 value</a></li>
+<li><a href="#sec-2-3">用 key-value 对构建字典</a></li>
+<li><a href="#sec-2-4">用字典计数</a></li>
+<li><a href="#sec-2-5">用字典分组</a></li>
+<li><a href="#sec-2-6">原子操作popitem</a></li>
+<li><a href="#sec-2-7">连接字典</a></li>
+</ul>
+</li>
+<li><a href="#sec-3">可读性</a>
+<ul>
+<li><a href="#sec-3-1">用关键字参数提高函数调用的可读性</a></li>
+<li><a href="#sec-3-2">用 namedtuple 提高多个返回值的可读性</a>
+<ul>
+<li><a href="#sec-3-2-1">创建namedtuple</a></li>
+</ul>
+</li>
+<li><a href="#sec-3-3">unpack 序列</a></li>
+<li><a href="#sec-3-4">更新多个变量的状态</a></li>
+<li><a href="#sec-3-5">同时状态更新</a></li>
+</ul>
+</li>
+<li><a href="#sec-4">效率</a>
+<ul>
+<li><a href="#sec-4-1">连接字符串</a></li>
+<li><a href="#sec-4-2">更新序列</a></li>
+</ul>
+</li>
+<li><a href="#sec-5">装饰器和上下文管理</a>
+<ul>
+<li><a href="#sec-5-1">使用装饰器分离出管理逻辑</a></li>
+<li><a href="#sec-5-2">分离临时上下文</a></li>
+<li><a href="#sec-5-3">文件操作</a></li>
+<li><a href="#sec-5-4">使用锁</a></li>
+</ul>
+</li>
+<li><a href="#sec-6">简洁的单句表达</a>
+<ul>
+<li><a href="#sec-6-1">列表解析和生成器</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
@@ -439,6 +481,416 @@ iter 接受两个参数：第一个是你反复调用的函数，第二个是标
 
 <div id="outline-container-sec-2" class="outline-2">
 <h2 id="sec-2">字典</h2>
+<div class="outline-text-2" id="text-2">
+</div><div id="outline-container-sec-2-1" class="outline-3">
+<h3 id="sec-2-1">遍历字典的 key</h3>
+<div class="outline-text-3" id="text-2-1">
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #eedd82;">d</span> = {<span style="color: #ffa07a;">'matthew'</span>: <span style="color: #ffa07a;">'blue'</span>, <span style="color: #ffa07a;">'rachel'</span>: <span style="color: #ffa07a;">'green'</span>, <span style="color: #ffa07a;">'raymond'</span>: <span style="color: #ffa07a;">'red'</span>}
+
+<span style="color: #00ffff;">for</span> k <span style="color: #00ffff;">in</span> d:
+    <span style="color: #00ffff;">print</span> (k)
+</pre>
+</div>
+
+<p>
+在迭代中修改容器是非常危险的： 
+</p>
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #eedd82;">d</span> = {<span style="color: #ffa07a;">'matthew'</span>: <span style="color: #ffa07a;">'blue'</span>, <span style="color: #ffa07a;">'rachel'</span>: <span style="color: #ffa07a;">'green'</span>, <span style="color: #ffa07a;">'raymond'</span>: <span style="color: #ffa07a;">'red'</span>}
+
+     <span style="color: #00ffff;">for</span> k <span style="color: #00ffff;">in</span> <span style="color: #b0c4de;">list</span>(d.keys()):
+         <span style="color: #00ffff;">if</span> k.startswith(<span style="color: #ffa07a;">'r'</span>):
+             <span style="color: #00ffff;">del</span> (d[k])
+
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">&gt;&gt;&gt; matthew</span>
+</pre>
+</div>
+
+<p>
+list(d.keys()): 把字典里所有的 key 都复制到一个列表里。然后就可以修改字典
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-2" class="outline-3">
+<h3 id="sec-2-2">遍历一个字典的 key 和 value</h3>
+<div class="outline-text-3" id="text-2-2">
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #eedd82;">d</span> = {<span style="color: #ffa07a;">'matthew'</span>: <span style="color: #ffa07a;">'blue'</span>, <span style="color: #ffa07a;">'rachel'</span>: <span style="color: #ffa07a;">'green'</span>, <span style="color: #ffa07a;">'raymond'</span>: <span style="color: #ffa07a;">'red'</span>}
+
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#24182;&#19981;&#24555;&#65292;&#27599;&#27425;&#24517;&#39035;&#35201;&#37325;&#26032;&#21704;&#24076;&#24182;&#20570;&#19968;&#27425;&#26597;&#25214; </span>
+<span style="color: #00ffff;">for</span> k <span style="color: #00ffff;">in</span> d:
+    <span style="color: #00ffff;">print</span> (k, <span style="color: #ffa07a;">'-&gt;'</span>, d[k]) 
+    <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&gt;&gt;&gt; matthew -&gt; blue</span>
+    <span style="color: #ff4500;"># </span><span style="color: #ff4500;">rachel -&gt; green</span>
+    <span style="color: #ff4500;"># </span><span style="color: #ff4500;">raymond -&gt; red</span>
+</pre>
+</div>
+<p>
+更好的写法：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #ff4500;"># </span><span style="color: #ff4500;">for k, v in d.iteritems():</span>
+<span style="color: #ff4500;">#     </span><span style="color: #ff4500;">print (k, '-&gt;', v) </span>
+
+<span style="color: #00ffff;">for</span> k, v <span style="color: #00ffff;">in</span> d.items():
+    <span style="color: #00ffff;">print</span> (k, <span style="color: #ffa07a;">'-&gt;'</span>, v)
+</pre>
+</div>
+
+<p>
+注意：Python 3 已经没有 iteritems() 了，items() 的行为和 iteritems() 很接近，返回一个迭代器
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-3" class="outline-3">
+<h3 id="sec-2-3">用 key-value 对构建字典</h3>
+<div class="outline-text-3" id="text-2-3">
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #eedd82;">names</span> = [<span style="color: #ffa07a;">'raymond'</span>, <span style="color: #ffa07a;">'rachel'</span>, <span style="color: #ffa07a;">'matthew'</span>]
+<span style="color: #eedd82;">colors</span> = [<span style="color: #ffa07a;">'red'</span>, <span style="color: #ffa07a;">'green'</span>, <span style="color: #ffa07a;">'blue'</span>]
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">d = dict(izip(names, colors))</span>
+
+<span style="color: #eedd82;">d</span> = <span style="color: #b0c4de;">dict</span>(<span style="color: #b0c4de;">zip</span>(names, colors)) 
+<span style="color: #00ffff;">print</span> (d)
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">&gt;&gt;&gt; {'raymond': 'red', 'rachel': 'green', 'matthew': 'blue'}</span>
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-4" class="outline-3">
+<h3 id="sec-2-4">用字典计数</h3>
+<div class="outline-text-3" id="text-2-4">
+<p>
+简单，基本的计数方法。适合初学者起步时学习：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #eedd82;">colors</span> = [<span style="color: #ffa07a;">'red'</span>, <span style="color: #ffa07a;">'green'</span>, <span style="color: #ffa07a;">'red'</span>, <span style="color: #ffa07a;">'blue'</span>, <span style="color: #ffa07a;">'green'</span>, <span style="color: #ffa07a;">'red'</span>]
+
+<span style="color: #eedd82;">d</span> = {}
+<span style="color: #00ffff;">for</span> color <span style="color: #00ffff;">in</span> colors:
+    <span style="color: #00ffff;">if</span> color <span style="color: #00ffff;">not</span> <span style="color: #00ffff;">in</span> d:
+        <span style="color: #eedd82;">d</span>[color] = 0
+    <span style="color: #eedd82;">d</span>[color] += 1
+
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">&gt;&gt;&gt;{'red': 3, 'green': 2, 'blue': 1}</span>
+</pre>
+</div>
+
+<p>
+更好的写法，使用初始值：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #eedd82;">d</span> = {}
+
+<span style="color: #00ffff;">for</span> color <span style="color: #00ffff;">in</span> colors:
+    <span style="color: #eedd82;">d</span>[color] = d.get(color, 0) + 1
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">&gt;&gt;&gt; {'red': 3, 'green': 2, 'blue': 1}</span>
+</pre>
+</div>
+
+<p>
+更新潮的方法：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #00ffff;">from</span> collections <span style="color: #00ffff;">import</span> defaultdict
+
+<span style="color: #eedd82;">d</span> = defaultdict(<span style="color: #b0c4de;">int</span>)
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">&gt;&gt;&gt; defaultdict(&lt;class 'int'&gt;, {})</span>
+
+<span style="color: #00ffff;">for</span> color <span style="color: #00ffff;">in</span> colors:
+    <span style="color: #eedd82;">d</span>[color] += 1
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">&gt;&gt;&gt; defaultdict(&lt;class 'int'&gt;, {'red': 3, 'green': 2, 'blue': 1})</span>
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-5" class="outline-3">
+<h3 id="sec-2-5">用字典分组</h3>
+<div class="outline-text-3" id="text-2-5">
+<p>
+按 name 的长度分组：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #eedd82;">names</span> = [<span style="color: #ffa07a;">'raymond'</span>, <span style="color: #ffa07a;">'rachel'</span>, <span style="color: #ffa07a;">'matthew'</span>, <span style="color: #ffa07a;">'roger'</span>,
+         <span style="color: #ffa07a;">'betty'</span>, <span style="color: #ffa07a;">'melissa'</span>, <span style="color: #ffa07a;">'judith'</span>, <span style="color: #ffa07a;">'charlie'</span>]
+
+<span style="color: #eedd82;">d</span> = {}
+
+<span style="color: #00ffff;">for</span> name <span style="color: #00ffff;">in</span> names:
+    <span style="color: #eedd82;">key</span> = <span style="color: #b0c4de;">len</span>(name)
+    <span style="color: #00ffff;">if</span> key <span style="color: #00ffff;">not</span> <span style="color: #00ffff;">in</span> d:
+        <span style="color: #eedd82;">d</span>[key] = []
+    d[key].append(name)
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">&gt;&gt;&gt; {7: ['raymond', 'matthew', 'melissa', 'charlie'], 6: ['rachel', 'judith'], 5: ['roger', 'betty']}</span>
+</pre>
+</div>
+
+<p>
+更好的写法：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #eedd82;">d</span> = {}
+
+<span style="color: #00ffff;">for</span> name <span style="color: #00ffff;">in</span> names:
+    <span style="color: #eedd82;">key</span> = <span style="color: #b0c4de;">len</span>(name)
+    d.setdefault(key, []).append(name)
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">&gt;&gt;&gt; {7: ['raymond', 'matthew', 'melissa', 'charlie'], 6: ['rachel', 'judith'], 5: ['roger', 'betty']}</span>
+</pre>
+</div>
+
+<p>
+更新潮的写法：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #00ffff;">from</span> collections <span style="color: #00ffff;">import</span> defaultdict
+
+<span style="color: #eedd82;">d</span> = defaultdict(<span style="color: #b0c4de;">list</span>)
+<span style="color: #ff4500;">#</span><span style="color: #ff4500;">&gt;&gt;&gt; defaultdict(&lt;class 'list'&gt;, {})</span>
+
+<span style="color: #00ffff;">for</span> name <span style="color: #00ffff;">in</span> names:
+    <span style="color: #eedd82;">key</span> = <span style="color: #b0c4de;">len</span>(name)
+    d[key].append(name)
+<span style="color: #ff4500;">#</span><span style="color: #ff4500;">defaultdict(&lt;class 'list'&gt;, {7: ['raymond', 'matthew', 'melissa', 'charlie'], 6: ['rachel', 'judith'], 5: ['roger', 'betty']})</span>
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-6" class="outline-3">
+<h3 id="sec-2-6">原子操作popitem</h3>
+<div class="outline-text-3" id="text-2-6">
+<p>
+popitem 是原子的，所以多线程的时候没必要用锁包着它：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #eedd82;">d</span> = {<span style="color: #ffa07a;">'matthew'</span>: <span style="color: #ffa07a;">'blue'</span>, <span style="color: #ffa07a;">'rachel'</span>: <span style="color: #ffa07a;">'green'</span>, <span style="color: #ffa07a;">'raymond'</span>: <span style="color: #ffa07a;">'red'</span>}
+
+<span style="color: #00ffff;">while</span> d:
+    <span style="color: #eedd82;">key</span>, <span style="color: #eedd82;">value</span> = d.popitem()
+    <span style="color: #00ffff;">print</span>(key, <span style="color: #ffa07a;">'-&gt;'</span>, value)
+
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">raymond -&gt; red</span>
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">rachel -&gt; green</span>
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">matthew -&gt; blue</span>
+
+<span style="color: #00ffff;">print</span>(d)
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">{}</span>
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-7" class="outline-3">
+<h3 id="sec-2-7">连接字典</h3>
+<div class="outline-text-3" id="text-2-7">
+<p>
+处理配置参数： 默认使用第一个字典（从配置文件读取），接着用环境变量覆盖它，最后用命令行参数覆盖它，不幸的是，这种方法拷贝数据太疯狂！
+</p>
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #eedd82;">defaults</span> = {<span style="color: #ffa07a;">'color'</span>: <span style="color: #ffa07a;">'red'</span>,
+            <span style="color: #ffa07a;">'USERNAME'</span>: <span style="color: #ffa07a;">'guest'</span>}
+
+<span style="color: #eedd82;">d</span> = defaults.copy()
+<span style="color: #00ffff;">for</span> k, v <span style="color: #00ffff;">in</span> d.items():
+    <span style="color: #00ffff;">print</span>(k, <span style="color: #ffa07a;">'-&gt;'</span>, v)
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">color -&gt; red</span>
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">USERNAME -&gt; guest</span>
+
+d.update(os.environ)
+<span style="color: #00ffff;">for</span> k, v <span style="color: #00ffff;">in</span> d.items():
+    <span style="color: #00ffff;">print</span>(k, <span style="color: #ffa07a;">'-&gt;'</span>, v)
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">color -&gt; red</span>
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">USERNAME -&gt; klose.wu</span>
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">.......</span>
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">TMP -&gt; C:\Users\klose.wu\AppData\Local\Temp</span>
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">TMPDIR -&gt; C:\Users\klose.wu\AppData\Local\Temp</span>
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">USERDNSDOMAIN -&gt; EBAOTECH.COM</span>
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">USERDOMAIN -&gt; EBAOTECH</span>
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">USERPROFILE -&gt; C:\Users\klose.wu</span>
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">WINDIR -&gt; C:\Windows</span>
+
+<span style="color: #00ffff;">import</span> argparse
+<span style="color: #eedd82;">parser</span> = argparse.ArgumentParser()
+parser.add_argument(<span style="color: #ffa07a;">'-u'</span>, <span style="color: #ffa07a;">'-user'</span>)
+parser.add_argument(<span style="color: #ffa07a;">'-c'</span>, <span style="color: #ffa07a;">'-color'</span>)
+
+<span style="color: #eedd82;">namespace</span> = parser.parse_args([])
+<span style="color: #eedd82;">command_line_args</span> = {k: v <span style="color: #00ffff;">for</span> k, v <span style="color: #00ffff;">in</span> <span style="color: #b0c4de;">vars</span>(namespace).items() <span style="color: #00ffff;">if</span> v}
+
+d.update(command_line_args)
+<span style="color: #00ffff;">for</span> k, v <span style="color: #00ffff;">in</span> d.items():
+    <span style="color: #00ffff;">print</span>(k, <span style="color: #ffa07a;">'-&gt;'</span>, v)
+</pre>
+</div>
+
+<p>
+更高效优雅的写法：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #eedd82;">d</span> = ChainMap(command_line_args, os.environ, defaults)
+<span style="color: #00ffff;">for</span> k, v <span style="color: #00ffff;">in</span> d.items():
+    <span style="color: #00ffff;">print</span>(k, <span style="color: #ffa07a;">'-&gt;'</span>, v)
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-3" class="outline-2">
+<h2 id="sec-3">可读性</h2>
+<div class="outline-text-2" id="text-3">
+<p>
+位置参数和下标很漂亮，但关键字和名称更好：
+</p>
+<ul class="org-ul">
+<li>第一种方法对计算机来说很便利
+</li>
+<li>第二种方法和人类思考方式一致
+</li>
+</ul>
+</div>
+
+<div id="outline-container-sec-3-1" class="outline-3">
+<h3 id="sec-3-1">用关键字参数提高函数调用的可读性</h3>
+<div class="outline-text-3" id="text-3-1">
+<div class="org-src-container">
+
+<pre class="src src-python">twitter_search(<span style="color: #ffa07a;">'@obama'</span>, <span style="color: #7fffd4;">False</span>, 20, <span style="color: #7fffd4;">True</span>)
+</pre>
+</div>
+
+<p>
+更好地做法：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python">twitter_search(<span style="color: #ffa07a;">'@obama'</span>, retweets=<span style="color: #7fffd4;">False</span>, numtweets=20, popular=<span style="color: #7fffd4;">True</span>)
+</pre>
+</div>
+<p>
+第二种方法稍微慢一点，但为了代码的可读性和开发时间，值得。
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-3-2" class="outline-3">
+<h3 id="sec-3-2">用 namedtuple 提高多个返回值的可读性</h3>
+<div class="outline-text-3" id="text-3-2">
+<p>
+测试结果是好是坏？你看不出来，因为返回值不清晰：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-python">doctest.testmod()
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">(0, 4)</span>
+</pre>
+</div>
+
+<p>
+更好的写法，使用一个 namedtuple 作为返回值：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-python">doctest.testmod()
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">TestResults(failed=0, attempted=4)</span>
+</pre>
+</div>
+
+<p>
+namedtuple 是 tuple 的子类，所以仍适用正常的元组操作，但它更友好 
+</p>
+</div>
+
+<div id="outline-container-sec-3-2-1" class="outline-4">
+<h4 id="sec-3-2-1">创建namedtuple</h4>
+<div class="outline-text-4" id="text-3-2-1">
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #00ffff;">from</span> collections <span style="color: #00ffff;">import</span> namedtuple
+
+<span style="color: #eedd82;">TestResults</span> = namedtuple(<span style="color: #ffa07a;">'TestResults'</span>, [<span style="color: #ffa07a;">'failed'</span>, <span style="color: #ffa07a;">'attempted'</span>])
+<span style="color: #eedd82;">testResult</span> = TestResults(failed=0, attempted=4)
+<span style="color: #ff4500;">#</span><span style="color: #ff4500;">TestResults(failed=0, attempted=4)</span>
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-3-3" class="outline-3">
+<h3 id="sec-3-3">unpack 序列</h3>
+</div>
+
+<div id="outline-container-sec-3-4" class="outline-3">
+<h3 id="sec-3-4">更新多个变量的状态</h3>
+</div>
+
+<div id="outline-container-sec-3-5" class="outline-3">
+<h3 id="sec-3-5">同时状态更新</h3>
+</div>
+</div>
+
+<div id="outline-container-sec-4" class="outline-2">
+<h2 id="sec-4">效率</h2>
+<div class="outline-text-2" id="text-4">
+</div><div id="outline-container-sec-4-1" class="outline-3">
+<h3 id="sec-4-1">连接字符串</h3>
+</div>
+
+<div id="outline-container-sec-4-2" class="outline-3">
+<h3 id="sec-4-2">更新序列</h3>
+</div>
+</div>
+
+<div id="outline-container-sec-5" class="outline-2">
+<h2 id="sec-5">装饰器和上下文管理</h2>
+<div class="outline-text-2" id="text-5">
+</div><div id="outline-container-sec-5-1" class="outline-3">
+<h3 id="sec-5-1">使用装饰器分离出管理逻辑</h3>
+</div>
+
+<div id="outline-container-sec-5-2" class="outline-3">
+<h3 id="sec-5-2">分离临时上下文</h3>
+</div>
+
+<div id="outline-container-sec-5-3" class="outline-3">
+<h3 id="sec-5-3">文件操作</h3>
+</div>
+
+<div id="outline-container-sec-5-4" class="outline-3">
+<h3 id="sec-5-4">使用锁</h3>
+</div>
+</div>
+
+<div id="outline-container-sec-6" class="outline-2">
+<h2 id="sec-6">简洁的单句表达</h2>
+<div class="outline-text-2" id="text-6">
+</div><div id="outline-container-sec-6-1" class="outline-3">
+<h3 id="sec-6-1">列表解析和生成器</h3>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
