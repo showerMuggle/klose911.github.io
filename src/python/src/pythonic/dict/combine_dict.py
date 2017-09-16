@@ -56,6 +56,8 @@ for k, v in d.items():
 # WINDIR -> C:\Windows
 
 # 更高效优雅的写法
+from collections import ChainMap
+
 d = ChainMap(command_line_args, os.environ, defaults)
 for k, v in d.items():
     print(k, '->', v)
