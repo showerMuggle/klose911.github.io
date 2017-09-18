@@ -157,7 +157,12 @@ for the JavaScript code in this tag.
 <li><a href="#sec-1-1-2-2">向本机发送地址掩码请求</a></li>
 </ul>
 </li>
-<li><a href="#sec-1-1-3">时间戳请求与应答</a></li>
+<li><a href="#sec-1-1-3">时间戳请求与应答</a>
+<ul>
+<li><a href="#sec-1-1-3-1">示例</a></li>
+<li><a href="#sec-1-1-3-2">其他方法</a></li>
+</ul>
+</li>
 <li><a href="#sec-1-1-4">端口不可达</a></li>
 </ul>
 </li>
@@ -698,6 +703,177 @@ received mask= ff000000, from 127.0.0.1
 
 <div id="outline-container-sec-1-1-3" class="outline-4">
 <h4 id="sec-1-1-3">时间戳请求与应答</h4>
+<div class="outline-text-4" id="text-1-1-3">
+<p>
+ICMP时间戳请求允许系统向另一个系统查询当前的时间。返回的建议值是自午夜开始计算的毫秒数，协调的统一时间(UTC, 格林尼治时间)。这种ICMP报文的好处是它提供了毫秒级的分辨率，而利用其他方法从别的主机获取的时间（如某些Unix系统提供的rdate命令）只能提供秒级的分辨率。由于返回的时间是从午夜开始计算的，因此调用者必须通过其他方法获知当时的日期，这是它的一个缺陷
+</p>
+
+<p>
+ICMP时间戳请求和应答报文格式如图6-6所示：
+</p>
+
+<div class="figure">
+<p><img src="pic/icmp-timestamp-packet.png" alt="icmp-timestamp-packet.png" width="70%" />
+</p>
+</div>
+
+<p>
+请求端填写发起时间戳，然后发送报文。应答系统收到请求报文时填写接收时间戳，在发送应答时填写发送时间戳。但是，实际上，大多数的实现把后面两个字段都设成相同的值（提供三个字段的原因是可以让发送方分别计算发送请求的时间和发送应答的时间） 
+</p>
+</div>
+
+<div id="outline-container-sec-1-1-3-1" class="outline-5">
+<h5 id="sec-1-1-3-1">示例</h5>
+<div class="outline-text-5" id="text-1-1-3-1">
+<p>
+可以写一个简单程序icmptime，程序打印出ICMP报文中的三个时间戳，以及计算出：
+</p>
+<ol class="org-ol">
+<li>orig：发起时间戳
+</li>
+<li>recv：接收时间戳
+</li>
+<li>xmit：发送时间戳
+</li>
+<li>rtt：往返时间，收到应答时的时间值减去发送请求时的时间值
+</li>
+<li>difference：接收时间戳值减去发起时间戳值
+
+
+<div class="figure">
+<p><img src="pic/icmptime-rtt.png" alt="icmptime-rtt.png" width="70%" />
+</p>
+</div>
+</li>
+</ol>
+
+<p>
+假定我们相信RTT的值，并且相信RTT的一半用于请求报文的传输，另一半用于应答报文的传输，那么为了使本机时钟与查询主机的时钟一致，本机时钟需要进行调整，调整值是：
+</p>
+
+<pre class="example">
+difference - rtt/2
+</pre>
+</div>
+
+<ul class="org-ul"><li><a id="sec-1-1-3-1-1" name="sec-1-1-3-1-1"></a>bsdi<br  /><div class="outline-text-6" id="text-1-1-3-1-1">
+<p>
+从sun主机给bsdi主机发送ICMP时间戳请求，并打印出返回的应答。运行结果如下：
+</p>
+
+<div class="figure">
+<p><img src="pic/icmptime-1.png" alt="icmptime-1.png" width="70%" />
+</p>
+</div>
+
+<ul class="org-ul">
+<li>bsdi主机把接收时间戳和发送时间戳都设成相同的值
+</li>
+<li>bsdi的时钟比sun的时钟要慢7ms~8ms
+</li>
+<li>由于时间戳的值是自午夜开始计算的毫秒数，即UTC，因此它们的值始终小于86400000(24×60×60×1000)。这些例子都是在下午4:00以前运行的，并且在一个比UTC慢7个小时的时区，因此它们的值比82800000(16+7=23小时)要大没问题
+</li>
+<li>如果对主机bsdi重复运行该程序数次，会发现接收时间戳和发送时间戳的最后一位数总是0。这是因为该版本的软件只能提供10ms的时间分辨率 
+</li>
+</ul>
+</div>
+</li>
+
+<li><a id="sec-1-1-3-1-2" name="sec-1-1-3-1-2"></a>svr4<br  /><div class="outline-text-6" id="text-1-1-3-1-2">
+<p>
+向主机svr4运行该程序两次：
+</p>
+
+<div class="figure">
+<p><img src="pic/icmptime-2.png" alt="icmptime-2.png" width="70%" />
+</p>
+</div>
+
+<p>
+由于某种原因， SVR4在ICMP时间戳中不提供毫秒级的分辨率。这样，对秒以下的时间差调整将不起任何作用
+</p>
+</div>
+</li>
+
+<li><a id="sec-1-1-3-1-3" name="sec-1-1-3-1-3"></a>其他主机<br  /><div class="outline-text-6" id="text-1-1-3-1-3">
+<p>
+对子网140.252.1上的其他主机运行该程序：
+</p>
+
+<div class="figure">
+<p><img src="pic/icmptime-3.png" alt="icmptime-3.png" width="70%" />
+</p>
+</div>
+
+<p>
+结果表明其中一台主机的时钟与sun相差3.7秒，而另一个主机时钟相差近75秒
+</p>
+</div>
+</li>
+
+<li><a id="sec-1-1-3-1-4" name="sec-1-1-3-1-4"></a>cisco路由器<br  /><div class="outline-text-6" id="text-1-1-3-1-4">
+<p>
+对路由器gateway（Cisco路由器）。它表明，当系统返回一个非标准时间戳值时（不是自午夜开始计算的毫秒数，UTC），它就用32bit时间戳中的高位来表示。我们的程序证明了一点，在尖括号中打印出了接收和发送的时间戳值（在关闭高位之后）。另外，不能计算发起时间戳和接收时间戳之间的时间差，因为它们的单位不一致：
+</p>
+
+<div class="figure">
+<p><img src="pic/icmptime-4.png" alt="icmptime-4.png" width="70%" />
+</p>
+</div>
+
+<p>
+如果我们在这台主机上运行该程序数次，会发现时间戳值显然具有毫秒级的分辨率，而且是从某个起始点开始计算的毫秒数，但是起始点并不是午夜UTC（例如可能是从路由器引导时开始计数的毫秒数）
+</p>
+</div>
+</li>
+
+<li><a id="sec-1-1-3-1-5" name="sec-1-1-3-1-5"></a>ntp服务器<br  /><div class="outline-text-6" id="text-1-1-3-1-5">
+<p>
+比较sun主机和另一个已知是准确的系统时钟，一个ntp时间服务器：
+</p>
+
+<div class="figure">
+<p><img src="pic/icmptime-5.png" alt="icmptime-5.png" width="70%" />
+</p>
+</div>
+
+<p>
+如果把difference的值减去RTT的一半，结果表明sun主机上的时钟要快38.5～51.5ms
+</p>
+</div>
+</li></ul>
+</div>
+
+<div id="outline-container-sec-1-1-3-2" class="outline-5">
+<h5 id="sec-1-1-3-2">其他方法</h5>
+<div class="outline-text-5" id="text-1-1-3-2">
+<p>
+还可以用其他方法来获得时间和日期：
+</p>
+<ul class="org-ul">
+<li>日期服务程序和时间服务程序。前者是以人们可读的格式返回当前的时间和日期，后者是一行ASCII字符。可以用telnet命令来验证这个服务：
+
+<div class="figure">
+<p><img src="pic/time-service.png" alt="time-service.png" width="70%" />
+</p>
+</div>
+</li>
+</ul>
+
+<p>
+时间服务程序返回的是一个32bit的二制进数值，表示自UTC，1900年1月1日午夜起算的秒数。这个程序是以秒为单位提供的日期和时间
+</p>
+
+<ul class="org-ul">
+<li>NTP：严格的计时器使用网络时间协议，该协议在RFC 1305中给出了描述。这个协议采用先进的技术来保证LAN或WAN上的一组系统的时钟误差在毫秒级以内
+</li>
+<li>开放软件基金会的分布式计算环境(DCE)定义了分布式时间服务(DTS)，它也提供计算机之间的时钟同步
+</li>
+<li>伯克利大学的Unix系统提供守护程序timed(8)，来同步局域网上的系统时钟。不像NTP和DTS，timed不在广域网范围内工作
+</li>
+</ul>
+</div>
+</div>
 </div>
 
 <div id="outline-container-sec-1-1-4" class="outline-4">
