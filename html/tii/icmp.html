@@ -163,7 +163,13 @@ for the JavaScript code in this tag.
 <li><a href="#sec-1-1-3-2">其他方法</a></li>
 </ul>
 </li>
-<li><a href="#sec-1-1-4">端口不可达</a></li>
+<li><a href="#sec-1-1-4">端口不可达</a>
+<ul>
+<li><a href="#sec-1-1-4-1">TFTP实例</a></li>
+<li><a href="#sec-1-1-4-2">端口不可达报文</a></li>
+<li><a href="#sec-1-1-4-3">tcpdump时间序列</a></li>
+</ul>
+</li>
 </ul>
 </li>
 <li><a href="#sec-1-2">ICMP报文的4.4BSD处理</a></li>
@@ -878,11 +884,485 @@ difference - rtt/2
 
 <div id="outline-container-sec-1-1-4" class="outline-4">
 <h4 id="sec-1-1-4">端口不可达</h4>
+<div class="outline-text-4" id="text-1-1-4">
+<p>
+端口不可达报文，它是ICMP目的不可到达报文中的一种，来看一看ICMP差错报文中所附加的信息
+</p>
+</div>
+
+<div id="outline-container-sec-1-1-4-1" class="outline-5">
+<h5 id="sec-1-1-4-1">TFTP实例</h5>
+<div class="outline-text-5" id="text-1-1-4-1">
+<p>
+UDP的规则之一：如果收到一份UDP数据报而目的端口与某个正在使用的进程不相符，那么UDP返回一个ICMP不可达报文
+</p>
+
+<p>
+对于TFTP服务器来说，UDP的公共端口号是69。但是大多数的TFTP客户程序允许用connect命令来指定一个不同的端口号。这里，就用它来指定8888端口：
+</p>
+
+<div class="figure">
+<p><img src="pic/icmp-tftp.png" alt="icmp-tftp.png" width="50%" />
+</p>
+</div>
+
+<p>
+connect命令首先指定要连接的主机名及其端口号，接着用get命令来取文件。敲入get命令后，一份UDP数据报就发送到主机svr4上的8888端口。tcpdump命令引起的报文交换结果如图6-8所示：
+</p>
+
+<div class="figure">
+<p><img src="pic/icmp-tftp-tcpdump.png" alt="icmp-tftp-tcpdump.png" width="70%" />
+</p>
+</div>
+
+<p>
+在UDP数据报送到svr4之前：
+</p>
+<ol class="org-ol">
+<li>先发送一份ARP请求来确定它的硬件地址（第1行）
+</li>
+<li>接着返回ARP应答（第2行）
+</li>
+<li>然后才发送UDP数据报（第3行）
+</li>
+<li>一个ICMP端口不可达差错是立刻返回的（第4行）
+</li>
+<li>但是TFTP客户程序看上去似乎忽略了这个ICMP报文，而在5秒钟之后又发送了另一份UDP数据报（第5行）。在客户程序放弃之前重发了三次。
+</li>
+</ol>
+
+<p>
+有些值得注意的细节：
+</p>
+<ul class="org-ul">
+<li>ICMP报文是在主机之间交换的，而不用目的端口号，而每个20字节的UDP数据报则是从一个特定端口（2924）发送到另一个特定端口（8888）
+</li>
+<li>跟在每个UDP后面的数字20指的是UDP数据报中的数据长度：
+<ul class="org-ul">
+<li>TFTP的2个字节的操作代码
+</li>
+<li>9个字节以空字符结束：文件名temp.foo
+</li>
+<li>9个字节以空字符结束：字符串netascii
+</li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-1-1-4-2" class="outline-5">
+<h5 id="sec-1-1-4-2">端口不可达报文</h5>
+<div class="outline-text-5" id="text-1-1-4-2">
+<p>
+如果用-e选项运行同样的例子，可以看到每个返回的ICMP端口不可达报文的完整长度。这里的长度为70字节，各字段分配如图6-9所示：
+</p>
+
+<div class="figure">
+<p><img src="pic/udp-port-unreachable-packet.png" alt="udp-port-unreachable-packet.png" width="70%" />
+</p>
+</div>
+
+<p>
+ICMP的一个规则是ICMP差错报文必须包括生成该差错报文的数据报IP首部（包含任何选项），还必须至少包括跟在该IP首部后面的前8个字节。在我们的例子中，跟在IP首部后面的前8个字节包含UDP的首部：
+</p>
+<ul class="org-ul">
+<li>包含在UDP首部中的内容是源端口号和目的端口号。就是由于目的端口号8888才导致产生了ICMP端口不可达的差错报文。接收ICMP的系统可以根据源端口号2924来把差错报文与某个特定的用户进程相关联（在本例中是TFTP客户程序）
+</li>
+<li>导致差错的数据报中的IP首部要被送回的原因是因为IP首部中包含了协议字段，使得ICMP可以知道如何解释后面的8个字节（在本例中是UDP首部）。如果我们来查看TCP首部,可以发现源端口和目的端口被包含在TCP首部的前8个字节中
+</li>
+</ul>
+
+<p>
+ICMP不可达报文的一般格式如图6-10所示：
+</p>
+
+<div class="figure">
+<p><img src="pic/icmp-port-unreachable-packet.png" alt="icmp-port-unreachable-packet.png" width="70%" />
+</p>
+</div>
+
+<ul class="org-ul">
+<li>有16种不同类型的ICMP不可达报文，代码分别从0到15。ICMP端口不可达差错代码是3
+</li>
+<li>尽管图上标明了在ICMP报文中的第二个32bit字必须为0，但是当代码为4时（“需要分片但设置了不分片比特”），路径MTU发现机制（2.9节）却允许路由器把外出接口的MTU填在这个32bit字的低16bit中
+</li>
+<li>尽管ICMP规则允许系统返回多于8个字节的产生差错的IP数据报中的数据，但是大多数从伯克利派生出来的系统只返回8个字节
+</li>
+</ul>
+</div>
+</div>
+
+
+<div id="outline-container-sec-1-1-4-3" class="outline-5">
+<h5 id="sec-1-1-4-3">tcpdump时间序列</h5>
+<div class="outline-text-5" id="text-1-1-4-3">
+<p>
+以时间系列的格式给出tcpdump命令的输出，如图6-11所示：
+</p>
+
+<div class="figure">
+<p><img src="pic/udp-port-unreachable-sequences.png" alt="udp-port-unreachable-sequences.png" width="70%" />
+</p>
+</div>
+
+<ul class="org-ul">
+<li>时间随着向下而递增，在图左边的时间标记与tcpdump命令的输出是相同的
+</li>
+<li>位于图顶部的标记是通信双方的主机名和端口号
+</li>
+<li>当UDP或TCP数据正在被传送时，用粗线的行来表示
+</li>
+<li>BSD系统不把接收到的ICMP报文中的UDP数据通知用户进程，因此它会继续重发5次请求
+<ul class="org-ul">
+<li>TFTP客户程序使用的是不太好的超时重传算法：只是假定5秒是足够的，因此每隔5秒就重传一次
+</li>
+</ul>
+</li>
+<li>ICMP报文是在发送UDP数据报3.5ms后返回的，这和以后看到的Ping应答的往返时间差不多
+</li>
+</ul>
+</div>
+</div>
 </div>
 </div>
 
 <div id="outline-container-sec-1-2" class="outline-3">
 <h3 id="sec-1-2">ICMP报文的4.4BSD处理</h3>
+<div class="outline-text-3" id="text-1-2">
+<p>
+由于ICMP覆盖的范围很广，从致命差错到信息差错，因此即使在一个给定的系统实现中，对每个ICMP报文的处理都是不相同的。图6-12显示的是4.4BSD系统对每个可能的ICMP报文的处理方法：
+</p>
+<table border="1" cellspacing="0" cellpadding="6" rules="groups" frame="boader">
+<caption class="t-above"><span class="table-number">Table 2:</span> ICMP报文类型</caption>
+
+<colgroup>
+<col  class="right" />
+
+<col  class="right" />
+
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<thead>
+<tr>
+<th scope="col" class="right">类型</th>
+<th scope="col" class="right">代码</th>
+<th scope="col" class="left">描述</th>
+<th scope="col" class="left">处理方式</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="right">0</td>
+<td class="right">0</td>
+<td class="left">回显应答</td>
+<td class="left">用户进程</td>
+</tr>
+</tbody>
+<tbody>
+<tr>
+<td class="right">3</td>
+<td class="right">&#xa0;</td>
+<td class="left">目的不可达</td>
+<td class="left">&#xa0;</td>
+</tr>
+
+<tr>
+<td class="right">&#xa0;</td>
+<td class="right">0</td>
+<td class="left">网络不可达</td>
+<td class="left">“无路由到达主机”</td>
+</tr>
+
+<tr>
+<td class="right">&#xa0;</td>
+<td class="right">1</td>
+<td class="left">主机不可达</td>
+<td class="left">“无路由到达主机”</td>
+</tr>
+
+<tr>
+<td class="right">&#xa0;</td>
+<td class="right">2</td>
+<td class="left">协议不可达</td>
+<td class="left">“连接被拒绝”</td>
+</tr>
+
+<tr>
+<td class="right">&#xa0;</td>
+<td class="right">3</td>
+<td class="left">端口不可达</td>
+<td class="left">“连接被拒绝”</td>
+</tr>
+
+<tr>
+<td class="right">&#xa0;</td>
+<td class="right">4</td>
+<td class="left">需要进行分片但设置了不分片比特</td>
+<td class="left">“报文太长”</td>
+</tr>
+
+<tr>
+<td class="right">&#xa0;</td>
+<td class="right">5</td>
+<td class="left">源站选路失败</td>
+<td class="left">“无路由到达主机”</td>
+</tr>
+
+<tr>
+<td class="right">&#xa0;</td>
+<td class="right">6</td>
+<td class="left">目的网络不认识</td>
+<td class="left">“无路由到达主机”</td>
+</tr>
+
+<tr>
+<td class="right">&#xa0;</td>
+<td class="right">7</td>
+<td class="left">目的主机不认识</td>
+<td class="left">“无路由到达主机”</td>
+</tr>
+
+<tr>
+<td class="right">&#xa0;</td>
+<td class="right">8</td>
+<td class="left">源主机被隔离(作废不用)</td>
+<td class="left">“无路由到达主机”</td>
+</tr>
+
+<tr>
+<td class="right">&#xa0;</td>
+<td class="right">9</td>
+<td class="left">目的网络被强制禁止</td>
+<td class="left">“无路由到达主机”</td>
+</tr>
+
+<tr>
+<td class="right">&#xa0;</td>
+<td class="right">10</td>
+<td class="left">目的主机被强制禁止</td>
+<td class="left">“无路由到达主机”</td>
+</tr>
+
+<tr>
+<td class="right">&#xa0;</td>
+<td class="right">11</td>
+<td class="left">由于服务类型TOS，网络不可达</td>
+<td class="left">“无路由到达主机”</td>
+</tr>
+
+<tr>
+<td class="right">&#xa0;</td>
+<td class="right">12</td>
+<td class="left">由于服务类型TOS，主机不可达</td>
+<td class="left">“无路由到达主机”</td>
+</tr>
+
+<tr>
+<td class="right">&#xa0;</td>
+<td class="right">13</td>
+<td class="left">由于过滤，通信被强制禁止</td>
+<td class="left">（忽略）</td>
+</tr>
+
+<tr>
+<td class="right">&#xa0;</td>
+<td class="right">14</td>
+<td class="left">主机越权</td>
+<td class="left">（忽略）</td>
+</tr>
+
+<tr>
+<td class="right">&#xa0;</td>
+<td class="right">15</td>
+<td class="left">优先权中止生效</td>
+<td class="left">（忽略）</td>
+</tr>
+</tbody>
+<tbody>
+<tr>
+<td class="right">&#xa0;</td>
+<td class="right">0</td>
+<td class="left">源端被关闭(基本流控制)</td>
+<td class="left">TCP由内核处理, UDP则忽略</td>
+</tr>
+</tbody>
+<tbody>
+<tr>
+<td class="right">5</td>
+<td class="right">&#xa0;</td>
+<td class="left">重定向</td>
+<td class="left">&#xa0;</td>
+</tr>
+
+<tr>
+<td class="right">&#xa0;</td>
+<td class="right">0</td>
+<td class="left">对网络重定向</td>
+<td class="left">内核更新路由表</td>
+</tr>
+
+<tr>
+<td class="right">&#xa0;</td>
+<td class="right">1</td>
+<td class="left">对主机重定向</td>
+<td class="left">内核更新路由表</td>
+</tr>
+
+<tr>
+<td class="right">&#xa0;</td>
+<td class="right">2</td>
+<td class="left">对服务类型和网络重定向</td>
+<td class="left">内核更新路由表</td>
+</tr>
+
+<tr>
+<td class="right">&#xa0;</td>
+<td class="right">3</td>
+<td class="left">对服务类型和主机重定向</td>
+<td class="left">内核更新路由表</td>
+</tr>
+</tbody>
+<tbody>
+<tr>
+<td class="right">8</td>
+<td class="right">0</td>
+<td class="left">请求回显</td>
+<td class="left">&#xa0;</td>
+</tr>
+</tbody>
+<tbody>
+<tr>
+<td class="right">9</td>
+<td class="right">0</td>
+<td class="left">路由器通告</td>
+<td class="left">用户进程</td>
+</tr>
+
+<tr>
+<td class="right">10</td>
+<td class="right">0</td>
+<td class="left">路由器请求</td>
+<td class="left">用户进程</td>
+</tr>
+</tbody>
+<tbody>
+<tr>
+<td class="right">11</td>
+<td class="right">&#xa0;</td>
+<td class="left">超时</td>
+<td class="left">&#xa0;</td>
+</tr>
+
+<tr>
+<td class="right">&#xa0;</td>
+<td class="right">0</td>
+<td class="left">传输期间生存时间为0</td>
+<td class="left">用户进程</td>
+</tr>
+
+<tr>
+<td class="right">&#xa0;</td>
+<td class="right">1</td>
+<td class="left">在数据报组装期间生存时间为0</td>
+<td class="left">用户进程</td>
+</tr>
+</tbody>
+<tbody>
+<tr>
+<td class="right">12</td>
+<td class="right">&#xa0;</td>
+<td class="left">参数问题</td>
+<td class="left">&#xa0;</td>
+</tr>
+
+<tr>
+<td class="right">&#xa0;</td>
+<td class="right">0</td>
+<td class="left">坏的IP首部(包括各种差错)</td>
+<td class="left">“协议不可用”</td>
+</tr>
+
+<tr>
+<td class="right">&#xa0;</td>
+<td class="right">1</td>
+<td class="left">缺少必需的选项</td>
+<td class="left">“协议不可用”</td>
+</tr>
+</tbody>
+<tbody>
+<tr>
+<td class="right">13</td>
+<td class="right">0</td>
+<td class="left">时间戳请求</td>
+<td class="left">内核产生应答</td>
+</tr>
+
+<tr>
+<td class="right">14</td>
+<td class="right">0</td>
+<td class="left">时间戳应答</td>
+<td class="left">用户进程</td>
+</tr>
+</tbody>
+<tbody>
+<tr>
+<td class="right">15</td>
+<td class="right">0</td>
+<td class="left">信息请求(作废不用)</td>
+<td class="left">&#xa0;</td>
+</tr>
+
+<tr>
+<td class="right">16</td>
+<td class="right">0</td>
+<td class="left">信息应答(作废不用)</td>
+<td class="left">&#xa0;</td>
+</tr>
+</tbody>
+<tbody>
+<tr>
+<td class="right">17</td>
+<td class="right">0</td>
+<td class="left">地址掩码请求</td>
+<td class="left">内核产生应答</td>
+</tr>
+
+<tr>
+<td class="right">18</td>
+<td class="right">0</td>
+<td class="left">地址掩码应答</td>
+<td class="left">用户进程</td>
+</tr>
+</tbody>
+</table>
+
+
+<ul class="org-ul">
+<li>内核：那么ICMP就由内核来处理
+</li>
+<li>用户进程：那么报文就被传送到所有在内核中登记的用户进程，以读取收到的ICMP报文。如果不存在任何这样的用户进程，那么报文就悄悄地被丢弃
+</li>
+<li>有一些报文完全被忽略
+</li>
+<li>引号内的一串字符：那么它就是对应的Unix差错
+</li>
+</ul>
+
+<p>
+<a href="ping.html">Next：Ping程序</a>
+</p>
+
+<p>
+<a href="rarp.html">Previous：逆地址解析协议</a>
+</p>
+
+<p>
+<a href="tii.html">Home：目录</a>
+</p>
+</div>
 </div>
 </div>
 </div>
