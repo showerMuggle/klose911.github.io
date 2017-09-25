@@ -184,7 +184,33 @@ for the JavaScript code in this tag.
 </li>
 </ul>
 </li>
-<li><a href="#sec-4">Kubernetes网络开源组件</a></li>
+<li><a href="#sec-4">Kubernetes网络开源组件</a>
+<ul>
+<li><a href="#sec-4-1">技术术语</a></li>
+<li><a href="#sec-4-2">容器网络方案</a>
+<ul>
+<li><a href="#sec-4-2-1">隧道方案</a></li>
+<li><a href="#sec-4-2-2">路由方案</a></li>
+</ul>
+</li>
+<li><a href="#sec-4-3">CNM VS CNI</a>
+<ul>
+<li><a href="#sec-4-3-1">CNM</a></li>
+<li><a href="#sec-4-3-2">CNI</a></li>
+</ul>
+</li>
+<li><a href="#sec-4-4">Flannel容器网络</a>
+<ul>
+<li><a href="#sec-4-4-1">原理</a></li>
+</ul>
+</li>
+<li><a href="#sec-4-5">Calico容器网络</a>
+<ul>
+<li><a href="#sec-4-5-1">原理</a></li>
+</ul>
+</li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
@@ -534,6 +560,191 @@ Dockerfile在GitHub上Kubernetes组织的contrib仓库中，位于dnsmasq目录�
 
 <div id="outline-container-sec-4" class="outline-2">
 <h2 id="sec-4">Kubernetes网络开源组件</h2>
+<div class="outline-text-2" id="text-4">
+</div><div id="outline-container-sec-4-1" class="outline-3">
+<h3 id="sec-4-1">技术术语</h3>
+<div class="outline-text-3" id="text-4-1">
+<ul class="org-ul">
+<li>IPAM：IP地址管理。这个IP地址管理并不是容器所特有的，传统的网络比如说DHCP其实也是一种IPAM，到了容器时代我们谈IPAM，主流的两种方法     1. 基于CIDR的IP地址段分配
+<ol class="org-ol">
+<li>精确为每一个容器分配IP
+</li>
+</ol>
+</li>
+</ul>
+<p>
+但总之一旦形成一个容器主机集群之后，上面的容器都要给它分配一个全局唯一的IP地址，这就涉及到IPAM的话题
+</p>
+<ul class="org-ul">
+<li>Overlay：在现有二层或三层网络之上再构建起来一个独立的网络，这个网络通常会有自己独立的IP地址空间、交换或者路由的实现
+</li>
+<li>IPSesc：一个点对点的一个加密通信协议，一般会用到Overlay网络的数据通道里
+</li>
+<li>vxLAN：由VMware、Cisco、RedHat等联合提出的这么一个解决方案，这个解决方案最主要是解决VLAN支持虚拟网络数量（4096）过少的问题。因为在公有云上每一个租户都有不同的VPC，4096明显不够用。就有了vxLAN，它可以支持1600万个虚拟网络，基本上公有云是够用的
+</li>
+<li>Bridge： 连接两个对等网络之间的网络设备，但在今天的语境里指的是Linux Bridge，就是大名鼎鼎的Docker0这个网桥
+</li>
+<li>BGP： 主干网自治网络的路由协议，今天有了互联网，互联网由很多小的自治网络构成的，自治网络之间的三层路由是由BGP实现的
+</li>
+</ul>
+</div>
+</div>
+<div id="outline-container-sec-4-2" class="outline-3">
+<h3 id="sec-4-2">容器网络方案</h3>
+<div class="outline-text-3" id="text-4-2">
+</div><div id="outline-container-sec-4-2-1" class="outline-4">
+<h4 id="sec-4-2-1">隧道方案</h4>
+<div class="outline-text-4" id="text-4-2-1">
+<p>
+隧道方案在IaaS层的网络中应用也比较多，大家共识是随着节点规模的增长复杂度会提升，而且出了网络问题跟踪起来比较麻烦，大规模集群情况下这是需要考虑的一个点：
+</p>
+<ul class="org-ul">
+<li>Weave：UDP广播，本机建立新的BR，通过PCAP互通
+</li>
+<li>Open vSwitch：基于VxLan和GRE协议，但是性能方面损失比较严重
+</li>
+<li>Flannel：UDP广播，VxLan
+</li>
+<li>Racher：IPsec
+</li>
+</ul>
+</div>
+</div>
+<div id="outline-container-sec-4-2-2" class="outline-4">
+<h4 id="sec-4-2-2">路由方案</h4>
+<div class="outline-text-4" id="text-4-2-2">
+<p>
+路由方案一般是从3层或者2层实现隔离和跨主机容器互通的，出了问题也很容易排查：
+</p>
+<ul class="org-ul">
+<li>Calico：基于BGP协议的路由方案，支持很细致的ACL控制，对混合云亲和度比较高
+</li>
+<li>Macvlan：从逻辑和Kernel层来看隔离性和性能最优的方案，基于二层隔离，所以需要二层路由器支持，大多数云服务商不支持，所以混合云上比较难以实现
+</li>
+</ul>
+</div>
+</div>
+</div>
+<div id="outline-container-sec-4-3" class="outline-3">
+<h3 id="sec-4-3">CNM VS CNI</h3>
+<div class="outline-text-3" id="text-4-3">
+<p>
+容器网络发展到现在，形成了两大阵营，就是Docker的CNM和Google、CoreOS、Kuberenetes主导的CNI。首先明确一点，CNM和CNI并不是网络实现，他们是网络规范和网络体系，从研发的角度他们就是一堆接口，你底层是用Flannel也好、用Calico也好，他们并不关心，CNM和CNI关心的是网络管理的问题
+</p>
+</div>
+<div id="outline-container-sec-4-3-1" class="outline-4">
+<h4 id="sec-4-3-1">CNM</h4>
+<div class="outline-text-4" id="text-4-3-1">
+<p>
+Docker Libnetwork的优势就是原生，而且和Docker容器生命周期结合紧密，缺点也可以理解为是原生，被Docker”绑架“：
+</p>
+<ul class="org-ul">
+<li>Docker Swarm overlay
+</li>
+<li>Macvlan &amp; IP networkdrivers
+</li>
+<li>Calico
+</li>
+<li>Contiv
+</li>
+<li>Weave
+</li>
+</ul>
+</div>
+</div>
+<div id="outline-container-sec-4-3-2" class="outline-4">
+<h4 id="sec-4-3-2">CNI</h4>
+<div class="outline-text-4" id="text-4-3-2">
+<p>
+CNI的优势是兼容其他容器技术（rkt）及上层编排系统（Kubernetes &amp; Mesos)，而且社区活跃势头迅猛，Kubernetes加上CoreOS主推。缺点是非Docker原生：
+</p>
+<ul class="org-ul">
+<li>Kubernetes
+</li>
+<li>Weave
+</li>
+<li>Macvlan
+</li>
+<li>Calico
+</li>
+<li>Flannel
+</li>
+<li>Contiv
+</li>
+<li>Mesos CNI
+</li>
+</ul>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-4-4" class="outline-3">
+<h3 id="sec-4-4">Flannel容器网络</h3>
+<div class="outline-text-3" id="text-4-4">
+<p>
+Flannel之所以可以搭建kubernets依赖的底层网络，是因为它可以实现以下两点：
+</p>
+<ol class="org-ol">
+<li>给每个node上的docker容器分配相互不想冲突的IP地址
+</li>
+<li>能给这些IP地址之间建立一个覆盖网络，同过覆盖网络，将数据包原封不动的传递到目标容器内
+</li>
+</ol>
+</div>
+
+<div id="outline-container-sec-4-4-1" class="outline-4">
+<h4 id="sec-4-4-1">原理</h4>
+<div class="outline-text-4" id="text-4-4-1">
+<p>
+Flannel实质上是一种“覆盖网络(overlay network)”，也就是将TCP数据包装在另一种网络包里面进行路由转发和通信，目前已经支持udp、vxlan、host-gw、aws-vpc、gce和alloc路由等数据转发方式，默认的节点间数据通信方式是UDP转发：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/flannel.png" alt="flannel.png" width="90%" />
+</p>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-4-5" class="outline-3">
+<h3 id="sec-4-5">Calico容器网络</h3>
+<div class="outline-text-3" id="text-4-5">
+<p>
+Calico是一个纯3层的数据中心网络方案，而且无缝集成像OpenStack这种IaaS云架构，能够提供可控的VM、容器、裸机之间的IP通信。Calico不使用重叠网络比如flannel和libnetwork重叠网络驱动，它是一个纯三层的方法，使用虚拟路由代替虚拟交换，每一台虚拟路由通过BGP协议传播可达信息（路由）到剩余数据中心
+</p>
+
+
+<div class="figure">
+<p><img src="pic/calico-architecture.png" alt="calico-architecture.png" width="90%" />
+</p>
+</div>
+
+<p>
+Calico在每一个计算节点利用Linux Kernel实现了一个高效的vRouter来负责数据转发，而每个vRouter通过BGP协议负责把自己上运行的workload的路由信息像整个Calico网络内传播&#x2013;小规模部署可以直接互联，大规模下可通过指定的BGP route reflector来完成
+</p>
+
+<p>
+Calico节点组网可以直接利用数据中心的网络结构（无论是L2或者L3），不需要额外的NAT，隧道或者Overlay Network
+</p>
+
+<p>
+Calico基于iptables还提供了丰富而灵活的网络Policy，保证通过各个节点上的ACLs来提供Workload的多租户隔离、安全组以及其他可达性限制等功能
+</p>
+</div>
+
+<div id="outline-container-sec-4-5-1" class="outline-4">
+<h4 id="sec-4-5-1">原理</h4>
+<div class="outline-text-4" id="text-4-5-1">
+
+<div class="figure">
+<p><img src="pic/calico-mechanism.png" alt="calico-mechanism.png" width="90%" />
+</p>
+</div>
+</div>
+</div>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
