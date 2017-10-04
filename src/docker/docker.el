@@ -30,7 +30,7 @@
 	;; picture
         ("docker-pic"
          :base-directory "~/Documents/programming/html/klose911.github.io/src/docker/pic"  ;; Change this to your local dir
-         :base-extension "png\\|jpg\\|gif"
+         :base-extension "png\\|jpg\\|gif\\|svg"
          :publishing-directory "~/Documents/programming/html/klose911.github.io/html/docker/pic"
          :recursive t
          :publishing-function org-publish-attachment
@@ -39,6 +39,18 @@
         ("docker" :components ("docker-notes" "docker-static" "docker-pic"))
         )
       )
+
+(setq org-footnote-re
+      (concat "\\[\\(?:"
+	      ;; Match inline footnotes.
+	      (org-re "fn:\\([-_[:word:]]+\\)?:\\|")
+	      ;; Match other footnotes.
+	      ;; "\\(?:\\([0-9]+\\)\\]\\)\\|"
+	      (org-re "\\(fn:[-_[:word:]]+\\)")
+	      "\\)"))
+
+(setq org-footnote-definition-re
+      (org-re "^\\[\\(fn:[-_[:word:]]+\\)\\]"))
 
 (defun docker-publish (no-cache)
   "Publish docker"
