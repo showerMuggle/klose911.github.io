@@ -161,7 +161,18 @@ for the JavaScript code in this tag.
 <li><a href="#sec-1-2">示例</a></li>
 </ul>
 </li>
-<li><a href="#sec-2">IP分片</a></li>
+<li><a href="#sec-2">IP分片</a>
+<ul>
+<li><a href="#sec-2-1">分片字段</a></li>
+<li><a href="#sec-2-2">分片实例</a></li>
+<li><a href="#sec-2-3">ICMP不可达差错（需要分片）</a>
+<ul>
+<li><a href="#sec-2-3-1">实例</a></li>
+</ul>
+</li>
+<li><a href="#sec-2-4">MTU发现</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
@@ -410,6 +421,185 @@ connected on 140.252.13.35.1110 to 140.252.13.34.9
 
 <div id="outline-container-sec-2" class="outline-2">
 <h2 id="sec-2">IP分片</h2>
+<div class="outline-text-2" id="text-2">
+<p>
+正如以前描述的那样，物理网络层一般要限制每次发送数据帧的最大长度。任何时候IP层接收到一份要发送的IP数据报时，它要判断向本地哪个接口发送数据（选路），并查询该接口获得其MTU。IP把MTU与数据报长度进行比较，如果需要则进行分片。分片可以发生在原始发送端主机上，也可以发生在中间路由器上
+</p>
+
+<p>
+把一份IP数据报分片以后，只有到达目的地才进行重新组装（这里的重新组装与其他网络协议不同，它们要求在下一站就进行进行重新组装，而不是在最终的目的地）。重新组装由目的端的IP层来完成，其目的是使分片和重新组装过程对运输层（TCP和UDP）是透明的，除了某些可能的越级操作外。已经分片过的数据报有可能会再次进行分片（可能不止一次）。IP首部中包含的数据为分片和重新组装提供了足够的信息
+</p>
+
+<pre class="example">
+     尽管IP分片过程看起来是透明的，但有一点让人不想使用它：即使只丢失一片数据也要重传整个数据报。因为IP层本身没有超时重传的机制（由更高层来负责超时和重传，TCP有超时和重传机制，但UDP没有。一些UDP应用程序本身也执行超时和重传）。当来自TCP报文段的某一片丢失后，TCP在超时后会重发整个TCP报文段，该报文段对应于一份IP数据报。没有办法只重传数据报中的一个数据报片。事实上，如果对数据报分片的是中间路由器，而不是起始端系统，那么起始端系统就无法知道数据报是如何被分片的。因此经常要避免分片
+</pre>
+</div>
+<div id="outline-container-sec-2-1" class="outline-3">
+<h3 id="sec-2-1">分片字段</h3>
+<div class="outline-text-3" id="text-2-1">
+<p>
+回忆IP首部，下面这些字段用于分片过程：
+</p>
+<ul class="org-ul">
+<li>标识字段：对于发送端发送的每份IP数据报来说，其标识字段都包含一个唯一值。该值在数据报分片时被复制到每个片中
+</li>
+<li>标志字段：
+<ul class="org-ul">
+<li>一个比特来表示“更多的片”。除了最后一片外，其他每个组成数据报的片都要把该比特置1
+</li>
+<li>一个比特称作“不分片”位。如果将这一比特置1，IP将不对数据报进行分片。相反把数据报丢弃并发送一个ICMP差错报文（“需要进行分片但设置了不分片比特”）给起始端
+</li>
+</ul>
+</li>
+<li>片偏移字段：该片偏移原始数据报开始处的位置。另外，当数据报被分片后，每个片的总长度值要改为该片的长度值
+</li>
+</ul>
+
+<p>
+当IP数据报被分片后，每一片都成为一个分组，具有自己的IP首部，并在选择路由时与其他分组独立。这样，当数据报的这些片到达目的端时有可能会失序，但是在IP首部中有足够的信息让接收端能正确组装这些数据报片
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-2" class="outline-3">
+<h3 id="sec-2-2">分片实例</h3>
+<div class="outline-text-3" id="text-2-2">
+<p>
+使用UDP很容易导致IP分片（TCP试图避免分片，但对于应用程序来说几乎不可能强迫TCP发送一个需要进行分片的长报文段）。我们可以用sock程序来增加数据报的长度，直到分片发生。在一个以太网上，数据帧的最大长度是1500字节，其中1472字节留给数据，假定IP首部为20字节，UDP首部为8字节。我们分别以数据长度为1471,1472,1473和1474字节运行sock程序。最后两次应该发生分片：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">bsdi $ sock -u -i -nl -w1471 svr4 discard
+bsdi $ sock -u -i -nl -w1472 svr4 discard
+bsdi $ sock -u -i -nl -w1473 svr4 discard
+bsdi $ sock -u -i -nl -w1474 svr4 discard
+</pre>
+</div>
+
+<p>
+相应的tcpdump输出如下图所示：
+</p>
+
+<div class="figure">
+<p><img src="pic/udp-fragment-dump.png" alt="udp-fragment-dump.png" width="60%" />
+</p>
+</div>
+
+<p>
+前两份UDP数据报（第1行和第2行）能装入以太网数据帧，没有被分片。但是对应于写1473字节的IP数据报长度为1501，就必须进行分片（第3行和第4行）。同理，写1474字节产生的数据报长度为1502，它也需要进行分片（第5行和第6行）
+</p>
+
+<p>
+当IP数据报被分片后，tcpdump打印出其他的信息：
+</p>
+<ul class="org-ul">
+<li>frag26304（第3行和第4行）和frag26313（第5行和第6行）指的是IP首部中标识字段的值
+</li>
+<li>分片信息中的下一个数字，即第3行中位于冒号和@号之间的1480，是除IP首部外的片长。两份数据报第一片的长度均为1480：UDP首部占8字节，用户数据占1472字节（加上IP首部的20字节分组长度正好为1500字节）。第1份数据报的第2片（第4行）只包含1字节数据(剩下的用户数据)。第2份数据报的第2片（第6行）包含剩下的2字节用户数据
+</li>
+<li>在分片时，除最后一片外，其他每一片中的数据部分（除IP首部外的其余部分）必须是8字节的整数倍，本例中1480是8的整数倍
+</li>
+<li>位于@符号后的数字是从数据报开始处计算的片偏移值。两份数据报第1片的偏移值均为0(第3行和第5行)，第2片的偏移值为1480（第4行和第6行）。跟在偏移值后面的加号对应于IP首部中3bit标志字段中的“更多片”比特。设置这一比特的目的是让接收端知道在什么时候完成所有的分片组装
+</li>
+<li>注意第4行和第6行（不是第1片）省略了协议名（UDP）、源端口号和目的端口号。协议名是可以打印出来的，因为它在IP首部并被复制到各个片中。但是， <b>端口号</b> 在UDP首部，只能在第1片中被发现
+</li>
+</ul>
+
+<p>
+发送的第3份数据报（用户数据为1473字节）分片情况如图11-8所示：需要重申的是， <b>任何运输层(UDP/TCP)首部</b> 只出现在第1片数据中：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/udp-fragment-packet.png" alt="udp-fragment-packet.png" width="60%" />
+</p>
+</div>
+
+<p>
+IP数据报是指IP层端到端的传输单元（在分片之前和重新组装之后），分组是指在IP层和链路层之间传送的数据单元。一个分组可以是一个完整的IP数据报，也可以是IP数据报的一个分片
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-3" class="outline-3">
+<h3 id="sec-2-3">ICMP不可达差错（需要分片）</h3>
+<div class="outline-text-3" id="text-2-3">
+<p>
+发生ICMP不可达差错的另一种情况是，当路由器收到一份需要分片的数据报，而在IP首部又设置了不分片（DF）的标志比特。如果某个程序需要判断到达目的端的路途中最小MTU是多少（路径MTU发现机制），那么这个差错就可以被该程序使用
+</p>
+
+<p>
+这种情况下的ICMP不可达差错报文格式如图11-9所示，这里的格式与图6-10不同，因为在第2个32bit字中，16~31bit可以提供下一站的MTU，而不再是0：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/icmp-need-fragment.png" alt="icmp-need-fragment.png" width="60%" />
+</p>
+</div>
+
+<p>
+如果路由器没有提供这种新的ICMP差错报文格式，那么下一站的MTU就设为0
+</p>
+</div>
+
+<div id="outline-container-sec-2-3-1" class="outline-4">
+<h4 id="sec-2-3-1">实例</h4>
+<div class="outline-text-4" id="text-2-3-1">
+<p>
+ICMP差错试图判断从路由器netb到主机sun之间的拨号SLIP链路的MTU。我们知道从sun到netb的链路的MTU：当SLIP被安装到主机sun时，这是SLIP配置过程中的一部分。以前已经通过netstat命令观察过。现在，我们想从另一个方向来判断它的MTU。在点到点的链路中，不要求两个方向的MTU为相同值
+</p>
+
+<p>
+从主机solaris上运行ping程序到主机bsdi，增加数据分组长度，直到看见进入的分组被分片为止。如图11-10所示：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/sun-netb-mtu.png" alt="sun-netb-mtu.png" width="70%" />
+</p>
+</div>
+
+<p>
+在主机sun上运行tcpdump，观察SLIP链路，看什么时候发生分片。开始没有观察到分片，一切都很正常直到ping分组的数据长度从500增加到600字节。可以看到接收到的回显请求（仍然没有分片），但不见回显应答
+</p>
+
+<p>
+为了跟踪下去，也在主机bsdi上运行tcpdump，观察它接收和发送的报文。输出如图11-11所示：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/bsdi-fragement-dump.png" alt="bsdi-fragement-dump.png" width="70%" />
+</p>
+</div>
+
+<ul class="org-ul">
+<li>每行中的标记（DF）说明在IP首部中设置了不分片比特。这意味着Solaris 2.2一般把不分片比特置1，作为实现路径MTU发现机制的一部分
+</li>
+<li>第1行显示的是回显请求通过路由器netb到达sun主机，没有进行分片，并设置了DF比特，因此可以知道还没有达到netb的SLIP MTU
+</li>
+<li>在第2行注意到DF标志被复制到回显应答报文中。这就带来了问题。回显应答与回显请求报文长度相同（超过600字节），但是sun外出的SLIP接口MTU为552。因此回显应答需要进行分片，但是DF标志比特又被设置了。这样，sun就产生一个ICMP不可达差错报文返回给bsdi（报文在bsdi处被丢弃）
+</li>
+</ul>
+
+<p>
+这就是我们在主机solaris上没有看到任何回显应答的原因。这些应答永远不能通过sun。分组的路径如图11-12所示：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/sun-netb-fragment.png" alt="sun-netb-fragment.png" width="70%" />
+</p>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-4" class="outline-3">
+<h3 id="sec-2-4">MTU发现</h3>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
