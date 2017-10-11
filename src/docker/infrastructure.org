@@ -439,6 +439,164 @@ sudo运行上面的程序，会看到下面的挂载信息以及一个所谓的�
 关于如何做一个chroot的目录，有个工具叫DebootstrapChroot
 
 ** User Namespace
+User Namespace主要是用了CLONE_NEWUSER的参数。使用了这个参数后，内部看到的UID和GID已经与外部不同了，默认显示为65534。那是因为容器找不到其真正的UID所以，设置上了最大的UID（其设置定义在/proc/sys/kernel/overflowuid）
+
+要把容器中的uid和真实系统的uid给映射在一起，需要修改 /proc/<pid>/uid_map 和 /proc/<pid>/gid_map 这两个文件，这两个文件的格式为：
+
+#+BEGIN_SRC 
+  ID-inside-ns ID-outside-ns length
+#+END_SRC
++ ID-inside-ns：表示在容器显示的UID或GID
++ ID-outside-ns：表示容器外映射的真实的UID或GID
++ length：表示映射的范围，一般填1，表示一一对应
+
+比如，把真实的uid=1000映射成容器内的uid=0：
+#+BEGIN_SRC sh 
+  $ cat /proc/2465/uid_map
+
+  0       1000          1
+#+END_SRC
+
+再比如，把namespace内部从0开始的uid映射到外部从0开始的uid，其最大范围是无符号32位整形：
+#+BEGIN_SRC sh
+  $ cat /proc/$$/uid_map
+
+  0          0          4294967295
+#+END_SRC
+
+需要注意的是：
++ 写这两个文件的进程需要这个namespace中的CAP_SETUID (CAP_SETGID)权限
++ 写入的进程必须是此user namespace的父或子的user namespace进程
++ 另外需要满如下条件之一：
+  1. 父进程将effective uid/gid映射到子进程的user namespace中
+  2. 父进程如果有CAP_SETUID/CAP_SETGID权限，那么它将可以映射到父进程中的任一uid/gid
+
+*** 实例
+我们用了一个pipe来对父子进程进行同步，这是因为子进程中有一个execv的系统调用，这个系统调用会把当前子进程的进程空间给全部覆盖掉，我们希望在execv之前就做好user namespace的uid/gid的映射，这样，execv运行的/bin/bash就会因为我们设置了uid为0的inside-uid而变成#号的提示符
+    #+BEGIN_SRC C
+      #define _GNU_SOURCE
+      #include <stdio.h>
+      #include <stdlib.h>
+      #include <sys/types.h>
+      #include <sys/wait.h>
+      #include <sys/mount.h>
+      #include <linux/capability.h>
+      #include <stdio.h>
+      #include <sched.h>
+      #include <signal.h>
+      #include <unistd.h>
+       
+      #define STACK_SIZE (1024 * 1024)
+       
+      static char container_stack[STACK_SIZE];
+      char* const container_args[] = {
+              "/bin/bash",
+              NULL
+      };
+       
+      int pipefd[2];
+       
+      void set_map(char* file, int inside_id, int outside_id, int len) {
+              FILE* mapfd = fopen(file, "w");
+              if (NULL == mapfd) {
+                      perror("open file error");
+                      return;
+              }
+              fprintf(mapfd, "%d %d %d", inside_id, outside_id, len);
+              fclose(mapfd);
+      }
+       
+      void set_uid_map(pid_t pid, int inside_id, int outside_id, int len) {
+              char file[256];
+              sprintf(file, "/proc/%d/uid_map", pid);
+              set_map(file, inside_id, outside_id, len);
+      }
+       
+      void set_gid_map(pid_t pid, int inside_id, int outside_id, int len) {
+              char file[256];
+              sprintf(file, "/proc/%d/gid_map", pid);
+              set_map(file, inside_id, outside_id, len);
+      }
+       
+      int container_main(void* arg)
+      {
+       
+              printf("Container [%5d] - inside the container!\n", getpid());
+       
+              printf("Container: eUID = %ld;  eGID = %ld, UID=%ld, GID=%ld\n",
+                     (long) geteuid(), (long) getegid(), (long) getuid(), (long) getgid());
+       
+              /* 等待父进程通知后再往下执行（进程间的同步） */
+              char ch;
+              close(pipefd[1]);
+              read(pipefd[0], &ch, 1);
+       
+              printf("Container [%5d] - setup hostname!\n", getpid());
+              //set hostname
+              sethostname("container",10);
+       
+              //remount "/proc" to make sure the "top" and "ps" show container's information
+              mount("proc", "/proc", "proc", 0, NULL);
+       
+              execv(container_args[0], container_args);
+              printf("Something's wrong!\n");
+              return 1;
+      }
+
+      int main()
+      {
+              const int gid=getgid(), uid=getuid();
+       
+              printf("Parent: eUID = %ld;  eGID = %ld, UID=%ld, GID=%ld\n",
+                     (long) geteuid(), (long) getegid(), (long) getuid(), (long) getgid()); 
+              pipe(pipefd);
+              printf("Parent [%5d] - start a container!\n", getpid());
+       
+              int container_pid = clone(container_main, container_stack+STACK_SIZE, 
+                                        CLONE_NEWUTS | CLONE_NEWPID | CLONE_NEWNS | CLONE_NEWUSER | SIGCHLD, NULL);
+              printf("Parent [%5d] - Container [%5d]!\n", getpid(), container_pid);
+       
+              //To map the uid/gid, 
+              //   we need edit the /proc/PID/uid_map (or /proc/PID/gid_map) in parent
+              //The file format is
+              //   ID-inside-ns   ID-outside-ns   length
+              //if no mapping, 
+              //   the uid will be taken from /proc/sys/kernel/overflowuid
+              //   the gid will be taken from /proc/sys/kernel/overflowgid
+              set_uid_map(container_pid, 0, uid, 1);
+              set_gid_map(container_pid, 0, gid, 1);
+       
+              printf("Parent [%5d] - user/group mapping done!\n", getpid());
+       
+              /* 通知子进程 */
+              close(pipefd[1]);
+       
+              waitpid(container_pid, NULL, 0);
+              printf("Parent - container stopped!\n");
+              return 0;
+      }
+    #+END_SRC
+整个程序的运行效果如下：
+
+#+BEGIN_SRC sh
+  klose@ubuntu16-188 ~/$ id
+  uid=1002(klose) gid=1002(klose) groups=1002(klose),100(users),999(docker)
+
+  klose@ubuntu16-188 ~/ $ ./user_namespace
+  Parent: eUID = 1002;  eGID = 1002, UID=1002, GID=1002
+  Parent [ 5994] - start a container!
+  Parent [ 5994] - Container [ 5996]!
+  Container [    1] - inside the container!
+  Container: eUID = 0;  eGID = 65534, UID=0, GID=65534
+  Parent [ 5994] - user/group mapping done!
+  Container [    1] - setup hostname!
+
+  container namespace # id
+  uid=0(root) gid=65534(nogroup) groups=65534(nogroup)
+#+END_SRC
+虽然容器里是root，但其实这个容器的/bin/bash进程是以一个普通用户hchen来运行的。这样一来，容器的安全性会得到提高。
+
+User Namespace是以普通用户运行，但是别的Namespace需要root权限，那么，如果我要同时使用多个Namespace，该怎么办呢？一般来说，先用一般用户创建User Namespace，然后把这个一般用户映射成root，在容器内用root来创建其它的Namesapce
 
 ** Network Namespace
 
