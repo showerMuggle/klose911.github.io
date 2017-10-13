@@ -1094,5 +1094,238 @@ Cgroup可让您为系统中所运行任务（进程）的用户定义组群分�
 + 子系统（Subsystem）：一个子系统就是一个资源控制器，比如CPU子系统就是控制CPU时间分配的一个控制器。子系统必须附加到一个层级上才能起作用，一个子系统附加到某个层级以后，这个层级上的所有控制族群都受到这个子系统的控制。Cgroup的子系统可以有很多，也在不断增加中。
 
 * Aufs
-  
+  AUFS是一种Union File System，所谓UnionFS就是把不同物理位置的目录合并mount到同一个目录中。UnionFS的一个最主要的应用是，把一张CD/DVD和一个硬盘目录给联合 mount在一起，然后，你就可以对这个只读的CD/DVD上的文件进行修改（当然，修改的文件存于硬盘上的目录里）
+
+   #+ATTR_HTML: image :width 30% 
+   [[file:pic/docker-filesystems-busyboxrw.png]]
+
+** 示例 
+首先，我们建上两个目录（水果和蔬菜），并在这两个目录中放上一些文件，水果中有苹果和蕃茄，蔬菜有胡萝卜和蕃茄 
+
+
+#+BEGIN_SRC sh :results output :exports result
+  klose@ubuntu16-188 ~/Documents/programming/C/aufs $ tree . 
+#+END_SRC
+
+   #+RESULTS:
+   #+begin_example
+     .
+     ├── fruits
+     │  ├── apple
+     │  └── tomato
+     └── vegetables
+         ├── carrots
+         └── tomato
+
+     2 directories, 4 files
+   #+end_example
+
+然后，输入以下命令：
+#+BEGIN_SRC sh :results output :exports result
+  # 创建一个mount目录
+  $ mkdir mnt
+   
+  # 把水果目录和蔬菜目录union mount到 ./mnt目录中
+  $ sudo mount -t aufs -o dirs=./fruits:./vegetables none ./mnt
+   
+  #  查看./mnt目录
+  $ tree ./mnt
+#+END_SRC
+
+   #+RESULTS:
+   #+begin_example
+     ./mnt/
+     ├── apple
+     ├── carrots
+     └── tomato
+
+     0 directories, 3 files
+   #+end_example
+
+可以看到在./mnt目录下有三个文件，苹果apple、胡萝卜carrots和蕃茄tomato。水果和蔬菜的目录被union到了./mnt目录下了
+
+来修改一下其中的文件内容：
+
+#+BEGIN_SRC sh
+  $ echo mnt > ./mnt/apple
+  $ cat ./mnt/apple
+  mnt
+  $ cat ./fruits/apple
+  mnt
+#+END_SRC
+上面的示例，可以看到./mnt/apple的内容改了，./fruits/apple的内容也改了 
+
+#+BEGIN_SRC sh
+  $ echo mnt_carrots > ./mnt/carrots
+  $ cat ./vegetables/carrots
+   
+  $ cat ./fruits/carrots
+  mnt_carrots
+#+END_SRC
+可以看到修改了./mnt/carrots的文件内容，./vegetables/carrots并没有变化，反而是./fruits/carrots的目录中出现了carrots文件，其内容是在./mnt/carrots里的内容 
+
+也就是说，在mount aufs命令中，没有指它vegetables和fruits的目录权限。默认上来说，命令行上第一个（最左边）的目录是可读可写的，后面的全都是只读的。（一般来说，最前面的目录应该是可写的，而后面的都应该是只读的）
+
+所以，如果我们像下面这样指定权限来mount aufs，你就会发现有不一样的效果（记得先把上面./fruits/carrots的文件删除了）：
+#+BEGIN_SRC sh
+  $ sudo mount -t aufs -o dirs=./fruits=rw:./vegetables=rw none ./mnt
+   
+  $ echo "mnt_carrots" > ./mnt/carrots
+   
+  $ cat ./vegetables/carrots
+  mnt_carrots
+   
+  $ cat ./fruits/carrots
+  cat: ./fruits/carrots: No such file or directory
+#+END_SRC
+在这情况下，如果我们要修改./mnt/tomato这个文件，那么究竟是哪个文件会被改写？
+
+#+BEGIN_SRC sh
+  $ echo "mnt_tomato" > ./mnt/tomato
+   
+  $ cat ./fruits/tomato
+  mnt_tomato
+   
+  $ cat ./vegetables/tomato
+  I am a vegetable
+#+END_SRC
+
+可见，如果有重复的文件名，在mount命令行上，越往前的就优先级越高
+
+** 用途
+历史上，有一个叫Knoppix的Linux发行版，其主要用于Linux演示、光盘教学、系统急救，以及商业产品的演示，不需要硬盘安装，直接把CD/DVD上的image运行在一个可写的存储设备上（比如一个U盘上），其实，也就是把CD/DVD这个文件系统和USB这个可写的系统给联合mount起来，这样你对CD/DVD上的image做的任何改动都会在被应用在U盘上，于是乎，你可以对CD/DVD上的内容进行任意的修改，因为改动都在U盘上，所以你改不坏原来的东西
+
+可以再发挥一下想像力，你也可以把一个目录，比如你的源代码，作为一个只读的template，和另一个你的working directory给union在一起，然后你就可以做各种修改而不用害怕会把源代码改坏了。有点像一个ad hoc snapshot
+
+*** docker分层
+下图来自Docker的官方文档Layer，其很好的展示了Docker用UnionFS搭建的分层镜像：
+   #+ATTR_HTML: image :width 50% 
+   [[file:pic/docker-filesystems-multilayer.png]]
+
+关于docker的分层镜像，除了aufs，docker还支持btrfs, devicemapper和vfs，你可以使用 -s 或 -storage-driver= 选项来指定相关的镜像存储。在Ubuntu 14.04下，docker默认Ubuntu的 aufs（在CentOS7下，用的是devicemapper，关于devicemapper，我会以以后的文章中讲解）你可以在下面的目录中查看相关的每个层的镜像：
+
+#+BEGIN_SRC sh
+  $ /var/lib/docker/aufs/diff/<id>
+#+END_SRC
+
+在docker执行起来后（比如：docker run -it ubuntu /bin/bash），你可以从/sys/fs/aufs/si_[id]目录下查看aufs的mount的情况，下面是个示例：
+#+BEGIN_SRC sh
+  $ ls /sys/fs/aufs/si_b71b209f85ff8e75/
+  br0      br2      br4      br6      brid1    brid3    brid5    xi_path
+  br1      br3      br5      brid0    brid2    brid4    brid6 
+   
+  $ cat /sys/fs/aufs/si_b71b209f85ff8e75/*
+  /var/lib/docker/aufs/diff/87315f1367e5703f599168d1e17528a0500bd2e2df7d2fe2aaf9595f3697dbd7=rw
+  /var/lib/docker/aufs/diff/87315f1367e5703f599168d1e17528a0500bd2e2df7d2fe2aaf9595f3697dbd7-init=ro+wh
+  /var/lib/docker/aufs/diff/d0955f21bf24f5bfffd32d2d0bb669d0564701c271bc3dfc64cfc5adfdec2d07=ro+wh
+  /var/lib/docker/aufs/diff/9fec74352904baf5ab5237caa39a84b0af5c593dc7cc08839e2ba65193024507=ro+wh
+  /var/lib/docker/aufs/diff/a1a958a248181c9aa6413848cd67646e5afb9797f1a3da5995c7a636f050f537=ro+wh
+  /var/lib/docker/aufs/diff/f3c84ac3a0533f691c9fea4cc2ceaaf43baec22bf8d6a479e069f6d814be9b86=ro+wh
+  /var/lib/docker/aufs/diff/511136ea3c5a64f264b78b5433614aec563103b4d4702f3ba7d4d2698e22c158=ro+wh
+  64
+  65
+  66
+  67
+  68
+  69
+  70
+  /run/shm/aufs.xino
+#+END_SRC
+
+** Aufs的特性
+AUFS有所有Union FS的特性，把多个目录，合并成同一个目录，并可以为每个需要合并的目录指定相应的权限，实时的添加、删除、修改已经被mount好的目录。而且，他还能在多个可写的branch/dir间进行负载均衡
+
+被union的目录（分支）的相关权限：
++ rw: 可写可读read-write
++ ro: read-only，如果你不指权限，那么除了第一个外ro是默认值，对于ro分支，其永远不会收到写操作，也不会收到查找whiteout的操作
++ rr: real-read-only，与read-only不同的是，rr标记的是天生就是只读的分支，这样，AUFS可以提高性能，比如不再设置inotify来检查文件变动通知
+
+*** whiteout 
+一般来说ro的分支都会有wh的属性，比如 “[dir]=ro+wh”。所谓whiteout的意思，如果在union中删除的某个文件，实际上是位于一个readonly的分支（目录）上，那么，在mount的union这个目录中你将看不到这个文件，但是read-only这个层上我们无法做任何的修改，所以，我们就需要对这个readonly目录里的文件作whiteout。AUFS的whiteout的实现是通过在上层的可写的目录下建立对应的whiteout隐藏文件来实现的
+
+**** whiteout实例
+假设我们有三个目录和文件如下所示，其中test是个空目录：
+#+BEGIN_SRC sh
+  $ tree
+  .
+  ├── fruits
+  │   ├── apple
+  │   └── tomato
+  ├── test
+  └── vegetables
+      ├── carrots
+      └── tomato
+#+END_SRC
+
+如下mount：
+
+#+BEGIN_SRC sh
+  $ mkdir mnt
+   
+  $ mount -t aufs -o dirs=./test=rw:./fruits=ro:./vegetables=ro none ./mnt
+   
+  $ ls ./mnt/
+  apple  carrots  tomato
+#+END_SRC
+
+现在我们在权限为rw的test目录下建个whiteout的隐藏文件.wh.apple，你就会发现./mnt/apple这个文件就消失了：
+
+#+BEGIN_SRC sh
+  $  touch ./test/.wh.apple
+   
+  $ ls ./mnt
+  carrots  tomato
+#+END_SRC
+
+上面这个操作和 rm ./mnt/apple是一样的
+
+** 术语
++ Branch: 就是各个要被union起来的目录
+  + Branch根据被union的顺序形成一个stack，一般来说最上面的是可写的，下面的都是只读的
+  + Branch的stack可以在被mount后进行修改，比如：修改顺序，加入新的branch，或是删除其中的branch，或是直接修改branch的权限
++ 如果UnionFS中的某个目录被删除了，那么就应该不可见了，就算是在底层的branch中还有这个目录，那也应该不可见了
+  + Whiteout: 某个上层目录覆盖了下层的相同名字的目录。用于隐藏低层分支的文件，也用于阻止readdir进入低层分支
+    + 在隐藏低层档的情况下，whiteout的名字是 *.wh.<filename>*
+  + Opaque: 不允许任何下层的某个目录显示出来。
+    + 在阻止readdir的情况下，名字是 *.wh..wh..opq* 或者 *.wh.__dir_opaque*
+
+** 问题
+1. *要有文件在原来的地方被修改了会怎么样？* mount的目录会一起改变吗？答案是会的，也可以是不会的。因为你可以指定一个叫udba的参数(User's Direct Branch Access)，这个参数有三个取值：
+   + *udba=none* 设置上这个参数后，AUFS会运转的更快，因为那些不在mount目录里发生的修改，aufs不会同步过来了，所以会有数据出错的问题
+   + *udba=reval* 设置上这个参数后，AUFS会去查文件有没有被更新，如果有的话，就会把修改拉到mount目录内
+   + *udba=notify* 这个参数会让AUFS为所有的branch注册inotify，这样可以让AUFS在更新文件修改的性能更高一些
+
+2. 如果有多个rw的branch（目录）被union起来了，那么，当我创建文件的时候，aufs会创建在哪里呢？ aufs提供了一个叫create的参数可以供你来配置相当的创建策略：
+   + *create=rr | round-robin* 轮询，下面的示例可以看到，新创建的文件轮流写到三个目录中：
+
+     #+BEGIN_SRC sh
+       hchen$ sudo mount -t aufs  -o dirs=./1=rw:./2=rw:./3=rw -o create=rr none ./mnt
+       hchen$ touch ./mnt/a ./mnt/b ./mnt/c
+       hchen$ tree
+       .
+       ├── 1
+       │   └── a
+       ├── 2
+       │   └── c
+       └── 3
+       └── b
+     #+END_SRC
+
+   + *create=mfs[:second] | most-free-space[:second]* 选一个可用空间最好的分支。可以指定一个检查可用磁盘空间的时间
+   + *create=mfsrr:low[:second]* 选一个空间大于low的branch，如果空间小于low了，那么aufs会使用 round-robin 方式
+
+** 性能
+AUFS的性能慢吗？也慢也不慢。因为AUFS会把所有的分支mount起来，所以，在查找文件上是比较慢了。因为它要遍历所有的branch。是个O(n)的算法（很明显，这个算法有很大的改进空间的）所以，branch越多，查找文件的性能也就越慢。但是，一旦AUFS找到了这个文件的inode，那后以后的读写和操作原文件基本上是一样的
+
+所以，如果你的程序跑在在AUFS下，open和stat操作会有明显的性能下降，branch越多，性能越差，但是在write/read操作上，性能没有什么变化
+
+IBM的研究中心对Docker的性能给了一份非常不错的性能报告，我截了两张图出来：
+   #+ATTR_HTML: image :width 50% 
+   [[file:pic/docker-seq-io.jpg]]
+
+   #+ATTR_HTML: image :width 50% 
+   [[file:pic/docker-rand-io.jpg]]
+
+第一张是顺序读写，第二张是随机读写。基本没有什么性能损失的问题。而KVM在随机读写的情况也就有点慢了
+
 * DeviceMapper

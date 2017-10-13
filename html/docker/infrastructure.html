@@ -180,7 +180,28 @@ for the JavaScript code in this tag.
 <li><a href="#sec-2-6">CGroup术语</a></li>
 </ul>
 </li>
-<li><a href="#sec-3">Aufs</a></li>
+<li><a href="#sec-3">Aufs</a>
+<ul>
+<li><a href="#sec-3-1">示例</a></li>
+<li><a href="#sec-3-2">用途</a>
+<ul>
+<li><a href="#sec-3-2-1">docker分层</a></li>
+</ul>
+</li>
+<li><a href="#sec-3-3">Aufs的特性</a>
+<ul>
+<li><a href="#sec-3-3-1">whiteout</a>
+<ul>
+<li><a href="#sec-3-3-1-1">whiteout实例</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#sec-3-4">术语</a></li>
+<li><a href="#sec-3-5">问题</a></li>
+<li><a href="#sec-3-6">性能</a></li>
+</ul>
+</li>
 <li><a href="#sec-4">DeviceMapper</a></li>
 </ul>
 </div>
@@ -1741,6 +1762,402 @@ $ sudo mount -t cgroup -o net_prio none /sys/fs/cgroup/net_prio
 
 <div id="outline-container-sec-3" class="outline-2">
 <h2 id="sec-3">Aufs</h2>
+<div class="outline-text-2" id="text-3">
+<p>
+AUFS是一种Union File System，所谓UnionFS就是把不同物理位置的目录合并mount到同一个目录中。UnionFS的一个最主要的应用是，把一张CD/DVD和一个硬盘目录给联合 mount在一起，然后，你就可以对这个只读的CD/DVD上的文件进行修改（当然，修改的文件存于硬盘上的目录里）
+</p>
+
+
+<div class="figure">
+<p><img src="pic/docker-filesystems-busyboxrw.png" alt="docker-filesystems-busyboxrw.png" width="30%" />
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-3-1" class="outline-3">
+<h3 id="sec-3-1">示例</h3>
+<div class="outline-text-3" id="text-3-1">
+<p>
+首先，我们建上两个目录（水果和蔬菜），并在这两个目录中放上一些文件，水果中有苹果和蕃茄，蔬菜有胡萝卜和蕃茄 
+</p>
+
+
+<div class="org-src-container">
+
+<pre class="src src-sh">klose@ubuntu16-188 ~/Documents/programming/C/aufs $ tree .
+</pre>
+</div>
+
+<pre class="example">
+.
+├── fruits
+│  ├── apple
+│  └── tomato
+└── vegetables
+    ├── carrots
+    └── tomato
+
+2 directories, 4 files
+</pre>
+
+<p>
+然后，输入以下命令：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh"><span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#21019;&#24314;&#19968;&#20010;mount&#30446;&#24405;</span>
+$ mkdir mnt
+
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#25226;&#27700;&#26524;&#30446;&#24405;&#21644;&#34092;&#33756;&#30446;&#24405;union mount&#21040; ./mnt&#30446;&#24405;&#20013;</span>
+$ sudo mount -t aufs -o <span style="color: #eedd82;">dirs</span>=./fruits:./vegetables none ./mnt
+
+<span style="color: #ff4500;">#  </span><span style="color: #ff4500;">&#26597;&#30475;./mnt&#30446;&#24405;</span>
+$ tree ./mnt
+</pre>
+</div>
+
+<pre class="example">
+./mnt/
+├── apple
+├── carrots
+└── tomato
+
+0 directories, 3 files
+</pre>
+
+<p>
+可以看到在./mnt目录下有三个文件，苹果apple、胡萝卜carrots和蕃茄tomato。水果和蔬菜的目录被union到了./mnt目录下了
+</p>
+
+<p>
+来修改一下其中的文件内容：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">$ echo mnt &gt; ./mnt/apple
+$ cat ./mnt/apple
+mnt
+$ cat ./fruits/apple
+mnt
+</pre>
+</div>
+<p>
+上面的示例，可以看到./mnt/apple的内容改了，./fruits/apple的内容也改了 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">$ echo mnt_carrots &gt; ./mnt/carrots
+$ cat ./vegetables/carrots
+
+$ cat ./fruits/carrots
+mnt_carrots
+</pre>
+</div>
+<p>
+可以看到修改了./mnt/carrots的文件内容，./vegetables/carrots并没有变化，反而是./fruits/carrots的目录中出现了carrots文件，其内容是在./mnt/carrots里的内容 
+</p>
+
+<p>
+也就是说，在mount aufs命令中，没有指它vegetables和fruits的目录权限。默认上来说，命令行上第一个（最左边）的目录是可读可写的，后面的全都是只读的。（一般来说，最前面的目录应该是可写的，而后面的都应该是只读的）
+</p>
+
+<p>
+所以，如果我们像下面这样指定权限来mount aufs，你就会发现有不一样的效果（记得先把上面./fruits/carrots的文件删除了）：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ sudo mount -t aufs -o <span style="color: #eedd82;">dirs</span>=./fruits=rw:./vegetables=rw none ./mnt
+
+$ echo <span style="color: #ffa07a;">"mnt_carrots"</span> &gt; ./mnt/carrots
+
+$ cat ./vegetables/carrots
+mnt_carrots
+
+$ cat ./fruits/carrots
+cat: ./fruits/carrots: No such file or directory
+</pre>
+</div>
+<p>
+在这情况下，如果我们要修改./mnt/tomato这个文件，那么究竟是哪个文件会被改写？
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">$ echo <span style="color: #ffa07a;">"mnt_tomato"</span> &gt; ./mnt/tomato
+
+$ cat ./fruits/tomato
+mnt_tomato
+
+$ cat ./vegetables/tomato
+I am a vegetable
+</pre>
+</div>
+
+<p>
+可见，如果有重复的文件名，在mount命令行上，越往前的就优先级越高
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-3-2" class="outline-3">
+<h3 id="sec-3-2">用途</h3>
+<div class="outline-text-3" id="text-3-2">
+<p>
+历史上，有一个叫Knoppix的Linux发行版，其主要用于Linux演示、光盘教学、系统急救，以及商业产品的演示，不需要硬盘安装，直接把CD/DVD上的image运行在一个可写的存储设备上（比如一个U盘上），其实，也就是把CD/DVD这个文件系统和USB这个可写的系统给联合mount起来，这样你对CD/DVD上的image做的任何改动都会在被应用在U盘上，于是乎，你可以对CD/DVD上的内容进行任意的修改，因为改动都在U盘上，所以你改不坏原来的东西
+</p>
+
+<p>
+可以再发挥一下想像力，你也可以把一个目录，比如你的源代码，作为一个只读的template，和另一个你的working directory给union在一起，然后你就可以做各种修改而不用害怕会把源代码改坏了。有点像一个ad hoc snapshot
+</p>
+</div>
+
+<div id="outline-container-sec-3-2-1" class="outline-4">
+<h4 id="sec-3-2-1">docker分层</h4>
+<div class="outline-text-4" id="text-3-2-1">
+<p>
+下图来自Docker的官方文档Layer，其很好的展示了Docker用UnionFS搭建的分层镜像：
+</p>
+
+<div class="figure">
+<p><img src="pic/docker-filesystems-multilayer.png" alt="docker-filesystems-multilayer.png" width="50%" />
+</p>
+</div>
+
+<p>
+关于docker的分层镜像，除了aufs，docker还支持btrfs, devicemapper和vfs，你可以使用 -s 或 -storage-driver= 选项来指定相关的镜像存储。在Ubuntu 14.04下，docker默认Ubuntu的 aufs（在CentOS7下，用的是devicemapper，关于devicemapper，我会以以后的文章中讲解）你可以在下面的目录中查看相关的每个层的镜像：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">$ /var/lib/docker/aufs/diff/&lt;id&gt;
+</pre>
+</div>
+
+<p>
+在docker执行起来后（比如：docker run -it ubuntu /bin/bash），你可以从/sys/fs/aufs/si_[id]目录下查看aufs的mount的情况，下面是个示例：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ ls /sys/fs/aufs/si_b71b209f85ff8e75/
+br0      br2      br4      br6      brid1    brid3    brid5    xi_path
+br1      br3      br5      brid0    brid2    brid4    brid6 
+
+$ cat /sys/fs/aufs/si_b71b209f85ff8e75/*
+/var/lib/docker/aufs/diff/87315f1367e5703f599168d1e17528a0500bd2e2df7d2fe2aaf9595f3697dbd7=rw
+/var/lib/docker/aufs/diff/87315f1367e5703f599168d1e17528a0500bd2e2df7d2fe2aaf9595f3697dbd7-init=ro+wh
+/var/lib/docker/aufs/diff/d0955f21bf24f5bfffd32d2d0bb669d0564701c271bc3dfc64cfc5adfdec2d07=ro+wh
+/var/lib/docker/aufs/diff/9fec74352904baf5ab5237caa39a84b0af5c593dc7cc08839e2ba65193024507=ro+wh
+/var/lib/docker/aufs/diff/a1a958a248181c9aa6413848cd67646e5afb9797f1a3da5995c7a636f050f537=ro+wh
+/var/lib/docker/aufs/diff/f3c84ac3a0533f691c9fea4cc2ceaaf43baec22bf8d6a479e069f6d814be9b86=ro+wh
+/var/lib/docker/aufs/diff/511136ea3c5a64f264b78b5433614aec563103b4d4702f3ba7d4d2698e22c158=ro+wh
+64
+65
+66
+67
+68
+69
+70
+/run/shm/aufs.xino
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-3-3" class="outline-3">
+<h3 id="sec-3-3">Aufs的特性</h3>
+<div class="outline-text-3" id="text-3-3">
+<p>
+AUFS有所有Union FS的特性，把多个目录，合并成同一个目录，并可以为每个需要合并的目录指定相应的权限，实时的添加、删除、修改已经被mount好的目录。而且，他还能在多个可写的branch/dir间进行负载均衡
+</p>
+
+<p>
+被union的目录（分支）的相关权限：
+</p>
+<ul class="org-ul">
+<li>rw: 可写可读read-write
+</li>
+<li>ro: read-only，如果你不指权限，那么除了第一个外ro是默认值，对于ro分支，其永远不会收到写操作，也不会收到查找whiteout的操作
+</li>
+<li>rr: real-read-only，与read-only不同的是，rr标记的是天生就是只读的分支，这样，AUFS可以提高性能，比如不再设置inotify来检查文件变动通知
+</li>
+</ul>
+</div>
+
+<div id="outline-container-sec-3-3-1" class="outline-4">
+<h4 id="sec-3-3-1">whiteout</h4>
+<div class="outline-text-4" id="text-3-3-1">
+<p>
+一般来说ro的分支都会有wh的属性，比如 “[dir]=ro+wh”。所谓whiteout的意思，如果在union中删除的某个文件，实际上是位于一个readonly的分支（目录）上，那么，在mount的union这个目录中你将看不到这个文件，但是read-only这个层上我们无法做任何的修改，所以，我们就需要对这个readonly目录里的文件作whiteout。AUFS的whiteout的实现是通过在上层的可写的目录下建立对应的whiteout隐藏文件来实现的
+</p>
+</div>
+
+<div id="outline-container-sec-3-3-1-1" class="outline-5">
+<h5 id="sec-3-3-1-1">whiteout实例</h5>
+<div class="outline-text-5" id="text-3-3-1-1">
+<p>
+假设我们有三个目录和文件如下所示，其中test是个空目录：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">$ tree
+.
+&#9500;&#9472;&#9472; fruits
+&#9474;   &#9500;&#9472;&#9472; apple
+&#9474;   &#9492;&#9472;&#9472; tomato
+&#9500;&#9472;&#9472; test
+&#9492;&#9472;&#9472; vegetables
+    &#9500;&#9472;&#9472; carrots
+    &#9492;&#9472;&#9472; tomato
+</pre>
+</div>
+
+<p>
+如下mount：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">$ mkdir mnt
+
+$ mount -t aufs -o <span style="color: #eedd82;">dirs</span>=./test=rw:./fruits=ro:./vegetables=ro none ./mnt
+
+$ ls ./mnt/
+apple  carrots  tomato
+</pre>
+</div>
+
+<p>
+现在我们在权限为rw的test目录下建个whiteout的隐藏文件.wh.apple，你就会发现./mnt/apple这个文件就消失了：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">$  touch ./test/.wh.apple
+
+$ ls ./mnt
+carrots  tomato
+</pre>
+</div>
+
+<p>
+上面这个操作和 rm ./mnt/apple是一样的
+</p>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-3-4" class="outline-3">
+<h3 id="sec-3-4">术语</h3>
+<div class="outline-text-3" id="text-3-4">
+<ul class="org-ul">
+<li>Branch: 就是各个要被union起来的目录
+<ul class="org-ul">
+<li>Branch根据被union的顺序形成一个stack，一般来说最上面的是可写的，下面的都是只读的
+</li>
+<li>Branch的stack可以在被mount后进行修改，比如：修改顺序，加入新的branch，或是删除其中的branch，或是直接修改branch的权限
+</li>
+</ul>
+</li>
+<li>如果UnionFS中的某个目录被删除了，那么就应该不可见了，就算是在底层的branch中还有这个目录，那也应该不可见了
+<ul class="org-ul">
+<li>Whiteout: 某个上层目录覆盖了下层的相同名字的目录。用于隐藏低层分支的文件，也用于阻止readdir进入低层分支
+<ul class="org-ul">
+<li>在隐藏低层档的情况下，whiteout的名字是 <b>.wh.&lt;filename&gt;</b>
+</li>
+</ul>
+</li>
+<li>Opaque: 不允许任何下层的某个目录显示出来。
+<ul class="org-ul">
+<li>在阻止readdir的情况下，名字是 <b>.wh..wh..opq</b> 或者 <b>.wh.__dir_opaque</b>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-3-5" class="outline-3">
+<h3 id="sec-3-5">问题</h3>
+<div class="outline-text-3" id="text-3-5">
+<ol class="org-ol">
+<li><b>要有文件在原来的地方被修改了会怎么样？</b> mount的目录会一起改变吗？答案是会的，也可以是不会的。因为你可以指定一个叫udba的参数(User's Direct Branch Access)，这个参数有三个取值：
+<ul class="org-ul">
+<li><b>udba=none</b> 设置上这个参数后，AUFS会运转的更快，因为那些不在mount目录里发生的修改，aufs不会同步过来了，所以会有数据出错的问题
+</li>
+<li><b>udba=reval</b> 设置上这个参数后，AUFS会去查文件有没有被更新，如果有的话，就会把修改拉到mount目录内
+</li>
+<li><b>udba=notify</b> 这个参数会让AUFS为所有的branch注册inotify，这样可以让AUFS在更新文件修改的性能更高一些
+</li>
+</ul>
+</li>
+
+<li>如果有多个rw的branch（目录）被union起来了，那么，当我创建文件的时候，aufs会创建在哪里呢？ aufs提供了一个叫create的参数可以供你来配置相当的创建策略：
+<ul class="org-ul">
+<li><b>create=rr | round-robin</b> 轮询，下面的示例可以看到，新创建的文件轮流写到三个目录中：
+
+<div class="org-src-container">
+
+<pre class="src src-sh">hchen$ sudo mount -t aufs  -o <span style="color: #eedd82;">dirs</span>=./1=rw:./2=rw:./3=rw -o <span style="color: #eedd82;">create</span>=rr none ./mnt
+hchen$ touch ./mnt/a ./mnt/b ./mnt/c
+hchen$ tree
+.
+&#9500;&#9472;&#9472; 1
+&#9474;   &#9492;&#9472;&#9472; a
+&#9500;&#9472;&#9472; 2
+&#9474;   &#9492;&#9472;&#9472; c
+&#9492;&#9472;&#9472; 3
+&#9492;&#9472;&#9472; b
+</pre>
+</div>
+</li>
+
+<li><b>create=mfs[:second] | most-free-space[:second]</b> 选一个可用空间最好的分支。可以指定一个检查可用磁盘空间的时间
+</li>
+<li><b>create=mfsrr:low[:second]</b> 选一个空间大于low的branch，如果空间小于low了，那么aufs会使用 round-robin 方式
+</li>
+</ul>
+</li>
+</ol>
+</div>
+</div>
+
+<div id="outline-container-sec-3-6" class="outline-3">
+<h3 id="sec-3-6">性能</h3>
+<div class="outline-text-3" id="text-3-6">
+<p>
+AUFS的性能慢吗？也慢也不慢。因为AUFS会把所有的分支mount起来，所以，在查找文件上是比较慢了。因为它要遍历所有的branch。是个O(n)的算法（很明显，这个算法有很大的改进空间的）所以，branch越多，查找文件的性能也就越慢。但是，一旦AUFS找到了这个文件的inode，那后以后的读写和操作原文件基本上是一样的
+</p>
+
+<p>
+所以，如果你的程序跑在在AUFS下，open和stat操作会有明显的性能下降，branch越多，性能越差，但是在write/read操作上，性能没有什么变化
+</p>
+
+<p>
+IBM的研究中心对Docker的性能给了一份非常不错的性能报告，我截了两张图出来：
+</p>
+
+<div class="figure">
+<p><img src="pic/docker-seq-io.jpg" alt="docker-seq-io.jpg" width="50%" />
+</p>
+</div>
+
+
+<div class="figure">
+<p><img src="pic/docker-rand-io.jpg" alt="docker-rand-io.jpg" width="50%" />
+</p>
+</div>
+
+<p>
+第一张是顺序读写，第二张是随机读写。基本没有什么性能损失的问题。而KVM在随机读写的情况也就有点慢了
+</p>
+</div>
+</div>
 </div>
 
 <div id="outline-container-sec-4" class="outline-2">
