@@ -185,7 +185,16 @@ for the JavaScript code in this tag.
 </ul>
 </li>
 <li><a href="#sec-5">ICMP源站抑制差错</a></li>
-<li><a href="#sec-6">UDP服务器的设计</a></li>
+<li><a href="#sec-6">UDP服务器的设计</a>
+<ul>
+<li><a href="#sec-6-1">客户IP地址及端口号</a></li>
+<li><a href="#sec-6-2">目的IP地址</a></li>
+<li><a href="#sec-6-3">UDP输入队列</a></li>
+<li><a href="#sec-6-4">限制本地IP地址</a></li>
+<li><a href="#sec-6-5">限制远端IP地址</a></li>
+<li><a href="#sec-6-6">每个端口有多个接收者</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
@@ -825,10 +834,446 @@ Host Requirements RFC要求实现中必须防止这种类型的ARP洪泛。建�
 
 <div id="outline-container-sec-5" class="outline-2">
 <h2 id="sec-5">ICMP源站抑制差错</h2>
+<div class="outline-text-2" id="text-5">
+<p>
+我们同样也可以使用UDP产生ICMP <b>源站抑制</b> 差错。当一个系统接收数据报的速度比其处理速度快时，可能产生这个差错。注意限定词 <b>可能</b>, 即使一个系统已经没有缓存并丢弃数据报，也不要求它一定要发送源站抑制报文。图11-18给出了ICMP源站抑制差错报文的格式：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/icmp-source-quench.png" alt="icmp-source-quench.png" width="70%" />
+</p>
+</div>
+
+<p>
+可以从bsdi通过必须经过拨号SLIP链路的以太网，将数据报发送给路由器sun。由于SLIP链路的速度大约只有以太网的千分之一，因此，我们很容易就可以使其缓存用完。下面的命令行从主机bsdi通过路由器sun发送100个1024字节长数据报给solaris。我们将数据报发送给标准的丢弃服务，这样，这些数据报将被忽略：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">bsdi$ sock -u -i -w1024 -n100 solaris discard
+</pre>
+</div>
+
+<p>
+图11-19给出了与此命令行相对应的tcpdump输出结果：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/icmp-source-quench-dump.png" alt="icmp-source-quench-dump.png" width="70%" />
+</p>
+</div>
+
+<p>
+在这个输出结果中，删除了很多行，这只是一个模型。接收前26个数据报时未发生差错；我们只给出了第一个数据报的结果。然而，从第27个数据报开始，每发送一份数据报，就会接收到一份源站抑制差错报文。总共有26 + (74×2) = 174行输出结果
+</p>
+
+<p>
+以前的并行线吞吐率计算结果可以知道，以9600b/s速率传送1024字节数据报只需要1秒时间（由于从sun到netb的SLIP链路的MTU为552字节，因此在例子中，20 + 8 + 1024字节数据报将进行分片，因此，其时间会稍长一些）。但是可以从图11-19的时间中看出，sun路由器在不到1秒时间内就处理完所有的100个数据报，而这时，第一份数据报还未通过SLIP链路。因此我们用完其缓存就不足不奇了
+</p>
+
+<p>
+sock程序要么没有接收到源站抑制差错报文，要么接收到却将它们忽略了。结果是如果采用UDP协议，那么BSD实现通常忽略其接收到的源站抑制报文（相对而言，TCP接受源站抑制差错报文，并将放慢在该连接上的数据传输速度）。其部分原因在于：在接收到源站抑制差错报文时，导致源站抑制的进程可能已经中止了。实际上，如果使用Unix的time程序来测定sock程序所运行的时间，其结果是它只运行了大约0.5秒时间。但是从图11-19中可以看到，在发送第一份数据报过后0.71秒才接收到一些源站抑制，而此时该进程已经中止。我们的程序写入了100个数据报然后中止了，实际上所有的100个数据报都已发送出去（准确的说有些数据报已经在内核的输出队列中）
+</p>
+
+<p>
+这个例子重申了UDP是一个 <b>非可靠</b> 的协议，它说明了端到端的流量控制。尽管sock程序成功地将100个数据报写入其网络，但只有26个数据报真正发送到了目的端。其他74个数据报可能被中间路由器丢弃。 <b>除非在应用程序中建立一些应答机制，否则发送端并不知道接收端是否收到了这些数据</b> 
+</p>
+</div>
 </div>
 
 <div id="outline-container-sec-6" class="outline-2">
 <h2 id="sec-6">UDP服务器的设计</h2>
+<div class="outline-text-2" id="text-6">
+<p>
+使用UDP的一些蕴含对于设计和实现服务器会产生影响。通常，客户端的设计和实现比服务器端的要容易一些，这就是我们为什么要讨论服务器的设计，而不是讨论客户端的设计的原因。典型的服务器与操作系统进行交互作用，而且大多数需要同时处理多个客户
+</p>
+
+<p>
+通常一个客户启动后直接与单个服务器通信，然后就结束了。而对于服务器来说，它启动后处于休眠状态，等待客户请求的到来。对于UDP来说，当客户数据报到达时，服务器苏醒过来，数据报中可能包含来自客户的某种形式的请求消息
+</p>
+
+<p>
+在这里我们所感兴趣的并不是客户和服务器的编程方面，而是UDP那些影响使用该协议的服务器的设计和实现方面的协议特性。尽管我们所描述的一些特性取决于所使用UDP的实现，但对于大多数实现来说，这些特性是公共的
+</p>
+</div>
+
+<div id="outline-container-sec-6-1" class="outline-3">
+<h3 id="sec-6-1">客户IP地址及端口号</h3>
+<div class="outline-text-3" id="text-6-1">
+<p>
+来自客户的是UDP数据报，IP首部包含源端和目的端IP地址，UDP首部包含了源端和目的端的UDP端口号。当一个应用程序接收到UDP数据报时，操作系统必须告诉它是谁发送了这份消息，即源IP地址和端口号
+</p>
+
+<p>
+这个特性允许 <b>一个交互UDP服务器对多个客户进行处理。给每个发送请求的客户发回应答</b> 
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-6-2" class="outline-3">
+<h3 id="sec-6-2">目的IP地址</h3>
+<div class="outline-text-3" id="text-6-2">
+<p>
+一些应用程序需要知道数据报是发送给谁的，即目的IP地址。例如，Host Requirements RFC规定，TFTP服务器必须忽略接收到的发往广播地址的数据报
+</p>
+
+<p>
+这要求操作系统从接收到的UDP数据报中将目的IP地址交给应用程序。不幸的是，并非所有的实现都提供这个功能：
+</p>
+
+<pre class="example">
+socket API以IP_RECVDSTADDR socket选项提供了这个功能
+</pre>
+</div>
+</div>
+
+<div id="outline-container-sec-6-3" class="outline-3">
+<h3 id="sec-6-3">UDP输入队列</h3>
+<div class="outline-text-3" id="text-6-3">
+<p>
+大多数UDP服务器是交互服务器。这意味着单个服务器进程对单个UDP端口上的所有客户请求进行处理
+</p>
+
+<p>
+通常程序所使用的 <b>每个UDP端口都与一个有限大小的输入队列</b> 相联系。这意味着，来自不同客户的差不多同时到达的请求将由UDP自动排队。接收到的UDP数据报以其接收顺序交给应用程序（在应用程序要求交送下一个数据报时）
+</p>
+
+<p>
+然而，排队溢出造成内核中的UDP模块丢弃数据报的可能性是存在的。在作为UDP服务器的bsdi主机上运行sock程序：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">bsdi$ sock -s -u -v -E -R256 -P30 6666
+</pre>
+</div>
+
+<pre class="example">
+from 140.252.13.33, to 140.252.13.63: 1111111111 从发送到广播地址
+from 140.252.13.34, to 140.252.13.35: 4444444444444 从svr4发送到单播地址
+</pre>
+<p>
+<b>-s</b> 表示作为服务器运行， <b>-u</b> 表示UDP， <b>-v</b> 表示打印客户的IP地址， <b>-E</b> 表示打印目的IP地址。另外，我们将这个端口的UDP接收缓存设置为256字节( <b>-R</b> )，其每次应用程序读取的大小也是这个数( <b>-r</b> )。标志 <b>-P30</b> 表示创建UDP端口后，先暂停30秒后再读取第一个数据报。这样，我们就有时间在另两台主机上启动客户程序，发送一些数据报，以查看接收队列是如何工作的
+</p>
+
+<p>
+服务器一开始工作，处于其30秒的暂停时间内，我们就在sun主机上启动一个客户，并发送三个数据报：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">sun$ sock -u -v 140.252.13.63 6666 <span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#21040;&#20197;&#22826;&#32593;&#24191;&#25773;&#22320;&#22336;</span>
+</pre>
+</div>
+<pre class="example">
+connected on 140.252.13.33.1252 to 140.252.13.63.6666
+
+1111111111                         11字节的数据(新行)
+222222222                          10字节的数据(新行)
+33333333333                        12字节的数据(新行)
+</pre>
+
+<p>
+目的地址是广播地址（140.252.13.63）。我们同时也在主机svr4上启动第2个客户，并发送另外三个数据报：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">svr4$ sock -u -v bsdi 6666
+</pre>
+</div>
+<pre class="example">
+connected on 0.0.0.0.1042 to 140.252.13.35.6666
+
+4444444444444                 14字节的数据(新行)
+555555555555555               16字节的数据(新行)
+66666666                      9字节的数据(新行)
+</pre>
+
+<ul class="org-ul">
+<li>早些时候在bsdi上所看到的结果表明，应用程序只接收到2个数据报：来自sun的第一个全1报文，和来自svr4的第一个全4报文。其他4个数据报看来全被丢弃
+</li>
+</ul>
+
+<p>
+图11-20给出的tcpdump输出结果表明，所有6个数据报都发送给了目的主机。两个客户的数据报以交替顺序键入：第一个来自sun，然后是来自svr4的，以此类推。同时也可以看出，全部6个数据报大约在12秒内发送完毕，也就是在服务器休眠的30秒内完成的：
+</p>
+
+<div class="figure">
+<p><img src="pic/bsdi-udp-queue-dump.png" alt="bsdi-udp-queue-dump.png" width="70%" />
+</p>
+</div>
+
+<ul class="org-ul">
+<li>服务器的 <b>-E</b> 选项使其可以知道每个数据报的目的IP地址。如果需要，它可以选择如何处理其接收到的第一个数据报，这个数据报的地址是广播地址
+</li>
+</ul>
+
+<p>
+从本例中看到以下几个要点：
+</p>
+<ol class="org-ol">
+<li>应用程序并不知道其输入队列何时溢出。只是由UDP对超出数据报进行丢弃处理
+</li>
+<li>从tcpdump输出结果，可以看到，没有发回任何信息告诉客户其数据报被丢弃。这里不存在像ICMP源站抑制这样发回发送端的消息
+</li>
+<li>UDP输出队列是FIFO（先进先出）的，而我们以前所看到的ARP输入却是LIFO（后进先出）的
+</li>
+</ol>
+</div>
+</div>
+
+<div id="outline-container-sec-6-4" class="outline-3">
+<h3 id="sec-6-4">限制本地IP地址</h3>
+<div class="outline-text-3" id="text-6-4">
+<p>
+大多数UDP服务器在创建UDP端点时都使其本地IP地址具有通配符的特点。这就表明进入的UDP数据报如果其目的地为服务器端口，那么在任何本地接口均可接收到它。例如，我们以端口号777启动一个UDP服务器：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">sun$ sock -u -s 7777
+</pre>
+</div>
+<p>
+然后，用netstat命令观察端点的状态：
+</p>
+
+
+<div class="org-src-container">
+
+<pre class="src src-sh">sun$ netstat -a -n -f inet
+</pre>
+</div>
+
+<pre class="example">
+Active Internet Connections
+Proto  Recv-Q   Send-Q      Local Address       Send Adress     state
+udp    0        0           *.7777              *.*
+</pre>
+
+<p>
+这里删除了许多行，只保留了其中感兴趣的东西。 <b>-a</b> 选项表示报告所有网络端点的状态。 <b>-n</b> 选项表示以点数格式打印IP地址而不用DNS把地址转换成名字，打印数字端口号而不是服务名称。 <b>-f inet</b> 选项表示只报告TCP和UDP端点 
+</p>
+
+<p>
+本地地址以*.7777格式打印， <b>星号</b> 表示任何本地IP地址
+</p>
+
+<p>
+当服务器创建端点时，它可以把其中一个主机本地IP地址包括广播地址指定为端点的本地IP地址。只有当目的IP地址与指定的地址相匹配时，进入的UDP数据报才能被送到这个端点。用我们的sock程序，如果在端口号之前指定一个IP地址，那么该IP地址就成为该端点的本地IP地址。例如：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">sun$ sock -u -s 140.252.1.29 7777
+</pre>
+</div>
+<p>
+这样就限制服务器在SLIP接口(140.252.1.29)处接收数据报。netstat输出结果显示如下：
+</p>
+<pre class="example">
+Active Internet Connections
+Proto  Recv-Q   Send-Q      Local Address       Send Adress     state
+udp    0        0           140.252.1.29.7777   *.*
+</pre>
+
+<p>
+如果试图在以太网上的主机bsdi以地址140.252.13.35向该服务器发送一份数据报，那么将返回一个ICMP端口不可达差错。服务器永远看不到这份数据报。这种情形如图11-21所示：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/udp-restrict-local-address-dump.png" alt="udp-restrict-local-address-dump.png" width="70%" />
+</p>
+</div>
+
+<p>
+有可能在相同的端口上启动不同的服务器，每个服务器具有不同的本地IP地址。但是，一般必须告诉系统应用程序重用相同的端口号没有问题：
+</p>
+<pre class="example">
+     使用sockets API时，必须指定SO_REUSEADDRsocket选项。在sock程序中是通过-A选项来完成的
+</pre>
+
+<p>
+在主机sun上，可以在同一个端口号(8888)上启动5个不同的服务器：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">sun$ sock -u -s 140.252.1.29 8888               <span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#23545;&#20110;SLIP&#38142;&#36335;</span>
+sun$ sock -u -s -A 140.252.13.33 8888           <span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#23545;&#20110;&#20197;&#22826;&#32593;</span>
+sun$ sock -u -s -A 127.0.0.1 8888               <span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#23545;&#20110;&#26412;&#22320;&#29615;&#36335;</span>
+sun$ sock -u -s -A 140.252.13.63 8888           <span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#23545;&#20110;&#20197;&#22826;&#32593;&#24191;&#25773;</span>
+sun$ sock -u -s -A 8888                         <span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#20854;&#20182;(IP&#36890;&#37197;)</span>
+</pre>
+</div>
+<p>
+除了第一个以外，其他的服务器都必须以 <b>-A</b> 选项启动，告诉系统可以重用同一个端口号。5个服务器的netstat输出结果如下所示：
+</p>
+<pre class="example">
+Active Internet Connections
+Proto  Recv-Q   Send-Q      Local Address       Send Adress     state
+udp    0        0           *.8888              *.*
+udp    0        0           140.252.13.63.8888  *.*
+udp    0        0           127.0.0.1.8888      *.*
+udp    0        0           140.252.13.33.8888  *.*
+udp    0        0           140.252.1.29.8888   *.*
+</pre>
+
+<p>
+在这种情况下，到达服务器的数据报中，只有带星号的本地IP地址，其目的地址为140.252.1.255，因为其他4个服务器占用了其他所有可能的IP地址
+</p>
+
+<p>
+如果存在一个含星号的IP地址，那么就隐含了一种优先级关系。 <b>如果为端点指定了特定IP地址，那么在匹配目的地址时始终优先匹配该IP地址。只有在匹配不成功时才使用含星号的端点</b>
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-6-5" class="outline-3">
+<h3 id="sec-6-5">限制远端IP地址</h3>
+<div class="outline-text-3" id="text-6-5">
+<p>
+在前面所有的netstat输出结果中，远端IP地址和远端端口号都显示为*.*，其意思是该端点将接受来自任何IP地址和任何端口号的UDP数据报。大多数系统允许UDP端点对远端地址进行限制
+</p>
+
+<p>
+这说明端点将只能接收特定IP地址和端口号的UDP数据报。sock程序用 <b>-f</b> 选项来指定远端IP地址和端口号：
+</p>
+
+
+<div class="org-src-container">
+
+<pre class="src src-sh">sun % sock -u -s -f 140.252.13.35.4444 5555
+</pre>
+</div>
+
+<p>
+这样就设置了远端IP地址140.252.13.35（即主机bsdi）和远端端口号4444。服务器的有名端口号为5555。如果运行netstat命令，我们发现本地IP地址也被设置了，尽管我们没有指定：
+</p>
+<pre class="example">
+Active Internet Connections
+Proto  Recv-Q   Send-Q      Local Address       Send Adress     state
+udp    0        0           140.252.13.33.5555  140.252.13.35.4444
+</pre>
+<p>
+这是在伯克利派生系统中指定远端IP地址和端口号带来的副作用：如果在指定远端地址时没有选择本地地址，那么将自动选择本地地址。它的值就成为选择到达远端IP地址路由时将选择的接口IP地址。事实上，在这个例子中，sun在以太网上的IP地址与远端地址140.252.13.33相连
+</p>
+
+<p>
+图11-22总结了UDP服务器本身可以创建的三类地址绑定：
+</p>
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 2:</span> 为UDP服务器指定本地和远端IP地址及端口号</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">本地地址</td>
+<td class="left">远端地址</td>
+<td class="left">描述</td>
+</tr>
+
+<tr>
+<td class="left">localIP.lport</td>
+<td class="left">foreignIP.fport</td>
+<td class="left">只限于一个客户</td>
+</tr>
+
+<tr>
+<td class="left">localIP.lport</td>
+<td class="left"><b>.</b></td>
+<td class="left">限于到达一个本地接口的数据报: localIP</td>
+</tr>
+
+<tr>
+<td class="left">*.lport</td>
+<td class="left"><b>.</b></td>
+<td class="left">接收发送到lport的所有数据报</td>
+</tr>
+</tbody>
+</table>
+
+<ul class="org-ul">
+<li>lport指的是服务器有名端口号
+</li>
+<li>localIP必须是本地接口的IP地址
+</li>
+<li>这三行的排序是UDP模块在判断用哪个端点接收数据报时所采用的顺序： 
+<ol class="org-ol">
+<li>最为确定的地址（第一行）首先被匹配
+</li>
+<li>最不确定的地址（最后一行IP地址带有两个星号）最后进行匹配
+</li>
+</ol>
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-6-6" class="outline-3">
+<h3 id="sec-6-6">每个端口有多个接收者</h3>
+<div class="outline-text-3" id="text-6-6">
+<p>
+尽管在RFC中没有指明，但大多数的系统在某一时刻只允许一个程序端点与某个本地IP地址及UDP端口号相关联。当目的地为该IP地址及端口号的UDP数据报到达主机时，就复制一份传给该端点。端点的IP地址可以含星号，正如我们前面讨论的那样
+</p>
+
+<p>
+例如，在SunOS 4.1.3中，我们启动一个端口号为9999的服务器，本地IP地址含有星号：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">sun % sock -u -s 9999
+</pre>
+</div>
+
+<p>
+接着，如果启动另一个具有相同本地地址和端口号的服务器，那么它将不运行，尽管我们指定了-A选项：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">sun $ sock -u -s 9999 <span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#25105;&#20204;&#39044;&#35745;&#23427;&#20250;&#22833;&#36133;</span>
+can not bind local address: Address already<span style="color: #00ffff;"> in</span> use
+
+sun % sock -u -s -A 9999 <span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#22240;&#27492;,&#36825;&#27425;&#23581;&#35797;-A&#21442;&#25968;</span>
+can not bind local address: Address already<span style="color: #00ffff;"> in</span> use
+</pre>
+</div>
+
+<p>
+在一个支持多播的系统上，这种情况将发生变化。多个端点可以使用同一个IP地址和UDP端口号，尽管应用程序通常必须告诉API是可行的（如，用-A标志来指明SO_REUSEADDRsocket选项）：
+</p>
+<pre class="example">
+4.4BSD支持多播传送，需要应用程序设置一个不同的socket选项(SO_REUSEPORT)以允许多个端点共享同一个端口。另外，每个端点必须指定这个选项，包括使用该端口的第一个端点
+</pre>
+
+<p>
+当UDP数据报到达的目的IP地址为广播地址或多播地址，而且在目的IP地址和端口号处有多个端点时，就向每个端点传送一份数据报的复制（端点的本地IP地址可以含有星号，它可匹配任何目的IP地址）。但是，如果UDP数据报到达的是一个单播地址，那么只向其中一个端点传送一份数据报的复制。选择哪个端点传送数据取决于各个不同的系统实现
+</p>
+
+<p>
+<a href="broad-multi-cast.html">Next：广播和多播</a>
+</p>
+
+<p>
+<a href="dynamic-route.html">Previous：动态选路</a>
+</p>
+
+<p>
+<a href="tii.html">Home：目录</a>
+</p>
+</div>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
