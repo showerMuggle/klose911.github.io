@@ -202,7 +202,28 @@ for the JavaScript code in this tag.
 <li><a href="#sec-3-6">性能</a></li>
 </ul>
 </li>
-<li><a href="#sec-4">DeviceMapper</a></li>
+<li><a href="#sec-4">DeviceMapper</a>
+<ul>
+<li><a href="#sec-4-1">简介</a></li>
+<li><a href="#sec-4-2">Thin Provisioning</a>
+<ul>
+<li><a href="#sec-4-2-1">Thin Provisioning Snapshot</a>
+<ul>
+<li><a href="#sec-4-2-1-1">创建loopback设备</a></li>
+<li><a href="#sec-4-2-1-2">创建pool</a></li>
+<li><a href="#sec-4-2-1-3">创建volume</a></li>
+<li><a href="#sec-4-2-1-4">格式化volume</a></li>
+<li><a href="#sec-4-2-1-5">挂载volume</a></li>
+<li><a href="#sec-4-2-1-6">创建snapshot</a></li>
+<li><a href="#sec-4-2-1-7">挂载snapshot</a></li>
+<li><a href="#sec-4-2-1-8">多层snapshot</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#sec-4-3">Docker的DeviceMapper</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
@@ -2162,6 +2183,455 @@ IBM的研究中心对Docker的性能给了一份非常不错的性能报告，�
 
 <div id="outline-container-sec-4" class="outline-2">
 <h2 id="sec-4">DeviceMapper</h2>
+<div class="outline-text-2" id="text-4">
+<p>
+因为Docker首选的AUFS并不在Linux的内核主干里，所以，对于非Ubuntu的Linux分发包，比如CentOS，就无法使用AUFS作为Docker的文件系统了。于是作为第二优先级的DeviceMapper就被拿出来做分层镜像的一个实现
+</p>
+</div>
+
+<div id="outline-container-sec-4-1" class="outline-3">
+<h3 id="sec-4-1">简介</h3>
+<div class="outline-text-3" id="text-4-1">
+<p>
+DeviceMapper自Linux 2.6被引入成为了Linux最重要的一个技术。它在内核中支持逻辑卷管理的通用设备映射机制，它为实现用于存储资源管理的块设备驱动提供了一个高度模块化的内核架构，它包含三个重要的对象概念： <b>Mapped Device</b>,  <b>Mapping Table</b>,  <b>Target Device</b>
+</p>
+<ul class="org-ul">
+<li>Mapped Device是一个逻辑抽象，可以理解成为内核向外提供的逻辑设备，它通过Mapping Table描述的映射关系和 Target Device 建立映射。Target device 表示的是 Mapped Device 所映射的物理空间段，对 Mapped Device 所表示的逻辑设备来说，就是该逻辑设备映射到的一个物理设备
+</li>
+<li>Mapping Table里有 Mapped Device 逻辑的起始地址、范围、和表示在 Target Device 所在物理设备的地址偏移量以及Target 类型等信息（注：这些地址和偏移量都是以磁盘的扇区为单位的，即 512 个字节大小，所以，当你看到128的时候，其实表示的是128*512=64K）
+</li>
+<li>DeviceMapper 中的逻辑设备Mapped Device不但可以映射一个或多个物理设备Target Device，还可以映射另一个Mapped Device，于是，就是构成了一个迭代或递归的情况，就像文件系统中的目录里除了文件还可以有目录，理论上可以无限嵌套下去
+</li>
+</ul>
+
+<p>
+DeviceMapper在内核中通过一个一个模块化的 Target Driver 插件实现对 IO 请求的过滤或者重新定向等工作，当前已经实现的插件包括软 Raid、加密、多路径、镜像、快照等，这体现了在 Linux 内核设计中策略和机制分离的原则。如下图所示：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/device-mapper.gif" alt="device-mapper.gif" width="80%" />
+</p>
+</div>
+
+<p>
+从图中可以看到 <b>DeviceMapper只是一个框架，在这个框架上可以插入各种各样的策略</b> ，在这诸多“插件”中，有一个东西叫 <b>Thin Provisioning Snapshot</b> ，这是Docker使用DeviceMapper中最重要的模块
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-4-2" class="outline-3">
+<h3 id="sec-4-2">Thin Provisioning</h3>
+<div class="outline-text-3" id="text-4-2">
+<p>
+这个技术是虚拟化技术中的一种。你可以联想一下我们计算机中的内存管理中用到的 <b>虚拟内存技术</b> 。操作系统给每个进程N多N多用不完的内址地址（32位下，每个进程可以有最多2GB的内存空间），但是呢，物理内存是没有那么多的，如果按照进程内存和物理内存一一映射来玩的话，那么，我们得要多少的物理内存啊。所以，操作系统引入了虚拟内存的设计，意思是 <b>我逻辑上给你无限多的内存，但是实际上是实报实销</b> ，因为我知道你一定用不了那么多，于是，达到了内存使用率提高的效果
+</p>
+
+<p>
+对于这里说的是存储。看下面两个图, 很好的说明了怎么一回事：
+</p>
+<ul class="org-ul">
+<li>fat provisioning:
+
+<div class="figure">
+<p><img src="pic/fat-provisioning.jpg" alt="fat-provisioning.jpg" width="70%" />
+</p>
+</div>
+</li>
+
+<li>thin provisioning:  
+
+<div class="figure">
+<p><img src="pic/thin-provisioning.jpg" alt="thin-provisioning.jpg" width="70%" />
+</p>
+</div>
+</li>
+</ul>
+</div>
+
+
+<div id="outline-container-sec-4-2-1" class="outline-4">
+<h4 id="sec-4-2-1">Thin Provisioning Snapshot</h4>
+<div class="outline-text-4" id="text-4-2-1">
+<p>
+下面用一系列的命令来演示一下Device Mapper的Thin Provisioning Snapshot。首先，需要先建两个文件，一个是data.img，一个是meta.data.img：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">wu@ubuntu16-188:~$ sudo dd <span style="color: #eedd82;">if</span>=/dev/zero <span style="color: #eedd82;">of</span>=/tmp/data.img <span style="color: #eedd82;">bs</span>=1K <span style="color: #eedd82;">count</span>=1 <span style="color: #eedd82;">seek</span>=10M
+1+0 records<span style="color: #00ffff;"> in</span>
+1+0 records out
+1024 bytes (1.0 kB, 1.0 KiB) copied, 0.000235208 s, 4.4 MB/s
+
+wu@ubuntu16-188:~$ sudo dd <span style="color: #eedd82;">if</span>=/dev/zero <span style="color: #eedd82;">of</span>=/tmp/meta.data.img <span style="color: #eedd82;">bs</span>=1K <span style="color: #eedd82;">count</span>=1 <span style="color: #eedd82;">seek</span>=1G
+1+0 records<span style="color: #00ffff;"> in</span>
+1+0 records out
+1024 bytes (1.0 kB, 1.0 KiB) copied, 0.000493576 s, 2.1 MB/s
+</pre>
+</div>
+
+<p>
+注意命令中 <b>seek</b> 选项，其表示为略过 <b>of</b> 选项指定的输出文件的前10G个output的blocksize的空间后再写入内容。因为bs是1个字节，所以也就是10G的尺寸，但其实在硬盘上是没有占有空间的，占有空间只有1k的内容。当向其写入内容时，才会在硬盘上为其分配空间。我们可以用ls命令看一下，实际分配了都是只有4K：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">wu@ubuntu16-188:~$ ls -lsh /tmp/data.img
+4.0K -rw-r--r-- 1 root root 11G Oct 16 15:17 /tmp/data.img
+
+wu@ubuntu16-188:~$ ls -lsh /tmp/meta.data.img
+4.0K -rw-r--r-- 1 root root 1.1T Oct 16 15:17 /tmp/meta.data.img
+</pre>
+</div>
+</div>
+
+<div id="outline-container-sec-4-2-1-1" class="outline-5">
+<h5 id="sec-4-2-1-1">创建loopback设备</h5>
+<div class="outline-text-5" id="text-4-2-1-1">
+<p>
+然后，我们为每个文件分别创建一个loopback设备：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">wu@ubuntu16-188:~$ sudo losetup /dev/loop2015 /tmp/data.img
+
+wu@ubuntu16-188:~$ sudo losetup /dev/loop2016 /tmp/meta.data.img
+
+wu@ubuntu16-188:~$ sudo losetup -a
+/dev/loop2016: [64768]:131127 (/tmp/meta.data.img)
+/dev/loop2015: [64768]:131126 (/tmp/data.img)
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-4-2-1-2" class="outline-5">
+<h5 id="sec-4-2-1-2">创建pool</h5>
+<div class="outline-text-5" id="text-4-2-1-2">
+<p>
+现在，为这个设备建一个Thin Provisioning的Pool，用dmsetup命令：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">sudo dmsetup create klose-thin-pool <span style="color: #ffa07a;">\</span>
+                  --table <span style="color: #ffa07a;">"0 20971522 thin-pool /dev/loop2016 /dev/loop2015 \</span>
+<span style="color: #ffa07a;">                           128 65536 1 skip_block_zeroing"</span>
+</pre>
+</div>
+
+<p>
+其中的参数解释如下：
+</p>
+<ul class="org-ul">
+<li>dmsetup create：用来创建thin pool的命令
+</li>
+<li>klose-thin-pool 是自定义的一个pool名，不冲突就好
+</li>
+<li>&#x2013;table是这个pool的参数设置：
+<ul class="org-ul">
+<li>0: 开始的sector位置
+</li>
+<li>20971522: 结尾的sector号，前面说过，一个sector是512字节，所以，20971522个正好是10GB
+</li>
+<li>/dev/loop2016: meta文件的设备
+</li>
+<li>/dev/loop2015: data文件的设备
+</li>
+<li>128: 最小的可分配的sector数
+</li>
+<li>65536: 最少可用sector的water mark，也就是一个threshold
+</li>
+<li>1: 有一个附加参数
+<ul class="org-ul">
+<li>skip_block_zeroing: 附加参数，表示略过用0填充的块
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+<p>
+现在就可以看到一个Device Mapper的设备了：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">wu@ubuntu16-188:~$ sudo ls -l  /dev/mapper/klose-thin-pool
+lrwxrwxrwx 1 root root 7 Oct 16 15:27 /dev/mapper/klose-thin-pool -&gt; ../dm-2
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-4-2-1-3" class="outline-5">
+<h5 id="sec-4-2-1-3">创建volume</h5>
+<div class="outline-text-5" id="text-4-2-1-3">
+<p>
+然而初始还没有完成，还要创建一个Thin Provisioning 的 Volume：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">wu@ubuntu16-188:~$ sudo dmsetup message /dev/mapper/klose-thin-pool 0 <span style="color: #ffa07a;">"create_thin 0"</span>
+wu@ubuntu16-188:~$ sudo dmsetup create klose-thin-volumn-001 <span style="color: #ffa07a;">\</span>
+&gt;             --table <span style="color: #ffa07a;">"0 2097152 thin /dev/mapper/klose-thin-pool 0"</span>
+</pre>
+</div>
+
+<p>
+其中：
+</p>
+<ul class="org-ul">
+<li>第一个命令中的create_thin是关键字，后面的0表示这个Volume的device 的 id
+</li>
+<li>第二个命令，是真正的为这个Volumn创建一个可以mount的设备，名字叫klose-thin-volumn-001。2097152只有1GB
+</li>
+</ul>
+</div>
+</div>
+
+
+<div id="outline-container-sec-4-2-1-4" class="outline-5">
+<h5 id="sec-4-2-1-4">格式化volume</h5>
+<div class="outline-text-5" id="text-4-2-1-4">
+<p>
+在mount前，还要格式化一下：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">wu@ubuntu16-188:~$ sudo mkfs.ext4 /dev/mapper/klose-thin-volumn-001
+</pre>
+</div>
+
+<pre class="example">
+mke2fs 1.43.3 (04-Sep-2016)
+Discarding device blocks: done
+Creating filesystem with 262144 4k blocks and 65536 inodes
+Filesystem UUID: 08c52fdf-ad29-437a-9957-9e8a23149088
+Superblock backups stored on blocks:
+        32768, 98304, 163840, 229376
+
+Allocating group tables: done
+Writing inode tables: done
+Creating journal (8192 blocks): done
+Writing superblocks and filesystem accounting information: done
+</pre>
+</div>
+</div>
+
+<div id="outline-container-sec-4-2-1-5" class="outline-5">
+<h5 id="sec-4-2-1-5">挂载volume</h5>
+<div class="outline-text-5" id="text-4-2-1-5">
+<p>
+接下来可以mount了：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">wu@ubuntu16-188:~$ sudo mkdir -p /mnt/base
+wu@ubuntu16-188:~$ sudo mount /dev/mapper/klose-thin-volumn-001 /mnt/base/
+
+root@ubuntu16-188:~#  echo <span style="color: #ffa07a;">"hello world, I am a base"</span> &gt; /mnt/base/id.txt
+root@ubuntu16-188:~# cat /mnt/base/id.txt
+hello world, I am a base
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-4-2-1-6" class="outline-5">
+<h5 id="sec-4-2-1-6">创建snapshot</h5>
+<div class="outline-text-5" id="text-4-2-1-6">
+<p>
+终于可以来看看snapshot怎么搞：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">wu@ubuntu16-188:~$ sudo dmsetup message /dev/mapper/klose-thin-pool 0 <span style="color: #ffa07a;">"create_snap 1 0"</span>
+wu@ubuntu16-188:~$ sudo dmsetup create mysnap1 <span style="color: #ffa07a;">\</span>
+&gt;                    --table <span style="color: #ffa07a;">"0 2097152 thin /dev/mapper/klose-thin-pool 1"</span>
+wu@ubuntu16-188:~$ sudo ls -l  /dev/mapper/mysnap1
+lrwxrwxrwx 1 root root 7 Oct 16 17:09 /dev/mapper/mysnap1 -&gt; ../dm-4
+</pre>
+</div>
+
+<p>
+上面的命令中：
+</p>
+<ul class="org-ul">
+<li>第一条命令是向klose-thin-pool发一个create_snap的消息，后面跟两个id：
+<ul class="org-ul">
+<li>第一个是新的dev id
+</li>
+<li>第二个是要从哪个已有的dev id上做snapshot，0这个dev id是我们前面就创建了的
+</li>
+</ul>
+</li>
+<li>第二条命令是创建一个mysnap1的device，并可以被mount
+</li>
+</ul>
+</div>
+</div>
+
+
+<div id="outline-container-sec-4-2-1-7" class="outline-5">
+<h5 id="sec-4-2-1-7">挂载snapshot</h5>
+<div class="outline-text-5" id="text-4-2-1-7">
+<p>
+mount这个新创建的snapshot：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">wu@ubuntu16-188:~$ sudo mkdir -p /mnt/mysnap1
+wu@ubuntu16-188:~$ sudo mount /dev/mapper/mysnap1 /mnt/mysnap1/
+wu@ubuntu16-188:~$ sudo ls -l /mnt/mysnap1/
+total 20
+-rw-r--r-- 1 root root    25 Oct 16 15:48 id.txt
+drwx------ 2 root root 16384 Oct 16 15:38 lost+found
+wu@ubuntu16-188:~$ sudo cat /mnt/mysnap1/id.txt
+hello world, I am a base
+</pre>
+</div>
+
+<p>
+我们来修改一下/mnt/mysnap1/id.txt，并加上一个snap1.txt的文件：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">root@ubuntu16-188:~# echo <span style="color: #ffa07a;">"I am snap1"</span> &gt;&gt; /mnt/mysnap1/id.txt
+root@ubuntu16-188:~# echo <span style="color: #ffa07a;">"I am snap1"</span> &gt;&gt; /mnt/mysnap1/snap1.txt
+root@ubuntu16-188:~# cat /mnt/mysnap1/id.txt
+hello world, I am a base
+I am snap1
+
+root@ubuntu16-188:~# cat /mnt/mysnap1/snap1.txt
+I am snap1
+</pre>
+</div>
+
+<p>
+再看一下/mnt/base，会发现没有什么变化，这就已经可以看到了分层镜像的样子了
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">root@ubuntu16-188:~#ls /mnt/base/
+id.txt  lost+found
+
+root@ubuntu16-188:~# cat /mnt/base/id.txt
+hello world, I am a base
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-4-2-1-8" class="outline-5">
+<h5 id="sec-4-2-1-8">多层snapshot</h5>
+<div class="outline-text-5" id="text-4-2-1-8">
+<p>
+还可以继续在刚才的snapshot上再建一个snapshot：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">wu@ubuntu16-188:~$ sudo dmsetup message /dev/mapper/klose-thin-pool 0 <span style="color: #ffa07a;">"create_snap 2 1"</span>
+wu@ubuntu16-188:~$  sudo dmsetup create mysnap2 <span style="color: #ffa07a;">\</span>
+&gt;                    --table <span style="color: #ffa07a;">"0 2097152 thin /dev/mapper/klose-thin-pool 2"</span>
+wu@ubuntu16-188:~$ sudo ls -l /dev/mapper/mysnap2
+lrwxrwxrwx 1 root root 7 Oct 16 17:31 /dev/mapper/mysnap2 -&gt; ../dm-5
+wu@ubuntu16-188:~$ sudo mkdir -p /mnt/
+base/    mysnap1/
+wu@ubuntu16-188:~$ sudo mkdir -p /mnt/mysnap2
+wu@ubuntu16-188:~$ sudo mount /dev/mapper/mysnap2 /mnt/mysnap2/
+wu@ubuntu16-188:~$ sudo ls /mnt/mysnap2/
+id.txt  lost+found  snap1.txt
+</pre>
+</div>
+
+<p>
+最后补点理论知识吧：
+</p>
+<ul class="org-ul">
+<li>Snapshot来自LVM（Logic Volumn Manager），它可以在不中断服务的情况下为某个device打一个快照
+</li>
+<li>Snapshot是Copy-On-Write的，也就是说，只有发生了修改，才会对对应的内存进行拷贝
+</li>
+</ul>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-4-3" class="outline-3">
+<h3 id="sec-4-3">Docker的DeviceMapper</h3>
+<div class="outline-text-3" id="text-4-3">
+<p>
+可以看一下docker的loopback设备：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">[root@xen12-166 ~]$ losetup -a
+/dev/loop0: [64768]:268449090 (/var/lib/docker/devicemapper/devicemapper/data)
+/dev/loop1: [64768]:268449091 (/var/lib/docker/devicemapper/devicemapper/metadata)
+</pre>
+</div>
+
+<p>
+其中data 100GB，metadata 2.0GB：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">[root@xen12-166 ~]$ ls -alhs /var/lib/docker/devicemapper/devicemapper
+total 17G
+0 drwx------ 2 root root   32 Jun  1 12:08 .
+0 drwx------ 5 root root   50 Jun  1 13:42 ..
+17G -rw------- 1 root root 100G Oct 16 17:42 data
+59M -rw------- 1 root root 2.0G Oct 16 17:41 metadata
+</pre>
+</div>
+
+<p>
+下面是相关的thin-pool， 其中一大串hash串的device是正在启动的容器：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">  [root@xen12-166 ~]$ ls -l /dev/mapper/docker*
+
+  lrwxrwxrwx 1 root root 8 Oct 16 17:06 /dev/mapper/docker-253:0-144069364-066e0a37b7e7e4bec72d4ff342a34e56ab8e4fd8338c5853b6d0cf7a78518656 -&gt; ../dm-37
+.......
+  lrwxrwxrwx 1 root root 8 Sep 26 13:04 /dev/mapper/docker-253:0-144069364-e48c295abcaa8bac8fc23e0454d3879c5a2f351c514588f21c2b650be3b95dcd -&gt; ../dm-10
+  lrwxrwxrwx 1 root root 7 Sep 26 13:04 /dev/mapper/docker-253:0-144069364-e51d640bf993763f542231df21226074cd8538e2f172f59812e2c9f6e32d0e7f -&gt; ../dm-5
+  lrwxrwxrwx 1 root root 7 Sep 26 13:05 /dev/mapper/docker-253:0-144069364-fafd411a11413b4d0f2f02ff6a4b93a6bf8419dbd028e8c93516d4f1d04298af -&gt; ../dm-9
+  lrwxrwxrwx 1 root root 7 Sep 26 13:04 /dev/mapper/docker-253:0-144069364-ff31f1db928b9820c6e73f63021c1dd772dde490340349a69438b8ed0986cf66 -&gt; ../dm-7
+  lrwxrwxrwx 1 root root 7 Sep 26 13:02 /dev/mapper/docker-253:0-144069364-pool -&gt; ../dm-2
+</pre>
+</div>
+
+<p>
+可以看一下它的device id：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">[root@xen12-166 ~]$ cat /var/lib/docker/devicemapper/metadata/066e0a37b7e7e4bec72d4ff342a34e56ab8e4fd8338c5853b6d0cf7a78518656
+{<span style="color: #ffa07a;">"device_id"</span>:6715,<span style="color: #ffa07a;">"size"</span>:10737418240,<span style="color: #ffa07a;">"transaction_id"</span>:22227,<span style="color: #ffa07a;">"initialized"</span>:false,<span style="color: #ffa07a;">"deleted"</span>:false}
+</pre>
+</div>
+
+<p>
+device_id是6715，size是10737418240，除以512，就是20971520 个 sector 
+</p>
+
+<p>
+<b>Thin Provisioning的文档中说，这还处理实验阶段，不要上Production</b> 
+</p>
+</div>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">

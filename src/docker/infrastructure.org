@@ -609,7 +609,7 @@ unshare() 和 setns() 都比较简单
    上图中，Docker使用了一个私有网段 172.40.1.0，docker还可能会使用10.0.0.0和192.168.0.0这两个私有网段，关键看你的路由表中是否配置了，如果没有配置，就会使用，如果你的路由表配置了所有私有网段，那么docker启动时就会出错了
    
    当你启动一个Docker容器后，你可以使用ip link show或ip addr show来查看当前宿主机的网络情况（我们可以看到有一个docker0，还有一个veth22a38e6的虚拟网卡——给容器用的）：
-      
+   
    #+BEGIN_SRC sh :results output :exports result
   hchen@ubuntu:~$ ip link show
    #+END_SRC
@@ -627,8 +627,8 @@ unshare() 和 setns() 都比较简单
    #+end_example
    
    那么，要如何才能做成这个样子呢？我们来看一组命令： 
-
-
+   
+   
    #+BEGIN_SRC sh
      ## 首先，我们先增加一个网桥lxcbr0，模仿docker0
      brctl addbr lxcbr0
@@ -668,10 +668,10 @@ unshare() 和 setns() 都比较简单
      mkdir -p /etc/netns/ns1
      echo "nameserver 8.8.8.8" > /etc/netns/ns1/resolv.conf
    #+END_SRC
-上面基本上就是docker网络的原理了，只不过：
+   上面基本上就是docker网络的原理了，只不过：
 + Docker的resolv.conf没有用这样的方式，而是用了Mount Namesapce的那种方式
 + docker是用进程的PID来做Network Namespace的名称的
-
+  
 甚至可以为正在运行的docker容器增加一个新的网卡：
 
 #+BEGIN_SRC sh
@@ -691,12 +691,12 @@ unshare() 和 setns() 都比较简单
 无论是Docker的NAT方式，还是混杂模式都会有性能上的问题：
 + NAT不用说了，存在一个转发的开销
 + 混杂模式呢，网卡上收到的负载都会完全交给所有的虚拟网卡上，于是就算一个网卡上没有数据，但也会被其它网卡上的数据所影响
-
+  
 这两种方式都不够完美，真正解决这种网络问题需要使用VLAN技术，于是Google为Linux内核实现了一个IPVLAN的驱动，这基本上就是为Docker量身定制的
 
 ** Namespace文件 
-让我们运行一下上篇中的那个pid.mnt的程序（也就是PID Namespace中那个mount proc的程序），然后不要退出：
-
+   让我们运行一下上篇中的那个pid.mnt的程序（也就是PID Namespace中那个mount proc的程序），然后不要退出：
+   
    #+BEGIN_SRC sh :results output :exports result
      $ sudo ./pid.mnt 
    #+END_SRC
@@ -706,8 +706,8 @@ unshare() 和 setns() 都比较简单
      Parent [ 4599] - start a container!
      Container [  1] - inside the container!
    #+end_example
-
-到另一个shell中查看一下父子进程的PID：
+   
+   到另一个shell中查看一下父子进程的PID：
    #+BEGIN_SRC sh :results output :exports result
      hchen@ubuntu:~$ pstree -p 4599
    #+END_SRC
@@ -716,8 +716,8 @@ unshare() 和 setns() 都比较简单
    #+begin_example
      pid.mnt(4599)───bash(4600)
    #+end_example
-
-可以到proc下（/proc//ns）查看进程的各个namespace的id（内核版本需要3.8以上）。下面是父进程的：
+   
+   可以到proc下（/proc//ns）查看进程的各个namespace的id（内核版本需要3.8以上）。下面是父进程的：
    #+BEGIN_SRC sh :results output :exports result
      hchen@ubuntu:~$ sudo ls -l /proc/4599/ns
    #+END_SRC
@@ -732,8 +732,8 @@ unshare() 和 setns() 都比较简单
      lrwxrwxrwx 1 root root 0  4月  7 22:01 user -> user:[4026531837]
      lrwxrwxrwx 1 root root 0  4月  7 22:01 uts -> uts:[4026531838]
    #+end_example
-
-下面是子进程的：
+   
+   下面是子进程的：
    #+BEGIN_SRC sh :results output :exports result
      hchen@ubuntu:~$ sudo ls -l /proc/4600/ns
    #+END_SRC
@@ -748,41 +748,41 @@ unshare() 和 setns() 都比较简单
      lrwxrwxrwx 1 root root 0  4月  7 22:01 user -> user:[4026531837]
      lrwxrwxrwx 1 root root 0  4月  7 22:01 uts -> uts:[4026532521]
    #+end_example
-
-可以看到，其中的 *ipc, net, user是同一个ID，而mnt, pid, uts都是不一样的* 。如果两个进程指向的namespace编号相同，就说明他们在同一个namespace下，否则则在不同namespace里面
-
-这些文件还有另一个作用，那就是，一旦这些文件被打开，只要其fd被占用着，那么就算PID所属的所有进程都已经结束，创建的namespace也会一直存在。比如：我们可以通过下面命令来hold这个namespace：
-
-#+BEGIN_SRC sh
+   
+   可以看到，其中的 *ipc, net, user是同一个ID，而mnt, pid, uts都是不一样的* 。如果两个进程指向的namespace编号相同，就说明他们在同一个namespace下，否则则在不同namespace里面
+   
+   这些文件还有另一个作用，那就是，一旦这些文件被打开，只要其fd被占用着，那么就算PID所属的所有进程都已经结束，创建的namespace也会一直存在。比如：我们可以通过下面命令来hold这个namespace：
+   
+   #+BEGIN_SRC sh
   $ mount -bind /proc/4600/ns/uts ~/uts
-#+END_SRC
-
-另外，曾经描述过一个setns的系统调用，其函数声明如下：
-
-#+BEGIN_SRC C
+   #+END_SRC
+   
+   另外，曾经描述过一个setns的系统调用，其函数声明如下：
+   
+   #+BEGIN_SRC C
   int setns(int fd, int nstype);
-#+END_SRC
-
-其中第一个参数就是一个fd，也就是一个open()系统调用打开了上述文件后返回的fd，比如：
-
-#+BEGIN_SRC C
+   #+END_SRC
+   
+   其中第一个参数就是一个fd，也就是一个open()系统调用打开了上述文件后返回的fd，比如：
+   
+   #+BEGIN_SRC C
   fd = open("/proc/4600/ns/nts", O_RDONLY);  // 获取namespace文件描述符
   setns(fd, 0); // 加入新的namespace
-#+END_SRC
-
+   #+END_SRC
+   
 * CGroup
   Namespace解决的问题主要是环境隔离的问题，这只是虚拟化中最最基础的一步，我们还需要解决对计算机资源使用上的隔离。也就是说，虽然你通过Namespace把我Jail到一个特定的环境中去了，但是我在其中的进程使用用CPU、内存、磁盘等这些计算资源其实还是可以随心所欲的。所以，我们希望对进程进行资源利用上的限制或控制。这就是Linux CGroup出来了的原因
-
-Linux CGroup全称Linux Control Group， 是Linux内核的一个功能，用来限制，控制与分离一个进程组群的资源（如CPU、内存、磁盘输入输出等）。这个项目最早是由Google的工程师在2006年发起，最早的名称为进程容器（process containers）。在2007年时，因为在Linux内核中，容器这个名词太过广泛，为避免混乱，被重命名为cgroup，并且被合并到2.6.24版的内核中去。然后，其它开始了他的发展
-
-Cgroup可让您为系统中所运行任务（进程）的用户定义组群分配资源，比如CPU时间、系统内存、网络带宽或者这些资源的组合。你可以监控您配置的cgroup，拒绝cgroup访问某些资源，甚至在运行的系统中动态配置cgroup
-
-主要提供了如下功能：
+  
+  Linux CGroup全称Linux Control Group， 是Linux内核的一个功能，用来限制，控制与分离一个进程组群的资源（如CPU、内存、磁盘输入输出等）。这个项目最早是由Google的工程师在2006年发起，最早的名称为进程容器（process containers）。在2007年时，因为在Linux内核中，容器这个名词太过广泛，为避免混乱，被重命名为cgroup，并且被合并到2.6.24版的内核中去。然后，其它开始了他的发展
+  
+  Cgroup可让您为系统中所运行任务（进程）的用户定义组群分配资源，比如CPU时间、系统内存、网络带宽或者这些资源的组合。你可以监控您配置的cgroup，拒绝cgroup访问某些资源，甚至在运行的系统中动态配置cgroup
+  
+  主要提供了如下功能：
 + Resource limitation: 限制资源使用，比如内存使用上限以及文件系统的缓存限制
 + Prioritization: 优先级控制，比如：CPU利用和磁盘IO吞吐
 + Accounting: 一些审计或一些统计，主要目的是为了计费
 + Control: 挂起进程，恢复执行进程
-
+  
 使用cgroup，系统管理员可更具体地控制对系统资源的分配、优先顺序、拒绝gc、管理和监控。可更好地根据任务和用户分配硬件资源，提高总体效率
 
 在实践中，系统管理员一般会利用CGroup做下面这些事（有点像为某个虚拟机分配资源似的）：
@@ -790,9 +790,9 @@ Cgroup可让您为系统中所运行任务（进程）的用户定义组群分�
 + 为这组进程分配其足够使用的内存
 + 为这组进程分配相应的网络带宽和磁盘存储限制
 + 限制访问某些设备（通过设置设备的白名单）
-
+  
 ** 入门 
-首先，Linux把CGroup这个事实现成了一个file system，你可以mount。在我的Ubuntu 14.04下，你输入以下命令你就可以看到cgroup已为你mount好了：
+   首先，Linux把CGroup这个事实现成了一个file system，你可以mount。在我的Ubuntu 14.04下，你输入以下命令你就可以看到cgroup已为你mount好了：
    #+BEGIN_SRC sh :results output :exports result
      hchen@ubuntu:~$ mount -t cgroup
    #+END_SRC
@@ -811,8 +811,8 @@ Cgroup可让您为系统中所运行任务（进程）的用户定义组群分�
      cgroup on /sys/fs/cgroup/perf_event type cgroup (rw,relatime,perf_event)
      cgroup on /sys/fs/cgroup/hugetlb type cgroup (rw,relatime,hugetlb)
    #+end_example
-
-或者使用lssubsys命令：
+   
+   或者使用lssubsys命令：
    #+BEGIN_SRC sh :results output :exports result
      $ lssubsys  -m
    #+END_SRC
@@ -831,11 +831,11 @@ Cgroup可让您为系统中所运行任务（进程）的用户定义组群分�
      perf_event /sys/fs/cgroup/perf_event
      hugetlb /sys/fs/cgroup/hugetlb
    #+end_example
-
-我们可以看到，在/sys/fs下有一个cgroup的目录，这个目录下还有很多子目录，比如： cpu，cpuset，memory，blkio……这些，这些都是cgroup的子系统。分别用于干不同的事的。
-
-如果你没有看到上述的目录，你可以自己mount，下面给了一个示例：
-#+BEGIN_SRC sh
+   
+   我们可以看到，在/sys/fs下有一个cgroup的目录，这个目录下还有很多子目录，比如： cpu，cpuset，memory，blkio……这些，这些都是cgroup的子系统。分别用于干不同的事的。
+   
+   如果你没有看到上述的目录，你可以自己mount，下面给了一个示例：
+   #+BEGIN_SRC sh
   mkdir cgroup
   mount -t tmpfs cgroup_root ./cgroup
   mkdir cgroup/cpuset
@@ -844,9 +844,9 @@ Cgroup可让您为系统中所运行任务（进程）的用户定义组群分�
   mount -t cgroup -ocpu cpu ./cgroup/cpu/
   mkdir cgroup/memory
   mount -t cgroup -omemory memory ./cgroup/memory/
-#+END_SRC
-
-一旦mount成功，你就会看到这些目录下就有好些文件了，比如，如下所示的cpu和cpuset的子系统：
+   #+END_SRC
+   
+   一旦mount成功，你就会看到这些目录下就有好些文件了，比如，如下所示的cpu和cpuset的子系统：
    #+BEGIN_SRC sh :results output :exports result
      hchen@ubuntu:~$ ls /sys/fs/cgroup/cpu /sys/fs/cgroup/cpuset/
    #+END_SRC
@@ -867,8 +867,8 @@ Cgroup可让您为系统中所运行任务（进程）的用户定义组群分�
      cpuset.cpus            cpuset.memory_spread_slab       user
      cpuset.mem_exclusive   cpuset.mems
    #+end_example
-
-你可以到/sys/fs/cgroup的各个子目录下去make个dir，你会发现，一旦你创建了一个子目录，这个子目录里又有很多文件了：
+   
+   你可以到/sys/fs/cgroup的各个子目录下去make个dir，你会发现，一旦你创建了一个子目录，这个子目录里又有很多文件了：
    #+BEGIN_SRC sh :results output :exports result
      hchen@ubuntu:/sys/fs/cgroup/cpu$ sudo mkdir haoel
      hchen@ubuntu:/sys/fs/cgroup/cpu$ ls ./haoel
@@ -879,48 +879,48 @@ Cgroup可让您为系统中所运行任务（进程）的用户定义组群分�
      cgroup.clone_children  cgroup.procs       cpu.cfs_quota_us  cpu.stat           tasks
      cgroup.event_control   cpu.cfs_period_us  cpu.shares        notify_on_release
    #+end_example
-
+   
 ** CPU 限制
-假设，我们有一个非常吃CPU的程序，叫deadloop，其源码如下：
-
-#+BEGIN_SRC C
+   假设，我们有一个非常吃CPU的程序，叫deadloop，其源码如下：
+   
+   #+BEGIN_SRC C
   int main(void)
   {
           int i = 0;
           for(;;) i++;
           return 0;
   }
-#+END_SRC
-
-用sudo执行起来后，毫无疑问，CPU被干到了100%，下面是top命令的输出：
-
-#+BEGIN_SRC sh
+   #+END_SRC
+   
+   用sudo执行起来后，毫无疑问，CPU被干到了100%，下面是top命令的输出：
+   
+   #+BEGIN_SRC sh
   PID USER      PR  NI    VIRT    RES    SHR S %CPU %MEM     TIME+ COMMAND     
   3529 root      20   0    4196    736    656 R 99.6  0.1   0:23.13 deadloop
-#+END_SRC
-
-然后，我们这前不是在/sys/fs/cgroup/cpu下创建了一个haoel的group。我们先设置一下这个group的cpu利用的限制：
-
-#+BEGIN_SRC sh
+   #+END_SRC
+   
+   然后，我们这前不是在/sys/fs/cgroup/cpu下创建了一个haoel的group。我们先设置一下这个group的cpu利用的限制：
+   
+   #+BEGIN_SRC sh
   hchen@ubuntu:~# cat /sys/fs/cgroup/cpu/haoel/cpu.cfs_quota_us 
   -1
   root@ubuntu:~# echo 20000 > /sys/fs/cgroup/cpu/haoel/cpu.cfs_quota_us
-#+END_SRC
-这个进程的PID是3529，把这个进程加到这个cgroup中：
-#+BEGIN_SRC sh
+   #+END_SRC
+   这个进程的PID是3529，把这个进程加到这个cgroup中：
+   #+BEGIN_SRC sh
   $ echo 3529 >> /sys/fs/cgroup/cpu/haoel/tasks
-#+END_SRC
-然后，就会在top中看到CPU的利用立马下降成20%了。（前面我们设置的20000就是20%的意思）：
-
-#+BEGIN_SRC sh
+   #+END_SRC
+   然后，就会在top中看到CPU的利用立马下降成20%了。（前面我们设置的20000就是20%的意思）：
+   
+   #+BEGIN_SRC sh
   PID USER      PR  NI    VIRT    RES    SHR S %CPU %MEM     TIME+ COMMAND     
   3529 root      20   0    4196    736    656 R 19.9  0.1   8:06.11 deadloop
-#+END_SRC
-
+   #+END_SRC
+   
 *** 线程实例
-下面的代码是一个线程的示例：
-
-#+BEGIN_SRC C
+    下面的代码是一个线程的示例：
+    
+    #+BEGIN_SRC C
   #define _GNU_SOURCE         /* See feature_test_macros(7) */
    
   #include <pthread.h>
@@ -987,11 +987,11 @@ Cgroup可让您为系统中所运行任务（进程）的用户定义组群分�
           pthread_exit(NULL);
           free(threads);
   }
-#+END_SRC
-
+    #+END_SRC
+    
 ** 内存使用限制
-再来看一个限制内存的例子，下面的代码是个死循环，其它不断的分配内存，每次512个字节，每次休息一秒：
-#+BEGIN_SRC C
+   再来看一个限制内存的例子，下面的代码是个死循环，其它不断的分配内存，每次512个字节，每次休息一秒：
+   #+BEGIN_SRC C
   #include <stdio.h>
   #include <stdlib.h>
   #include <string.h>
@@ -1017,53 +1017,53 @@ Cgroup可让您为系统中所运行任务（进程）的用户定义组群分�
           }
           return 0;
   }
-#+END_SRC
-
-然后，我们：
-#+BEGIN_SRC sh
+   #+END_SRC
+   
+   然后，我们：
+   #+BEGIN_SRC sh
   # 创建memory cgroup
   $ mkdir /sys/fs/cgroup/memory/haoel
   $ echo 64k > /sys/fs/cgroup/memory/haoel/memory.limit_in_bytes
    
   # 把上面的进程的pid加入这个cgroup
   $ echo [pid] > /sys/fs/cgroup/memory/haoel/tasks
-#+END_SRC
-
-一会上面的进程就会因为内存问题被kill掉了
+   #+END_SRC
+   
+   一会上面的进程就会因为内存问题被kill掉了
 ** 磁盘I/O限制
-我们先看一下我们的硬盘IO，我们的模拟命令如下：从/dev/sda1上读入数据，输出到/dev/null上
-#+BEGIN_SRC sh
+   我们先看一下我们的硬盘IO，我们的模拟命令如下：从/dev/sda1上读入数据，输出到/dev/null上
+   #+BEGIN_SRC sh
   $ sudo dd if=/dev/sda1 of=/dev/null
-#+END_SRC
-
-我们通过iotop命令我们可以看到相关的IO速度是55MB/s（虚拟机内）：
-
-#+BEGIN_SRC sh
+   #+END_SRC
+   
+   我们通过iotop命令我们可以看到相关的IO速度是55MB/s（虚拟机内）：
+   
+   #+BEGIN_SRC sh
   TID  PRIO  USER     DISK READ  DISK WRITE  SWAPIN     IO>    COMMAND          
   8128 be/4 root       55.74 M/s    0.00 B/s  0.00 % 85.65 % dd if=/de~=/dev/null...
-#+END_SRC
-然后，我们先创建一个blkio（块设备IO）的cgroup：
-
-#+BEGIN_SRC sh
+   #+END_SRC
+   然后，我们先创建一个blkio（块设备IO）的cgroup：
+   
+   #+BEGIN_SRC sh
   $ mkdir /sys/fs/cgroup/blkio/haoel
-#+END_SRC
-
-并把读IO限制到1MB/s，并把前面那个dd命令的pid放进去（注：8:0 是设备号，你可以通过ls -l /dev/sda1获得）：
-
-#+BEGIN_SRC sh
+   #+END_SRC
+   
+   并把读IO限制到1MB/s，并把前面那个dd命令的pid放进去（注：8:0 是设备号，你可以通过ls -l /dev/sda1获得）：
+   
+   #+BEGIN_SRC sh
   root@ubuntu:~$ echo '8:0 1048576'  > /sys/fs/cgroup/blkio/haoel/blkio.throttle.read_bps_device 
   root@ubuntu:~$ echo 8128 > /sys/fs/cgroup/blkio/haoel/tasks
-#+END_SRC
-
-再用iotop命令，你马上就能看到读速度被限制到了1MB/s左右：
-
-#+BEGIN_SRC sh
+   #+END_SRC
+   
+   再用iotop命令，你马上就能看到读速度被限制到了1MB/s左右：
+   
+   #+BEGIN_SRC sh
   TID  PRIO  USER     DISK READ  DISK WRITE  SWAPIN     IO>    COMMAND          
   8128 be/4 root      973.20 K/s    0.00 B/s  0.00 % 94.41 % dd if=/de~=/dev/null...
-#+END_SRC
-
+   #+END_SRC
+   
 ** CGroup的子系统
-好了，有了以上的感性认识我们来，再来看看control group有哪些子系统：
+   好了，有了以上的感性认识我们来，再来看看control group有哪些子系统：
 + blkio:  这个子系统为块设备设定输入/输出限制，比如物理设备（磁盘，固态硬盘，USB 等等）
 + cpu:  这个子系统使用调度程序提供对 CPU 的 cgroup 任务访问
 + cpuacct:  这个子系统自动生成 cgroup 中任务所使用的 CPU 报告
@@ -1074,7 +1074,7 @@ Cgroup可让您为系统中所运行任务（进程）的用户定义组群分�
 + net_cls:  这个子系统使用等级识别符（classid）标记网络数据包，可允许 Linux 流量控制程序（tc）识别从具体 cgroup 中生成的数据包
 + net_prio:  这个子系统用来设计网络流量的优先级
 + hugetlb:  这个子系统主要针对于HugeTLB系统进行限制，这是一个大页文件系统
-
+  
 注意，你可能在Ubuntu 14.04下看不到net_cls和net_prio这两个cgroup，你需要手动mount一下：
 
 #+BEGIN_SRC sh
@@ -1092,21 +1092,21 @@ Cgroup可让您为系统中所运行任务（进程）的用户定义组群分�
 + 控制组（Control Group）：一组按照某种标准划分的进程，比如官方文档中的Professor和Student，或是WWW和System之类的，其表示了某进程组。Cgroups中的资源控制都是以控制组为单位实现。一个进程可以加入到某个控制组。而资源的限制是定义在这个组上，就像上面示例中我用的haoel一样。简单点说，cgroup的呈现就是一个目录带一系列的可配置文件
 + 层级（Hierarchy）：控制组可以组织成hierarchical的形式，既一颗控制组的树（目录结构）。控制组树上的子节点继承父结点的属性。简单点说，hierarchy就是在一个或多个子系统上的cgroups目录树
 + 子系统（Subsystem）：一个子系统就是一个资源控制器，比如CPU子系统就是控制CPU时间分配的一个控制器。子系统必须附加到一个层级上才能起作用，一个子系统附加到某个层级以后，这个层级上的所有控制族群都受到这个子系统的控制。Cgroup的子系统可以有很多，也在不断增加中。
-
+  
 * Aufs
   AUFS是一种Union File System，所谓UnionFS就是把不同物理位置的目录合并mount到同一个目录中。UnionFS的一个最主要的应用是，把一张CD/DVD和一个硬盘目录给联合 mount在一起，然后，你就可以对这个只读的CD/DVD上的文件进行修改（当然，修改的文件存于硬盘上的目录里）
-
-   #+ATTR_HTML: image :width 30% 
-   [[file:pic/docker-filesystems-busyboxrw.png]]
-
+  
+  #+ATTR_HTML: image :width 30% 
+  [[file:pic/docker-filesystems-busyboxrw.png]]
+  
 ** 示例 
-首先，我们建上两个目录（水果和蔬菜），并在这两个目录中放上一些文件，水果中有苹果和蕃茄，蔬菜有胡萝卜和蕃茄 
-
-
-#+BEGIN_SRC sh :results output :exports result
+   首先，我们建上两个目录（水果和蔬菜），并在这两个目录中放上一些文件，水果中有苹果和蕃茄，蔬菜有胡萝卜和蕃茄 
+   
+   
+   #+BEGIN_SRC sh :results output :exports result
   klose@ubuntu16-188 ~/Documents/programming/C/aufs $ tree . 
-#+END_SRC
-
+   #+END_SRC
+   
    #+RESULTS:
    #+begin_example
      .
@@ -1116,12 +1116,12 @@ Cgroup可让您为系统中所运行任务（进程）的用户定义组群分�
      └── vegetables
          ├── carrots
          └── tomato
-
+   
      2 directories, 4 files
    #+end_example
-
-然后，输入以下命令：
-#+BEGIN_SRC sh :results output :exports result
+   
+   然后，输入以下命令：
+   #+BEGIN_SRC sh :results output :exports result
   # 创建一个mount目录
   $ mkdir mnt
    
@@ -1130,44 +1130,44 @@ Cgroup可让您为系统中所运行任务（进程）的用户定义组群分�
    
   #  查看./mnt目录
   $ tree ./mnt
-#+END_SRC
-
+   #+END_SRC
+   
    #+RESULTS:
    #+begin_example
      ./mnt/
      ├── apple
      ├── carrots
      └── tomato
-
+   
      0 directories, 3 files
    #+end_example
-
-可以看到在./mnt目录下有三个文件，苹果apple、胡萝卜carrots和蕃茄tomato。水果和蔬菜的目录被union到了./mnt目录下了
-
-来修改一下其中的文件内容：
-
-#+BEGIN_SRC sh
+   
+   可以看到在./mnt目录下有三个文件，苹果apple、胡萝卜carrots和蕃茄tomato。水果和蔬菜的目录被union到了./mnt目录下了
+   
+   来修改一下其中的文件内容：
+   
+   #+BEGIN_SRC sh
   $ echo mnt > ./mnt/apple
   $ cat ./mnt/apple
   mnt
   $ cat ./fruits/apple
   mnt
-#+END_SRC
-上面的示例，可以看到./mnt/apple的内容改了，./fruits/apple的内容也改了 
-
-#+BEGIN_SRC sh
+   #+END_SRC
+   上面的示例，可以看到./mnt/apple的内容改了，./fruits/apple的内容也改了 
+   
+   #+BEGIN_SRC sh
   $ echo mnt_carrots > ./mnt/carrots
   $ cat ./vegetables/carrots
    
   $ cat ./fruits/carrots
   mnt_carrots
-#+END_SRC
-可以看到修改了./mnt/carrots的文件内容，./vegetables/carrots并没有变化，反而是./fruits/carrots的目录中出现了carrots文件，其内容是在./mnt/carrots里的内容 
-
-也就是说，在mount aufs命令中，没有指它vegetables和fruits的目录权限。默认上来说，命令行上第一个（最左边）的目录是可读可写的，后面的全都是只读的。（一般来说，最前面的目录应该是可写的，而后面的都应该是只读的）
-
-所以，如果我们像下面这样指定权限来mount aufs，你就会发现有不一样的效果（记得先把上面./fruits/carrots的文件删除了）：
-#+BEGIN_SRC sh
+   #+END_SRC
+   可以看到修改了./mnt/carrots的文件内容，./vegetables/carrots并没有变化，反而是./fruits/carrots的目录中出现了carrots文件，其内容是在./mnt/carrots里的内容 
+   
+   也就是说，在mount aufs命令中，没有指它vegetables和fruits的目录权限。默认上来说，命令行上第一个（最左边）的目录是可读可写的，后面的全都是只读的。（一般来说，最前面的目录应该是可写的，而后面的都应该是只读的）
+   
+   所以，如果我们像下面这样指定权限来mount aufs，你就会发现有不一样的效果（记得先把上面./fruits/carrots的文件删除了）：
+   #+BEGIN_SRC sh
   $ sudo mount -t aufs -o dirs=./fruits=rw:./vegetables=rw none ./mnt
    
   $ echo "mnt_carrots" > ./mnt/carrots
@@ -1177,10 +1177,10 @@ Cgroup可让您为系统中所运行任务（进程）的用户定义组群分�
    
   $ cat ./fruits/carrots
   cat: ./fruits/carrots: No such file or directory
-#+END_SRC
-在这情况下，如果我们要修改./mnt/tomato这个文件，那么究竟是哪个文件会被改写？
-
-#+BEGIN_SRC sh
+   #+END_SRC
+   在这情况下，如果我们要修改./mnt/tomato这个文件，那么究竟是哪个文件会被改写？
+   
+   #+BEGIN_SRC sh
   $ echo "mnt_tomato" > ./mnt/tomato
    
   $ cat ./fruits/tomato
@@ -1188,28 +1188,28 @@ Cgroup可让您为系统中所运行任务（进程）的用户定义组群分�
    
   $ cat ./vegetables/tomato
   I am a vegetable
-#+END_SRC
-
-可见，如果有重复的文件名，在mount命令行上，越往前的就优先级越高
-
+   #+END_SRC
+   
+   可见，如果有重复的文件名，在mount命令行上，越往前的就优先级越高
+   
 ** 用途
-历史上，有一个叫Knoppix的Linux发行版，其主要用于Linux演示、光盘教学、系统急救，以及商业产品的演示，不需要硬盘安装，直接把CD/DVD上的image运行在一个可写的存储设备上（比如一个U盘上），其实，也就是把CD/DVD这个文件系统和USB这个可写的系统给联合mount起来，这样你对CD/DVD上的image做的任何改动都会在被应用在U盘上，于是乎，你可以对CD/DVD上的内容进行任意的修改，因为改动都在U盘上，所以你改不坏原来的东西
-
-可以再发挥一下想像力，你也可以把一个目录，比如你的源代码，作为一个只读的template，和另一个你的working directory给union在一起，然后你就可以做各种修改而不用害怕会把源代码改坏了。有点像一个ad hoc snapshot
-
+   历史上，有一个叫Knoppix的Linux发行版，其主要用于Linux演示、光盘教学、系统急救，以及商业产品的演示，不需要硬盘安装，直接把CD/DVD上的image运行在一个可写的存储设备上（比如一个U盘上），其实，也就是把CD/DVD这个文件系统和USB这个可写的系统给联合mount起来，这样你对CD/DVD上的image做的任何改动都会在被应用在U盘上，于是乎，你可以对CD/DVD上的内容进行任意的修改，因为改动都在U盘上，所以你改不坏原来的东西
+   
+   可以再发挥一下想像力，你也可以把一个目录，比如你的源代码，作为一个只读的template，和另一个你的working directory给union在一起，然后你就可以做各种修改而不用害怕会把源代码改坏了。有点像一个ad hoc snapshot
+   
 *** docker分层
-下图来自Docker的官方文档Layer，其很好的展示了Docker用UnionFS搭建的分层镜像：
-   #+ATTR_HTML: image :width 50% 
-   [[file:pic/docker-filesystems-multilayer.png]]
-
-关于docker的分层镜像，除了aufs，docker还支持btrfs, devicemapper和vfs，你可以使用 -s 或 -storage-driver= 选项来指定相关的镜像存储。在Ubuntu 14.04下，docker默认Ubuntu的 aufs（在CentOS7下，用的是devicemapper，关于devicemapper，我会以以后的文章中讲解）你可以在下面的目录中查看相关的每个层的镜像：
-
-#+BEGIN_SRC sh
+    下图来自Docker的官方文档Layer，其很好的展示了Docker用UnionFS搭建的分层镜像：
+    #+ATTR_HTML: image :width 50% 
+    [[file:pic/docker-filesystems-multilayer.png]]
+    
+    关于docker的分层镜像，除了aufs，docker还支持btrfs, devicemapper和vfs，你可以使用 -s 或 -storage-driver= 选项来指定相关的镜像存储。在Ubuntu 14.04下，docker默认Ubuntu的 aufs（在CentOS7下，用的是devicemapper，关于devicemapper，我会以以后的文章中讲解）你可以在下面的目录中查看相关的每个层的镜像：
+    
+    #+BEGIN_SRC sh
   $ /var/lib/docker/aufs/diff/<id>
-#+END_SRC
-
-在docker执行起来后（比如：docker run -it ubuntu /bin/bash），你可以从/sys/fs/aufs/si_[id]目录下查看aufs的mount的情况，下面是个示例：
-#+BEGIN_SRC sh
+    #+END_SRC
+    
+    在docker执行起来后（比如：docker run -it ubuntu /bin/bash），你可以从/sys/fs/aufs/si_[id]目录下查看aufs的mount的情况，下面是个示例：
+    #+BEGIN_SRC sh
   $ ls /sys/fs/aufs/si_b71b209f85ff8e75/
   br0      br2      br4      br6      brid1    brid3    brid5    xi_path
   br1      br3      br5      brid0    brid2    brid4    brid6 
@@ -1230,22 +1230,22 @@ Cgroup可让您为系统中所运行任务（进程）的用户定义组群分�
   69
   70
   /run/shm/aufs.xino
-#+END_SRC
-
+    #+END_SRC
+    
 ** Aufs的特性
-AUFS有所有Union FS的特性，把多个目录，合并成同一个目录，并可以为每个需要合并的目录指定相应的权限，实时的添加、删除、修改已经被mount好的目录。而且，他还能在多个可写的branch/dir间进行负载均衡
-
-被union的目录（分支）的相关权限：
+   AUFS有所有Union FS的特性，把多个目录，合并成同一个目录，并可以为每个需要合并的目录指定相应的权限，实时的添加、删除、修改已经被mount好的目录。而且，他还能在多个可写的branch/dir间进行负载均衡
+   
+   被union的目录（分支）的相关权限：
 + rw: 可写可读read-write
 + ro: read-only，如果你不指权限，那么除了第一个外ro是默认值，对于ro分支，其永远不会收到写操作，也不会收到查找whiteout的操作
 + rr: real-read-only，与read-only不同的是，rr标记的是天生就是只读的分支，这样，AUFS可以提高性能，比如不再设置inotify来检查文件变动通知
-
+  
 *** whiteout 
-一般来说ro的分支都会有wh的属性，比如 “[dir]=ro+wh”。所谓whiteout的意思，如果在union中删除的某个文件，实际上是位于一个readonly的分支（目录）上，那么，在mount的union这个目录中你将看不到这个文件，但是read-only这个层上我们无法做任何的修改，所以，我们就需要对这个readonly目录里的文件作whiteout。AUFS的whiteout的实现是通过在上层的可写的目录下建立对应的whiteout隐藏文件来实现的
-
+    一般来说ro的分支都会有wh的属性，比如 “[dir]=ro+wh”。所谓whiteout的意思，如果在union中删除的某个文件，实际上是位于一个readonly的分支（目录）上，那么，在mount的union这个目录中你将看不到这个文件，但是read-only这个层上我们无法做任何的修改，所以，我们就需要对这个readonly目录里的文件作whiteout。AUFS的whiteout的实现是通过在上层的可写的目录下建立对应的whiteout隐藏文件来实现的
+    
 **** whiteout实例
-假设我们有三个目录和文件如下所示，其中test是个空目录：
-#+BEGIN_SRC sh
+     假设我们有三个目录和文件如下所示，其中test是个空目录：
+     #+BEGIN_SRC sh
   $ tree
   .
   ├── fruits
@@ -1255,30 +1255,30 @@ AUFS有所有Union FS的特性，把多个目录，合并成同一个目录，�
   └── vegetables
       ├── carrots
       └── tomato
-#+END_SRC
-
-如下mount：
-
-#+BEGIN_SRC sh
+     #+END_SRC
+     
+     如下mount：
+     
+     #+BEGIN_SRC sh
   $ mkdir mnt
    
   $ mount -t aufs -o dirs=./test=rw:./fruits=ro:./vegetables=ro none ./mnt
    
   $ ls ./mnt/
   apple  carrots  tomato
-#+END_SRC
-
-现在我们在权限为rw的test目录下建个whiteout的隐藏文件.wh.apple，你就会发现./mnt/apple这个文件就消失了：
-
-#+BEGIN_SRC sh
+     #+END_SRC
+     
+     现在我们在权限为rw的test目录下建个whiteout的隐藏文件.wh.apple，你就会发现./mnt/apple这个文件就消失了：
+     
+     #+BEGIN_SRC sh
   $  touch ./test/.wh.apple
    
   $ ls ./mnt
   carrots  tomato
-#+END_SRC
-
-上面这个操作和 rm ./mnt/apple是一样的
-
+     #+END_SRC
+     
+     上面这个操作和 rm ./mnt/apple是一样的
+     
 ** 术语
 + Branch: 就是各个要被union起来的目录
   + Branch根据被union的顺序形成一个stack，一般来说最上面的是可写的，下面的都是只读的
@@ -1288,16 +1288,16 @@ AUFS有所有Union FS的特性，把多个目录，合并成同一个目录，�
     + 在隐藏低层档的情况下，whiteout的名字是 *.wh.<filename>*
   + Opaque: 不允许任何下层的某个目录显示出来。
     + 在阻止readdir的情况下，名字是 *.wh..wh..opq* 或者 *.wh.__dir_opaque*
-
+      
 ** 问题
 1. *要有文件在原来的地方被修改了会怎么样？* mount的目录会一起改变吗？答案是会的，也可以是不会的。因为你可以指定一个叫udba的参数(User's Direct Branch Access)，这个参数有三个取值：
    + *udba=none* 设置上这个参数后，AUFS会运转的更快，因为那些不在mount目录里发生的修改，aufs不会同步过来了，所以会有数据出错的问题
    + *udba=reval* 设置上这个参数后，AUFS会去查文件有没有被更新，如果有的话，就会把修改拉到mount目录内
    + *udba=notify* 这个参数会让AUFS为所有的branch注册inotify，这样可以让AUFS在更新文件修改的性能更高一些
-
+     
 2. 如果有多个rw的branch（目录）被union起来了，那么，当我创建文件的时候，aufs会创建在哪里呢？ aufs提供了一个叫create的参数可以供你来配置相当的创建策略：
    + *create=rr | round-robin* 轮询，下面的示例可以看到，新创建的文件轮流写到三个目录中：
-
+     
      #+BEGIN_SRC sh
        hchen$ sudo mount -t aufs  -o dirs=./1=rw:./2=rw:./3=rw -o create=rr none ./mnt
        hchen$ touch ./mnt/a ./mnt/b ./mnt/c
@@ -1310,22 +1310,279 @@ AUFS有所有Union FS的特性，把多个目录，合并成同一个目录，�
        └── 3
        └── b
      #+END_SRC
-
+     
    + *create=mfs[:second] | most-free-space[:second]* 选一个可用空间最好的分支。可以指定一个检查可用磁盘空间的时间
    + *create=mfsrr:low[:second]* 选一个空间大于low的branch，如果空间小于low了，那么aufs会使用 round-robin 方式
-
+     
 ** 性能
-AUFS的性能慢吗？也慢也不慢。因为AUFS会把所有的分支mount起来，所以，在查找文件上是比较慢了。因为它要遍历所有的branch。是个O(n)的算法（很明显，这个算法有很大的改进空间的）所以，branch越多，查找文件的性能也就越慢。但是，一旦AUFS找到了这个文件的inode，那后以后的读写和操作原文件基本上是一样的
-
-所以，如果你的程序跑在在AUFS下，open和stat操作会有明显的性能下降，branch越多，性能越差，但是在write/read操作上，性能没有什么变化
-
-IBM的研究中心对Docker的性能给了一份非常不错的性能报告，我截了两张图出来：
+   AUFS的性能慢吗？也慢也不慢。因为AUFS会把所有的分支mount起来，所以，在查找文件上是比较慢了。因为它要遍历所有的branch。是个O(n)的算法（很明显，这个算法有很大的改进空间的）所以，branch越多，查找文件的性能也就越慢。但是，一旦AUFS找到了这个文件的inode，那后以后的读写和操作原文件基本上是一样的
+   
+   所以，如果你的程序跑在在AUFS下，open和stat操作会有明显的性能下降，branch越多，性能越差，但是在write/read操作上，性能没有什么变化
+   
+   IBM的研究中心对Docker的性能给了一份非常不错的性能报告，我截了两张图出来：
    #+ATTR_HTML: image :width 50% 
    [[file:pic/docker-seq-io.jpg]]
-
+   
    #+ATTR_HTML: image :width 50% 
    [[file:pic/docker-rand-io.jpg]]
-
-第一张是顺序读写，第二张是随机读写。基本没有什么性能损失的问题。而KVM在随机读写的情况也就有点慢了
-
+   
+   第一张是顺序读写，第二张是随机读写。基本没有什么性能损失的问题。而KVM在随机读写的情况也就有点慢了
+   
 * DeviceMapper
+  因为Docker首选的AUFS并不在Linux的内核主干里，所以，对于非Ubuntu的Linux分发包，比如CentOS，就无法使用AUFS作为Docker的文件系统了。于是作为第二优先级的DeviceMapper就被拿出来做分层镜像的一个实现
+  
+** 简介
+   DeviceMapper自Linux 2.6被引入成为了Linux最重要的一个技术。它在内核中支持逻辑卷管理的通用设备映射机制，它为实现用于存储资源管理的块设备驱动提供了一个高度模块化的内核架构，它包含三个重要的对象概念： *Mapped Device*,  *Mapping Table*,  *Target Device*
++ Mapped Device是一个逻辑抽象，可以理解成为内核向外提供的逻辑设备，它通过Mapping Table描述的映射关系和 Target Device 建立映射。Target device 表示的是 Mapped Device 所映射的物理空间段，对 Mapped Device 所表示的逻辑设备来说，就是该逻辑设备映射到的一个物理设备
++ Mapping Table里有 Mapped Device 逻辑的起始地址、范围、和表示在 Target Device 所在物理设备的地址偏移量以及Target 类型等信息（注：这些地址和偏移量都是以磁盘的扇区为单位的，即 512 个字节大小，所以，当你看到128的时候，其实表示的是128*512=64K）
++ DeviceMapper 中的逻辑设备Mapped Device不但可以映射一个或多个物理设备Target Device，还可以映射另一个Mapped Device，于是，就是构成了一个迭代或递归的情况，就像文件系统中的目录里除了文件还可以有目录，理论上可以无限嵌套下去
+  
+DeviceMapper在内核中通过一个一个模块化的 Target Driver 插件实现对 IO 请求的过滤或者重新定向等工作，当前已经实现的插件包括软 Raid、加密、多路径、镜像、快照等，这体现了在 Linux 内核设计中策略和机制分离的原则。如下图所示：
+
+#+ATTR_HTML: image :width 80% 
+[[file:pic/device-mapper.gif]]
+
+从图中可以看到 *DeviceMapper只是一个框架，在这个框架上可以插入各种各样的策略* ，在这诸多“插件”中，有一个东西叫 *Thin Provisioning Snapshot* ，这是Docker使用DeviceMapper中最重要的模块
+
+** Thin Provisioning
+   这个技术是虚拟化技术中的一种。你可以联想一下我们计算机中的内存管理中用到的 *虚拟内存技术* 。操作系统给每个进程N多N多用不完的内址地址（32位下，每个进程可以有最多2GB的内存空间），但是呢，物理内存是没有那么多的，如果按照进程内存和物理内存一一映射来玩的话，那么，我们得要多少的物理内存啊。所以，操作系统引入了虚拟内存的设计，意思是 *我逻辑上给你无限多的内存，但是实际上是实报实销* ，因为我知道你一定用不了那么多，于是，达到了内存使用率提高的效果
+   
+   对于这里说的是存储。看下面两个图, 很好的说明了怎么一回事：
++ fat provisioning:
+  #+ATTR_HTML: image :width 70% 
+  [[file:pic/fat-provisioning.jpg]]
+  
++ thin provisioning:  
+  #+ATTR_HTML: image :width 70% 
+  [[file:pic/thin-provisioning.jpg]]
+  
+  
+*** Thin Provisioning Snapshot 
+    下面用一系列的命令来演示一下Device Mapper的Thin Provisioning Snapshot。首先，需要先建两个文件，一个是data.img，一个是meta.data.img：
+    
+    #+BEGIN_SRC sh
+  wu@ubuntu16-188:~$ sudo dd if=/dev/zero of=/tmp/data.img bs=1K count=1 seek=10M
+  1+0 records in
+  1+0 records out
+  1024 bytes (1.0 kB, 1.0 KiB) copied, 0.000235208 s, 4.4 MB/s
+
+  wu@ubuntu16-188:~$ sudo dd if=/dev/zero of=/tmp/meta.data.img bs=1K count=1 seek=1G
+  1+0 records in
+  1+0 records out
+  1024 bytes (1.0 kB, 1.0 KiB) copied, 0.000493576 s, 2.1 MB/s
+    #+END_SRC
+    
+    注意命令中 *seek* 选项，其表示为略过 *of* 选项指定的输出文件的前10G个output的blocksize的空间后再写入内容。因为bs是1个字节，所以也就是10G的尺寸，但其实在硬盘上是没有占有空间的，占有空间只有1k的内容。当向其写入内容时，才会在硬盘上为其分配空间。我们可以用ls命令看一下，实际分配了都是只有4K：
+    
+    #+BEGIN_SRC sh
+  wu@ubuntu16-188:~$ ls -lsh /tmp/data.img
+  4.0K -rw-r--r-- 1 root root 11G Oct 16 15:17 /tmp/data.img
+
+  wu@ubuntu16-188:~$ ls -lsh /tmp/meta.data.img
+  4.0K -rw-r--r-- 1 root root 1.1T Oct 16 15:17 /tmp/meta.data.img
+    #+END_SRC
+    
+**** 创建loopback设备
+    然后，我们为每个文件分别创建一个loopback设备：
+    
+    #+BEGIN_SRC sh
+  wu@ubuntu16-188:~$ sudo losetup /dev/loop2015 /tmp/data.img
+
+  wu@ubuntu16-188:~$ sudo losetup /dev/loop2016 /tmp/meta.data.img
+
+  wu@ubuntu16-188:~$ sudo losetup -a
+  /dev/loop2016: [64768]:131127 (/tmp/meta.data.img)
+  /dev/loop2015: [64768]:131126 (/tmp/data.img)
+    #+END_SRC
+    
+**** 创建pool
+    现在，为这个设备建一个Thin Provisioning的Pool，用dmsetup命令：
+    #+BEGIN_SRC sh
+  sudo dmsetup create klose-thin-pool \
+                    --table "0 20971522 thin-pool /dev/loop2016 /dev/loop2015 \
+                             128 65536 1 skip_block_zeroing"
+    #+END_SRC
+    
+    其中的参数解释如下：
++ dmsetup create：用来创建thin pool的命令
++ klose-thin-pool 是自定义的一个pool名，不冲突就好
++ --table是这个pool的参数设置：
+  + 0: 开始的sector位置
+  + 20971522: 结尾的sector号，前面说过，一个sector是512字节，所以，20971522个正好是10GB
+  + /dev/loop2016: meta文件的设备
+  + /dev/loop2015: data文件的设备
+  + 128: 最小的可分配的sector数
+  + 65536: 最少可用sector的water mark，也就是一个threshold
+  + 1: 有一个附加参数
+      + skip_block_zeroing: 附加参数，表示略过用0填充的块
+	
+现在就可以看到一个Device Mapper的设备了：
+
+#+BEGIN_SRC sh
+  wu@ubuntu16-188:~$ sudo ls -l  /dev/mapper/klose-thin-pool
+  lrwxrwxrwx 1 root root 7 Oct 16 15:27 /dev/mapper/klose-thin-pool -> ../dm-2
+#+END_SRC
+
+**** 创建volume
+然而初始还没有完成，还要创建一个Thin Provisioning 的 Volume：
+
+#+BEGIN_SRC sh
+  wu@ubuntu16-188:~$ sudo dmsetup message /dev/mapper/klose-thin-pool 0 "create_thin 0"
+  wu@ubuntu16-188:~$ sudo dmsetup create klose-thin-volumn-001 \
+  >             --table "0 2097152 thin /dev/mapper/klose-thin-pool 0"
+#+END_SRC
+
+其中：
++ 第一个命令中的create_thin是关键字，后面的0表示这个Volume的device 的 id
++ 第二个命令，是真正的为这个Volumn创建一个可以mount的设备，名字叫klose-thin-volumn-001。2097152只有1GB
+
+
+**** 格式化volume
+在mount前，还要格式化一下：
+
+#+BEGIN_SRC sh :results output :exports result
+  wu@ubuntu16-188:~$ sudo mkfs.ext4 /dev/mapper/klose-thin-volumn-001
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+     mke2fs 1.43.3 (04-Sep-2016)
+     Discarding device blocks: done
+     Creating filesystem with 262144 4k blocks and 65536 inodes
+     Filesystem UUID: 08c52fdf-ad29-437a-9957-9e8a23149088
+     Superblock backups stored on blocks:
+             32768, 98304, 163840, 229376
+
+     Allocating group tables: done
+     Writing inode tables: done
+     Creating journal (8192 blocks): done
+     Writing superblocks and filesystem accounting information: done
+   #+end_example
+
+**** 挂载volume
+接下来可以mount了：
+#+BEGIN_SRC sh
+  wu@ubuntu16-188:~$ sudo mkdir -p /mnt/base
+  wu@ubuntu16-188:~$ sudo mount /dev/mapper/klose-thin-volumn-001 /mnt/base/
+
+  root@ubuntu16-188:~#  echo "hello world, I am a base" > /mnt/base/id.txt
+  root@ubuntu16-188:~# cat /mnt/base/id.txt
+  hello world, I am a base
+#+END_SRC
+
+**** 创建snapshot
+终于可以来看看snapshot怎么搞：
+
+#+BEGIN_SRC sh
+  wu@ubuntu16-188:~$ sudo dmsetup message /dev/mapper/klose-thin-pool 0 "create_snap 1 0"
+  wu@ubuntu16-188:~$ sudo dmsetup create mysnap1 \
+  >                    --table "0 2097152 thin /dev/mapper/klose-thin-pool 1"
+  wu@ubuntu16-188:~$ sudo ls -l  /dev/mapper/mysnap1
+  lrwxrwxrwx 1 root root 7 Oct 16 17:09 /dev/mapper/mysnap1 -> ../dm-4
+#+END_SRC
+
+上面的命令中：
++ 第一条命令是向klose-thin-pool发一个create_snap的消息，后面跟两个id：
+  + 第一个是新的dev id
+  + 第二个是要从哪个已有的dev id上做snapshot，0这个dev id是我们前面就创建了的
++ 第二条命令是创建一个mysnap1的device，并可以被mount
+
+
+**** 挂载snapshot
+mount这个新创建的snapshot：
+
+#+BEGIN_SRC sh
+  wu@ubuntu16-188:~$ sudo mkdir -p /mnt/mysnap1
+  wu@ubuntu16-188:~$ sudo mount /dev/mapper/mysnap1 /mnt/mysnap1/
+  wu@ubuntu16-188:~$ sudo ls -l /mnt/mysnap1/
+  total 20
+  -rw-r--r-- 1 root root    25 Oct 16 15:48 id.txt
+  drwx------ 2 root root 16384 Oct 16 15:38 lost+found
+  wu@ubuntu16-188:~$ sudo cat /mnt/mysnap1/id.txt
+  hello world, I am a base
+#+END_SRC
+
+我们来修改一下/mnt/mysnap1/id.txt，并加上一个snap1.txt的文件：
+
+#+BEGIN_SRC sh
+  root@ubuntu16-188:~# echo "I am snap1" >> /mnt/mysnap1/id.txt
+  root@ubuntu16-188:~# echo "I am snap1" >> /mnt/mysnap1/snap1.txt
+  root@ubuntu16-188:~# cat /mnt/mysnap1/id.txt
+  hello world, I am a base
+  I am snap1
+
+  root@ubuntu16-188:~# cat /mnt/mysnap1/snap1.txt
+  I am snap1
+#+END_SRC
+
+再看一下/mnt/base，会发现没有什么变化，这就已经可以看到了分层镜像的样子了
+#+BEGIN_SRC sh
+  root@ubuntu16-188:~#ls /mnt/base/
+  id.txt  lost+found
+
+  root@ubuntu16-188:~# cat /mnt/base/id.txt
+  hello world, I am a base
+#+END_SRC
+
+**** 多层snapshot
+还可以继续在刚才的snapshot上再建一个snapshot：
+
+#+BEGIN_SRC sh
+  wu@ubuntu16-188:~$ sudo dmsetup message /dev/mapper/klose-thin-pool 0 "create_snap 2 1"
+  wu@ubuntu16-188:~$  sudo dmsetup create mysnap2 \
+  >                    --table "0 2097152 thin /dev/mapper/klose-thin-pool 2"
+  wu@ubuntu16-188:~$ sudo ls -l /dev/mapper/mysnap2
+  lrwxrwxrwx 1 root root 7 Oct 16 17:31 /dev/mapper/mysnap2 -> ../dm-5
+  wu@ubuntu16-188:~$ sudo mkdir -p /mnt/
+  base/    mysnap1/
+  wu@ubuntu16-188:~$ sudo mkdir -p /mnt/mysnap2
+  wu@ubuntu16-188:~$ sudo mount /dev/mapper/mysnap2 /mnt/mysnap2/
+  wu@ubuntu16-188:~$ sudo ls /mnt/mysnap2/
+  id.txt  lost+found  snap1.txt
+#+END_SRC
+
+最后补点理论知识吧：
++ Snapshot来自LVM（Logic Volumn Manager），它可以在不中断服务的情况下为某个device打一个快照
++ Snapshot是Copy-On-Write的，也就是说，只有发生了修改，才会对对应的内存进行拷贝
+
+** Docker的DeviceMapper
+可以看一下docker的loopback设备：
+
+#+BEGIN_SRC sh
+  [root@xen12-166 ~]$ losetup -a
+  /dev/loop0: [64768]:268449090 (/var/lib/docker/devicemapper/devicemapper/data)
+  /dev/loop1: [64768]:268449091 (/var/lib/docker/devicemapper/devicemapper/metadata)
+#+END_SRC
+
+其中data 100GB，metadata 2.0GB：
+#+BEGIN_SRC sh
+  [root@xen12-166 ~]$ ls -alhs /var/lib/docker/devicemapper/devicemapper
+  total 17G
+  0 drwx------ 2 root root   32 Jun  1 12:08 .
+  0 drwx------ 5 root root   50 Jun  1 13:42 ..
+  17G -rw------- 1 root root 100G Oct 16 17:42 data
+  59M -rw------- 1 root root 2.0G Oct 16 17:41 metadata
+#+END_SRC
+
+下面是相关的thin-pool， 其中一大串hash串的device是正在启动的容器：
+#+BEGIN_SRC sh
+    [root@xen12-166 ~]$ ls -l /dev/mapper/docker*
+
+    lrwxrwxrwx 1 root root 8 Oct 16 17:06 /dev/mapper/docker-253:0-144069364-066e0a37b7e7e4bec72d4ff342a34e56ab8e4fd8338c5853b6d0cf7a78518656 -> ../dm-37
+  .......
+    lrwxrwxrwx 1 root root 8 Sep 26 13:04 /dev/mapper/docker-253:0-144069364-e48c295abcaa8bac8fc23e0454d3879c5a2f351c514588f21c2b650be3b95dcd -> ../dm-10
+    lrwxrwxrwx 1 root root 7 Sep 26 13:04 /dev/mapper/docker-253:0-144069364-e51d640bf993763f542231df21226074cd8538e2f172f59812e2c9f6e32d0e7f -> ../dm-5
+    lrwxrwxrwx 1 root root 7 Sep 26 13:05 /dev/mapper/docker-253:0-144069364-fafd411a11413b4d0f2f02ff6a4b93a6bf8419dbd028e8c93516d4f1d04298af -> ../dm-9
+    lrwxrwxrwx 1 root root 7 Sep 26 13:04 /dev/mapper/docker-253:0-144069364-ff31f1db928b9820c6e73f63021c1dd772dde490340349a69438b8ed0986cf66 -> ../dm-7
+    lrwxrwxrwx 1 root root 7 Sep 26 13:02 /dev/mapper/docker-253:0-144069364-pool -> ../dm-2
+#+END_SRC
+
+可以看一下它的device id：
+#+BEGIN_SRC sh
+  [root@xen12-166 ~]$ cat /var/lib/docker/devicemapper/metadata/066e0a37b7e7e4bec72d4ff342a34e56ab8e4fd8338c5853b6d0cf7a78518656
+  {"device_id":6715,"size":10737418240,"transaction_id":22227,"initialized":false,"deleted":false}
+#+END_SRC
+
+device_id是6715，size是10737418240，除以512，就是20971520 个 sector 
+
+ *Thin Provisioning的文档中说，这还处理实验阶段，不要上Production* 
