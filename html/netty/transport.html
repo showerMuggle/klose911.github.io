@@ -142,6 +142,475 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="netty.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">传输</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#sec-1">Transport 的迁移</a>
+<ul>
+<li><a href="#sec-1-1">使用JDK API 实现</a>
+<ul>
+<li><a href="#sec-1-1-1">OIO</a></li>
+<li><a href="#sec-1-1-2">NIO</a></li>
+</ul>
+</li>
+<li><a href="#sec-1-2">使用Netty实现</a>
+<ul>
+<li><a href="#sec-1-2-1">OIO</a></li>
+<li><a href="#sec-1-2-2">NIO</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#sec-2">Transport API</a>
+<ul>
+<li><a href="#sec-2-1">实例</a>
+<ul>
+<li><a href="#sec-2-1-1">写数据到Channel</a></li>
+<li><a href="#sec-2-1-2">多线程</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#sec-3">自带的 Transport</a></li>
+<li><a href="#sec-4">Transport 选择</a></li>
+</ul>
+</div>
+</div>
+<p>
+本章将涵盖很多 transport(传输)，他们的用例以及 API：
+</p>
+<ul class="org-ul">
+<li>NIO
+</li>
+<li>OIO
+</li>
+<li>Local(本地)
+</li>
+<li>Embedded(内嵌)
+</li>
+</ul>
+
+<p>
+网络应用程序提供了人与系统通信的信道，但是，当然 他们也将大量的数据从一个地方移到到另一个地方。如何做到这一点取决于具体的网络传输，但转移始终是相同的：字节通过线路。传输的概念帮助我们抽象掉的底层数据转移的机制。所有人都需要知道的是，字节在被发送和接收
+</p>
+
+<p>
+如果你已经做过 Java中的网络编程，你可能会发现在某些时候你必须支持比预期更多的并发连接。如果你再尝试从阻塞切换到非阻塞传输，则可能遇会到的问题，因为 Java 的公开的网络 API 来处理这两种情况有很大的不同
+</p>
+
+<p>
+Netty 在传输层是统一的API，这使得比你用 JDK 实现更简单。你无需重构整个代码库。总之，你可以省下时间去做其他更富有成效的事
+</p>
+
+<p>
+在本章中，我们将研究这个统一的 API，与 JDK 进行演示对比，可以见它具有更大的易用性。我们将介绍不同的捆绑在 Netty 的传输实现和适当的的用例。吸收这些信息后，你就知道如何选择适合您的应用的最佳选择
+</p>
+
+<div id="outline-container-sec-1" class="outline-2">
+<h2 id="sec-1">Transport 的迁移</h2>
+<div class="outline-text-2" id="text-1">
+<p>
+从一个简单的应用程序开始，这个应用程序什么都不做，只是接受客户端连接并发送“Hi!”字符串消息到客户端，发送完了就断开连接
+</p>
+</div>
+
+<div id="outline-container-sec-1-1" class="outline-3">
+<h3 id="sec-1-1">使用JDK API 实现</h3>
+<div class="outline-text-3" id="text-1-1">
+</div><div id="outline-container-sec-1-1-1" class="outline-4">
+<h4 id="sec-1-1-1">OIO</h4>
+<div class="outline-text-4" id="text-1-1-1">
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">PlainOioServer</span> {
+    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">serve</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">port</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">IOException</span> {
+        <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">ServerSocket</span> <span style="color: #eedd82;">socket</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">ServerSocket</span>(port);     <span style="color: #ff4500;">//</span><span style="color: #ff4500;">1 &#32465;&#23450;&#26381;&#21153;&#22120;&#21040;&#25351;&#23450;&#30340;&#31471;&#21475;</span>
+        <span style="color: #00ffff;">try</span> {
+            <span style="color: #00ffff;">for</span> (;;) {
+                <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">Socket</span> <span style="color: #eedd82;">clientSocket</span> = socket.accept();    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">2 &#25509;&#21463;&#19968;&#20010;&#36830;&#25509;</span>
+                System.out.println(<span style="color: #ffa07a;">"Accepted connection from "</span> + clientSocket);
+
+                <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">Thread</span>(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">Runnable</span>() {                        <span style="color: #ff4500;">//</span><span style="color: #ff4500;">3 &#21019;&#24314;&#19968;&#20010;&#26032;&#30340;&#32447;&#31243;&#26469;&#22788;&#29702;&#36830;&#25509;</span>
+                        <span style="color: #7fffd4;">@Override</span>
+                        <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">run</span>() {
+                            <span style="color: #98fb98;">OutputStream</span> <span style="color: #eedd82;">out</span>;
+                            <span style="color: #00ffff;">try</span> {
+                                out = clientSocket.getOutputStream();
+                                out.write(<span style="color: #ffa07a;">"Hi!\r\n"</span>.getBytes(Charset.forName(<span style="color: #ffa07a;">"UTF-8"</span>)));                            <span style="color: #ff4500;">//</span><span style="color: #ff4500;">4 &#23558;&#28040;&#24687;&#21457;&#36865;&#21040;&#36830;&#25509;&#30340;&#23458;&#25143;&#31471;</span>
+                                out.flush();
+                                clientSocket.close();                <span style="color: #ff4500;">//</span><span style="color: #ff4500;">5 &#19968;&#26086;&#28040;&#24687;&#34987;&#20889;&#20837;&#21644;&#21047;&#26032;&#26102;&#23601;&#20851;&#38381;&#36830;&#25509;</span>
+
+                            } <span style="color: #00ffff;">catch</span> (<span style="color: #98fb98;">IOException</span> <span style="color: #eedd82;">e</span>) {
+                                e.printStackTrace();
+                                <span style="color: #00ffff;">try</span> {
+                                    clientSocket.close();
+                                } <span style="color: #00ffff;">catch</span> (<span style="color: #98fb98;">IOException</span> <span style="color: #eedd82;">ex</span>) {
+                                    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">ignore on close</span>
+                                }
+                            }
+                        }
+                    }).start();                                        <span style="color: #ff4500;">//</span><span style="color: #ff4500;">6 &#21551;&#21160;&#32447;&#31243;</span>
+            }
+        } <span style="color: #00ffff;">catch</span> (<span style="color: #98fb98;">IOException</span> <span style="color: #eedd82;">e</span>) {
+            e.printStackTrace();
+        }
+    }
+}
+</pre>
+</div>
+
+<p>
+上面的方式可以工作正常，但是这种阻塞模式在大连接数的情况就会有很严重的问题，如客户端连接超时，服务器响应严重延迟，性能无法扩展。为了解决这种情况，我们可以使用异步网络处理所有的并发连接，但问题在于 NIO 和 OIO 的 API 是完全不同的，所以一个用OIO开发的网络应用程序想要使用NIO重构代码几乎是重新开发
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-1-1-2" class="outline-4">
+<h4 id="sec-1-1-2">NIO</h4>
+<div class="outline-text-4" id="text-1-1-2">
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">PlainNioServer</span> {
+    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">serve</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">port</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">IOException</span> {
+        <span style="color: #98fb98;">ServerSocketChannel</span> <span style="color: #eedd82;">serverChannel</span> = ServerSocketChannel.open();
+        serverChannel.configureBlocking(<span style="color: #7fffd4;">false</span>);
+        <span style="color: #98fb98;">ServerSocket</span> <span style="color: #eedd82;">ss</span> = serverChannel.socket();
+        <span style="color: #98fb98;">InetSocketAddress</span> <span style="color: #eedd82;">address</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">InetSocketAddress</span>(port);
+        ss.bind(address);                                            <span style="color: #ff4500;">//</span><span style="color: #ff4500;">1 &#32465;&#23450;&#26381;&#21153;&#22120;&#21040;&#25351;&#23450;&#31471;&#21475;</span>
+        <span style="color: #98fb98;">Selector</span> <span style="color: #eedd82;">selector</span> = Selector.open();                        <span style="color: #ff4500;">//</span><span style="color: #ff4500;">2 &#25171;&#24320; selector &#22788;&#29702; channel</span>
+        serverChannel.register(selector, <span style="color: #7fffd4;">SelectionKey</span>.OP_ACCEPT);    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">3 &#27880;&#20876; selector &#21040; serverSocket &#65292;&#24182;&#25351;&#23450;&#36825;&#26159;&#25509;&#21463;&#20219;&#24847;&#36830;&#25509;</span>
+        <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">ByteBuffer</span> <span style="color: #eedd82;">msg</span> = ByteBuffer.wrap(<span style="color: #ffa07a;">"Hi!\r\n"</span>.getBytes());
+        <span style="color: #00ffff;">for</span> (;;) {
+            <span style="color: #00ffff;">try</span> {
+                selector.select();                                    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">4 &#31561;&#24453;&#26032;&#30340;&#20107;&#20214;&#26469;&#22788;&#29702;&#12290;&#36825;&#23558;&#38459;&#22622;&#65292;&#30452;&#21040;&#19968;&#20010;&#20107;&#20214;&#26159;&#20256;&#20837;</span>
+            } <span style="color: #00ffff;">catch</span> (<span style="color: #98fb98;">IOException</span> <span style="color: #eedd82;">ex</span>) {
+                ex.printStackTrace();
+                <span style="color: #ff4500;">// </span><span style="color: #ff4500;">handle exception</span>
+                <span style="color: #00ffff;">break</span>;
+            }
+            <span style="color: #98fb98;">Set</span>&lt;<span style="color: #98fb98;">SelectionKey</span>&gt; <span style="color: #eedd82;">readyKeys</span> = selector.selectedKeys();    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">5 &#20174;&#25910;&#21040;&#30340;&#25152;&#26377;&#20107;&#20214;&#20013; &#33719;&#21462; SelectionKey &#23454;&#20363;</span>
+            <span style="color: #98fb98;">Iterator</span>&lt;<span style="color: #98fb98;">SelectionKey</span>&gt; <span style="color: #eedd82;">iterator</span> = readyKeys.iterator();
+            <span style="color: #00ffff;">while</span> (iterator.hasNext()) {
+                <span style="color: #98fb98;">SelectionKey</span> <span style="color: #eedd82;">key</span> = iterator.next();
+                iterator.remove();
+                <span style="color: #00ffff;">try</span> {
+                    <span style="color: #00ffff;">if</span> (key.isAcceptable()) {                <span style="color: #ff4500;">//</span><span style="color: #ff4500;">6 &#26816;&#26597;&#35813;&#20107;&#20214;&#26159;&#19968;&#20010;&#26032;&#30340;&#36830;&#25509;&#20934;&#22791;&#22909;&#25509;&#21463;</span>
+                        <span style="color: #98fb98;">ServerSocketChannel</span> <span style="color: #eedd82;">server</span> =
+                            (<span style="color: #98fb98;">ServerSocketChannel</span>)key.channel();
+                        <span style="color: #98fb98;">SocketChannel</span> <span style="color: #eedd82;">client</span> = server.accept();
+                        client.configureBlocking(<span style="color: #7fffd4;">false</span>);
+                        client.register(selector, <span style="color: #7fffd4;">SelectionKey</span>.OP_WRITE |
+                                <span style="color: #7fffd4;">SelectionKey</span>.OP_READ, msg.duplicate());    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">7 &#25509;&#21463;&#23458;&#25143;&#31471;&#65292;&#24182;&#29992; selector &#36827;&#34892;&#27880;&#20876;</span>
+                        System.out.println(
+                            <span style="color: #ffa07a;">"Accepted connection from "</span> + client);
+                    }
+                    <span style="color: #00ffff;">if</span> (key.isWritable()) {                <span style="color: #ff4500;">//</span><span style="color: #ff4500;">8 &#26816;&#26597; socket &#26159;&#21542;&#20934;&#22791;&#22909;&#20889;&#25968;&#25454;</span>
+                        <span style="color: #98fb98;">SocketChannel</span> <span style="color: #eedd82;">client</span> =
+                            (<span style="color: #98fb98;">SocketChannel</span>)key.channel();
+                        <span style="color: #98fb98;">ByteBuffer</span> <span style="color: #eedd82;">buffer</span> =
+                            (<span style="color: #98fb98;">ByteBuffer</span>)key.attachment();
+                        <span style="color: #00ffff;">while</span> (buffer.hasRemaining()) {
+                            <span style="color: #00ffff;">if</span> (client.write(buffer) == 0) { <span style="color: #ff4500;">//</span><span style="color: #ff4500;">9 &#23558;&#25968;&#25454;&#20889;&#20837;&#21040;&#25152;&#36830;&#25509;&#30340;&#23458;&#25143;&#31471;&#12290;&#22914;&#26524;&#32593;&#32476;&#39281;&#21644;&#65292;&#36830;&#25509;&#26159;&#21487;&#20889;&#30340;&#65292;&#37027;&#20040;&#36825;&#20010;&#24490;&#29615;&#23558;&#20889;&#20837;&#25968;&#25454;&#65292;&#30452;&#21040;&#35813;&#32531;&#20914;&#21306;&#26159;&#31354;&#30340;</span>
+                                <span style="color: #00ffff;">break</span>;
+                            }
+                        }
+                        client.close();                    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">10 &#20851;&#38381;&#36830;&#25509;</span>
+                    }
+                } <span style="color: #00ffff;">catch</span> (<span style="color: #98fb98;">IOException</span> <span style="color: #eedd82;">ex</span>) {
+                    key.cancel();
+                    <span style="color: #00ffff;">try</span> {
+                        key.channel().close();
+                    } <span style="color: #00ffff;">catch</span> (<span style="color: #98fb98;">IOException</span> <span style="color: #eedd82;">cex</span>) {
+                        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#22312;&#20851;&#38381;&#26102;&#24573;&#30053;</span>
+                    }
+                }
+            }
+        }
+    }
+}
+</pre>
+</div>
+
+<p>
+即使它们实现的功能是一样，但是代码与OIO完全不同
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-1-2" class="outline-3">
+<h3 id="sec-1-2">使用Netty实现</h3>
+<div class="outline-text-3" id="text-1-2">
+</div><div id="outline-container-sec-1-2-1" class="outline-4">
+<h4 id="sec-1-2-1">OIO</h4>
+<div class="outline-text-4" id="text-1-2-1">
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">NettyOioServer</span> {
+
+    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">server</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">port</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Exception</span> {
+        <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">ByteBuf</span> <span style="color: #eedd82;">buf</span> = Unpooled.unreleasableBuffer(
+            Unpooled.copiedBuffer(<span style="color: #ffa07a;">"Hi!\r\n"</span>, Charset.forName(<span style="color: #ffa07a;">"UTF-8"</span>)));
+        <span style="color: #98fb98;">EventLoopGroup</span> <span style="color: #eedd82;">group</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">OioEventLoopGroup</span>();
+        <span style="color: #00ffff;">try</span> {
+            <span style="color: #98fb98;">ServerBootstrap</span> <span style="color: #eedd82;">b</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">ServerBootstrap</span>();        <span style="color: #ff4500;">//</span><span style="color: #ff4500;">1 &#21019;&#24314;&#19968;&#20010; ServerBootstrap</span>
+
+            b.group(group)                                    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">2 &#20351;&#29992; OioEventLoopGroup &#20801;&#35768;&#38459;&#22622;&#27169;&#24335;</span>
+                .channel(OioServerSocketChannel.<span style="color: #00ffff;">class</span>)
+                .localAddress(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">InetSocketAddress</span>(port))
+                .childHandler(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">ChannelInitializer</span>&lt;<span style="color: #98fb98;">SocketChannel</span>&gt;() { <span style="color: #ff4500;">//</span><span style="color: #ff4500;">3 &#25351;&#23450; ChannelInitializer &#23558;&#32473;&#27599;&#20010;&#25509;&#21463;&#30340;&#36830;&#25509;&#35843;&#29992;</span>
+                        <span style="color: #7fffd4;">@Override</span>
+                        <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">initChannel</span>(<span style="color: #98fb98;">SocketChannel</span> <span style="color: #eedd82;">ch</span>) 
+                            <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Exception</span> {
+                            ch.pipeline().addLast(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">ChannelInboundHandlerAdapter</span>() {            <span style="color: #ff4500;">//</span><span style="color: #ff4500;">4 &#28155;&#21152;&#30340; ChannelHandler &#25318;&#25130;&#20107;&#20214;&#65292;&#24182;&#20801;&#35768;&#20182;&#20204;&#20316;&#20986;&#21453;&#24212;</span>
+                                    <span style="color: #7fffd4;">@Override</span>
+                                    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">channelActive</span>(<span style="color: #98fb98;">ChannelHandlerContext</span> <span style="color: #eedd82;">ctx</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Exception</span> {
+                                        ctx.writeAndFlush(buf.duplicate()).addListener(<span style="color: #7fffd4;">ChannelFutureListener</span>.CLOSE);<span style="color: #ff4500;">//</span><span style="color: #ff4500;">5 &#20889;&#20449;&#24687;&#21040;&#23458;&#25143;&#31471;&#65292;&#24182;&#28155;&#21152; ChannelFutureListener &#24403;&#19968;&#26086;&#28040;&#24687;&#20889;&#20837;&#23601;&#20851;&#38381;&#36830;&#25509;</span>
+                                    }
+                                });
+                        }
+                    });
+            <span style="color: #98fb98;">ChannelFuture</span> <span style="color: #eedd82;">f</span> = b.bind().sync();  <span style="color: #ff4500;">//</span><span style="color: #ff4500;">6 &#32465;&#23450;&#26381;&#21153;&#22120;&#26469;&#25509;&#21463;&#36830;&#25509;</span>
+            f.channel().closeFuture().sync();
+        } <span style="color: #00ffff;">finally</span> {
+            group.shutdownGracefully().sync();        <span style="color: #ff4500;">//</span><span style="color: #ff4500;">7 &#37322;&#25918;&#25152;&#26377;&#36164;&#28304;</span>
+        }
+    }
+}
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-1-2-2" class="outline-4">
+<h4 id="sec-1-2-2">NIO</h4>
+<div class="outline-text-4" id="text-1-2-2">
+<p>
+下面是 Netty NIO 的代码，只是改变了一行代码，就从 OIO 传输 切换到了 NIO：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">NettyNioServer</span> {
+    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">server</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">port</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Exception</span> {
+        <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">ByteBuf</span> <span style="color: #eedd82;">buf</span> = Unpooled.unreleasableBuffer(
+            Unpooled.copiedBuffer(<span style="color: #ffa07a;">"Hi!\r\n"</span>, Charset.forName(<span style="color: #ffa07a;">"UTF-8"</span>)));
+        <span style="color: #98fb98;">NioEventLoopGroup</span> <span style="color: #eedd82;">group</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">NioEventLoopGroup</span>();
+        <span style="color: #00ffff;">try</span> {
+            <span style="color: #98fb98;">ServerBootstrap</span> <span style="color: #eedd82;">b</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">ServerBootstrap</span>();    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">1 &#21019;&#24314;&#19968;&#20010; ServerBootstrap</span>
+            b.group(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">NioEventLoopGroup</span>(), <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">NioEventLoopGroup</span>()) <span style="color: #ff4500;">// </span><span style="color: #ff4500;">2 &#20351;&#29992; NioEventLoopGroup &#20801;&#35768;&#38750;&#38459;&#22622;&#27169;&#24335;</span>
+                .channel(NioServerSocketChannel.<span style="color: #00ffff;">class</span>)
+                .localAddress(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">InetSocketAddress</span>(port)) 
+                .childHandler(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">ChannelInitializer</span>&lt;<span style="color: #98fb98;">SocketChannel</span>&gt;() {    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">3 &#25351;&#23450; ChannelInitializer &#23558;&#32473;&#27599;&#20010;&#25509;&#21463;&#30340;&#36830;&#25509;&#35843;&#29992;</span>
+                        <span style="color: #7fffd4;">@Override</span>
+                        <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">initChannel</span>(<span style="color: #98fb98;">SocketChannel</span> <span style="color: #eedd82;">ch</span>) 
+                            <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Exception</span> {
+                            ch.pipeline().addLast(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">ChannelInboundHandlerAdapter</span>() {    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">4 &#28155;&#21152;&#30340; ChannelInboundHandlerAdapter() &#25509;&#25910;&#20107;&#20214;&#24182;&#36827;&#34892;&#22788;&#29702;</span>
+                                    <span style="color: #7fffd4;">@Override</span>
+                                    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">channelActive</span>(<span style="color: #98fb98;">ChannelHandlerContext</span> <span style="color: #eedd82;">ctx</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Exception</span> {
+                                        ctx.writeAndFlush(buf.duplicate())                <span style="color: #ff4500;">//</span><span style="color: #ff4500;">5 &#20889;&#20449;&#24687;&#21040;&#23458;&#25143;&#31471;&#65292;&#24182;&#28155;&#21152; ChannelFutureListener &#24403;&#19968;&#26086;&#28040;&#24687;&#20889;&#20837;&#23601;&#20851;&#38381;&#36830;&#25509;</span>
+                                            .addListener(<span style="color: #7fffd4;">ChannelFutureListener</span>.CLOSE);
+                                    }
+                                });
+                        }
+                    });
+            <span style="color: #98fb98;">ChannelFuture</span> <span style="color: #eedd82;">f</span> = b.bind().sync();                    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">6 &#32465;&#23450;&#26381;&#21153;&#22120;&#26469;&#25509;&#21463;&#36830;&#25509;</span>
+            f.channel().closeFuture().sync();
+        } <span style="color: #00ffff;">finally</span> {
+            group.shutdownGracefully().sync();                    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">7 &#37322;&#25918;&#25152;&#26377;&#36164;&#28304;</span>
+        }
+    }
+}
+</pre>
+</div>
+
+<p>
+因为 Netty 使用相同的 API 来实现每个传输，它并不关心你使用什么来实现。Netty 通过操作接口Channel 、ChannelPipeline 和 ChannelHandler来实现
+</p>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2" class="outline-2">
+<h2 id="sec-2">Transport API</h2>
+<div class="outline-text-2" id="text-2">
+<p>
+Transport API 的核心是 Channel 接口，用于所有的出站操作，见下图：
+</p>
+
+<div class="figure">
+<p><img src="pic/channel-interface-hierarchy.jpg" alt="channel-interface-hierarchy.jpg" width="80%" />
+</p>
+</div>
+
+<p>
+如上图所示，每个 Channel 都会分配一个 ChannelPipeline 和ChannelConfig：
+</p>
+<ul class="org-ul">
+<li>ChannelConfig 负责设置并存储 Channel 的配置，并允许在运行期间更新它们。传输一般有特定的配置设置，可能实现了 ChannelConfig 的子类型
+</li>
+<li>ChannelPipeline 容纳了使用的 ChannelHandler 实例，这些ChannelHandler 将处理通道传递的“入站”和“出站”数据以及事件，ChannelHandler 的实现允许你改变数据状态和传输数据
+</li>
+</ul>
+
+<p>
+可以使用 ChannelHandler 做下面一些事情：
+</p>
+<ul class="org-ul">
+<li>传输数据时，将数据从一种格式转换到另一种格式
+</li>
+<li>异常通知
+</li>
+<li>Channel 变为 active（活动） 或 inactive（非活动） 时获得通知（Channel 被注册或注销时从 EventLoop 中获得通知）
+</li>
+<li>通知用户特定事件
+</li>
+</ul>
+
+<p>
+ChannelPipeline 实现了常用的 Intercepting Filter（拦截过滤器）设计模式
+</p>
+
+<p>
+可以在运行时根据需要添加 ChannelHandler 实例到ChannelPipeline 或从 ChannelPipeline 中删除，这能帮助我们构建高度灵活的 Netty 程序。例如，可以支持 STARTTLS 协议，只需通过加入适当的 ChannelHandler（这里是 SslHandler）到的ChannelPipeline 中，当被请求这个协议时
+</p>
+
+<p>
+此外，访问指定的 ChannelPipeline 和 ChannelConfig，你能在Channel 自身上进行操作。Channel 提供了很多方法，如下列表：
+</p>
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 1:</span> Channel main methods</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">方法名称</td>
+<td class="left">描述</td>
+</tr>
+
+<tr>
+<td class="left">eventLoop()</td>
+<td class="left">返回分配给Channel的EventLoop</td>
+</tr>
+
+<tr>
+<td class="left">pipeline()</td>
+<td class="left">返回分配给Channel的ChannelPipeline</td>
+</tr>
+
+<tr>
+<td class="left">isActive()</td>
+<td class="left">返回Channel是否激活，已激活说明与远程连接对等</td>
+</tr>
+
+<tr>
+<td class="left">localAddress()</td>
+<td class="left">返回已绑定的本地SocketAddress</td>
+</tr>
+
+<tr>
+<td class="left">remoteAddress()</td>
+<td class="left">返回已绑定的远程SocketAddress</td>
+</tr>
+
+<tr>
+<td class="left">write()</td>
+<td class="left">写数据到远程客户端，数据通过ChannelPipeline传输过去</td>
+</tr>
+
+<tr>
+<td class="left">flush()</td>
+<td class="left">刷新先前的数据</td>
+</tr>
+
+<tr>
+<td class="left">writeAndFlush(&#x2026;)</td>
+<td class="left">一个方便的方法用户调用write(&#x2026;)而后调用y flush()</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<div id="outline-container-sec-2-1" class="outline-3">
+<h3 id="sec-2-1">实例</h3>
+<div class="outline-text-3" id="text-2-1">
+</div><div id="outline-container-sec-2-1-1" class="outline-4">
+<h4 id="sec-2-1-1">写数据到Channel</h4>
+<div class="outline-text-4" id="text-2-1-1">
+<p>
+写数据到远程已连接客户端可以调用Channel.write()方法，如下代码：
+</p>
+
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #98fb98;">Channel</span> <span style="color: #eedd82;">channel</span> = ...; <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#33719;&#21462;channel&#30340;&#24341;&#29992;</span>
+<span style="color: #98fb98;">ByteBuf</span> <span style="color: #eedd82;">buf</span> = Unpooled.copiedBuffer(<span style="color: #ffa07a;">"your data"</span>, <span style="color: #7fffd4;">CharsetUtil</span>.UTF_8);            <span style="color: #ff4500;">//</span><span style="color: #ff4500;">1 &#21019;&#24314; ByteBuf &#20445;&#23384;&#20889;&#30340;&#25968;&#25454;</span>
+<span style="color: #98fb98;">ChannelFuture</span> <span style="color: #eedd82;">cf</span> = channel.writeAndFlush(buf); <span style="color: #ff4500;">//</span><span style="color: #ff4500;">2 &#20889;&#25968;&#25454;&#65292;&#24182;&#21047;&#26032;</span>
+
+cf.addListener(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">ChannelFutureListener</span>() {    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">3 &#28155;&#21152; ChannelFutureListener &#21363;&#21487;&#20889;&#25805;&#20316;&#23436;&#25104;&#21518;&#25910;&#21040;&#36890;&#30693;</span>
+        <span style="color: #7fffd4;">@Override</span>
+        <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">operationComplete</span>(<span style="color: #98fb98;">ChannelFuture</span> <span style="color: #eedd82;">future</span>) {
+            <span style="color: #00ffff;">if</span> (future.isSuccess()) {                <span style="color: #ff4500;">//</span><span style="color: #ff4500;">4 &#20889;&#25805;&#20316;&#27809;&#26377;&#38169;&#35823;&#23436;&#25104;</span>
+                System.out.println(<span style="color: #ffa07a;">"Write successful"</span>);
+            } <span style="color: #00ffff;">else</span> {
+                System.err.println(<span style="color: #ffa07a;">"Write error"</span>);    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">5 &#20889;&#25805;&#20316;&#23436;&#25104;&#26102;&#20986;&#29616;&#38169;&#35823;</span>
+                future.cause().printStackTrace();
+            }
+        }
+    });
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-1-2" class="outline-4">
+<h4 id="sec-2-1-2">多线程</h4>
+<div class="outline-text-4" id="text-2-1-2">
+<p>
+Channel 是线程安全的，它可以被多个不同的线程安全的操作，在多线程环境下，所有的方法都是安全的。正因为 Channel 是安全的，可以存储对Channel的引用，并在需要的时候使用它写入数据到远程已连接的客户端，使用多线程也是如此。下面的代码是一个简单的多线程例子：
+</p>
+
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">final</span> <span style="color: #98fb98;">Channel</span> <span style="color: #eedd82;">channel</span> = ...; <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#33719;&#21462;channel&#30340;&#24341;&#29992;</span>
+<span style="color: #00ffff;">final</span> <span style="color: #98fb98;">ByteBuf</span> <span style="color: #eedd82;">buf</span> = Unpooled.copiedBuffer(<span style="color: #ffa07a;">"your data"</span>,
+                      <span style="color: #7fffd4;">CharsetUtil</span>.UTF_8).retain();    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">1 &#21019;&#24314;&#19968;&#20010; ByteBuf &#20445;&#23384;&#20889;&#30340;&#25968;&#25454;</span>
+<span style="color: #98fb98;">Runnable</span> <span style="color: #eedd82;">writer</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">Runnable</span>() {        <span style="color: #ff4500;">//</span><span style="color: #ff4500;">2 &#21019;&#24314; Runnable &#29992;&#20110;&#20889;&#25968;&#25454;&#21040; channel</span>
+        <span style="color: #7fffd4;">@Override</span>
+        <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">run</span>() {
+            channel.writeAndFlush(buf.duplicate());
+        }
+    };
+<span style="color: #98fb98;">Executor</span> <span style="color: #eedd82;">executor</span> = Executors.newCachedThreadPool(); <span style="color: #ff4500;">//</span><span style="color: #ff4500;">3 &#20351;&#29992;&#32447;&#31243;&#27744;&#26469;&#25191;&#34892;&#20219;&#21153;</span>
+
+<span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#20889;&#36827;&#19968;&#20010;&#32447;&#31243;</span>
+executor.execute(writer);        <span style="color: #ff4500;">//</span><span style="color: #ff4500;">4 &#25163;&#20889;&#19968;&#20010;&#20219;&#21153;&#65292;&#22312;&#19968;&#20010;&#32447;&#31243;&#20013;&#25191;&#34892;</span>
+
+<span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#20889;&#36827;&#21478;&#22806;&#19968;&#20010;&#32447;&#31243;</span>
+executor.execute(writer);        <span style="color: #ff4500;">//</span><span style="color: #ff4500;">5 &#25163;&#20889;&#19968;&#20010;&#20219;&#21153;&#65292;&#22312;&#21478;&#19968;&#20010;&#32447;&#31243;&#20013;&#25191;&#34892;</span>
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-3" class="outline-2">
+<h2 id="sec-3">自带的 Transport</h2>
+</div>
+
+<div id="outline-container-sec-4" class="outline-2">
+<h2 id="sec-4">Transport 选择</h2>
+</div>
 </div>
 <div id="postamble" class="status">
 
