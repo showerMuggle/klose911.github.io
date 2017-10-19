@@ -172,7 +172,14 @@ for the JavaScript code in this tag.
 </li>
 </ul>
 </li>
-<li><a href="#sec-3">自带的 Transport</a></li>
+<li><a href="#sec-3">自带的 Transport</a>
+<ul>
+<li><a href="#sec-3-1">NIO</a></li>
+<li><a href="#sec-3-2">OIO</a></li>
+<li><a href="#sec-3-3">本地 Transport 与 JVM 交互</a></li>
+<li><a href="#sec-3-4">内嵌 Transport</a></li>
+</ul>
+</li>
 <li><a href="#sec-4">Transport 选择</a></li>
 </ul>
 </div>
@@ -606,10 +613,303 @@ executor.execute(writer);        <span style="color: #ff4500;">//</span><span st
 
 <div id="outline-container-sec-3" class="outline-2">
 <h2 id="sec-3">自带的 Transport</h2>
+<div class="outline-text-2" id="text-3">
+<p>
+Netty 自带了一些传输协议的实现，虽然没有支持所有的传输协议，但是其自带的已足够我们来使用。Netty应用程序的传输协议依赖于底层协议，本节我们将学习Netty中的传输协议
+</p>
+
+<p>
+Netty中的传输方式有如下几种：
+</p>
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 2:</span> Provided transports</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">种类</td>
+<td class="left">包</td>
+<td class="left">描述</td>
+</tr>
+
+<tr>
+<td class="left">NIO</td>
+<td class="left">io.netty.channel.socket.nio</td>
+<td class="left">基于java.nio.channels的工具包，使用选择器作为基础的方法</td>
+</tr>
+
+<tr>
+<td class="left">OIO</td>
+<td class="left">io.netty.channel.socket.oio</td>
+<td class="left">基于java.net的工具包，使用阻塞流</td>
+</tr>
+
+<tr>
+<td class="left">Local</td>
+<td class="left">io.netty.channel.local</td>
+<td class="left">用来在虚拟机之间本地通信</td>
+</tr>
+
+<tr>
+<td class="left">Embedded</td>
+<td class="left">io.netty.channel.embedded</td>
+<td class="left">嵌入传输，它允许在没有真正网络的传输中使用 ChannelHandler，可以非常有用的来测试ChannelHandler的实现</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+
+<div id="outline-container-sec-3-1" class="outline-3">
+<h3 id="sec-3-1">NIO</h3>
+<div class="outline-text-3" id="text-3-1">
+<p>
+NIO传输是目前最常用的方式，它通过使用选择器提供了完全异步的方式操作所有的 I/O，NIO 从Java 1.4才被提供
+</p>
+
+<p>
+NIO 中可以注册一个通道或获得某个通道的改变的状态，通道状态有下面几种改变：
+</p>
+<ul class="org-ul">
+<li>一个新的 Channel 被接受并已准备好
+</li>
+<li>Channel 连接完成
+</li>
+<li>Channel 中有数据并已准备好读取
+</li>
+<li>Channel 发送数据出去
+</li>
+</ul>
+
+<p>
+处理完改变的状态后需重新设置他们的状态，用一个线程来检查是否有已准备好的 Channel，如果有则执行相关事件。在这里可能只同时一个注册的事件而忽略其他的。选择器所支持的操作在 SelectionKey 中定义，具体如下：
+</p>
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 3:</span> Selection operation bit-set</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">方法名称</td>
+<td class="left">描述</td>
+</tr>
+
+<tr>
+<td class="left">OP_ACCEPT</td>
+<td class="left">有新连接时得到通知</td>
+</tr>
+
+<tr>
+<td class="left">OP_CONNECT</td>
+<td class="left">连接完成后得到通知</td>
+</tr>
+
+<tr>
+<td class="left">OP_REA</td>
+<td class="left">准备好读取数据时得到通知</td>
+</tr>
+
+<tr>
+<td class="left">OP_WRITE</td>
+<td class="left">写入更多数据到通道时得到通知</td>
+</tr>
+</tbody>
+</table>
+
+
+<div class="figure">
+<p><img src="pic/select-process-state-changes.jpg" alt="select-process-state-changes.jpg" width="80%" />
+</p>
+</div>
+
+<ol class="org-ol">
+<li>新信道注册 WITH 选择器
+</li>
+<li>选择处理的状态变化的通知
+</li>
+<li>以前注册的通道
+</li>
+<li>Selector.select()方法阻塞，直到新的状态变化接收或配置的超时已过
+</li>
+<li>检查是否有状态变化
+</li>
+<li>处理所有的状态变化
+</li>
+<li>在选择器操作的同一个线程执行其他任务
+</li>
+</ol>
+
+<p>
+有一种功能，目前仅适用于 NIO 传输叫什么 <b>zero-file-copy</b> ，这使您能够快速，高效地通过移动数据到从文件系统传输内容网络协议栈而无需复制从内核空间到用户空间。这可以使 FTP 或 HTTP 协议有很大的不同
+</p>
+
+<p>
+然而，并非所有的操作系统都支持此功能。此外，你不能用它实现数据加密或压缩文件系统，仅支持文件的原生内容。另一方面，传送的文件原本已经加密的是完全有效的
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-3-2" class="outline-3">
+<h3 id="sec-3-2">OIO</h3>
+<div class="outline-text-3" id="text-3-2">
+<p>
+Netty 中，该 OIO 传输代表了一种妥协。它通过了 Netty 的通用 API 访问但不是异步，而是构建在 java.net 的阻塞实现上。任何人下面讨论这一点可能会认为，这个协议并没有很大优势。但它确实有它有效的用途
+</p>
+
+<p>
+假设你需要的端口使用该做阻塞调用库（例如 JDBC）。它可能不适合非阻塞。相反，你可以在短期内使用 OIO 传输，后来移植到纯异步的传输上。让我们看看它是如何工作的
+</p>
+
+<p>
+在 java.net API，通常有一个线程接受新的连接到达监听在ServerSocket，并创建一个新的线程来处理新的 Socket 。这是必需的，因为在一个特定的 socket的每个 I/O 操作可能会阻塞在任何时间。在一个线程处理多个 socket 易造成阻塞操作，一个 socket 占用了所有的其他人 
+</p>
+
+<p>
+Netty 利用了 SO_TIMEOUT 标志，可以设置在一个 Socket。这 timeout 指定最大毫秒数量用于等待 I/O 的操作完成。如果操作在指定的时间内失败，SocketTimeoutException 会被抛出。Netty中捕获该异常并继续处理循环。在接下来的事件循环运行，它再次尝试。像 Netty 的异步架构来支持 OIO 的话，这其实是唯一的办法。当 SocketTimeoutException 抛出时，执行 stack trace 
+</p>
+
+
+<div class="figure">
+<p><img src="pic/oio-processing.jpg" alt="oio-processing.jpg" width="80%" />
+</p>
+</div>
+
+<ol class="org-ol">
+<li>线程分配给 Socket
+</li>
+<li>Socket 连接到远程
+</li>
+<li>读操作（可能会阻塞）
+</li>
+<li>读完成
+</li>
+<li>处理可读的字节
+</li>
+<li>执行提交到 socket 的其他任务
+</li>
+<li>再次尝试读
+</li>
+</ol>
+</div>
+</div>
+
+<div id="outline-container-sec-3-3" class="outline-3">
+<h3 id="sec-3-3">本地 Transport 与 JVM 交互</h3>
+<div class="outline-text-3" id="text-3-3">
+<p>
+Netty 提供了“本地”传输，为运行在同一个 Java 虚拟机上的服务器和客户之间提供异步通信。此传输支持所有的 Netty 常见的传输实现的 API
+</p>
+
+<p>
+在此传输中，与服务器 Channel 关联的 SocketAddress 不是“绑定”到一个物理网络地址中，而它被存储在注册表中，只要服务器是运行的。当 Channel 关闭时它会注销。由于传输不接受“真正的”网络通信，它不能与其他传输实现互操作。因此，客户端是希望连接到使用当地的交通必须使用它，以及一个服务器。除此限制之外，它的使用是与其他的传输是相同的
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-3-4" class="outline-3">
+<h3 id="sec-3-4">内嵌 Transport</h3>
+<div class="outline-text-3" id="text-3-4">
+<p>
+Netty中 还提供了可以嵌入 ChannelHandler 实例到其他的 ChannelHandler 的传输，使用它们就像辅助类，增加了灵活性的方法，使您可以与你的 ChannelHandler 互动
+</p>
+
+<p>
+该嵌入技术通常用于测试 ChannelHandler 的实现，但它也可用于将功能添加到现有的 ChannelHandler 而无需更改代码。嵌入传输的关键是Channel 的实现，称为 EmbeddedChannel
+</p>
+</div>
+</div>
 </div>
 
 <div id="outline-container-sec-4" class="outline-2">
 <h2 id="sec-4">Transport 选择</h2>
+<div class="outline-text-2" id="text-4">
+<p>
+并不是所有传输都支持核心协议，这会限制你的选择，具体看下表：
+</p>
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 4:</span> Transport支持的传输协议</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">Transport</td>
+<td class="left">TCP</td>
+<td class="left">UDP</td>
+<td class="left">SCTP*</td>
+<td class="left">UDT</td>
+</tr>
+
+<tr>
+<td class="left">NIO</td>
+<td class="left">•</td>
+<td class="left">•</td>
+<td class="left">•</td>
+<td class="left">•</td>
+</tr>
+
+<tr>
+<td class="left">OIO</td>
+<td class="left">•</td>
+<td class="left">•</td>
+<td class="left">•</td>
+<td class="left">•</td>
+</tr>
+</tbody>
+</table>
+
+<p>
+*指目前仅在 Linux 上的支持 
+</p>
+
+<p>
+虽然只有 SCTP 具有这些特殊的要求，对应的特定的传输也有推荐的配置。一个服务器平台可能会需要支持较高的数量的并发连接比单个客户端的话。下面是你可能遇到的用例:
+</p>
+<ul class="org-ul">
+<li>OIO: 在低连接数、需要低延迟时、阻塞时使用
+</li>
+<li>NIO: 在高连接数时使用
+</li>
+<li>Local: 在同一个JVM内通信时使用
+</li>
+<li>Embedded: 测试ChannelHandler时使用
+</li>
+</ul>
+
+<p>
+<a href="buffer.html">Next：缓冲</a>
+</p>
+
+<p>
+<a href="overview.html">Previous：总览</a>
+</p>
+
+<p>
+<a href="netty.html">Home：目录</a>
+</p>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
