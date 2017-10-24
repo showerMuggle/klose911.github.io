@@ -142,126 +142,126 @@ Netty 使用 reference-counting 来判断何时可以释放 ByteBuf 或 ByteBufH
     
     Netty 尝试使用 CompositeByteBuf 优化 socket I/O 操作，消除原生 JDK 中可能存在的的性能低和内存消耗问题。虽然这是在 Netty 的核心代码中进行的优化，并且是不对外暴露的，但是作为开发者还是应该意识到其影响
     
-* 字节级别的操作
-  除了基本的读写操作， ByteBuf 还提供了它所包含的数据的修改方法
-  
-** 随机访问索引
-   ByteBuf 使用从0开始的索引，第一个字节的索引是 0，最后一个字节的索引是 ByteBuf 的 capacity - 1，下面代码是遍历 ByteBuf 的所有字节：
+** 字节级别的操作
+   除了基本的读写操作， ByteBuf 还提供了它所包含的数据的修改方法
    
-   #+BEGIN_SRC java
+*** 随机访问索引
+    ByteBuf 使用从0开始的索引，第一个字节的索引是 0，最后一个字节的索引是 ByteBuf 的 capacity - 1，下面代码是遍历 ByteBuf 的所有字节：
+    
+    #+BEGIN_SRC java
   ByteBuf buffer = ...;
 
   for (int i = 0; i < buffer.capacity(); i++) {
           byte b = buffer.getByte(i);
           System.out.println((char) b);
   }
-   #+END_SRC
-   
-   注意：通过索引访问时不会推进 readerIndex 和 writerIndex，我们可以通过 ByteBuf 的 readerIndex(index) 或 writerIndex(index) 来分别推进读索引或写索引
-   
-** 顺序访问索引
-   ByteBuf 提供两个指针变量支付读和写操作，读操作是使用 readerIndex()，写操作时使用 writerIndex()。这和JDK的ByteBuffer不同，ByteBuffer只有一个方法来设置索引，所以需要使用 flip() 方法来切换读和写模式
-   
-   #+BEGIN_EXAMPLE
-   ByteBuf 一定符合：0 <= readerIndex <= writerIndex <= capacity
-   #+END_EXAMPLE
-   
-   #+ATTR_HTML: image :width 70% 
-   [[file:pic/bytebug-internal-segmentation.jpg]]
-   
+    #+END_SRC
+    
+    注意：通过索引访问时不会推进 readerIndex 和 writerIndex，我们可以通过 ByteBuf 的 readerIndex(index) 或 writerIndex(index) 来分别推进读索引或写索引
+    
+*** 顺序访问索引
+    ByteBuf 提供两个指针变量支付读和写操作，读操作是使用 readerIndex()，写操作时使用 writerIndex()。这和JDK的ByteBuffer不同，ByteBuffer只有一个方法来设置索引，所以需要使用 flip() 方法来切换读和写模式
+    
+    #+BEGIN_EXAMPLE
+    ByteBuf 一定符合：0 <= readerIndex <= writerIndex <= capacity
+    #+END_EXAMPLE
+    
+    #+ATTR_HTML: image :width 70% 
+    [[file:pic/bytebug-internal-segmentation.jpg]]
+    
 1. 字节，可以被丢弃，因为它们已经被读
 2. 还没有被读的字节是： readable bytes（可读字节）
 3. 空间可加入多个字节的是： writeable bytes（写字节）
    
-*** 可丢弃字节的字节
-    标有 *可丢弃字节* 的段包含已经被读取的字节。他们可以被丢弃，通过调用discardReadBytes() 来回收空间。这个段的初始大小存储在readerIndex，为 0，当 *read* 操作被执行时递增（ *get* 操作不会移动 readerIndex）
-    
-    图5.4示出了在 图5.3 中的缓冲区中调用 discardReadBytes() 所示的结果。可以看到，在丢弃字节段的空间已变得可用写。需要注意的是不能保证对可写的段之后的内容在 discardReadBytes() 方法之后已经被调用：
-    
-    #+ATTR_HTML: image :width 70% 
-    [[file:pic/discard-read-bytes.jpg]]
-    
+**** 可丢弃字节的字节
+     标有 *可丢弃字节* 的段包含已经被读取的字节。他们可以被丢弃，通过调用discardReadBytes() 来回收空间。这个段的初始大小存储在readerIndex，为 0，当 *read* 操作被执行时递增（ *get* 操作不会移动 readerIndex）
+     
+     图5.4示出了在 图5.3 中的缓冲区中调用 discardReadBytes() 所示的结果。可以看到，在丢弃字节段的空间已变得可用写。需要注意的是不能保证对可写的段之后的内容在 discardReadBytes() 方法之后已经被调用：
+     
+     #+ATTR_HTML: image :width 70% 
+     [[file:pic/discard-read-bytes.jpg]]
+     
 1. 字节尚未被读出（readerIndex 现在 0）
 2. 可用的空间，由于空间被回收而增大 
    
 ByteBuf.discardReadBytes() 可以用来清空 ByteBuf 中已读取的数据，从而使 ByteBuf 有多余的空间容纳新的数据，但是discardReadBytes() 可能会涉及内存复制，因为它需要移动 ByteBuf 中可读的字节到开始位置，这样的操作会影响性能，一般在需要马上释放内存的时候使用收益会比较大
 
-*** 可读字节
-    ByteBuf 的 *可读字节* 分段存储的是实际数据。新分配，包装，或复制的缓冲区的 readerIndex 的默认值为 0 。任何操作，其名称以 *read* 或 *skip* 开头的都将检索或跳过该数据在当前 readerIndex ，并且通过读取的字节数来递增
-    
-    如果所谓的读操作是一个指定 ByteBuf 参数作为写入的对象，并且没有一个目标索引参数，目标缓冲区的 writerIndex 也会增加了。例如：
-    
-    #+BEGIN_SRC java
+**** 可读字节
+     ByteBuf 的 *可读字节* 分段存储的是实际数据。新分配，包装，或复制的缓冲区的 readerIndex 的默认值为 0 。任何操作，其名称以 *read* 或 *skip* 开头的都将检索或跳过该数据在当前 readerIndex ，并且通过读取的字节数来递增
+     
+     如果所谓的读操作是一个指定 ByteBuf 参数作为写入的对象，并且没有一个目标索引参数，目标缓冲区的 writerIndex 也会增加了。例如：
+     
+     #+BEGIN_SRC java
   readBytes(ByteBuf dest);
-    #+END_SRC
-    
-    如果试图从缓冲器读取已经用尽的可读的字节，则抛出IndexOutOfBoundsException。下面显示了如何读取所有可读字节：
-    
-    #+BEGIN_SRC java
+     #+END_SRC
+     
+     如果试图从缓冲器读取已经用尽的可读的字节，则抛出IndexOutOfBoundsException。下面显示了如何读取所有可读字节：
+     
+     #+BEGIN_SRC java
   //遍历缓冲区的可读字节
   ByteBuf buffer= ...;
   while (buffer.isReadable()) {
           System.out.println(buffer.readByte());
   }
-    #+END_SRC
-    
-    一个新分配的缓冲区的 writerIndex 的默认值是 0 。任何操作，其名称 *write* 开头的操作在当前的 writerIndex 写入数据时，递增字节写入的数量。如果写操作的目标也是 ByteBuf ，且未指定源索引，则源缓冲区的 readerIndex 将增加相同的量。例如：
-    #+BEGIN_SRC java
+     #+END_SRC
+     
+     一个新分配的缓冲区的 writerIndex 的默认值是 0 。任何操作，其名称 *write* 开头的操作在当前的 writerIndex 写入数据时，递增字节写入的数量。如果写操作的目标也是 ByteBuf ，且未指定源索引，则源缓冲区的 readerIndex 将增加相同的量。例如：
+     #+BEGIN_SRC java
   writeBytes(ByteBuf dest);
-    #+END_SRC
-    
-    如果试图写入超出目标的容量，则抛出 IndexOutOfBoundException
-    
-    下面的例子展示了填充随机整数到缓冲区中，直到耗尽空间。该方法writableBytes() 被用在这里确定是否存在足够的缓冲空间：
-    #+BEGIN_SRC java
+     #+END_SRC
+     
+     如果试图写入超出目标的容量，则抛出 IndexOutOfBoundException
+     
+     下面的例子展示了填充随机整数到缓冲区中，直到耗尽空间。该方法writableBytes() 被用在这里确定是否存在足够的缓冲空间：
+     #+BEGIN_SRC java
   //填充随机整数到缓冲区中
   ByteBuf buffer = ...;
   while (buffer.writableBytes() >= 4) {
           buffer.writeInt(random.nextInt());
   }
-    #+END_SRC
+     #+END_SRC
+     
+*** 索引管理
+    在 JDK 的 InputStream 定义了 mark(int readlimit) 和 reset()方法。这些是分别用来标记流中的当前位置和复位流到该位置
     
-** 索引管理
-   在 JDK 的 InputStream 定义了 mark(int readlimit) 和 reset()方法。这些是分别用来标记流中的当前位置和复位流到该位置
-   
-   同样，可以设置和重新定位ByteBuf readerIndex 和 writerIndex 通过调用 markReaderIndex(), markWriterIndex(), resetReaderIndex() 和 resetWriterIndex()。这些类似于InputStream 的调用，所不同的是，没有 readlimit 参数来指定当标志变为无效
-   
-   可以通过调用 readerIndex(int) 或 writerIndex(int) 将指标移动到指定的位置。在尝试任何无效位置上设置一个索引将导致 IndexOutOfBoundsException 异常
-   
-   调用 clear() 可以同时设置 readerIndex 和 writerIndex 为 0。注意，这不会清除内存中的内容。调用之前，包含3个段，下面显示了调用之后：
-   
-   #+ATTR_HTML: image :width 70% 
-   [[file:pic/bytebuf-clear.jpg]]
-   
-   现在整个 ByteBuf 空间都是可写的了。clear() 比 discardReadBytes() 更低成本，因为他只是重置了索引，而没有内存拷贝
-   
-** 查询操作
-   有几种方法，以确定在所述缓冲器中的指定值的索引。最简单的是使用 indexOf() 方法。更复杂的搜索执行以 ByteBufProcessor 为参数的方法。这个接口定义了一个方法，boolean process(byte value)，它用来报告输入值是否是一个正在寻求的值
-   
-   ByteBufProcessor 定义了很多方便实现共同目标值。例如，假设您的应用程序需要集成所谓的“Flash sockets”，将使用 NULL 结尾的内容：
-   
-   #+BEGIN_SRC java
-  int index=buffer.forEachByte（ByteBufProcessor.FIND_NUL）;
-   #+END_SRC
-   
-   通过减少的，因为少量的 *边界检查* 的处理过程中执行了，从而使 消耗 Flash 数据变得 编码工作量更少、效率更高
-   
-   下面例子展示了寻找一个回车符 \r的一个例子：
-   
-   #+BEGIN_SRC java
-  ByteBuf buffer = ...;
-  int index = buffer.forEachByte(ByteBufProcessor.FIND_CR);
-   #+END_SRC
-   
-** 衍生的缓冲区
-   *衍生的缓冲区* 是代表一个专门的展示 ByteBuf 内容的 *视图* 。这种视图是由 duplicate(), slice(), slice(int, int), readOnly() 和 order(ByteOrder) 方法创建的。所有这些都返回一个新的 ByteBuf 实例包括它自己的 reader, writer 和标记索引。然而，内部数据存储共享就像在一个 NIO 的 ByteBuffer。这使得衍生的缓冲区创建、修改其 内容，以及修改其 *源* 实例更廉价
-   
-*** ByteBuf 拷贝
-    如果需要已有的缓冲区的全新副本，使用 *copy()* 或者 *copy(int, int)* 。不同于派生缓冲区，这个调用返回的 ByteBuf 有数据的独立副本
+    同样，可以设置和重新定位ByteBuf readerIndex 和 writerIndex 通过调用 markReaderIndex(), markWriterIndex(), resetReaderIndex() 和 resetWriterIndex()。这些类似于InputStream 的调用，所不同的是，没有 readlimit 参数来指定当标志变为无效
     
-    若需要操作某段数据，使用 *slice(int, int)* ，下面展示了用法：
+    可以通过调用 readerIndex(int) 或 writerIndex(int) 将指标移动到指定的位置。在尝试任何无效位置上设置一个索引将导致 IndexOutOfBoundsException 异常
+    
+    调用 clear() 可以同时设置 readerIndex 和 writerIndex 为 0。注意，这不会清除内存中的内容。调用之前，包含3个段，下面显示了调用之后：
+    
+    #+ATTR_HTML: image :width 70% 
+    [[file:pic/bytebuf-clear.jpg]]
+    
+    现在整个 ByteBuf 空间都是可写的了。clear() 比 discardReadBytes() 更低成本，因为他只是重置了索引，而没有内存拷贝
+    
+*** 查询操作
+    有几种方法，以确定在所述缓冲器中的指定值的索引。最简单的是使用 indexOf() 方法。更复杂的搜索执行以 ByteBufProcessor 为参数的方法。这个接口定义了一个方法，boolean process(byte value)，它用来报告输入值是否是一个正在寻求的值
+    
+    ByteBufProcessor 定义了很多方便实现共同目标值。例如，假设您的应用程序需要集成所谓的“Flash sockets”，将使用 NULL 结尾的内容：
     
     #+BEGIN_SRC java
+  int index=buffer.forEachByte（ByteBufProcessor.FIND_NUL）;
+    #+END_SRC
+    
+    通过减少的，因为少量的 *边界检查* 的处理过程中执行了，从而使 消耗 Flash 数据变得 编码工作量更少、效率更高
+    
+    下面例子展示了寻找一个回车符 \r的一个例子：
+    
+    #+BEGIN_SRC java
+  ByteBuf buffer = ...;
+  int index = buffer.forEachByte(ByteBufProcessor.FIND_CR);
+    #+END_SRC
+    
+*** 衍生的缓冲区
+    *衍生的缓冲区* 是代表一个专门的展示 ByteBuf 内容的 *视图* 。这种视图是由 duplicate(), slice(), slice(int, int), readOnly() 和 order(ByteOrder) 方法创建的。所有这些都返回一个新的 ByteBuf 实例包括它自己的 reader, writer 和标记索引。然而，内部数据存储共享就像在一个 NIO 的 ByteBuffer。这使得衍生的缓冲区创建、修改其 内容，以及修改其 *源* 实例更廉价
+    
+**** ByteBuf 拷贝
+     如果需要已有的缓冲区的全新副本，使用 *copy()* 或者 *copy(int, int)* 。不同于派生缓冲区，这个调用返回的 ByteBuf 有数据的独立副本
+     
+     若需要操作某段数据，使用 *slice(int, int)* ，下面展示了用法：
+     
+     #+BEGIN_SRC java
   Charset utf8 = Charset.forName("UTF-8");
   ByteBuf buf = Unpooled.copiedBuffer("Netty in Action rocks!", utf8); //1 创建一个 ByteBuf 保存特定字节串
 
@@ -270,11 +270,11 @@ ByteBuf.discardReadBytes() 可以用来清空 ByteBuf 中已读取的数据，�
 
   buf.setByte(0, (byte) 'J');                 //4 更新索引 0 的字节
   assert buf.getByte(0) == sliced.getByte(0); // 5 断言成功，因为数据是共享的，并以一个地方所做的修改将在其他地方可见
-    #+END_SRC
-    
-    下面看下如何将一个 ByteBuf 段的副本不同于 slice：
-    
-    #+BEGIN_SRC java
+     #+END_SRC
+     
+     下面看下如何将一个 ByteBuf 段的副本不同于 slice：
+     
+     #+BEGIN_SRC java
   Charset utf8 = Charset.forName("UTF-8");
   ByteBuf buf = Unpooled.copiedBuffer("Netty in Action rocks!", utf8);     //1 创建一个 ByteBuf 保存特定字节串
 
@@ -283,19 +283,19 @@ ByteBuf.discardReadBytes() 可以用来清空 ByteBuf 中已读取的数据，�
 
   buf.setByte(0, (byte) 'J');                   //4 更新索引 0 的字节
   assert buf.getByte(0) != copy.getByte(0); //5 断言成功，因为数据不是共享的，并以一个地方所做的修改将不影响其他 
-    #+END_SRC
-    
-    代码几乎是相同的，但所 衍生的 ByteBuf 效果是不同的。因此，使用一个 slice 可以尽可能避免复制内存
-    
-** 读/写操作
-   读/写操作主要由2类：
+     #+END_SRC
+     
+     代码几乎是相同的，但所 衍生的 ByteBuf 效果是不同的。因此，使用一个 slice 可以尽可能避免复制内存
+     
+*** 读/写操作
+    读/写操作主要由2类：
 + get()/set() ：操作从给定的索引开始，保持不变
 + read()/write()： 操作从给定的索引开始，与字节访问的数量来适用，递增当前的写索引或读索引
   
 下表是常见的 get() 操作：
 
 #+CAPTION: get操作
-#+ATTR_HTML: :border 1 :frame boader
+#+ATTR_HTML: :border 1 :frame boader  :rules all 
 | 方法名称                              | 描述                                |
 | getBoolean(int)                       | 返回当前索引的 Boolean 值     |
 | getByte(int) getUnsignedByte(int)     | 返回当前索引的(无符号)字节 |
@@ -308,7 +308,7 @@ ByteBuf.discardReadBytes() 可以用来清空 ByteBuf 中已读取的数据，�
 常见 set() 操作如下：
 
 #+CAPTION: set操作
-#+ATTR_HTML: :border 1 :frame boader
+#+ATTR_HTML: :border 1 :frame boader  :rules all 
 | 方法名称                 | 描述                              |
 | setBoolean(int, boolean) | 在指定的索引位置设置 Boolean 值 |
 | setByte(int, int)        | 在指定的索引位置设置 byte 值 |
@@ -336,7 +336,7 @@ ByteBuf.discardReadBytes() 可以用来清空 ByteBuf 中已读取的数据，�
 下面展示了常见的 read() 方法：
 
 #+CAPTION: read操作
-#+ATTR_HTML: :border 1 :frame boader
+#+ATTR_HTML: :border 1 :frame boader  :rules all 
 | 方法名称                             | 描述                                                                                                                               |
 | readBoolean()　   　               | Reads the Boolean value at the current readerIndex and increases the readerIndex by 1                                                |
 | readByte()　readUnsignedByte()　   | Reads the (unsigned) byte value at the current readerIndex and increases the readerIndex by 1                                        |
@@ -349,7 +349,7 @@ ByteBuf.discardReadBytes() 可以用来清空 ByteBuf 中已读取的数据，�
 每个 read() 方法都对应一个 write()：
 
 #+CAPTION: write操作
-#+ATTR_HTML: :border 1 :frame boader
+#+ATTR_HTML: :border 1 :frame boader  :rules all 
 | 方法名称                     | 描述                                                                                    |
 | writeBoolean(boolean)        | Writes the Boolean value on the current writerIndex and increases the　writerIndex by 1 |
 | writeByte(int)               | Writes the byte value on the current writerIndex and increases the　writerIndex by 1    |
@@ -359,9 +359,9 @@ ByteBuf.discardReadBytes() 可以用来清空 ByteBuf 中已读取的数据，�
 | writeShort(int)              | Writes the short value on the current writerIndex and increases thewriterIndex by 2     |
 | writeBytes(int，...）     　 | Transfers the bytes on the current writerIndex from given resources                     | 
 
-  下面是 read 和 write 的实例：
+下面是 read 和 write 的实例：
 
-  #+BEGIN_SRC java
+#+BEGIN_SRC java
     Charset utf8 = Charset.forName("UTF-8");
     ByteBuf buf = Unpooled.copiedBuffer("Netty in Action rocks!", utf8);    //1 创建一个新的 ByteBuf 保存给定 String 的字节
     System.out.println((char)buf.readByte());                    //2 打印的第一个字符 N
@@ -373,21 +373,124 @@ ByteBuf.discardReadBytes() 可以用来清空 ByteBuf 中已读取的数据，�
 
     assert readerIndex == buf.readerIndex(); 
     assert writerIndex != buf.writerIndex(); //6 此断言成功，因为 writeByte() 在 5 移动了 writerIndex
-  #+END_SRC
+#+END_SRC
 
 ** 更多操作
-
-#+CAPTION: 更多操作
-#+ATTR_HTML: :border 1 :frame boader
-| 方法名称         | 描述                                                                                                                       |
-| isReadable()     | Returns true if at least one byte can be read                                                                                |
-| isWritable()     | Returns true if at least one byte can be written                                                                             |
-| readableBytes()  | Returns the number of bytes that can be read                                                                                 |
-| writablesBytes() | Returns the number of bytes that can be written                                                                              |
-| capacity()       | Returns the number of bytes that the ByteBuf can hold. After this it will try to expand again until maxCapacity() is reached |
-| maxCapacity()    | Returns the maximum number of bytes the ByteBuf can hold                                                                     |
-| hasArray()       | Returns true if the ByteBuf is backed by a byte array                                                                        |
-| array()          | Returns the byte array if the ByteBuf is backed by a byte array, otherwise throws an UnsupportedOperationException           | 
-
+   
+   #+CAPTION: 更多操作
+   #+ATTR_HTML: :border 1 :frame boader  :rules all 
+   | 方法名称         | 描述                                                                                                                       |
+   | isReadable()     | Returns true if at least one byte can be read                                                                                |
+   | isWritable()     | Returns true if at least one byte can be written                                                                             |
+   | readableBytes()  | Returns the number of bytes that can be read                                                                                 |
+   | writablesBytes() | Returns the number of bytes that can be written                                                                              |
+   | capacity()       | Returns the number of bytes that the ByteBuf can hold. After this it will try to expand again until maxCapacity() is reached |
+   | maxCapacity()    | Returns the maximum number of bytes the ByteBuf can hold                                                                     |
+   | hasArray()       | Returns true if the ByteBuf is backed by a byte array                                                                        |
+   | array()          | Returns the byte array if the ByteBuf is backed by a byte array, otherwise throws an UnsupportedOperationException           | 
+   
 * ByteBufHolder
+  我们经常遇到需要另外存储除有效的实际数据各种属性值。 HTTP 响应是一个很好的例子；与内容一起的字节的还有状态码, cookies等
+  
+  Netty 提供 ByteBufHolder 处理这种常见的情况。 ByteBufHolder 还提供对于 Netty 的高级功能，如缓冲池，其中保存实际数据的 ByteBuf 可以从池中借用，如果需要还可以自动释放
+  
+  ByteBufHolder 有那么几个方法。到底层的这些支持接入数据和引用计数。表5.7所示的方法：
+  
+  #+CAPTION: ByteBufHolder operations
+  #+ATTR_HTML: :border 1 :frame boader  :rules all 
+  | 名称   | 描述                                                            |
+  | data() | 返回 ByteBuf 保存的数据                                         |
+  | copy() | 制作一个 ByteBufHolder 的拷贝，但不共享其数据(所以数据也是拷贝) |
+  
+  如果你想实现一个 *消息对象* 有效负载存储在 ByteBuf，使用ByteBufHolder 是一个好主意
+  
+** ByteBuf 分配
+   本节介绍 ByteBuf 实例管理的几种方式：
+   
+*** ByteBufAllocator
+    为了减少分配和释放内存的开销，Netty 通过支持池类 ByteBufAllocator，可用于分配的任何 ByteBuf 我们已经描述过的类型的实例。是否使用池是由应用程序决定的，表5.8列出了 ByteBufAllocator 提供的操作：
+    
+    #+CAPTION: ByteBufAllocator方法
+    #+ATTR_HTML: :border 1 :frame boader  :rules all 
+    | 名称                                                                                                                                     | 描述                                                                               |
+    | buffer() buffer(int) buffer(int, int)                                                                                                    | Return a ByteBuf with heap-based or direct data storage                              |
+    | heapBuffer() heapBuffer(int) heapBuffer(int, int)                                                                                        | Return a ByteBuf with heap-based storage                                             |
+    | directBuffer() directBuffer(int) directBuffer(int, int)                                                                                  | Return a ByteBuf with direct storage                                                 |
+    | compositeBuffer() compositeBuffer(int) heapCompositeBuffer() heapCompositeBuffer(int) directCompositeBuffer() directCompositeBuffer(int) | Return a CompositeByteBuf that can be expanded by adding heapbased or direct buffers |
+    | ioBuffer()                                                                                                                               | Return a ByteBuf that will be used for I/O operations on a socket                    |
+    
+    通过一些方法接受整型参数允许用户指定 ByteBuf 的初始和最大容量值。你可能还记得，ByteBuf 存储可以扩大到其最大容量
+    
+    得到一个 ByteBufAllocator 的引用很简单。你可以得到从 Channel ，或通过绑定到的 ChannelHandler 的 ChannelHandlerContext 得到它，用它实现了数据处理逻辑
+    
+    下面的代码说明获得 ByteBufAllocator 的两种方式：
+    #+BEGIN_SRC java
+  Channel channel = ...;
+  ByteBufAllocator allocator = channel.alloc(); //1 从 channel 获得 ByteBufAllocator
+  ....
+  ChannelHandlerContext ctx = ...;
+  ByteBufAllocator allocator2 = ctx.alloc(); //2 从 ChannelHandlerContext 获得 ByteBufAllocator
+  ...
+    #+END_SRC
+    
+    Netty 提供了两种 ByteBufAllocator 的实现：
++ PooledByteBufAllocator，用ByteBuf 实例池改进性能以及内存使用降到最低，此实现使用一个 *jemalloc* 内存分配
++ 不池化 ByteBuf 情况下，每次返回一个新的实例
+  
+Netty 默认使用 PooledByteBufAllocator，可以通过 *ChannelConfig* 或通过引导设置一个不同的实现来改变
 
+**** Unpooled 缓存
+     当未引用 ByteBufAllocator 时，上面的方法无法访问到 ByteBuf。对于这个用例 Netty 提供一个实用工具类称为 Unpooled,，它提供了静态辅助方法来创建非池化的 ByteBuf 实例。表5.9列出了最重要的方法：
+     
+     #+CAPTION: Unpooled 辅助类方法
+     #+ATTR_HTML: :border 1 :frame boader  :rules all 
+     | 名称                                                    | 描述                                              |
+     | buffer() buffer(int) buffer(int, int)                   | Returns an unpooled ByteBuf with heap-based storage |
+     | directBuffer() directBuffer(int) directBuffer(int, int) | Returns an unpooled ByteBuf with direct storage     |
+     | wrappedBuffer()                                         | Returns a ByteBuf, which wraps the given data.      |
+     | copiedBuffer()                                          | Returns a ByteBuf, which copies the given data      |
+     
+*** ByteBufUtil
+    ByteBufUtil 静态辅助方法来操作 ByteBuf，因为这个 API 是通用的，与使用池无关，这些方法已经在外面的分配类实现
+    
+    最有价值的是 hexDump() 方法，这个方法返回指定 ByteBuf 中可读字节的十六进制字符串，可以用于调试程序时打印 ByteBuf 的内容。一个典型的用途是记录一个 ByteBuf 的内容进行调试。十六进制字符串相比字节而言对用户更友好。 而且十六进制版本可以很容易地转换回实际字节表示
+    
+    另一个有用方法是使用 boolean equals(ByteBuf, ByteBuf),用来比较 ByteBuf 实例是否相等。在实现自己 ByteBuf 的子类时经常用到
+    
+* 引用计数器
+  Netty 4 引入了 引用计数器给 ByteBuf 和 ByteBufHolder
+  
+  引用计数本身并不复杂，它在特定的对象上跟踪引用的数目。实现了 *ReferenceCounted* 的类的实例会通常开始于一个活动的引用计数器为 1。活动的引用计数器大于0的对象被保证不被释放。当数量引用减少到0，该实例将被释放。需要注意的是 *释放* 的语义是特定于具体的实现。最起码，一个对象，它已被释放应不再可用。
+  
+  这种技术就是诸如 PooledByteBufAllocator 这种 *减少内存分配开销的池化* 的精髓部分 
+  
+  获取引用计数：
+  #+BEGIN_SRC java
+  Channel channel = ...;
+  ByteBufAllocator allocator = channel.alloc(); //1 从 channel 获取 ByteBufAllocator
+  ....
+  ByteBuf buffer = allocator.directBuffer(); //2 从 ByteBufAllocator 分配一个 ByteBuf
+  assert buffer.refCnt() == 1; //3 检查引用计数器是否是 1
+  ...
+  #+END_SRC
+  
+  释放应用计数：
+  #+BEGIN_SRC java
+  ByteBuf buffer = ...;
+  boolean released = buffer.release(); //1 release() 将会递减对象引用的数目。当这个引用计数达到0时，对象已被释放，并且该方法返回 true
+  ...
+  #+END_SRC
+  
+  如果尝试访问已经释放的对象，将会抛出 IllegalReferenceCountException 异常。
+  
+  一个特定的类可以定义自己独特的方式其 *释放计数的规则* ，例如 release() 可以将引用计数器直接计为 0 而不管当前引用的对象数目
+  
+  #+BEGIN_EXAMPLE
+  在一般情况下，最后访问的对象负责释放它
+  #+END_EXAMPLE
+  
+  [[file:channel.org][Next：ChannelHandler]]
+  
+  [[file:transport.org][Previous：传输]]
+  
+[[file:netty.org][Home：目录]]
