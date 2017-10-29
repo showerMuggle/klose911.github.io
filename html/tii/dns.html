@@ -178,7 +178,34 @@ for the JavaScript code in this tag.
 <li><a href="#sec-1-3-2">FQDN</a></li>
 </ul>
 </li>
-<li><a href="#sec-1-4">指针查询</a></li>
+<li><a href="#sec-1-4">指针查询</a>
+<ul>
+<li><a href="#sec-1-4-1">实例</a></li>
+<li><a href="#sec-1-4-2">主机名检查</a>
+<ul>
+<li><a href="#sec-1-4-2-1">gethostbyaddr函数</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#sec-1-5">资源记录</a>
+<ul>
+<li><a href="#sec-1-5-1">A记录</a></li>
+<li><a href="#sec-1-5-2">PTR记录</a></li>
+<li><a href="#sec-1-5-3">CNAME记录</a></li>
+<li><a href="#sec-1-5-4">HINFO记录</a></li>
+<li><a href="#sec-1-5-5">MX记录</a></li>
+<li><a href="#sec-1-5-6">NS记录</a></li>
+</ul>
+</li>
+<li><a href="#sec-1-6">高速缓存</a>
+<ul>
+<li><a href="#sec-1-6-1">实例1</a></li>
+<li><a href="#sec-1-6-2">实例2</a></li>
+</ul>
+</li>
+<li><a href="#sec-1-7">用UDP还是用TCP</a></li>
+<li><a href="#sec-1-8">总结</a></li>
 </ul>
 </li>
 </ul>
@@ -850,6 +877,460 @@ Connected to gemini.tuc.noao.edu. <span style="color: #ff4500;">#</span><span st
 
 <div id="outline-container-sec-1-4" class="outline-3">
 <h3 id="sec-1-4">指针查询</h3>
+<div class="outline-text-3" id="text-1-4">
+<p>
+DNS中一直难于理解的部分就是指针查询方式，即 <b>给定一个IP地址，返回与该地址对应的域名</b> 
+</p>
+
+<p>
+首先回到图14-1，查看一下顶级域arpa，及它下面的in-addr域。当一个组织加入Internet，并获得DNS域名空间的授权，如noao.edu，则它们也获得了对应IP地址的 <b>in-addr.arpa域名空间的授权</b> 。在noao.edu这个例子中，它是网络号为140.252的B类网络。在DNS树中结点in-addr.arpa的下一级必须是该IP地址的第一字节（例中为140），再下一级为该IP地址的下一个字节（252），依此类推。但应牢记的是 <b>DNS名字是由DNS树的底部逐步向上书写的</b> 。这意味着对于IP地址为140.252.13.33的sun主机，它的DNS名字为 <b>33.13.252.140.in-addr.arpa</b> 
+</p>
+
+<p>
+必须写出4字节的IP地址，因为授权的代表是基于网络号：A类地址是第一字节，B类地址是第一、二字节，C类地址则是第一、二、三字节。 <b>IP地址的第一字节一定位于in-addr的下一级，但FQDN却是自树底往上书写的</b> 。如果FQDN由顶往下书写，则这个IP地址的DNS名字将是arpa.in-addr.140.252.13.33，而它所对应的域名将是edu.noao.tuc.sun。
+</p>
+
+<p>
+如果DNS树中没有独立的分支来处理这种地址与名字的转换，将无法进行这种反向转换，除非从树根开始依次尝试每个顶级域。毫不夸张地说，这将需要数天或数周的时间。虽然反写IP地址和特殊的域名会造成某些混乱，但in-addr解决方案仍是一种最有效的方式
+</p>
+
+<p>
+只有在使用host程序或tcpdump程序直接同DNS打交道时，才会担心in-addr域和反写IP地址影响。从应用的角度上看，正常的名字解析器函数（gethostbyaddr）将接收一个IP地址并返回对应主机的有关信息。反转这些字节和添加in-addr.arpa域均由该函数自动完成
+</p>
+</div>
+
+<div id="outline-container-sec-1-4-1" class="outline-4">
+<h4 id="sec-1-4-1">实例</h4>
+<div class="outline-text-4" id="text-1-4-1">
+<p>
+使用host程序完成一个指针查询，并使用tcpdump程序来观察这些分组。例子中的设置和图14-9相同，在sun主机上运行host程序，名字服务器在主机noao.edu上。我们指明svr4主机的IP地址：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">sun$ host 140.252.13.34
+</pre>
+</div>
+
+<pre class="example">
+Name: svr4.tuc.noao.edu
+Address: 140.252.13.34
+</pre>
+
+<p>
+既然IP地址是仅有的命令行参数，host程序将自动产生指针查询。图14-12显示了tcpdump的输出：    
+</p>
+
+
+<div class="figure">
+<p><img src="pic/dns-ptr-query-dump.png" alt="dns-ptr-query-dump.png" width="70%" />
+</p>
+</div>
+
+<ul class="org-ul">
+<li>第1行显示标识符为1，期望递归标志设置为 <b>1+</b> ，查询类型为PTR（ <b>?</b> 表示它是一个查询而不是响应）。44字节的数据包括12字节的DNS报文首部、28字节的域名标识符和4字节的查询类型和查询类
+</li>
+<li>查询结果包含一个回答RR，且为授权回答比特置 <b>1*</b> 。RR的类型是PTR，资源数据中包含该域名
+</li>
+<li>从名字解析器传递给名字服务器的指针查询不再是32bit的IP地址，而是域名 <b>34.13.252.140.in-addr.arpa</b>
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-1-4-2" class="outline-4">
+<h4 id="sec-1-4-2">主机名检查</h4>
+<div class="outline-text-4" id="text-1-4-2">
+<p>
+当一个IP数据报到达一个作为服务器的主机时，无论是UDP数据报还是TCP连接请求，服务器进程所能获得的是客户的IP地址和端口号（UDP或TCP）。某些服务器需要客户的IP地址来获得在DNS中的指针记录
+</p>
+
+<p>
+其他的一些服务器如Rlogin服务器不但需要客户的IP地址来获得指针记录，还要向DNS询问该IP地址所对应的域名，并检查返回的地址中是否有地址与收到的数据报中的源IP地址匹配。该检查是因为.rhosts文件中的条目仅包含主机名，而没有IP地址，因此主机需要证实该主机名是否对应源IP地址
+</p>
+</div>
+
+<div id="outline-container-sec-1-4-2-1" class="outline-5">
+<h5 id="sec-1-4-2-1">gethostbyaddr函数</h5>
+<div class="outline-text-5" id="text-1-4-2-1">
+<p>
+某些厂商将该项检查自动并入其名字解析器的例程中，特别是函数gethostbyaddr。这使得任何使用名字解析器的程序均可获得这种检查，而无需在应用中人为地进行这项检查
+</p>
+
+<p>
+来看一个使用SunOS 4.13名字解析器库的例子。可以编制一个简单的程序通过调用函数gethostbyaddr来完成一个指针查询。在文件/etc/resolv.conf中将名字服务器设置为noao.edu，sun主机通过SLIP链路与它相连。图14-13显示了当调用函数gethostbyaddr获取与IP地址140.252.1.29（sun主机）对应的名字时，tcpdump在SLIP链路上收到的内容：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/gethostbyaddr-dump.png" alt="gethostbyaddr-dump.png" width="70%" />
+</p>
+</div>
+
+<ul class="org-ul">
+<li>第1行是预期的指针查询
+</li>
+<li>第2行是预期的响应
+</li>
+<li>第3行显示了该名字解析器函数自动对第2行返回的名字发出一个IP地址查询
+</li>
+<li>既然sun主机有两个IP地址，第4行的响应就包括两个回答记录
+</li>
+</ul>
+
+<p>
+如果这两个地址中没有与gethostbyaddr输入参数匹配的地址，函数会向系统的日志发送一条报文，并向应用程序返回差错
+</p>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-1-5" class="outline-3">
+<h3 id="sec-1-5">资源记录</h3>
+<div class="outline-text-3" id="text-1-5">
+<p>
+至今已经见到了一些不同类型的资源记录（RR）：IP地址查询为A类型，指针查询为类型PTR。也已看到了由名字服务器返回的资源记录：回答RR、授权RR和附加信息RR。现有大约20种不同类型的资源记录，下面将介绍其中的一些。另外，随着时间的推移，会加入更多类型的RR
+</p>
+</div>
+
+<div id="outline-container-sec-1-5-1" class="outline-4">
+<h4 id="sec-1-5-1">A记录</h4>
+<div class="outline-text-4" id="text-1-5-1">
+<p>
+一个A记录定义了一个IP地址，它存储32bit的二进制数
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-1-5-2" class="outline-4">
+<h4 id="sec-1-5-2">PTR记录</h4>
+<div class="outline-text-4" id="text-1-5-2">
+<p>
+指针记录用于指针查询。IP地址被看作是in-addr.arpa域下的一个域名(标识符串)
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-1-5-3" class="outline-4">
+<h4 id="sec-1-5-3">CNAME记录</h4>
+<div class="outline-text-4" id="text-1-5-3">
+<p>
+CNAME表示 <b>规范名字(canonicalname)</b> 。它用来表示一个域名(标识符串)，而有规范名字的域名通常被称为别名
+</p>
+
+<p>
+某些FTP服务器使用它向其他的系统提供一个易于记忆的别名，例如，gated服务器可通过匿名FTP从 <b>gated.cornell.edu</b> 获得，但这里并没有叫做gated的系统，这仅是为其他系统提供的别名。其他系统的规范名为gated.cornell.edu 
+</p>
+
+
+<div class="org-src-container">
+
+<pre class="src src-sh">sun$ host -t cname gated.cornell.edu
+</pre>
+</div>
+
+<pre class="example">
+gated.cornell.edu CNAM COMET.CIT.CORNELL.EDU
+</pre>
+
+<p>
+这里使用的 <b>-t</b> 选项来指明它是特定的查询类型
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-1-5-4" class="outline-4">
+<h4 id="sec-1-5-4">HINFO记录</h4>
+<div class="outline-text-4" id="text-1-5-4">
+<p>
+HINFO表示主机信息：包括说明主机CPU和操作系统的两个字符串。并非所有的站点均提供它们系统的HINFO记录，并且提供的信息也可能不是最新的
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">sun$ host -t hinfo sun
+</pre>
+</div>
+
+<pre class="example">
+sun.tuc.noao.edu HINFO Sun-4/25 Sun4.1.3
+</pre>
+</div>
+</div>
+
+<div id="outline-container-sec-1-5-5" class="outline-4">
+<h4 id="sec-1-5-5">MX记录</h4>
+<div class="outline-text-4" id="text-1-5-5">
+<p>
+邮件交换记录，用于以下一些场合：
+</p>
+<ol class="org-ol">
+<li>一个没有连到Internet的站点能将一个连到Internet的站点作为它的邮件交换器。这两个站点能够用一种交替的方式交换到达的邮件，而通常使用的协议是UUCP协议
+</li>
+<li>MX记录提供了一种将无法到达其目的主机的邮件传送到一个替代主机的方式
+</li>
+<li>MX记录允许机构提供供他人发送邮件的虚拟主机，如cs.university.edu，即使这样的主机名根本不存在
+</li>
+<li>防火墙网关能使用MX记录来限制外界与内部系统的连接
+</li>
+</ol>
+
+<p>
+许多不能与Internet连接的站点通过UUCP链路与一个连接在Internet上的站点如UUNET相连接。通过MX记录能使用user@host这种邮件地址向那个站点发送电子邮件。例如，一个假想的域foo.com可能有下面的MX记录：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">sun$ host -t mx foo.com
+</pre>
+</div>
+
+<pre class="example">
+foo.com MX relay1.UU.NET
+foo.com MX relay2.UU.NET
+</pre>
+</div>
+</div>
+
+<div id="outline-container-sec-1-5-6" class="outline-4">
+<h4 id="sec-1-5-6">NS记录</h4>
+<div class="outline-text-4" id="text-1-5-6">
+<p>
+名字服务器记录。它说明一个域的授权名字服务器。它由域名表示(符号串)
+</p>
+
+<p>
+这些是RR的常用类型。将在后面的例子中遇到它们
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-1-6" class="outline-3">
+<h3 id="sec-1-6">高速缓存</h3>
+<div class="outline-text-3" id="text-1-6">
+<p>
+为了减少Internet上DNS的通信量，所有的名字服务器均使用高速缓存。在标准的Unix实现中，高速缓存是由 <b>名字服务器而不是由名字解析器维护的</b> 。既然名字解析器作为每个应用的一部分，而应用又不可能总处于工作状态，因此将高速缓存放在只要系统（名字服务器）处于工作状态就能起作用的程序中显得很重要。这样任何一个使用名字服务器的应用均可获得高速缓存。在该站点使用这个名字服务器的任何其他主机也能共享服务器的高速缓存
+</p>
+</div>
+
+<div id="outline-container-sec-1-6-1" class="outline-4">
+<h4 id="sec-1-6-1">实例1</h4>
+<div class="outline-text-4" id="text-1-6-1">
+<p>
+在迄今为止所举例子的网络环境中，在sun主机上运行客户程序，通过主机noao.edu的SLIP链路访问名字服务器。现在将改变这种设置，在sun主机上运行名字服务器。在这种情况下，如果使用tcpdump监视在SLIP链路上的DNS通信量，将只能看到服务器因超出其高速缓存而不能处理的查询
+</p>
+
+<p>
+在默认情况下，名字解析器将在本地主机上（UDP端口号为53或TCP端口号为53）寻找名字服务器。从名字解析器文件中删除nameserver行，而留下domain行：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">sun$ cat /etc/resolv.conf
+</pre>
+</div>
+
+<pre class="example">
+domain tuc.noao.edu
+</pre>
+
+<p>
+在这个文件中缺少namerserver指示将导致名字解析器使用本地主机上的名字服务器：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">sun$ host ftp.uu.net
+</pre>
+</div>
+
+<pre class="example">
+ftp.uu.net A 192.48.96.9
+</pre>
+
+<p>
+下图显示了这个查询的tcpdump输出结果：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/dns-cache-dump.png" alt="dns-cache-dump.png" width="70%" />
+</p>
+</div>
+
+<pre class="example">
+    在tcpdump中使用了新的选项:
+    
+    使用-w选项来收集进出UDP或TCP 53号端口的所有数据。将这些原始数据记录在一个文件中供以后处理，同时防止tcpdump试图调用名字解析器来显示与那个IP地址相对应的域名
+    
+    执行查询后，终止tcpdump并使用-r选项再次运行它。它会读取含有原始数据的文件并产生正式的输出显示。这个过程要花费几秒钟，因为tcpdump调用了它自己的名字解析器
+</pre>
+
+<p>
+标识符是小整数（2和3）。这是因为我们关闭这个名字服务器，后又重新启动它来强制清空它的高速缓存。当名字服务器启动时，它将标识符初始化为1
+</p>
+
+<ul class="org-ul">
+<li>第一行：查询主机ftp.uu.net的IP地址，该名字服务器就同8个根名字服务器中的一个 <b>ns.nic.ddn.mil</b> 取得联系。这是以前见到的正常的A类型查询：
+<ul class="org-ul">
+<li>它的期望递归表示没有说明（不是 <b>2+</b> , 而是 <b>2?</b> ）。在以前的例子中，经常看到名字解析器设置期望递归标志，但这里的名字服务器在与某个根服务器联系时没有设置这个标志。这是因为 <b>不应该向根名字服务器发出期望递归的查询，它们仅用来寻找其他授权名字服务器的地址</b>
+</li>
+</ul>
+</li>
+<li>第2行：返回的响应中没有回答资源记录，而包含5个授权资源记录和5个附加信息资源记录：
+<ul class="org-ul">
+<li><b>2-</b> ：期望递归标志（RA）没有被设置。即使要求进行递归查询，这个根名字服务器也不会回答期望递归查询
+</li>
+</ul>
+</li>
+</ul>
+
+<p>
+尽管tcpdump没有显示返回的10个资源记录，也能执行host命令来查看高速缓存的内容：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/host-cache.png" alt="host-cache.png" width="70%" />
+</p>
+</div>
+
+<pre class="example">
+这次采用-v选项查看的不仅仅只是A记录。它显示出对于域uu.net有5个授权名字服务器，而由根名字服务器返回的5个附加信息资源记录中含有这5个名字服务器的IP地址
+
+这避免了在查找其中的某个名字服务器的地址时，无需再次与根名字服务器联系。这是DNS中的另一个实现优化
+
+host命令指出这个回答不是授权的，这是因为这个回答来自名字服务器的高速缓存，而不是来自授权名字服务器
+</pre>
+
+<ul class="org-ul">
+<li>第3行：名字服务器与第一个授权名字服务器 <b>ns.uu.net</b> 询问ftp.uu.net的IP地址
+<ul class="org-ul">
+<li>这次设置了期望递归标志
+</li>
+</ul>
+</li>
+<li>第4行：返回的应答包含一个回答资源记录
+</li>
+</ul>
+
+<p>
+而后我们再次执行host命令，询问相同的名字，这次tcpdump没有输出，这正是所期望的，因为由host命令返回的回答来自于 <b>名字服务器的高速缓存</b> 
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-1-6-2" class="outline-4">
+<h4 id="sec-1-6-2">实例2</h4>
+<div class="outline-text-4" id="text-1-6-2">
+<p>
+再次执行host命令，查找ftp.ee.lbl.gov的地址：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">sun$ host ftp.ee.lbl.gov
+</pre>
+</div>
+
+<pre class="example">
+ftp.ee.lbl.gov CNAME ee.lbl.gov
+
+ee.lbl.gov A 128.3.112.20
+</pre>
+
+<p>
+图14-15显示了这时的tcpdump输出：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/dns-cname-dump.png" alt="dns-cname-dump.png" width="70%" />
+</p>
+</div>
+
+<ul class="org-ul">
+<li>第1行：服务器与另一个根名字服务器 <b>c.nyser.net</b> 联系。一个名字服务器通常轮询不同的根名字服务器来获得往返时间估计，然后选择往返时间最小的服务器
+<ul class="org-ul">
+<li>向一个根服务器发出查询，那么期望递归标志不应被设置
+</li>
+</ul>
+</li>
+<li>第2行：返回的响应中不包含回答资源记录，但含有4个授权记录和4个附加信息资源记录。这4个授权资源记录是供主机ftp.ee.lbl.gov进行域名服务的名字服务器名，其他4个记录则是这4个服务器的IP地址
+</li>
+<li>第3行：向名字服务器nsl.lbl.gov发出的查询请求
+<ul class="org-ul">
+<li>它的期望递归标志是被设置的
+</li>
+</ul>
+</li>
+<li>第4行：返回的响应和以往的响应不同。返回了两个回答资源记录：
+<ul class="org-ul">
+<li>tcpdump指出其中的第一个是CNAME资源记录，ftp.ee.lbl.gov的规范名称是ee.lbl.gov
+</li>
+</ul>
+</li>
+</ul>
+
+<pre class="example">
+这是CNAME记录常见的用法：
+
+LBL的FTP站点的名字通常是以ftp开始的，但它可能不时地从一个主机移到另一个主机
+
+用户只需要知道ftp.ee.lbl.gov，必要时DNS会用它的规范名进行替换
+</pre>
+
+<p>
+运行host程序时，它显示了规范域名的CNAME和IP地址。这是因为响应中含有两个回答资源记录：
+</p>
+<ol class="org-ol">
+<li>CNAME
+</li>
+<li>A记录
+</li>
+</ol>
+
+<p>
+如果A记录没有随CNAME记录返回，服务器将发出另一个查询请求，询问ee.lbl.gov的IP地址。这是另一个DNS的实现优化： <b>在一个响应中同时返回一个规范域名的CNAME记录和A记录</b> 
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-1-7" class="outline-3">
+<h3 id="sec-1-7">用UDP还是用TCP</h3>
+<div class="outline-text-3" id="text-1-7">
+<p>
+DNS名字服务器使用的熟知端口号无论对UDP还是TCP都是53。这意味着DNS均支持UDP和TCP访问，但我们使用tcpdump观察的所有例子都是采用UDP：
+</p>
+<ol class="org-ol">
+<li>当名字解析器发出一个查询请求，并且返回响应中的TC（删减标志）比特被设置为1时，它就意味着响应的长度超过了512个字节，而仅返回前512个字节。在遇到这种情况时，名字解析器通常使用TCP重发原来的查询请求，它将允许返回的响应超过512个字节。既然TCP能将用户的数据流分为一些报文段，它就能用多个报文段来传送任意长度的用户数据
+</li>
+<li>当一个域的辅助名字服务器在启动时，将从该域的主名字服务器执行区域传送。辅助服务器将定时（通常是3小时）向主服务器进行查询以便了解主服务器数据是否发生变动。如果有变动，将执行一次区域传送。区域传送将使用TCP，因为这里传送的数据远比一个查询或响应多得多
+</li>
+</ol>
+
+<p>
+既然DNS主要使用UDP，无论是名字解析器还是名字服务器都必须自己处理超时和重传。此外，不像其他的使用UDP的Internet应用，大部分操作集中在局域网上，DNS查询和响应通常经过广域网。分组丢失率和往返时间的不确定性在广域网上比局域网上更大。这样对于DNS客户程序，一个好的重传和超时程序就显得更重要了
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-1-8" class="outline-3">
+<h3 id="sec-1-8">总结</h3>
+<div class="outline-text-3" id="text-1-8">
+<p>
+通过一个例子将已经介绍的许多DNS特性作一个综合性回顾。先启动Rlogin客户程序，然后连接到一个位于其他域的Rlogin服务器。图14-16显示了发生的分组交换过程：
+</p>
+
+<div class="figure">
+<p><img src="pic/rlogin-dns.png" alt="rlogin-dns.png" width="70%" />
+</p>
+</div>
+
+<p>
+假定客户和服务器的高速缓存中没有任何信息：
+</p>
+</div>
 </div>
 </div>
 </div>
