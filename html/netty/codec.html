@@ -207,7 +207,12 @@ for the JavaScript code in this tag.
 <li><a href="#sec-1-1-4">在解码时处理太大的帧</a></li>
 </ul>
 </li>
-<li><a href="#sec-1-2">Encoder</a></li>
+<li><a href="#sec-1-2">Encoder</a>
+<ul>
+<li><a href="#sec-1-2-1">MessageToByteEncoder</a></li>
+<li><a href="#sec-1-2-2">MessageToMessageEncoder</a></li>
+</ul>
+</li>
 <li><a href="#sec-1-3">抽象 Codec 类</a></li>
 </ul>
 </li>
@@ -560,6 +565,141 @@ Netty 是异步框架需要缓冲区字节在内存中，直到能够解码它�
 
 <div id="outline-container-sec-1-2" class="outline-3">
 <h3 id="sec-1-2">Encoder</h3>
+<div class="outline-text-3" id="text-1-2">
+<p>
+encoder 是用来把出站数据从一种格式转换到另外一种格式，因此它实现了 ChanneOutboundHandler 。正如所期望的一样，类似于 decoder，Netty 也提供了一组类来帮助你写 encoder，当然这些类提供的是与 decoder 相反的方法，如下所示：
+</p>
+<ul class="org-ul">
+<li>编码从消息到字节
+</li>
+<li>编码从消息到消息
+</li>
+</ul>
+</div>
+
+<div id="outline-container-sec-1-2-1" class="outline-4">
+<h4 id="sec-1-2-1">MessageToByteEncoder</h4>
+<div class="outline-text-4" id="text-1-2-1">
+<p>
+使用 MessageToByteEncoder 实现从消息到字节
+</p>
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 3:</span> MessageToByteEncoder 方法</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">方法</td>
+<td class="left">描述</td>
+</tr>
+
+<tr>
+<td class="left">encode</td>
+<td class="left">The encode method is the only abstract method you need to implement. It is called with the outbound message, which this class will encodes to a ByteBuf. The ByteBuf is then forwarded to the next ChannelOutboundHandler in the ChannelPipeline</td>
+</tr>
+</tbody>
+</table>
+
+<p>
+这个类只有一个方法，而 decoder 却是有两个，原因就是 decoder 经常需要在 Channel 关闭时产生一个 <b>最后的消息</b> 。出于这个原因，提供了decodeLast()，而 encoder 没有这个需求
+</p>
+
+<p>
+下面示例，想产生 Short 值，并想将他们编码成 ByteBuf 来发送到 线上，因此提供了 ShortToByteEncoder 来实现该目的
+</p>
+
+
+<div class="figure">
+<p><img src="pic/short-encode-byte.jpg" alt="short-encode-byte.jpg" width="70%" />
+</p>
+</div>
+
+<p>
+上图展示了，encoder 收到了 Short 消息，编码他们，并把他们写入 ByteBuf。 ByteBuf 接着前进到下一个 pipeline 的ChannelOutboundHandler。每个 Short 将占用 ByteBuf 的两个字节：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">ShortToByteEncoder</span> <span style="color: #00ffff;">extends</span>
+                <span style="color: #98fb98;">MessageToByteEncoder</span>&lt;<span style="color: #98fb98;">Short</span>&gt; {  <span style="color: #ff4500;">//</span><span style="color: #ff4500;">1 &#23454;&#29616;&#32487;&#25215;&#33258; MessageToByteEncoder</span>
+    <span style="color: #7fffd4;">@Override</span>
+    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">encode</span>(<span style="color: #98fb98;">ChannelHandlerContext</span> <span style="color: #eedd82;">ctx</span>, <span style="color: #98fb98;">Short</span> <span style="color: #eedd82;">msg</span>, <span style="color: #98fb98;">ByteBuf</span> <span style="color: #eedd82;">out</span>)
+        <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Exception</span> {
+        out.writeShort(msg);  <span style="color: #ff4500;">//</span><span style="color: #ff4500;">2 &#20889; Short &#21040; ByteBuf</span>
+    }
+}
+</pre>
+</div>
+
+<p>
+Netty 提供很多 MessageToByteEncoder 类来帮助你的实现自己的 encoder 。其中 WebSocket08FrameEncoder 就是个不错的范例。可以在 io.netty.handler.codec.http.websocketx 包找到
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-1-2-2" class="outline-4">
+<h4 id="sec-1-2-2">MessageToMessageEncoder</h4>
+<div class="outline-text-4" id="text-1-2-2">
+<p>
+MessageToMessageEncoder 提供一种方法来将出站数据从一种消息编码成另一种消息，同样的只有一个方法,因为不需要产生 <b>最后的消息</b> 
+</p>
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 4:</span> MessageToMessageEncoder 方法</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">方法</td>
+<td class="left">描述</td>
+</tr>
+
+<tr>
+<td class="left">encode</td>
+<td class="left">The encode method is the only abstract method you need to implement. It is called for each message written with write(&#x2026;) to encode the message to one or multiple new outbound messages. The encoded messages are then forwarded</td>
+</tr>
+</tbody>
+</table>
+
+<p>
+下面例子，将要解码 Integer 消息到 String 消息。可简单使用 MessageToMessageEncoder
+</p>
+
+<div class="figure">
+<p><img src="pic/integer-encode-string.jpg" alt="integer-encode-string.jpg" width="70%" />
+</p>
+</div>
+
+<p>
+encoder 从出站字节流提取 Integer，以 String 形式传递给ChannelPipeline 中的下一个 ChannelOutboundHandler ：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">IntegerToStringEncoder</span> <span style="color: #00ffff;">extends</span>
+                    <span style="color: #98fb98;">MessageToMessageEncoder</span>&lt;<span style="color: #98fb98;">Integer</span>&gt; { <span style="color: #ff4500;">//</span><span style="color: #ff4500;">1 &#23454;&#29616;&#32487;&#25215;&#33258; MessageToMessageEncoder</span>
+
+    <span style="color: #7fffd4;">@Override</span>
+    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">encode</span>(<span style="color: #98fb98;">ChannelHandlerContext</span> <span style="color: #eedd82;">ctx</span>, <span style="color: #98fb98;">Integer</span> <span style="color: #eedd82;">msg</span>, <span style="color: #98fb98;">List</span>&lt;<span style="color: #98fb98;">Object</span>&gt; <span style="color: #eedd82;">out</span>)
+        <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Exception</span> {
+        out.add(String.valueOf(msg));  <span style="color: #ff4500;">//</span><span style="color: #ff4500;">2 &#36716; Integer &#20026; String&#65292;&#24182;&#28155;&#21152;&#21040; MessageBuf</span>
+    }
+}
+</pre>
+</div>
+
+<p>
+更复杂 的 MessageToMessageEncoder 应用案例，可以查看 io.netty.handler.codec.protobuf 包下的 ProtobufEncoder
+</p>
+</div>
+</div>
 </div>
 
 <div id="outline-container-sec-1-3" class="outline-3">

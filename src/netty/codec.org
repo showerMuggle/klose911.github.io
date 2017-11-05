@@ -169,5 +169,64 @@ decoder 负责将 *入站* 数据从一种格式转换到另一种格式，Netty
     这种保护是很重要的，尤其是当你解码一个有可变帧大小的协议的时候 
     
 ** Encoder
+ encoder 是用来把出站数据从一种格式转换到另外一种格式，因此它实现了 ChanneOutboundHandler 。正如所期望的一样，类似于 decoder，Netty 也提供了一组类来帮助你写 encoder，当然这些类提供的是与 decoder 相反的方法，如下所示：
++ 编码从消息到字节
++ 编码从消息到消息
+
+*** MessageToByteEncoder
+使用 MessageToByteEncoder 实现从消息到字节
+
+     #+CAPTION: MessageToByteEncoder 方法
+    #+ATTR_HTML: :border 1 :frame boader  :rules all 
+    | 方法       | 描述                                                                                                                                                                                                                                                                                                          |
+    | encode     | The encode method is the only abstract method you need to implement. It is called with the outbound message, which this class will encodes to a ByteBuf. The ByteBuf is then forwarded to the next ChannelOutboundHandler in the ChannelPipeline |
+
+这个类只有一个方法，而 decoder 却是有两个，原因就是 decoder 经常需要在 Channel 关闭时产生一个 *最后的消息* 。出于这个原因，提供了decodeLast()，而 encoder 没有这个需求
+
+下面示例，想产生 Short 值，并想将他们编码成 ByteBuf 来发送到 线上，因此提供了 ShortToByteEncoder 来实现该目的
+
+    #+ATTR_HTML: image :width 70% 
+    [[file:pic/short-encode-byte.jpg]]
+
+上图展示了，encoder 收到了 Short 消息，编码他们，并把他们写入 ByteBuf。 ByteBuf 接着前进到下一个 pipeline 的ChannelOutboundHandler。每个 Short 将占用 ByteBuf 的两个字节：
+#+BEGIN_SRC java
+  public class ShortToByteEncoder extends
+                                  MessageToByteEncoder<Short> {  //1 实现继承自 MessageToByteEncoder
+          @Override
+          public void encode(ChannelHandlerContext ctx, Short msg, ByteBuf out)
+                  throws Exception {
+                  out.writeShort(msg);  //2 写 Short 到 ByteBuf
+          }
+  }
+#+END_SRC
+
+Netty 提供很多 MessageToByteEncoder 类来帮助你的实现自己的 encoder 。其中 WebSocket08FrameEncoder 就是个不错的范例。可以在 io.netty.handler.codec.http.websocketx 包找到
+
+*** MessageToMessageEncoder
+MessageToMessageEncoder 提供一种方法来将出站数据从一种消息编码成另一种消息，同样的只有一个方法,因为不需要产生 *最后的消息* 
+
+     #+CAPTION:  MessageToMessageEncoder 方法
+    #+ATTR_HTML: :border 1 :frame boader  :rules all 
+    | 方法       | 描述                                                                                                                                                                                                                                                                                                          |
+    | encode     | The encode method is the only abstract method you need to implement. It is called for each message written with write(...) to encode the message to one or multiple new outbound messages. The encoded messages are then forwarded  |
+
+下面例子，将要解码 Integer 消息到 String 消息。可简单使用 MessageToMessageEncoder
+    #+ATTR_HTML: image :width 70% 
+    [[file:pic/integer-encode-string.jpg]]
+
+encoder 从出站字节流提取 Integer，以 String 形式传递给ChannelPipeline 中的下一个 ChannelOutboundHandler ：
+#+BEGIN_SRC java
+  public class IntegerToStringEncoder extends
+                                      MessageToMessageEncoder<Integer> { //1 实现继承自 MessageToMessageEncoder
+
+          @Override
+          public void encode(ChannelHandlerContext ctx, Integer msg, List<Object> out)
+                  throws Exception {
+                  out.add(String.valueOf(msg));  //2 转 Integer 为 String，并添加到 MessageBuf
+          }
+  }
+#+END_SRC
+
+更复杂 的 MessageToMessageEncoder 应用案例，可以查看 io.netty.handler.codec.protobuf 包下的 ProtobufEncoder
 
 ** 抽象 Codec 类
