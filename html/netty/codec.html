@@ -213,7 +213,13 @@ for the JavaScript code in this tag.
 <li><a href="#sec-1-2-2">MessageToMessageEncoder</a></li>
 </ul>
 </li>
-<li><a href="#sec-1-3">抽象 Codec 类</a></li>
+<li><a href="#sec-1-3">抽象 Codec 类</a>
+<ul>
+<li><a href="#sec-1-3-1">ByteToMessageCodec</a></li>
+<li><a href="#sec-1-3-2">MessageToMessageCodec</a></li>
+<li><a href="#sec-1-3-3">CombinedChannelDuplexHandler</a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -704,6 +710,302 @@ encoder 从出站字节流提取 Integer，以 String 形式传递给ChannelPipe
 
 <div id="outline-container-sec-1-3" class="outline-3">
 <h3 id="sec-1-3">抽象 Codec 类</h3>
+<div class="outline-text-3" id="text-1-3">
+<p>
+虽然我们一直把解码器和编码器作为不同的实体来讨论，但有时可能会发现把入站和出站的数据和信息转换都放在同一个类中更实用。Netty的抽象编解码器类就是用于这个目的,他们把一些成对的解码器和编码器组合在一起，以此来提供对于字节和消息都相同的操作。(这些类实现了 ChannelInboundHandler 和 ChannelOutboundHandler )
+</p>
+
+<p>
+是否有时候使用单独的解码器和编码器会比使用这些组合类要好？最简单的答案是： <b>紧密耦合的两个函数减少了他们的可重用性，但是把他们分开实现就会更容易扩展</b> 
+</p>
+</div>
+
+<div id="outline-container-sec-1-3-1" class="outline-4">
+<h4 id="sec-1-3-1">ByteToMessageCodec</h4>
+<div class="outline-text-4" id="text-1-3-1">
+<p>
+需要解码字节到消息，也许是一个 POJO，然后转回来。ByteToMessageCodec 将处理这个问题，因为它结合了ByteToMessageDecoder 和 MessageToByteEncoder。表7.5中列出的重要方法：
+</p>
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 5:</span> ByteToMessageCodec 方法</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">方法</td>
+<td class="left">描述</td>
+</tr>
+
+<tr>
+<td class="left">decode</td>
+<td class="left">This method is called as long as bytes are available to be consumed. It converts the inbound ByteBuf to the specified message format and forwards them to the next ChannelInboundHandler in the pipeline</td>
+</tr>
+
+<tr>
+<td class="left">decodeLast</td>
+<td class="left">The default implementation of this method delegates to decode(). It is called only be called once, when the Channel goes inactive. For special handling it can be oerridden</td>
+</tr>
+
+<tr>
+<td class="left">encode</td>
+<td class="left">This method is called for each message to be written through the ChannelPipeline. The encoded messages are contained in a ByteBuf which</td>
+</tr>
+</tbody>
+</table>
+
+<p>
+例如 SMTP：编解码器将读取入站字节并解码到一个自定义的消息类型 SmtpRequest。当接收到一个 SmtpResponse 会产生用于编码为字节进行传输
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-1-3-2" class="outline-4">
+<h4 id="sec-1-3-2">MessageToMessageCodec</h4>
+<div class="outline-text-4" id="text-1-3-2">
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 6:</span> MessageToMessageCodec 方法</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">方法</td>
+<td class="left">描述</td>
+</tr>
+
+<tr>
+<td class="left">decode</td>
+<td class="left">This method is called with the inbound messages of the codec and decodes them to messages. Those messages are forwarded to the next ChannelInboundHandler in the ChannelPipeline</td>
+</tr>
+
+<tr>
+<td class="left">decodeLast</td>
+<td class="left">Default implementation delegates to decode().decodeLast will only be called one time, which is when the Channel goes inactive. If you need special handling here you may override decodeLast() to implement it</td>
+</tr>
+
+<tr>
+<td class="left">encode</td>
+<td class="left">The encode method is called for each outbound message to be moved through the ChannelPipeline. The encoded messages are forwarded to the next ChannelOutboundHandler in the pipeline</td>
+</tr>
+</tbody>
+</table>
+
+<p>
+MessageToMessageCodec 是一个参数化的类，定义如下：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">abstract</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">MessageToMessageCodec</span>&lt;<span style="color: #98fb98;">INBOUND</span>,<span style="color: #98fb98;">OUTBOUND</span>&gt;
+</pre>
+</div>
+
+<p>
+上面所示的完整签名的方法都是这样的：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">protected</span> <span style="color: #00ffff;">abstract</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">encode</span>(<span style="color: #98fb98;">ChannelHandlerContext</span> <span style="color: #eedd82;">ctx</span>,
+                   <span style="color: #98fb98;">OUTBOUND</span> <span style="color: #eedd82;">msg</span>, <span style="color: #98fb98;">List</span>&lt;<span style="color: #98fb98;">Object</span>&gt; <span style="color: #eedd82;">out</span>);
+
+<span style="color: #00ffff;">protected</span> <span style="color: #00ffff;">abstract</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">decode</span>(<span style="color: #98fb98;">ChannelHandlerContext</span> <span style="color: #eedd82;">ctx</span>,
+                   <span style="color: #98fb98;">INBOUND</span> <span style="color: #eedd82;">msg</span>, <span style="color: #98fb98;">List</span>&lt;<span style="color: #98fb98;">Object</span>&gt; <span style="color: #eedd82;">out</span>);
+</pre>
+</div>
+
+<p>
+encode() 处理出站消息类型 OUTBOUND 到 INBOUND，而 decode() 则相反
+</p>
+
+<p>
+在现实中存在一个相当常见的用例，往往涉及两个来回转换的数据消息传递API 。我们不得不与遗留或专有的消息格式进行互操作。在下面的例子中，WebSocketConvertHandler 是一个静态嵌套类，继承了参数为 WebSocketFrame（类型为 INBOUND）和 WebSocketFrame（类型为 OUTBOUND）：
+</p>
+
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">WebSocketConvertHandler</span> <span style="color: #00ffff;">extends</span> <span style="color: #98fb98;">MessageToMessageCodec</span>&lt;<span style="color: #98fb98;">WebSocketFrame</span>, <span style="color: #7fffd4;">WebSocketConvertHandler</span>.<span style="color: #98fb98;">WebSocketFrame</span>&gt; {  <span style="color: #ff4500;">//</span><span style="color: #ff4500;">1 &#32534;&#30721; WebSocketFrame &#28040;&#24687;&#36716;&#20026; WebSocketFrame &#28040;&#24687;</span>
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">WebSocketConvertHandler</span> <span style="color: #eedd82;">INSTANCE</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">WebSocketConvertHandler</span>();
+
+    <span style="color: #7fffd4;">@Override</span>
+    <span style="color: #00ffff;">protected</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">encode</span>(<span style="color: #98fb98;">ChannelHandlerContext</span> <span style="color: #eedd82;">ctx</span>, <span style="color: #98fb98;">WebSocketFrame</span> <span style="color: #eedd82;">msg</span>, <span style="color: #98fb98;">List</span>&lt;<span style="color: #98fb98;">Object</span>&gt; <span style="color: #eedd82;">out</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Exception</span> {   
+        <span style="color: #98fb98;">ByteBuf</span> <span style="color: #eedd82;">payload</span> = msg.getData().duplicate().retain();
+        <span style="color: #00ffff;">switch</span> (msg.getType()) {   <span style="color: #ff4500;">//</span><span style="color: #ff4500;">2 &#26816;&#27979; WebSocketFrame &#30340; FrameType &#31867;&#22411;&#65292;&#24182;&#19988;&#21019;&#24314;&#19968;&#20010;&#26032;&#30340;&#21709;&#24212;&#30340; FrameType &#31867;&#22411;&#30340; WebSocketFrame</span>
+        <span style="color: #00ffff;">case</span> BINARY:
+            out.add(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">BinaryWebSocketFrame</span>(payload));
+            <span style="color: #00ffff;">break</span>;
+        <span style="color: #00ffff;">case</span> TEXT:
+            out.add(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">TextWebSocketFrame</span>(payload));
+            <span style="color: #00ffff;">break</span>;
+        <span style="color: #00ffff;">case</span> CLOSE:
+            out.add(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">CloseWebSocketFrame</span>(<span style="color: #7fffd4;">true</span>, 0, payload));
+            <span style="color: #00ffff;">break</span>;
+        <span style="color: #00ffff;">case</span> CONTINUATION:
+            out.add(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">ContinuationWebSocketFrame</span>(payload));
+            <span style="color: #00ffff;">break</span>;
+        <span style="color: #00ffff;">case</span> PONG:
+            out.add(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">PongWebSocketFrame</span>(payload));
+            <span style="color: #00ffff;">break</span>;
+        <span style="color: #00ffff;">case</span> PING:
+            out.add(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">PingWebSocketFrame</span>(payload));
+            <span style="color: #00ffff;">break</span>;
+        <span style="color: #00ffff;">default</span>:
+            <span style="color: #00ffff;">throw</span> <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">IllegalStateException</span>(<span style="color: #ffa07a;">"Unsupported websocket msg "</span> + msg);
+        }
+    }
+
+    <span style="color: #7fffd4;">@Override</span>
+    <span style="color: #00ffff;">protected</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">decode</span>(<span style="color: #98fb98;">ChannelHandlerContext</span> <span style="color: #eedd82;">ctx</span>, <span style="color: #7fffd4;">io</span>.<span style="color: #7fffd4;">netty</span>.<span style="color: #7fffd4;">handler</span>.<span style="color: #7fffd4;">codec</span>.<span style="color: #7fffd4;">http</span>.<span style="color: #7fffd4;">websocketx</span>.<span style="color: #98fb98;">WebSocketFrame</span> <span style="color: #eedd82;">msg</span>, <span style="color: #98fb98;">List</span>&lt;<span style="color: #98fb98;">Object</span>&gt; <span style="color: #eedd82;">out</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Exception</span> {
+        <span style="color: #00ffff;">if</span> (msg <span style="color: #00ffff;">instanceof</span> BinaryWebSocketFrame) {  <span style="color: #ff4500;">//</span><span style="color: #ff4500;">3 &#36890;&#36807; instanceof &#26469;&#26816;&#27979;&#27491;&#30830;&#30340; FrameType</span>
+            out.add(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">WebSocketFrame</span>(<span style="color: #7fffd4;">WebSocketFrame</span>.<span style="color: #7fffd4;">FrameType</span>.BINARY, msg.content().copy()));
+        } <span style="color: #00ffff;">else</span> <span style="color: #00ffff;">if</span> (msg <span style="color: #00ffff;">instanceof</span> CloseWebSocketFrame) {
+            out.add(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">WebSocketFrame</span>(<span style="color: #7fffd4;">WebSocketFrame</span>.<span style="color: #7fffd4;">FrameType</span>.CLOSE, msg.content().copy()));
+        } <span style="color: #00ffff;">else</span> <span style="color: #00ffff;">if</span> (msg <span style="color: #00ffff;">instanceof</span> PingWebSocketFrame) {
+            out.add(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">WebSocketFrame</span>(<span style="color: #7fffd4;">WebSocketFrame</span>.<span style="color: #7fffd4;">FrameType</span>.PING, msg.content().copy()));
+        } <span style="color: #00ffff;">else</span> <span style="color: #00ffff;">if</span> (msg <span style="color: #00ffff;">instanceof</span> PongWebSocketFrame) {
+            out.add(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">WebSocketFrame</span>(<span style="color: #7fffd4;">WebSocketFrame</span>.<span style="color: #7fffd4;">FrameType</span>.PONG, msg.content().copy()));
+        } <span style="color: #00ffff;">else</span> <span style="color: #00ffff;">if</span> (msg <span style="color: #00ffff;">instanceof</span> TextWebSocketFrame) {
+            out.add(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">WebSocketFrame</span>(<span style="color: #7fffd4;">WebSocketFrame</span>.<span style="color: #7fffd4;">FrameType</span>.TEXT, msg.content().copy()));
+        } <span style="color: #00ffff;">else</span> <span style="color: #00ffff;">if</span> (msg <span style="color: #00ffff;">instanceof</span> ContinuationWebSocketFrame) {
+            out.add(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">WebSocketFrame</span>(<span style="color: #7fffd4;">WebSocketFrame</span>.<span style="color: #7fffd4;">FrameType</span>.CONTINUATION, msg.content().copy()));
+        } <span style="color: #00ffff;">else</span> {
+            <span style="color: #00ffff;">throw</span> <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">IllegalStateException</span>(<span style="color: #ffa07a;">"Unsupported websocket msg "</span> + msg);
+        }
+    }
+
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">WebSocketFrame</span> {  <span style="color: #ff4500;">//</span><span style="color: #ff4500;">4 &#33258;&#23450;&#20041;&#28040;&#24687;&#31867;&#22411; WebSocketFrame</span>
+        <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">enum</span> <span style="color: #98fb98;">FrameType</span> {        <span style="color: #ff4500;">//</span><span style="color: #ff4500;">5 &#26522;&#20030;&#31867;&#26126;&#30830;&#20102; WebSocketFrame &#30340;&#31867;&#22411;</span>
+            <span style="color: #eedd82;">BINARY</span>,
+            <span style="color: #eedd82;">CLOSE</span>,
+            <span style="color: #eedd82;">PING</span>,
+            <span style="color: #eedd82;">PONG</span>,
+            <span style="color: #eedd82;">TEXT</span>,
+            <span style="color: #eedd82;">CONTINUATION</span>
+        }
+
+        <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">FrameType</span> <span style="color: #eedd82;">type</span>;
+        <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">ByteBuf</span> <span style="color: #eedd82;">data</span>;
+        <span style="color: #00ffff;">public</span> <span style="color: #87cefa;">WebSocketFrame</span>(<span style="color: #98fb98;">FrameType</span> <span style="color: #eedd82;">type</span>, <span style="color: #98fb98;">ByteBuf</span> <span style="color: #eedd82;">data</span>) {
+            <span style="color: #00ffff;">this</span>.type = type;
+            <span style="color: #00ffff;">this</span>.data = data;
+        }
+
+        <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">FrameType</span> <span style="color: #87cefa;">getType</span>() {
+            <span style="color: #00ffff;">return</span> type;
+        }
+
+        <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">ByteBuf</span> <span style="color: #87cefa;">getData</span>() {
+            <span style="color: #00ffff;">return</span> data;
+        }
+    }
+}
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-1-3-3" class="outline-4">
+<h4 id="sec-1-3-3">CombinedChannelDuplexHandler</h4>
+<div class="outline-text-4" id="text-1-3-3">
+<p>
+结合解码器和编码器在一起可能会牺牲可重用性。为了避免这种方式，并且部署一个解码器和编码器到 ChannelPipeline 作为逻辑单元而不失便利性
+</p>
+
+<p>
+关键是下面的类：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">CombinedChannelDuplexHandler</span>&lt;<span style="color: #98fb98;">I</span> <span style="color: #00ffff;">extends</span> <span style="color: #98fb98;">ChannelInboundHandler</span>,
+                        <span style="color: #98fb98;">O</span> <span style="color: #00ffff;">extends</span> <span style="color: #98fb98;">ChannelOutboundHandler</span>&gt;
+</pre>
+</div>
+
+<p>
+这个类是扩展 ChannelInboundHandler 和 ChannelOutboundHandler 参数化的类型。这提供了一个容器，单独的解码器和编码器类合作而无需直接扩展抽象的编解码器类。将在下面的例子说明这一点。首先查看 ByteToCharDecoder ：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">ByteToCharDecoder</span> <span style="color: #00ffff;">extends</span>
+                   <span style="color: #98fb98;">ByteToMessageDecoder</span> { <span style="color: #ff4500;">//</span><span style="color: #ff4500;">1 &#32487;&#25215; ByteToMessageDecoder</span>
+
+    <span style="color: #7fffd4;">@Override</span>
+    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">decode</span>(<span style="color: #98fb98;">ChannelHandlerContext</span> <span style="color: #eedd82;">ctx</span>, <span style="color: #98fb98;">ByteBuf</span> <span style="color: #eedd82;">in</span>, <span style="color: #98fb98;">List</span>&lt;<span style="color: #98fb98;">Object</span>&gt; <span style="color: #eedd82;">out</span>)
+        <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Exception</span> {
+        <span style="color: #00ffff;">if</span> (in.readableBytes() &gt;= 2) {  <span style="color: #ff4500;">//</span><span style="color: #ff4500;">2 &#20889; char &#21040; MessageBuf</span>
+            out.add(in.readChar());
+        }
+    }
+}
+</pre>
+</div>
+
+<p>
+decode() 方法从输入数据中提取两个字节，并将它们作为一个 char 写入 List 。(注意：扩展 ByteToMessageDecoder 因为它从 ByteBuf 读取字符)
+</p>
+
+<p>
+下面是把字符转换为字节的编码器：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">CharToByteEncoder</span> <span style="color: #00ffff;">extends</span>
+                   <span style="color: #98fb98;">MessageToByteEncoder</span>&lt;<span style="color: #98fb98;">Character</span>&gt; { <span style="color: #ff4500;">//</span><span style="color: #ff4500;">1 &#32487;&#25215; MessageToByteEncoder</span>
+
+    <span style="color: #7fffd4;">@Override</span>
+    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">encode</span>(<span style="color: #98fb98;">ChannelHandlerContext</span> <span style="color: #eedd82;">ctx</span>, <span style="color: #98fb98;">Character</span> <span style="color: #eedd82;">msg</span>, <span style="color: #98fb98;">ByteBuf</span> <span style="color: #eedd82;">out</span>)
+        <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Exception</span> {
+        out.writeChar(msg);   <span style="color: #ff4500;">//</span><span style="color: #ff4500;">2 &#20889; char &#21040; ByteBuf</span>
+    }
+}
+</pre>
+</div>
+
+<p>
+这个实现继承自 MessageToByteEncoder ，因为需要编码 char 消息 到 ByteBuf。这将直接将字符串写为 ByteBuf
+</p>
+
+<p>
+现在有了编码器和解码器，将他们组成一个编解码器：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">CombinedByteCharCodec</span> <span style="color: #00ffff;">extends</span> <span style="color: #98fb98;">CombinedChannelDuplexHandler</span>&lt;<span style="color: #98fb98;">ByteToCharDecoder</span>,
+                                        <span style="color: #98fb98;">CharToByteEncoder</span>&gt; { <span style="color: #ff4500;">//</span><span style="color: #ff4500;">1 &#21442;&#25968;&#26159;&#35299;&#30721;&#22120;&#21644;&#32534;&#30721;&#22120;&#30340;&#23454;&#29616;&#29992;&#20110;&#22788;&#29702;&#36827;&#31449;&#23383;&#33410;&#21644;&#20986;&#31449;&#28040;&#24687;</span>
+    <span style="color: #00ffff;">public</span> <span style="color: #87cefa;">CombinedByteCharCodec</span>() {
+        <span style="color: #00ffff;">super</span>(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">ByteToCharDecoder</span>(), <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">CharToByteEncoder</span>()); <span style="color: #ff4500;">//</span><span style="color: #ff4500;">2 &#20256;&#36882; ByteToCharDecoder &#21644; CharToByteEncoder &#23454;&#20363;&#21040; super &#26500;&#36896;&#20989;&#25968;&#26469;&#22996;&#25176;&#35843;&#29992;&#20351;&#20182;&#20204;&#32467;&#21512;&#36215;&#26469;</span>
+    }
+}
+</pre>
+</div>
+
+<p>
+上述方式来使程序更简单、更灵活，而不是使用一个以上的编解码器类。它也可以归结到你个人喜好或风格
+</p>
+
+<p>
+<a href="embedded.html">Next：内置的 ChannelHandler 和 Codecs</a>
+</p>
+
+<p>
+<a href="channel.html">Previous：ChannelHandler</a>
+</p>
+
+<p>
+<a href="netty.html">Home：目录</a>
+</p>
+</div>
+</div>
 </div>
 </div>
 </div>
