@@ -3,3 +3,76 @@
 #+HTML_LINK_UP: codecs.html   
 #+HTML_LINK_HOME: netty.html
 #+OPTIONS: num:nil timestamp:nil  ^:nil
+
+本章介绍：
++ 使用 SSL/TLS 加密 Netty 程序
++ 构建 Netty HTTP/HTTPS 程序
++ 处理空闲连接和超时
++ 解码分隔符和基于长度的协议
++ 写大数据
++ 序列化数据
+  
+Netty 提供了很多共同协议的编解码器和处理程序,几乎可以”开箱即用“的使用他们，而无需花在相当乏味的基础设施问题。在这一章里，将探索这些工具和他们的好处。这包括支持 SSL/TLS, WebSocket 和 谷歌SPDY，通过数据压缩使 HTTP 有更好的性能
+
+* 使用 SSL/TLS 加密 Netty 程序
+  今天数据隐私是一个十分关注的问题，作为开发人员需要准备好解决这个问题。至少需要熟悉加密协议 SSL 和 TLS 等之上的其他协议实现数据安全。作为一个 HTTPS 网站的用户显然更安全。当然这些协议是广泛不基于 http 的应用程序，例如安全SMTP(SMTPS)邮件服务，甚至关系数据库系统
+  
+** SslHandler
+   为了支持 SSL/TLS，Java 提供了 javax.net.ssl API 的类SslContext 和 SslEngine 使它相对简单的实现解密和加密。Netty 的利用该 API 命名 *SslHandler* 的 ChannelHandler 实现，有一个内部 *SslEngine* 做实际的工作
+   
+   图8.1显示了一个使用 SslHandler 数据流图：
+   
+   #+ATTR_HTML: image :width 70% 
+   [[file:pic/ssl-handler.jpg]]
+   
+1. 加密的入站数据被 SslHandler 拦截，并被解密
+2. 前面加密的数据被 SslHandler 解密
+3. 平常数据传过 SslHandler
+4. SslHandler 加密数据并它传递出站
+   
+*** 实例
+    
+    #+BEGIN_SRC java
+      public class SslChannelInitializer extends ChannelInitializer<Channel> {
+
+              private final SslContext context;
+              private final boolean startTls;
+              public SslChannelInitializer(SslContext context,
+                                           boolean client, boolean startTls) {   //1 使用构造函数来传递 SSLContext ，startTls 是否启用
+                      this.context = context;
+                      this.startTls = startTls;
+              }
+              @Override
+              protected void initChannel(Channel ch) throws Exception {
+                      SSLEngine engine = context.newEngine(ch.alloc());  //2 从 SslContext 获得一个新的 SslEngine 。给每个 SslHandler 实例使用一个新的 SslEngine
+                      engine.setUseClientMode(client); //3 设置 SslEngine 是 client 或者是 server 模式
+                      ch.pipeline().addFirst("ssl", new SslHandler(engine, startTls));  //4 添加 SslHandler 到 pipeline 作为第一个处理器
+              }
+      }
+    #+END_SRC
+    
+    在大多数情况下,SslHandler 将成为 ChannelPipeline 中的第一个 ChannelHandler 。这将确保所有其他 ChannelHandler 应用他们的逻辑到数据后加密后才发生，从而确保他们的变化是安全的
+*** 方法
+    SslHandler 有很多有用的方法，如表8.1所示。例如，在握手阶段两端相互验证，商定一个加密方法。您可以配置 SslHandler 修改其行为或提供 在SSL/TLS 握手完成后发送通知，这样所有数据都将被加密：
+    
+    #+CAPTION: SslHandler 方法
+    #+ATTR_HTML: :border 1 :frame boader  :rules all 
+    | 名称                                                                                      | 描述                                                                                                                                                                                             |
+    | setHandshakeTimeout(...) setHandshakeTimeoutMillis(...) getHandshakeTimeoutMillis()       | Set and get the timeout, after which the handshake ChannelFuture is notified of failure                                                                                                          |
+    | setCloseNotifyTimeout(...) setCloseNotifyTimeoutMillis(...) getCloseNotifyTimeoutMillis() | Set and get the timeout after which the close notify will time out and the connection will close. This also results in having the close notify ChannelFuture fail                                |
+    | handshakeFuture()                                                                         | Returns a ChannelFuture that will be notified once the handshake is complete. If the handshake was done before it will return a ChannelFuture that contains the result of the previous handshake |
+    | close(...)                                                                                | Send the close_notify to request close and destroy the underlying SslEngine                                                                                                                      |
+* 构建 Netty HTTP/HTTPS 应用
+HTTP/HTTPS 是最常见的一种协议，在智能手机里广泛应用。虽然每家公司都有一个主页，您可以通过HTTP或HTTPS访问。这不是它唯一的使用。许多组织通过 HTTP(S) 公开 WebService API ，旨在用于缓解独立的平台带来的弊端 。让我们看一下 Netty 提供的 ChannelHandler，是如何允许您使用 HTTP 和 HTTPS 而无需编写自己的编解码器
+
+** HTTP Decoder, Encoder 和 Codec
+
+** HTTP消息聚合
+
+** HTTP 压缩
+
+** 使用 HTTPS
+
+** WebSocket
+
+** SPDY

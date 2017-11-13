@@ -142,6 +142,199 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="netty.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">内置的ChannelHandler 和 Codecs</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#sec-1">使用 SSL/TLS 加密 Netty 程序</a>
+<ul>
+<li><a href="#sec-1-1">SslHandler</a>
+<ul>
+<li><a href="#sec-1-1-1">实例</a></li>
+<li><a href="#sec-1-1-2">方法</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#sec-2">构建 Netty HTTP/HTTPS 应用</a>
+<ul>
+<li><a href="#sec-2-1">HTTP Decoder, Encoder 和 Codec</a></li>
+<li><a href="#sec-2-2">HTTP消息聚合</a></li>
+<li><a href="#sec-2-3">HTTP 压缩</a></li>
+<li><a href="#sec-2-4">使用 HTTPS</a></li>
+<li><a href="#sec-2-5">WebSocket</a></li>
+<li><a href="#sec-2-6">SPDY</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<p>
+本章介绍：
+</p>
+<ul class="org-ul">
+<li>使用 SSL/TLS 加密 Netty 程序
+</li>
+<li>构建 Netty HTTP/HTTPS 程序
+</li>
+<li>处理空闲连接和超时
+</li>
+<li>解码分隔符和基于长度的协议
+</li>
+<li>写大数据
+</li>
+<li>序列化数据
+</li>
+</ul>
+
+<p>
+Netty 提供了很多共同协议的编解码器和处理程序,几乎可以”开箱即用“的使用他们，而无需花在相当乏味的基础设施问题。在这一章里，将探索这些工具和他们的好处。这包括支持 SSL/TLS, WebSocket 和 谷歌SPDY，通过数据压缩使 HTTP 有更好的性能
+</p>
+
+<div id="outline-container-sec-1" class="outline-2">
+<h2 id="sec-1">使用 SSL/TLS 加密 Netty 程序</h2>
+<div class="outline-text-2" id="text-1">
+<p>
+今天数据隐私是一个十分关注的问题，作为开发人员需要准备好解决这个问题。至少需要熟悉加密协议 SSL 和 TLS 等之上的其他协议实现数据安全。作为一个 HTTPS 网站的用户显然更安全。当然这些协议是广泛不基于 http 的应用程序，例如安全SMTP(SMTPS)邮件服务，甚至关系数据库系统
+</p>
+</div>
+
+<div id="outline-container-sec-1-1" class="outline-3">
+<h3 id="sec-1-1">SslHandler</h3>
+<div class="outline-text-3" id="text-1-1">
+<p>
+为了支持 SSL/TLS，Java 提供了 javax.net.ssl API 的类SslContext 和 SslEngine 使它相对简单的实现解密和加密。Netty 的利用该 API 命名 <b>SslHandler</b> 的 ChannelHandler 实现，有一个内部 <b>SslEngine</b> 做实际的工作
+</p>
+
+<p>
+图8.1显示了一个使用 SslHandler 数据流图：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/ssl-handler.jpg" alt="ssl-handler.jpg" width="70%" />
+</p>
+</div>
+
+<ol class="org-ol">
+<li>加密的入站数据被 SslHandler 拦截，并被解密
+</li>
+<li>前面加密的数据被 SslHandler 解密
+</li>
+<li>平常数据传过 SslHandler
+</li>
+<li>SslHandler 加密数据并它传递出站
+</li>
+</ol>
+</div>
+
+<div id="outline-container-sec-1-1-1" class="outline-4">
+<h4 id="sec-1-1-1">实例</h4>
+<div class="outline-text-4" id="text-1-1-1">
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">SslChannelInitializer</span> <span style="color: #00ffff;">extends</span> <span style="color: #98fb98;">ChannelInitializer</span>&lt;<span style="color: #98fb98;">Channel</span>&gt; {
+
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">SslContext</span> <span style="color: #eedd82;">context</span>;
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">boolean</span> <span style="color: #eedd82;">startTls</span>;
+    <span style="color: #00ffff;">public</span> <span style="color: #87cefa;">SslChannelInitializer</span>(<span style="color: #98fb98;">SslContext</span> <span style="color: #eedd82;">context</span>,
+                     <span style="color: #98fb98;">boolean</span> <span style="color: #eedd82;">client</span>, <span style="color: #98fb98;">boolean</span> <span style="color: #eedd82;">startTls</span>) {   <span style="color: #ff4500;">//</span><span style="color: #ff4500;">1 &#20351;&#29992;&#26500;&#36896;&#20989;&#25968;&#26469;&#20256;&#36882; SSLContext &#65292;startTls &#26159;&#21542;&#21551;&#29992;</span>
+        <span style="color: #00ffff;">this</span>.context = context;
+        <span style="color: #00ffff;">this</span>.startTls = startTls;
+    }
+    <span style="color: #7fffd4;">@Override</span>
+    <span style="color: #00ffff;">protected</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">initChannel</span>(<span style="color: #98fb98;">Channel</span> <span style="color: #eedd82;">ch</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Exception</span> {
+        <span style="color: #98fb98;">SSLEngine</span> <span style="color: #eedd82;">engine</span> = context.newEngine(ch.alloc());  <span style="color: #ff4500;">//</span><span style="color: #ff4500;">2 &#20174; SslContext &#33719;&#24471;&#19968;&#20010;&#26032;&#30340; SslEngine &#12290;&#32473;&#27599;&#20010; SslHandler &#23454;&#20363;&#20351;&#29992;&#19968;&#20010;&#26032;&#30340; SslEngine</span>
+        engine.setUseClientMode(client); <span style="color: #ff4500;">//</span><span style="color: #ff4500;">3 &#35774;&#32622; SslEngine &#26159; client &#25110;&#32773;&#26159; server &#27169;&#24335;</span>
+        ch.pipeline().addFirst(<span style="color: #ffa07a;">"ssl"</span>, <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">SslHandler</span>(engine, startTls));  <span style="color: #ff4500;">//</span><span style="color: #ff4500;">4 &#28155;&#21152; SslHandler &#21040; pipeline &#20316;&#20026;&#31532;&#19968;&#20010;&#22788;&#29702;&#22120;</span>
+    }
+}
+</pre>
+</div>
+
+<p>
+在大多数情况下,SslHandler 将成为 ChannelPipeline 中的第一个 ChannelHandler 。这将确保所有其他 ChannelHandler 应用他们的逻辑到数据后加密后才发生，从而确保他们的变化是安全的
+</p>
+</div>
+</div>
+<div id="outline-container-sec-1-1-2" class="outline-4">
+<h4 id="sec-1-1-2">方法</h4>
+<div class="outline-text-4" id="text-1-1-2">
+<p>
+SslHandler 有很多有用的方法，如表8.1所示。例如，在握手阶段两端相互验证，商定一个加密方法。您可以配置 SslHandler 修改其行为或提供 在SSL/TLS 握手完成后发送通知，这样所有数据都将被加密：
+</p>
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 1:</span> SslHandler 方法</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">名称</td>
+<td class="left">描述</td>
+</tr>
+
+<tr>
+<td class="left">setHandshakeTimeout(&#x2026;) setHandshakeTimeoutMillis(&#x2026;) getHandshakeTimeoutMillis()</td>
+<td class="left">Set and get the timeout, after which the handshake ChannelFuture is notified of failure</td>
+</tr>
+
+<tr>
+<td class="left">setCloseNotifyTimeout(&#x2026;) setCloseNotifyTimeoutMillis(&#x2026;) getCloseNotifyTimeoutMillis()</td>
+<td class="left">Set and get the timeout after which the close notify will time out and the connection will close. This also results in having the close notify ChannelFuture fail</td>
+</tr>
+
+<tr>
+<td class="left">handshakeFuture()</td>
+<td class="left">Returns a ChannelFuture that will be notified once the handshake is complete. If the handshake was done before it will return a ChannelFuture that contains the result of the previous handshake</td>
+</tr>
+
+<tr>
+<td class="left">close(&#x2026;)</td>
+<td class="left">Send the close_notify to request close and destroy the underlying SslEngine</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+<div id="outline-container-sec-2" class="outline-2">
+<h2 id="sec-2">构建 Netty HTTP/HTTPS 应用</h2>
+<div class="outline-text-2" id="text-2">
+<p>
+HTTP/HTTPS 是最常见的一种协议，在智能手机里广泛应用。虽然每家公司都有一个主页，您可以通过HTTP或HTTPS访问。这不是它唯一的使用。许多组织通过 HTTP(S) 公开 WebService API ，旨在用于缓解独立的平台带来的弊端 。让我们看一下 Netty 提供的 ChannelHandler，是如何允许您使用 HTTP 和 HTTPS 而无需编写自己的编解码器
+</p>
+</div>
+
+<div id="outline-container-sec-2-1" class="outline-3">
+<h3 id="sec-2-1">HTTP Decoder, Encoder 和 Codec</h3>
+</div>
+
+<div id="outline-container-sec-2-2" class="outline-3">
+<h3 id="sec-2-2">HTTP消息聚合</h3>
+</div>
+
+<div id="outline-container-sec-2-3" class="outline-3">
+<h3 id="sec-2-3">HTTP 压缩</h3>
+</div>
+
+<div id="outline-container-sec-2-4" class="outline-3">
+<h3 id="sec-2-4">使用 HTTPS</h3>
+</div>
+
+<div id="outline-container-sec-2-5" class="outline-3">
+<h3 id="sec-2-5">WebSocket</h3>
+</div>
+
+<div id="outline-container-sec-2-6" class="outline-3">
+<h3 id="sec-2-6">SPDY</h3>
+</div>
+</div>
 </div>
 <div id="postamble" class="status">
 
