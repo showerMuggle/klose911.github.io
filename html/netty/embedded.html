@@ -158,14 +158,36 @@ for the JavaScript code in this tag.
 </li>
 <li><a href="#sec-2">构建 Netty HTTP/HTTPS 应用</a>
 <ul>
-<li><a href="#sec-2-1">HTTP Decoder, Encoder 和 Codec</a></li>
-<li><a href="#sec-2-2">HTTP消息聚合</a></li>
-<li><a href="#sec-2-3">HTTP 压缩</a></li>
-<li><a href="#sec-2-4">使用 HTTPS</a></li>
-<li><a href="#sec-2-5">WebSocket</a></li>
-<li><a href="#sec-2-6">SPDY</a></li>
+<li><a href="#sec-2-1">Http应用</a>
+<ul>
+<li><a href="#sec-2-1-1">Codec</a>
+<ul>
+<li><a href="#sec-2-1-1-1">支持Http协议</a></li>
 </ul>
 </li>
+<li><a href="#sec-2-1-2">消息聚合</a></li>
+<li><a href="#sec-2-1-3">压缩</a>
+<ul>
+<li><a href="#sec-2-1-3-1">HTTP Request Header</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#sec-2-2">使用 HTTPS</a></li>
+<li><a href="#sec-2-3">WebSocket</a>
+<ul>
+<li><a href="#sec-2-3-1">协议</a></li>
+<li><a href="#sec-2-3-2">WebSocketFrame</a>
+<ul>
+<li><a href="#sec-2-3-2-1">WebSocketServerProtocolHandler</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#sec-2-4">SPDY</a></li>
+</ul>
+</li>
+<li><a href="#sec-3">空闲连接以及超时</a></li>
 </ul>
 </div>
 </div>
@@ -312,28 +334,447 @@ HTTP/HTTPS 是最常见的一种协议，在智能手机里广泛应用。虽然
 </div>
 
 <div id="outline-container-sec-2-1" class="outline-3">
-<h3 id="sec-2-1">HTTP Decoder, Encoder 和 Codec</h3>
+<h3 id="sec-2-1">Http应用</h3>
+<div class="outline-text-3" id="text-2-1">
+</div><div id="outline-container-sec-2-1-1" class="outline-4">
+<h4 id="sec-2-1-1">Codec</h4>
+<div class="outline-text-4" id="text-2-1-1">
+<p>
+HTTP 是请求-响应模式，客户端发送一个 HTTP 请求，服务就响应此请求。Netty 提供了简单的编码、解码器来简化基于这个协议的开发工作。图8.2显示 HTTP 请求是如何消费的：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/http-request.jpg" alt="http-request.jpg" width="70%" />
+</p>
+</div>
+
+<ol class="org-ol">
+<li>HTTP Request 第一部分是包含的头信息
+</li>
+<li>HttpContent 里面包含的是数据，可以后续有多个 HttpContent 部分
+</li>
+<li>LastHttpContent 标记是 HTTP request 的结束，同时可能包含头的尾部信息
+</li>
+<li>完整的 HTTP request
+</li>
+</ol>
+
+<p>
+图8.3显示 HTTP 响应的是如何生产的：
+</p>
+
+<div class="figure">
+<p><img src="pic/http-response.jpg" alt="http-response.jpg" width="70%" />
+</p>
+</div>
+
+<ol class="org-ol">
+<li>HTTP response 第一部分是包含的头信息
+</li>
+<li>HttpContent 里面包含的是数据，可以后续有多个 HttpContent 部分
+</li>
+<li>LastHttpContent 标记是 HTTP response 的结束，同时可能包含头的尾部信息
+</li>
+<li>完整的 HTTP response
+</li>
+</ol>
+
+<p>
+如图8.2和8.3所示的 <b>HTTP 请求/响应可能包含不止一个数据部分，它总是终止于 LastHttpContent 部分</b> 。FullHttpRequest 和 FullHttpResponse 消息是特殊子类型，分别表示一个完整的请求和响应。所有类型的 HTTP 消息(FullHttpRequest ，LastHttpContent )实现 HttpObject 接口：
+</p>
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 2:</span> Http decoder and encoder</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">名称</td>
+<td class="left">描述</td>
+</tr>
+
+<tr>
+<td class="left">HttpRequestEncoder</td>
+<td class="left">Encodes HttpRequest , HttpContent and LastHttpContent messages to bytes</td>
+</tr>
+
+<tr>
+<td class="left">HttpResponseEncoder</td>
+<td class="left">Encodes HttpResponse, HttpContent and LastHttpContent messages to bytes</td>
+</tr>
+
+<tr>
+<td class="left">HttpRequestDecoder</td>
+<td class="left">Decodes bytes into HttpRequest, HttpContent and LastHttpContent messages</td>
+</tr>
+
+<tr>
+<td class="left">HttpResponseDecoder</td>
+<td class="left">Decodes bytes into HttpResponse, HttpContent and LastHttpContent messages</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="outline-container-sec-2-1-1-1" class="outline-5">
+<h5 id="sec-2-1-1-1">支持Http协议</h5>
+<div class="outline-text-5" id="text-2-1-1-1">
+<p>
+只要添加正确的 ChannelHandler 到 ChannelPipeline 中就可以支持http协议
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">HttpPipelineInitializer</span> <span style="color: #00ffff;">extends</span> <span style="color: #98fb98;">ChannelInitializer</span>&lt;<span style="color: #98fb98;">Channel</span>&gt; {
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">boolean</span> <span style="color: #eedd82;">client</span>;
+
+    <span style="color: #00ffff;">public</span> <span style="color: #87cefa;">HttpPipelineInitializer</span>(<span style="color: #98fb98;">boolean</span> <span style="color: #eedd82;">client</span>) {
+        <span style="color: #00ffff;">this</span>.client = client;
+    }
+
+    <span style="color: #7fffd4;">@Override</span>
+    <span style="color: #00ffff;">protected</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">initChannel</span>(<span style="color: #98fb98;">Channel</span> <span style="color: #eedd82;">ch</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Exception</span> {
+        <span style="color: #98fb98;">ChannelPipeline</span> <span style="color: #eedd82;">pipeline</span> = ch.pipeline();
+        <span style="color: #00ffff;">if</span> (client) {
+            pipeline.addLast(<span style="color: #ffa07a;">"decoder"</span>, <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">HttpResponseDecoder</span>());  <span style="color: #ff4500;">//</span><span style="color: #ff4500;">1 client: &#28155;&#21152; HttpResponseDecoder &#29992;&#20110;&#22788;&#29702;&#26469;&#33258; server &#21709;&#24212;</span>
+            pipeline.addLast(<span style="color: #ffa07a;">"encoder"</span>, <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">HttpRequestEncoder</span>());  <span style="color: #ff4500;">//</span><span style="color: #ff4500;">2 client: &#28155;&#21152; HttpRequestEncoder &#29992;&#20110;&#21457;&#36865;&#35831;&#27714;&#21040; server</span>
+        } <span style="color: #00ffff;">else</span> {
+            pipeline.addLast(<span style="color: #ffa07a;">"decoder"</span>, <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">HttpRequestDecoder</span>());  <span style="color: #ff4500;">//</span><span style="color: #ff4500;">3 server: &#28155;&#21152; HttpRequestDecoder &#29992;&#20110;&#25509;&#25910;&#26469;&#33258; client &#30340;&#35831;&#27714;</span>
+            pipeline.addLast(<span style="color: #ffa07a;">"encoder"</span>, <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">HttpResponseEncoder</span>());  <span style="color: #ff4500;">//</span><span style="color: #ff4500;">4 server: &#28155;&#21152; HttpResponseEncoder &#29992;&#26469;&#21457;&#36865;&#21709;&#24212;&#32473; client</span>
+        }
+    }
+}
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-1-2" class="outline-4">
+<h4 id="sec-2-1-2">消息聚合</h4>
+<div class="outline-text-4" id="text-2-1-2">
+<p>
+安装 ChannelPipeline 中的初始化之后，能够对不同 HttpObject 消息进行操作。但由于 HTTP 请求和响应可以由许多部分组合而成，需要聚合他们形成完整的消息。为了消除这种繁琐任务， Netty 提供了一个聚合器，合并消息部件到 FullHttpRequest 和 FullHttpResponse 消息。这样总是能够看到完整的消息内容
+</p>
+
+<pre class="example">
+  这个操作有一个轻微的成本：消息段需要缓冲，直到完全可以将消息转发到下一个 ChannelInboundHandler 管道
+
+  但好处是：不必担心消息碎片
+</pre>
+
+<p>
+实现自动聚合只需添加另一个 ChannelHandler 到 ChannelPipeline。下面显示了这是如何实现的：
+</p>
+
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">HttpAggregatorInitializer</span> <span style="color: #00ffff;">extends</span> <span style="color: #98fb98;">ChannelInitializer</span>&lt;<span style="color: #98fb98;">Channel</span>&gt; {
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">boolean</span> <span style="color: #eedd82;">client</span>;
+
+    <span style="color: #00ffff;">public</span> <span style="color: #87cefa;">HttpAggregatorInitializer</span>(<span style="color: #98fb98;">boolean</span> <span style="color: #eedd82;">client</span>) {
+        <span style="color: #00ffff;">this</span>.client = client;
+    }
+
+    <span style="color: #7fffd4;">@Override</span>
+    <span style="color: #00ffff;">protected</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">initChannel</span>(<span style="color: #98fb98;">Channel</span> <span style="color: #eedd82;">ch</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Exception</span> {
+        <span style="color: #98fb98;">ChannelPipeline</span> <span style="color: #eedd82;">pipeline</span> = ch.pipeline();
+        <span style="color: #00ffff;">if</span> (client) {
+            pipeline.addLast(<span style="color: #ffa07a;">"codec"</span>, <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">HttpClientCodec</span>());  <span style="color: #ff4500;">//</span><span style="color: #ff4500;">1 client: &#28155;&#21152; HttpClientCodec</span>
+        } <span style="color: #00ffff;">else</span> {
+            pipeline.addLast(<span style="color: #ffa07a;">"codec"</span>, <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">HttpServerCodec</span>());  <span style="color: #ff4500;">//</span><span style="color: #ff4500;">2 server: &#28155;&#21152; HttpServerCodec </span>
+        }
+        pipeline.addLast(<span style="color: #ffa07a;">"aggegator"</span>, <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">HttpObjectAggregator</span>(512 * 1024));  <span style="color: #ff4500;">//</span><span style="color: #ff4500;">3 &#28155;&#21152; HttpObjectAggregator &#21040; ChannelPipeline, &#20351;&#29992;&#26368;&#22823;&#28040;&#24687;&#20540;&#26159; 512kb</span>
+    }
+}
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-1-3" class="outline-4">
+<h4 id="sec-2-1-3">压缩</h4>
+<div class="outline-text-4" id="text-2-1-3">
+<p>
+使用 HTTP 时建议压缩数据以减少传输流量，压缩数据会增加 CPU 负载，现在的硬件设施都很强大，大多数时候压缩数据时一个好主意。Netty 支持 <b>gzip</b> 和 <b>deflate</b> ，为此提供了两个 ChannelHandler 实现分别用于压缩和解压
+</p>
+</div>
+
+<div id="outline-container-sec-2-1-3-1" class="outline-5">
+<h5 id="sec-2-1-3-1">HTTP Request Header</h5>
+<div class="outline-text-5" id="text-2-1-3-1">
+<div class="org-src-container">
+
+<pre class="src src-html">GET /encrypted-area HTTP/1.1
+Host: www.example.com
+Accept-Encoding: gzip, deflate
+</pre>
+</div>
+
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">HttpAggregatorInitializer</span> <span style="color: #00ffff;">extends</span> <span style="color: #98fb98;">ChannelInitializer</span>&lt;<span style="color: #98fb98;">Channel</span>&gt; {
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">boolean</span> <span style="color: #eedd82;">isClient</span>;
+
+    <span style="color: #00ffff;">public</span> <span style="color: #87cefa;">HttpAggregatorInitializer</span>(<span style="color: #98fb98;">boolean</span> <span style="color: #eedd82;">isClient</span>) {
+        <span style="color: #00ffff;">this</span>.isClient = isClient;
+    }
+
+    <span style="color: #7fffd4;">@Override</span>
+    <span style="color: #00ffff;">protected</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">initChannel</span>(<span style="color: #98fb98;">Channel</span> <span style="color: #eedd82;">ch</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Exception</span> {
+        <span style="color: #98fb98;">ChannelPipeline</span> <span style="color: #eedd82;">pipeline</span> = ch.pipeline();
+        <span style="color: #00ffff;">if</span> (isClient) {
+            pipeline.addLast(<span style="color: #ffa07a;">"codec"</span>, <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">HttpClientCodec</span>()); <span style="color: #ff4500;">//</span><span style="color: #ff4500;">1 client: &#28155;&#21152; HttpClientCodec</span>
+            pipeline.addLast(<span style="color: #ffa07a;">"decompressor"</span>,<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">HttpContentDecompressor</span>()); <span style="color: #ff4500;">//</span><span style="color: #ff4500;">2 client: &#28155;&#21152; HttpContentDecompressor &#29992;&#20110;&#22788;&#29702;&#26469;&#33258;&#26381;&#21153;&#22120;&#30340;&#21387;&#32553;&#30340;&#20869;&#23481;</span>
+        } <span style="color: #00ffff;">else</span> {
+            pipeline.addLast(<span style="color: #ffa07a;">"codec"</span>, <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">HttpServerCodec</span>()); <span style="color: #ff4500;">//</span><span style="color: #ff4500;">3 server: HttpServerCodec</span>
+            pipeline.addLast(<span style="color: #ffa07a;">"compressor"</span>,<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">HttpContentCompressor</span>()); <span style="color: #ff4500;">//</span><span style="color: #ff4500;">4 server: HttpContentCompressor &#29992;&#20110;&#21387;&#32553;&#26469;&#33258; client &#25903;&#25345;&#30340; HttpContentCompressor</span>
+        }
+    }
+}
+</pre>
+</div>
+</div>
+</div>
+</div>
 </div>
 
 <div id="outline-container-sec-2-2" class="outline-3">
-<h3 id="sec-2-2">HTTP消息聚合</h3>
+<h3 id="sec-2-2">使用 HTTPS</h3>
+<div class="outline-text-3" id="text-2-2">
+<p>
+启用 HTTPS，只需添加 SslHandler 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">HttpsCodecInitializer</span> <span style="color: #00ffff;">extends</span> <span style="color: #98fb98;">ChannelInitializer</span>&lt;<span style="color: #98fb98;">Channel</span>&gt; {
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">SslContext</span> <span style="color: #eedd82;">context</span>;
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">boolean</span> <span style="color: #eedd82;">client</span>;
+
+    <span style="color: #00ffff;">public</span> <span style="color: #87cefa;">HttpsCodecInitializer</span>(<span style="color: #98fb98;">SslContext</span> <span style="color: #eedd82;">context</span>, <span style="color: #98fb98;">boolean</span> <span style="color: #eedd82;">client</span>) {
+        <span style="color: #00ffff;">this</span>.context = context;
+        <span style="color: #00ffff;">this</span>.client = client;
+    }
+
+    <span style="color: #7fffd4;">@Override</span>
+    <span style="color: #00ffff;">protected</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">initChannel</span>(<span style="color: #98fb98;">Channel</span> <span style="color: #eedd82;">ch</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Exception</span> {
+        <span style="color: #98fb98;">ChannelPipeline</span> <span style="color: #eedd82;">pipeline</span> = ch.pipeline();
+        <span style="color: #98fb98;">SSLEngine</span> <span style="color: #eedd82;">engine</span> = context.newEngine(ch.alloc());
+        pipeline.addFirst(<span style="color: #ffa07a;">"ssl"</span>, <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">SslHandler</span>(engine));  <span style="color: #ff4500;">//</span><span style="color: #ff4500;">1 &#28155;&#21152; SslHandler &#21040; pipeline &#26469;&#21551;&#29992; HTTPS</span>
+
+        <span style="color: #00ffff;">if</span> (client) {
+            pipeline.addLast(<span style="color: #ffa07a;">"codec"</span>, <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">HttpClientCodec</span>());  <span style="color: #ff4500;">//</span><span style="color: #ff4500;">2 client: &#28155;&#21152; HttpClientCodec</span>
+        } <span style="color: #00ffff;">else</span> {
+            pipeline.addLast(<span style="color: #ffa07a;">"codec"</span>, <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">HttpServerCodec</span>());  <span style="color: #ff4500;">//</span><span style="color: #ff4500;">3 server: &#28155;&#21152; HttpServerCodec </span>
+        }
+    }
+}
+</pre>
+</div>
+</div>
 </div>
 
 <div id="outline-container-sec-2-3" class="outline-3">
-<h3 id="sec-2-3">HTTP 压缩</h3>
+<h3 id="sec-2-3">WebSocket</h3>
+<div class="outline-text-3" id="text-2-3">
+</div><div id="outline-container-sec-2-3-1" class="outline-4">
+<h4 id="sec-2-3-1">协议</h4>
+<div class="outline-text-4" id="text-2-3-1">
+<p>
+Http 是不错的协议，但是如果需要实时发布信息怎么做？有个做法就是客户端一直轮询请求服务器，这种方式虽然可以达到目的，但是其缺点很多，也不是优秀的解决方案，为了解决这个问题，便出现了 WebSocket
+</p>
+
+<p>
+WebSocket 允许数据双向传输，而不需要请求-响应模式。早期的WebSocket 只能发送文本数据，然后现在不仅可以发送文本数据，也可以发送二进制数据，这使得可以使用 WebSocket 构建你想要的程序
+</p>
+
+<p>
+WebSocket 规范及其实现是为了一个更有效的解决方案。简单的说, 一个WebSocket 提供一个 TCP 连接两个方向的交通。结合 WebSocket API 它提供了一个替代 HTTP 轮询双向通信从页面到远程服务器
+</p>
+
+<p>
+WebSocket 提供真正的双向客户机和服务器之间的数据交换。 虽然最早实现仅限于文本数据，但现在不再是这样，WebSocket可以用于任意数据,就像一个正常的套接字
+</p>
+
+<p>
+图8.4给出了一个通用的 WebSocket 协议，在这种情况下的通信开始于普通 HTTP ，并 <b>升级</b> 为双向 WebSocket：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/websocket-protocol.jpg" alt="websocket-protocol.jpg" width="70%" />
+</p>
 </div>
 
+
+<ol class="org-ol">
+<li>Client (HTTP) 与 Server 通讯
+</li>
+<li>Server (HTTP) 与 Client 通讯
+</li>
+<li>Client 通过 HTTP(s) 来进行 WebSocket 握手，并等待确认
+</li>
+<li>连接协议升级至 WebSocket
+</li>
+</ol>
+</div>
+</div>
+
+<div id="outline-container-sec-2-3-2" class="outline-4">
+<h4 id="sec-2-3-2">WebSocketFrame</h4>
+<div class="outline-text-4" id="text-2-3-2">
+<p>
+添加应用程序支持 WebSocket，只需要 <b>添加适当的客户端或服务器端WebSocket ChannelHandler 到管道</b> 。这个类将处理特殊 WebSocket 定义的消息类型，称为 <b>帧</b> (Frame)。如表8.3所示，这些可以归类为 <b>数据</b> 和 <b>控制</b> 帧：
+</p>
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 3:</span> WebSocketFrame类型</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">名称</td>
+<td class="left">描述</td>
+</tr>
+
+<tr>
+<td class="left">BinaryWebSocketFrame</td>
+<td class="left">Data frame: binary data</td>
+</tr>
+
+<tr>
+<td class="left">TextWebSocketFrame</td>
+<td class="left">Data frame: text data</td>
+</tr>
+
+<tr>
+<td class="left">ContinuationWebSocketFrame</td>
+<td class="left">Data frame: text or binary data that belongs to a previous BinaryWebSocketFrame or TextWebSocketFrame</td>
+</tr>
+
+<tr>
+<td class="left">CloseWebSocketFrame</td>
+<td class="left">Control frame: a CLOSE request, close status code and a phrase</td>
+</tr>
+
+<tr>
+<td class="left">PingWebSocketFrame</td>
+<td class="left">Control frame: requests the send of a PongWebSocketFrame</td>
+</tr>
+
+<tr>
+<td class="left">PongWebSocketFrame</td>
+<td class="left">Control frame: sent as response to a PingWebSocketFrame</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<div id="outline-container-sec-2-3-2-1" class="outline-5">
+<h5 id="sec-2-3-2-1">WebSocketServerProtocolHandler</h5>
+<div class="outline-text-5" id="text-2-3-2-1">
+<p>
+由于 Netty 的主要是一个服务器端技术重点在这里创建一个 WebSocket server 。下面使用 WebSocketServerProtocolHandler 提出了一个简单的例子。该类处理协议升级握手以及三个 <b>控制帧</b> Close, Ping 和 Pong。Text 和 Binary 数据帧将被传递到下一个处理程序进行处理：
+</p>
+
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">WebSocketServerInitializer</span> <span style="color: #00ffff;">extends</span> <span style="color: #98fb98;">ChannelInitializer</span>&lt;<span style="color: #98fb98;">Channel</span>&gt; {
+    <span style="color: #7fffd4;">@Override</span>
+    <span style="color: #00ffff;">protected</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">initChannel</span>(<span style="color: #98fb98;">Channel</span> <span style="color: #eedd82;">ch</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Exception</span> {
+        ch.pipeline().addLast(
+            <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">HttpServerCodec</span>(),
+            <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">HttpObjectAggregator</span>(65536),  <span style="color: #ff4500;">//</span><span style="color: #ff4500;">1 &#28155;&#21152; HttpObjectAggregator &#29992;&#20110;&#25552;&#20379;&#22312;&#25569;&#25163;&#26102;&#32858;&#21512; HttpRequest</span>
+            <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">WebSocketServerProtocolHandler</span>(<span style="color: #ffa07a;">"/websocket"</span>),  <span style="color: #ff4500;">//</span><span style="color: #ff4500;">2 &#28155;&#21152; WebSocketServerProtocolHandler &#29992;&#20110;&#22788;&#29702;&#22909;&#25569;&#25163;&#35831;&#27714;&#12290;&#35831;&#27714;&#26159;&#21457;&#36865;&#21040;"/websocket." &#31471;&#28857;&#65292;&#24403;&#21319;&#32423;&#23436;&#25104;&#21518;&#65292;&#23427;&#23558;&#20250;&#22788;&#29702;Ping, Pong &#21644; Close &#24103;</span>
+            <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">TextFrameHandler</span>(),  <span style="color: #ff4500;">//</span><span style="color: #ff4500;">3 TextFrameHandler &#23558;&#20250;&#22788;&#29702; TextWebSocketFrames</span>
+            <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">BinaryFrameHandler</span>(),  <span style="color: #ff4500;">//</span><span style="color: #ff4500;">4 BinaryFrameHandler &#23558;&#20250;&#22788;&#29702; BinaryWebSocketFrames</span>
+            <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">ContinuationFrameHandler</span>());  <span style="color: #ff4500;">//</span><span style="color: #ff4500;">5 ContinuationFrameHandler &#23558;&#20250;&#22788;&#29702;ContinuationWebSocketFrames</span>
+    }
+
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">TextFrameHandler</span> <span style="color: #00ffff;">extends</span> <span style="color: #98fb98;">SimpleChannelInboundHandler</span>&lt;<span style="color: #98fb98;">TextWebSocketFrame</span>&gt; {
+        <span style="color: #7fffd4;">@Override</span>
+        <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">channelRead0</span>(<span style="color: #98fb98;">ChannelHandlerContext</span> <span style="color: #eedd82;">ctx</span>, <span style="color: #98fb98;">TextWebSocketFrame</span> <span style="color: #eedd82;">msg</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Exception</span> {
+            <span style="color: #ff4500;">// </span><span style="color: #ff4500;">Handle text frame</span>
+        }
+    }
+
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">BinaryFrameHandler</span> <span style="color: #00ffff;">extends</span> <span style="color: #98fb98;">SimpleChannelInboundHandler</span>&lt;<span style="color: #98fb98;">BinaryWebSocketFrame</span>&gt; {
+        <span style="color: #7fffd4;">@Override</span>
+        <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">channelRead0</span>(<span style="color: #98fb98;">ChannelHandlerContext</span> <span style="color: #eedd82;">ctx</span>, <span style="color: #98fb98;">BinaryWebSocketFrame</span> <span style="color: #eedd82;">msg</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Exception</span> {
+            <span style="color: #ff4500;">// </span><span style="color: #ff4500;">Handle binary frame</span>
+        }
+    }
+
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">ContinuationFrameHandler</span> <span style="color: #00ffff;">extends</span> <span style="color: #98fb98;">SimpleChannelInboundHandler</span>&lt;<span style="color: #98fb98;">ContinuationWebSocketFrame</span>&gt; {
+        <span style="color: #7fffd4;">@Override</span>
+        <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">channelRead0</span>(<span style="color: #98fb98;">ChannelHandlerContext</span> <span style="color: #eedd82;">ctx</span>, <span style="color: #98fb98;">ContinuationWebSocketFrame</span> <span style="color: #eedd82;">msg</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Exception</span> {
+            <span style="color: #ff4500;">// </span><span style="color: #ff4500;">Handle continuation frame</span>
+        }
+    }
+}
+</pre>
+</div>
+
+<p>
+加密 WebSocket 只需插入 SslHandler 到作为 pipline 第一个 ChannelHandler
+</p>
+</div>
+</div>
+</div>
+</div>
 <div id="outline-container-sec-2-4" class="outline-3">
-<h3 id="sec-2-4">使用 HTTPS</h3>
+<h3 id="sec-2-4">SPDY</h3>
+<div class="outline-text-3" id="text-2-4">
+<p>
+SPDY 是Google 开发的基于 TCP 的应用层协议，用以最小化网络延迟，提升网络速度，优化用户的网络使用体验。SPDY 并不是一种用于替代 HTTP 的协议，而是对 HTTP 协议的增强。SPDY 实现技术：
+</p>
+<ul class="org-ul">
+<li>压缩报头
+</li>
+<li>加密所有
+</li>
+<li>多路复用连接
+</li>
+<li>提供支持不同的传输优先级
+</li>
+</ul>
+
+<p>
+SPDY 主要有5个版本：
+</p>
+<ul class="org-ul">
+<li>1: 初始化版本，但没有使用
+</li>
+<li>2: 新特性，包含服务器推送
+</li>
+<li>3: 新特性包含流控制和更新压缩
+</li>
+<li>3.1: 会话层流程控制
+</li>
+<li>4.0: 流量控制，并与 HTTP 2.0 更加集成
+</li>
+</ul>
+
+<p>
+Netty 支持 版本 2 和 3 （包含3.1）的支持。这些版本被广泛应用，可以支持更多的用户
+</p>
+</div>
+</div>
 </div>
 
-<div id="outline-container-sec-2-5" class="outline-3">
-<h3 id="sec-2-5">WebSocket</h3>
-</div>
-
-<div id="outline-container-sec-2-6" class="outline-3">
-<h3 id="sec-2-6">SPDY</h3>
-</div>
+<div id="outline-container-sec-3" class="outline-2">
+<h2 id="sec-3">空闲连接以及超时</h2>
 </div>
 </div>
 <div id="postamble" class="status">
