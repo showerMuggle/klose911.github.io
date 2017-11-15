@@ -134,6 +134,48 @@ for the JavaScript code in this tag.
  }
 /*]]>*///-->
 </script>
+<script type="text/javascript" src="http://orgmode.org/mathjax/MathJax.js"></script>
+<script type="text/javascript">
+<!--/*--><![CDATA[/*><!--*/
+    MathJax.Hub.Config({
+        // Only one of the two following lines, depending on user settings
+        // First allows browser-native MathML display, second forces HTML/CSS
+        //  config: ["MMLorHTML.js"], jax: ["input/TeX"],
+            jax: ["input/TeX", "output/HTML-CSS"],
+        extensions: ["tex2jax.js","TeX/AMSmath.js","TeX/AMSsymbols.js",
+                     "TeX/noUndefined.js"],
+        tex2jax: {
+            inlineMath: [ ["\\(","\\)"] ],
+            displayMath: [ ['$$','$$'], ["\\[","\\]"], ["\\begin{displaymath}","\\end{displaymath}"] ],
+            skipTags: ["script","noscript","style","textarea","pre","code"],
+            ignoreClass: "tex2jax_ignore",
+            processEscapes: false,
+            processEnvironments: true,
+            preview: "TeX"
+        },
+        showProcessingMessages: true,
+        displayAlign: "center",
+        displayIndent: "2em",
+
+        "HTML-CSS": {
+             scale: 100,
+             availableFonts: ["STIX","TeX"],
+             preferredFont: "TeX",
+             webFont: "TeX",
+             imageFont: "TeX",
+             showMathMenu: true,
+        },
+        MMLorHTML: {
+             prefer: {
+                 MSIE:    "MML",
+                 Firefox: "MML",
+                 Opera:   "HTML",
+                 other:   "HTML"
+             }
+        }
+    });
+/*]]>*///-->
+</script>
 </head>
 <body>
 <div id="org-div-home-and-up">
@@ -187,7 +229,29 @@ for the JavaScript code in this tag.
 <li><a href="#sec-2-4">SPDY</a></li>
 </ul>
 </li>
-<li><a href="#sec-3">空闲连接以及超时</a></li>
+<li><a href="#sec-3">空闲连接以及超时</a>
+<ul>
+<li><a href="#sec-3-1">IdleStateHandler</a></li>
+</ul>
+</li>
+<li><a href="#sec-4">解码分隔符和基于长度的协议</a>
+<ul>
+<li><a href="#sec-4-1">分隔符协议</a>
+<ul>
+<li><a href="#sec-4-1-1">LineBasedFrameDecoder</a>
+<ul>
+<li><a href="#sec-4-1-1-1">CmdDecoder</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#sec-4-2">基于长度的协议</a>
+<ul>
+<li><a href="#sec-4-2-1">LengthFieldBasedFrameDecoder</a></li>
+</ul>
+</li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
@@ -461,9 +525,9 @@ HTTP 是请求-响应模式，客户端发送一个 HTTP 请求，服务就响�
 </p>
 
 <pre class="example">
-  这个操作有一个轻微的成本：消息段需要缓冲，直到完全可以将消息转发到下一个 ChannelInboundHandler 管道
-
-  但好处是：不必担心消息碎片
+    这个操作有一个轻微的成本：消息段需要缓冲，直到完全可以将消息转发到下一个 ChannelInboundHandler 管道
+    
+    但好处是：不必担心消息碎片
 </pre>
 
 <p>
@@ -775,6 +839,369 @@ Netty 支持 版本 2 和 3 （包含3.1）的支持。这些版本被广泛应�
 
 <div id="outline-container-sec-3" class="outline-2">
 <h2 id="sec-3">空闲连接以及超时</h2>
+<div class="outline-text-2" id="text-3">
+<p>
+检测空闲连接和超时是为了及时释放资源。常见的方法：发送消息用于测试一个不活跃的连接来，通常称为 <b>心跳</b> 到远端来确定它是否还活着。(一个更激进的方法是简单地断开那些指定的时间间隔的不活跃的连接)
+</p>
+
+<p>
+处理空闲连接是一项常见的任务，Netty 提供了几个 ChannelHandler 实现此目的：
+</p>
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 4:</span> ChannelHandlers for idle connections and timeouts</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">名称</td>
+<td class="left">描述</td>
+</tr>
+
+<tr>
+<td class="left">IdleStateHandler</td>
+<td class="left">如果连接闲置时间过长，则会触发 IdleStateEvent 事件。在 ChannelInboundHandler 中可以覆盖 userEventTriggered(&#x2026;) 方法来处理 IdleStateEvent</td>
+</tr>
+
+<tr>
+<td class="left">ReadTimeoutHandler</td>
+<td class="left">在指定的时间间隔内没有接收到入站数据则会抛出 ReadTimeoutException 并关闭 Channel。ReadTimeoutException 可以通过覆盖 ChannelHandler 的 exceptionCaught(…) 方法检测到</td>
+</tr>
+
+<tr>
+<td class="left">WriteTimeoutHandler</td>
+<td class="left">WriteTimeoutException 可以通过覆盖 ChannelHandler 的 exceptionCaught(…) 方法检测到</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<div id="outline-container-sec-3-1" class="outline-3">
+<h3 id="sec-3-1">IdleStateHandler</h3>
+<div class="outline-text-3" id="text-3-1">
+<p>
+当超过60秒没有数据收到时，就会得到通知，此时就发送心跳到远端，如果没有回应，连接就关闭
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">IdleStateHandlerInitializer</span> <span style="color: #00ffff;">extends</span> <span style="color: #98fb98;">ChannelInitializer</span>&lt;<span style="color: #98fb98;">Channel</span>&gt; {
+    <span style="color: #7fffd4;">@Override</span>
+    <span style="color: #00ffff;">protected</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">initChannel</span>(<span style="color: #98fb98;">Channel</span> <span style="color: #eedd82;">ch</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Exception</span> {
+        <span style="color: #98fb98;">ChannelPipeline</span> <span style="color: #eedd82;">pipeline</span> = ch.pipeline();
+        pipeline.addLast(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">IdleStateHandler</span>(0, 0, 60, <span style="color: #7fffd4;">TimeUnit</span>.SECONDS));  <span style="color: #ff4500;">//</span><span style="color: #ff4500;">1 IdleStateHandler &#23558;&#36890;&#36807; IdleStateEvent &#35843;&#29992; userEventTriggered &#65292;&#22914;&#26524;&#36830;&#25509;&#27809;&#26377;&#25509;&#25910;&#25110;&#21457;&#36865;&#25968;&#25454;&#36229;&#36807;60&#31186;&#38047;</span>
+        pipeline.addLast(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">HeartbeatHandler</span>());
+    }
+
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">HeartbeatHandler</span> <span style="color: #00ffff;">extends</span> <span style="color: #98fb98;">ChannelInboundHandlerAdapter</span> {
+        <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">ByteBuf</span> <span style="color: #eedd82;">HEARTBEAT_SEQUENCE</span> = Unpooled.unreleasableBuffer(
+            Unpooled.copiedBuffer(<span style="color: #ffa07a;">"HEARTBEAT"</span>, <span style="color: #7fffd4;">CharsetUtil</span>.ISO_8859_1));  <span style="color: #ff4500;">//</span><span style="color: #ff4500;">2 &#24515;&#36339;&#21457;&#36865;&#21040;&#36828;&#31471;</span>
+
+        <span style="color: #7fffd4;">@Override</span>
+        <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">userEventTriggered</span>(<span style="color: #98fb98;">ChannelHandlerContext</span> <span style="color: #eedd82;">ctx</span>, <span style="color: #98fb98;">Object</span> <span style="color: #eedd82;">evt</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Exception</span> {
+            <span style="color: #00ffff;">if</span> (evt <span style="color: #00ffff;">instanceof</span> IdleStateEvent) {
+                ctx.writeAndFlush(HEARTBEAT_SEQUENCE.duplicate())
+                    .addListener(<span style="color: #7fffd4;">ChannelFutureListener</span>.CLOSE_ON_FAILURE);  <span style="color: #ff4500;">//</span><span style="color: #ff4500;">3 &#21457;&#36865;&#30340;&#24515;&#36339;&#24182;&#28155;&#21152;&#19968;&#20010;&#20390;&#21548;&#22120;&#65292;&#22914;&#26524;&#21457;&#36865;&#25805;&#20316;&#22833;&#36133;&#23558;&#20851;&#38381;&#36830;&#25509;</span>
+            } <span style="color: #00ffff;">else</span> {
+                <span style="color: #00ffff;">super</span>.userEventTriggered(ctx, evt);  <span style="color: #ff4500;">//</span><span style="color: #ff4500;">4 &#20107;&#20214;&#19981;&#26159;&#19968;&#20010; IdleStateEvent &#30340;&#35805;&#65292;&#23601;&#23558;&#23427;&#20256;&#36882;&#32473;&#19979;&#19968;&#20010;&#22788;&#29702;&#31243;&#24207;</span>
+            }
+        }
+    }
+}
+</pre>
+</div>
+
+<p>
+这个例子说明了如何使用 IdleStateHandler 测试远端是否还活着，如果不是就关闭连接释放资源
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-4" class="outline-2">
+<h2 id="sec-4">解码分隔符和基于长度的协议</h2>
+<div class="outline-text-2" id="text-4">
+<p>
+使用 Netty 时会遇到需要解码以分隔符和长度为基础的协议
+</p>
+</div>
+<div id="outline-container-sec-4-1" class="outline-3">
+<h3 id="sec-4-1">分隔符协议</h3>
+<div class="outline-text-3" id="text-4-1">
+<p>
+经常需要处理分隔符协议或创建基于它们的协议，例如SMTP、POP3、IMAP、Telnet等等。Netty 附带的解码器可以很容易的提取一些序列分隔：
+</p>
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 5:</span> Decoders for handling delimited and length-based protocols</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">名称</td>
+<td class="left">描述</td>
+</tr>
+
+<tr>
+<td class="left">DelimiterBasedFrameDecoder</td>
+<td class="left">接收ByteBuf由一个或多个分隔符拆分，如NUL或换行符</td>
+</tr>
+
+<tr>
+<td class="left">LineBasedFrameDecoder</td>
+<td class="left">接收ByteBuf以分割线结束，如"\n"和"\r\n"</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<div id="outline-container-sec-4-1-1" class="outline-4">
+<h4 id="sec-4-1-1">LineBasedFrameDecoder</h4>
+<div class="outline-text-4" id="text-4-1-1">
+<p>
+下图显示了使用 <b>\r\n</b> 分隔符的处理：
+</p>
+
+<div class="figure">
+<p><img src="pic/line-delimited-frame.jpg" alt="line-delimited-frame.jpg" width="70%" />
+</p>
+</div>
+
+<ol class="org-ol">
+<li>字节流
+</li>
+<li>第一帧
+</li>
+<li>第二帧
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">LineBasedHandlerInitializer</span> <span style="color: #00ffff;">extends</span> <span style="color: #98fb98;">ChannelInitializer</span>&lt;<span style="color: #98fb98;">Channel</span>&gt; {
+
+    <span style="color: #7fffd4;">@Override</span>
+    <span style="color: #00ffff;">protected</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">initChannel</span>(<span style="color: #98fb98;">Channel</span> <span style="color: #eedd82;">ch</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Exception</span> {
+        <span style="color: #98fb98;">ChannelPipeline</span> <span style="color: #eedd82;">pipeline</span> = ch.pipeline();
+        pipeline.addLast(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">LineBasedFrameDecoder</span>(65 * 1024));   <span style="color: #ff4500;">//</span><span style="color: #ff4500;">1 &#28155;&#21152;&#19968;&#20010; LineBasedFrameDecoder &#29992;&#20110;&#25552;&#21462;&#24103;&#24182;&#25226;&#25968;&#25454;&#21253;&#36716;&#21457;&#21040;&#19979;&#19968;&#20010;&#31649;&#36947;&#20013;&#30340;&#22788;&#29702;&#31243;&#24207;,&#22312;&#36825;&#31181;&#24773;&#20917;&#19979;&#23601;&#26159; FrameHandler</span>
+        pipeline.addLast(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">FrameHandler</span>());  <span style="color: #ff4500;">//</span><span style="color: #ff4500;">2 &#28155;&#21152; FrameHandler &#29992;&#20110;&#25509;&#25910;&#24103;</span>
+    }
+
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">FrameHandler</span> <span style="color: #00ffff;">extends</span> <span style="color: #98fb98;">SimpleChannelInboundHandler</span>&lt;<span style="color: #98fb98;">ByteBuf</span>&gt; {
+        <span style="color: #7fffd4;">@Override</span>
+        <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">channelRead0</span>(<span style="color: #98fb98;">ChannelHandlerContext</span> <span style="color: #eedd82;">ctx</span>, <span style="color: #98fb98;">ByteBuf</span> <span style="color: #eedd82;">msg</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Exception</span> {  <span style="color: #ff4500;">//</span><span style="color: #ff4500;">3 &#27599;&#27425;&#35843;&#29992;&#37117;&#38656;&#35201;&#20256;&#36882;&#19968;&#20010;&#21333;&#24103;&#30340;&#20869;&#23481;</span>
+            <span style="color: #ff4500;">// </span><span style="color: #ff4500;">Do something with the frame</span>
+        }
+    }
+}
+</pre>
+</div>
+</li>
+</ol>
+</div>
+
+<div id="outline-container-sec-4-1-1-1" class="outline-5">
+<h5 id="sec-4-1-1-1">CmdDecoder</h5>
+<div class="outline-text-5" id="text-4-1-1-1">
+<p>
+使用 LineBasedFrameDecoder 可以方便处理特定分隔符作为数据结构体的这类情况：
+</p>
+<ul class="org-ul">
+<li>传入的数据流是一系列的帧，每个由换行（ <b>\n</b> ）分隔
+</li>
+<li>每帧包括一系列项目，每个由单个空格字符分隔
+</li>
+<li>一帧的内容代表一个 <b>命令</b> ：一个名字后跟一些变量参数
+</li>
+</ul>
+
+<p>
+下面代码显示了的实现的方式。定义以下类：
+</p>
+<ul class="org-ul">
+<li>类 Cmd : 存储帧的内容，其中一个 ByteBuf 用于存名字，另外一个存参数
+</li>
+<li>类 CmdDecoder : 从重写方法 decode() 中检索一行，并从其内容中构建一个 Cmd 的实例
+</li>
+<li>类 CmdHandler : 从 CmdDecoder 接收解码 Cmd 对象和对它的一些处理
+</li>
+</ul>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">CmdHandlerInitializer</span> <span style="color: #00ffff;">extends</span> <span style="color: #98fb98;">ChannelInitializer</span>&lt;<span style="color: #98fb98;">Channel</span>&gt; {
+
+    <span style="color: #7fffd4;">@Override</span>
+    <span style="color: #00ffff;">protected</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">initChannel</span>(<span style="color: #98fb98;">Channel</span> <span style="color: #eedd82;">ch</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Exception</span> {
+        <span style="color: #98fb98;">ChannelPipeline</span> <span style="color: #eedd82;">pipeline</span> = ch.pipeline();
+        pipeline.addLast(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">CmdDecoder</span>(65 * 1024));<span style="color: #ff4500;">//</span><span style="color: #ff4500;">1 &#28155;&#21152;&#19968;&#20010; CmdDecoder &#21040;&#31649;&#36947;&#65307;&#23558;&#25552;&#21462; Cmd &#23545;&#35937;&#21644;&#36716;&#21457;&#21040;&#22312;&#31649;&#36947;&#20013;&#30340;&#19979;&#19968;&#20010;&#22788;&#29702;&#22120;</span>
+        pipeline.addLast(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">CmdHandler</span>()); <span style="color: #ff4500;">//</span><span style="color: #ff4500;">2 &#28155;&#21152; CmdHandler &#23558;&#25509;&#25910;&#21644;&#22788;&#29702; Cmd &#23545;&#35937;</span>
+    }
+
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">Cmd</span> { <span style="color: #ff4500;">//</span><span style="color: #ff4500;">3 &#23384;&#20648;&#24103;&#30340;&#20869;&#23481;&#65292;&#20854;&#20013;&#19968;&#20010; ByteBuf &#29992;&#20110;&#23384;&#21517;&#23383;&#65292;&#21478;&#22806;&#19968;&#20010;&#23384;&#21442;&#25968;</span>
+        <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">ByteBuf</span> <span style="color: #eedd82;">name</span>;
+        <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">ByteBuf</span> <span style="color: #eedd82;">args</span>;
+
+        <span style="color: #00ffff;">public</span> <span style="color: #87cefa;">Cmd</span>(<span style="color: #98fb98;">ByteBuf</span> <span style="color: #eedd82;">name</span>, <span style="color: #98fb98;">ByteBuf</span> <span style="color: #eedd82;">args</span>) {
+            <span style="color: #00ffff;">this</span>.name = name;
+            <span style="color: #00ffff;">this</span>.args = args;
+        }
+
+        <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">ByteBuf</span> <span style="color: #87cefa;">name</span>() {
+            <span style="color: #00ffff;">return</span> name;
+        }
+
+        <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">ByteBuf</span> <span style="color: #87cefa;">args</span>() {
+            <span style="color: #00ffff;">return</span> args;
+        }
+    }
+
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">CmdDecoder</span> <span style="color: #00ffff;">extends</span> <span style="color: #98fb98;">LineBasedFrameDecoder</span> {
+        <span style="color: #00ffff;">public</span> <span style="color: #87cefa;">CmdDecoder</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">maxLength</span>) {
+            <span style="color: #00ffff;">super</span>(maxLength);
+        }
+
+        <span style="color: #7fffd4;">@Override</span>
+        <span style="color: #00ffff;">protected</span> <span style="color: #98fb98;">Object</span> <span style="color: #87cefa;">decode</span>(<span style="color: #98fb98;">ChannelHandlerContext</span> <span style="color: #eedd82;">ctx</span>, <span style="color: #98fb98;">ByteBuf</span> <span style="color: #eedd82;">buffer</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Exception</span> {
+            <span style="color: #98fb98;">ByteBuf</span> <span style="color: #eedd82;">frame</span> =  (ByteBuf) <span style="color: #00ffff;">super</span>.decode(ctx, buffer); <span style="color: #ff4500;">//</span><span style="color: #ff4500;">4 super.decode() &#36890;&#36807;&#32467;&#26463;&#20998;&#38548;&#20174; ByteBuf &#25552;&#21462;&#24103;</span>
+            <span style="color: #00ffff;">if</span> (frame == <span style="color: #7fffd4;">null</span>) {
+                <span style="color: #00ffff;">return</span> <span style="color: #7fffd4;">null</span>; <span style="color: #ff4500;">//</span><span style="color: #ff4500;">5 frame &#26159;&#31354;&#26102;&#65292;&#21017;&#36820;&#22238; null</span>
+            }
+            <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">index</span> = frame.indexOf(frame.readerIndex(), frame.writerIndex(), (<span style="color: #98fb98;">byte</span>) <span style="color: #ffa07a;">' '</span>);  <span style="color: #ff4500;">//</span><span style="color: #ff4500;">6 &#25214;&#21040;&#31532;&#19968;&#20010;&#31354;&#23383;&#31526;&#30340;&#32034;&#24341;&#12290;&#39318;&#20808;&#26159;&#23427;&#30340;&#21629;&#20196;&#21517;&#65307;&#25509;&#19979;&#26469;&#26159;&#21442;&#25968;&#30340;&#39034;&#24207;</span>
+            <span style="color: #00ffff;">return</span> <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">Cmd</span>(frame.slice(frame.readerIndex(), index), frame.slice(index +1, frame.writerIndex())); <span style="color: #ff4500;">//</span><span style="color: #ff4500;">7 &#20174;&#24103;&#20808;&#20110;&#32034;&#24341;&#20197;&#21450;&#23427;&#20043;&#21518;&#30340;&#29255;&#27573;&#20013;&#23454;&#20363;&#21270;&#19968;&#20010;&#26032;&#30340; Cmd &#23545;&#35937;</span>
+        }
+    }
+
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">CmdHandler</span> <span style="color: #00ffff;">extends</span> <span style="color: #98fb98;">SimpleChannelInboundHandler</span>&lt;<span style="color: #98fb98;">Cmd</span>&gt; {
+        <span style="color: #7fffd4;">@Override</span>
+        <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">channelRead0</span>(<span style="color: #98fb98;">ChannelHandlerContext</span> <span style="color: #eedd82;">ctx</span>, <span style="color: #98fb98;">Cmd</span> <span style="color: #eedd82;">msg</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Exception</span> {
+            <span style="color: #ff4500;">// </span><span style="color: #ff4500;">Do something with the command  //8 &#22788;&#29702;&#36890;&#36807;&#31649;&#36947;&#30340; Cmd &#23545;&#35937;</span>
+        }
+    }
+}
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-4-2" class="outline-3">
+<h3 id="sec-4-2">基于长度的协议</h3>
+<div class="outline-text-3" id="text-4-2">
+<p>
+基于长度的协议协议在帧头文件里定义了一个帧编码的长度，而不是结束位置用一个特殊的分隔符来标记。表8.6列出了 Netty 提供的两个解码器，用于处理这种类型的协议
+</p>
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 6:</span> Decoders for length-based protocols</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">名称</td>
+<td class="left">描述</td>
+</tr>
+
+<tr>
+<td class="left">FixedLengthFrameDecoder</td>
+<td class="left">提取固定长度</td>
+</tr>
+
+<tr>
+<td class="left">LengthFieldBasedFrameDecoder</td>
+<td class="left">读取头部长度并提取帧的长度</td>
+</tr>
+</tbody>
+</table>
+
+<p>
+如下图所示，FixedLengthFrameDecoder 的操作是提取固定长度每帧8字节：
+</p>
+
+<div class="figure">
+<p><img src="pic/fixed-length-frame.jpg" alt="fixed-length-frame.jpg" width="70%" />
+</p>
+</div>
+
+<ol class="org-ol">
+<li>字节流 stream
+</li>
+<li>4个帧，每个帧8个字节
+</li>
+</ol>
+
+<p>
+大部分时候帧的大小被编码在头部，这种情况可以使用LengthFieldBasedFrameDecoder，它会读取头部长度并提取帧的长度。下图显示了它是如何工作的：
+</p>
+
+<div class="figure">
+<p><img src="pic/length-field-based-frame.jpg" alt="length-field-based-frame.jpg" width="70%" />
+</p>
+</div>
+
+<ol class="org-ol">
+<li>长度 <b>0x000C</b> (12) 被编码在帧的前两个字节
+</li>
+<li>后面的12个字节就是内容
+</li>
+<li>提取没有头文件的帧内容
+</li>
+</ol>
+</div>
+
+<div id="outline-container-sec-4-2-1" class="outline-4">
+<h4 id="sec-4-2-1">LengthFieldBasedFrameDecoder</h4>
+<div class="outline-text-4" id="text-4-2-1">
+<p>
+LengthFieldBasedFrameDecoder 提供了几个构造函数覆盖各种各样的头长字段配置情况。下面代码显示使用三个参数的构造函数是：
+</p>
+<ul class="org-ul">
+<li><b>maxFrameLength</b> : 65 * 1024
+</li>
+<li><b>lengthFieldOffset</b> : 0
+</li>
+<li><b>lengthFieldLength</b> : 8 
+</li>
+</ul>
+
+<p>
+在这情况下，帧的长度被编码在帧的前8个字节：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">LengthBasedInitializer</span> <span style="color: #00ffff;">extends</span> <span style="color: #98fb98;">ChannelInitializer</span>&lt;<span style="color: #98fb98;">Channel</span>&gt; {
+    <span style="color: #7fffd4;">@Override</span>
+    <span style="color: #00ffff;">protected</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">initChannel</span>(<span style="color: #98fb98;">Channel</span> <span style="color: #eedd82;">ch</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Exception</span> {
+        <span style="color: #98fb98;">ChannelPipeline</span> <span style="color: #eedd82;">pipeline</span> = ch.pipeline();
+        pipeline.addLast(
+            <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">LengthFieldBasedFrameDecoder</span>(65 * 1024, 0, 8)); <span style="color: #ff4500;">//</span><span style="color: #ff4500;">1 &#28155;&#21152;&#19968;&#20010; LengthFieldBasedFrameDecoder ,&#29992;&#20110;&#25552;&#21462;&#22522;&#20110;&#24103;&#32534;&#30721;&#38271;&#24230;8&#20010;&#23383;&#33410;&#30340;&#12290;&#24103;</span>
+        pipeline.addLast(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">FrameHandler</span>()); <span style="color: #ff4500;">//</span><span style="color: #ff4500;">2 &#28155;&#21152;&#19968;&#20010; FrameHandler &#29992;&#26469;&#22788;&#29702;&#27599;&#24103;</span>
+    }
+
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">FrameHandler</span>
+        <span style="color: #00ffff;">extends</span> <span style="color: #98fb98;">SimpleChannelInboundHandler</span>&lt;<span style="color: #98fb98;">ByteBuf</span>&gt; {
+        <span style="color: #7fffd4;">@Override</span>
+        <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">channelRead0</span>(<span style="color: #98fb98;">ChannelHandlerContext</span> <span style="color: #eedd82;">ctx</span>, <span style="color: #98fb98;">ByteBuf</span> <span style="color: #eedd82;">msg</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Exception</span> {
+            <span style="color: #ff4500;">// </span><span style="color: #ff4500;">Do something with the frame //3 &#22788;&#29702;&#24103;&#25968;&#25454;</span>
+        }
+    }
+}
+</pre>
+</div>
+</div>
+</div>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
