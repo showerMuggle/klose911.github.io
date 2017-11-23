@@ -1,0 +1,379 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+<title>Netty 多线程模型</title>
+<meta  http-equiv="Content-Type" content="text/html;charset=utf-8" />
+<meta  name="generator" content="Org-mode" />
+<meta  name="author" content="Wu, Shanliang" />
+<style type="text/css">
+ <!--/*--><![CDATA[/*><!--*/
+  .title  { text-align: center; }
+  .todo   { font-family: monospace; color: red; }
+  .done   { color: green; }
+  .tag    { background-color: #eee; font-family: monospace;
+            padding: 2px; font-size: 80%; font-weight: normal; }
+  .timestamp { color: #bebebe; }
+  .timestamp-kwd { color: #5f9ea0; }
+  .right  { margin-left: auto; margin-right: 0px;  text-align: right; }
+  .left   { margin-left: 0px;  margin-right: auto; text-align: left; }
+  .center { margin-left: auto; margin-right: auto; text-align: center; }
+  .underline { text-decoration: underline; }
+  #postamble p, #preamble p { font-size: 90%; margin: .2em; }
+  p.verse { margin-left: 3%; }
+  pre {
+    border: 1px solid #ccc;
+    box-shadow: 3px 3px 3px #eee;
+    padding: 8pt;
+    font-family: monospace;
+    overflow: auto;
+    margin: 1.2em;
+  }
+  pre.src {
+    position: relative;
+    overflow: visible;
+    padding-top: 1.2em;
+  }
+  pre.src:before {
+    display: none;
+    position: absolute;
+    background-color: white;
+    top: -10px;
+    right: 10px;
+    padding: 3px;
+    border: 1px solid black;
+  }
+  pre.src:hover:before { display: inline;}
+  pre.src-sh:before    { content: 'sh'; }
+  pre.src-bash:before  { content: 'sh'; }
+  pre.src-emacs-lisp:before { content: 'Emacs Lisp'; }
+  pre.src-R:before     { content: 'R'; }
+  pre.src-perl:before  { content: 'Perl'; }
+  pre.src-java:before  { content: 'Java'; }
+  pre.src-sql:before   { content: 'SQL'; }
+
+  table { border-collapse:collapse; }
+  caption.t-above { caption-side: top; }
+  caption.t-bottom { caption-side: bottom; }
+  td, th { vertical-align:top;  }
+  th.right  { text-align: center;  }
+  th.left   { text-align: center;   }
+  th.center { text-align: center; }
+  td.right  { text-align: right;  }
+  td.left   { text-align: left;   }
+  td.center { text-align: center; }
+  dt { font-weight: bold; }
+  .footpara:nth-child(2) { display: inline; }
+  .footpara { display: block; }
+  .footdef  { margin-bottom: 1em; }
+  .figure { padding: 1em; }
+  .figure p { text-align: center; }
+  .inlinetask {
+    padding: 10px;
+    border: 2px solid gray;
+    margin: 10px;
+    background: #ffffcc;
+  }
+  #org-div-home-and-up
+   { text-align: right; font-size: 70%; white-space: nowrap; }
+  textarea { overflow-x: auto; }
+  .linenr { font-size: smaller }
+  .code-highlighted { background-color: #ffff00; }
+  .org-info-js_info-navigation { border-style: none; }
+  #org-info-js_console-label
+    { font-size: 10px; font-weight: bold; white-space: nowrap; }
+  .org-info-js_search-highlight
+    { background-color: #ffff00; color: #000000; font-weight: bold; }
+  /*]]>*/-->
+</style>
+<link rel="stylesheet" type="text/css" href="css/main.css" />
+<script type="text/javascript">
+/*
+@licstart  The following is the entire license notice for the
+JavaScript code in this tag.
+
+Copyright (C) 2012-2013 Free Software Foundation, Inc.
+
+The JavaScript code in this tag is free software: you can
+redistribute it and/or modify it under the terms of the GNU
+General Public License (GNU GPL) as published by the Free Software
+Foundation, either version 3 of the License, or (at your option)
+any later version.  The code is distributed WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU GPL for more details.
+
+As additional permission under GNU GPL version 3 section 7, you
+may distribute non-source (e.g., minimized or compacted) forms of
+that code without the copy of the GNU GPL normally required by
+section 4, provided you include this license notice and a URL
+through which recipients can access the Corresponding Source.
+
+
+@licend  The above is the entire license notice
+for the JavaScript code in this tag.
+*/
+<!--/*--><![CDATA[/*><!--*/
+ function CodeHighlightOn(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(null != target) {
+     elem.cacheClassElem = elem.className;
+     elem.cacheClassTarget = target.className;
+     target.className = "code-highlighted";
+     elem.className   = "code-highlighted";
+   }
+ }
+ function CodeHighlightOff(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(elem.cacheClassElem)
+     elem.className = elem.cacheClassElem;
+   if(elem.cacheClassTarget)
+     target.className = elem.cacheClassTarget;
+ }
+/*]]>*///-->
+</script>
+</head>
+<body>
+<div id="content">
+<h1 class="title">Netty 多线程模型</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#sec-1">背景</a>
+<ul>
+<li><a href="#sec-1-1">Java线程模型的演进</a>
+<ul>
+<li><a href="#sec-1-1-1">单线程</a></li>
+<li><a href="#sec-1-1-2">多线程</a></li>
+<li><a href="#sec-1-1-3">线程池</a></li>
+</ul>
+</li>
+<li><a href="#sec-1-2">Reactor模型</a>
+<ul>
+<li><a href="#sec-1-2-1">单线程模型</a></li>
+<li><a href="#sec-1-2-2">多线程模型</a></li>
+<li><a href="#sec-1-2-3">主从Reactor多线程模型</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-1" class="outline-2">
+<h2 id="sec-1">背景</h2>
+<div class="outline-text-2" id="text-1">
+</div><div id="outline-container-sec-1-1" class="outline-3">
+<h3 id="sec-1-1">Java线程模型的演进</h3>
+<div class="outline-text-3" id="text-1-1">
+</div><div id="outline-container-sec-1-1-1" class="outline-4">
+<h4 id="sec-1-1-1">单线程</h4>
+<div class="outline-text-4" id="text-1-1-1">
+<p>
+时间回到十几年前，那时主流的CPU都还是单核（除了商用高性能的小机），CPU的核心频率是机器最重要的指标之一
+</p>
+
+<p>
+在Java领域当时比较流行的是单线程编程，对于CPU密集型的应用程序而言， <b>频繁的通过多线程进行协作和抢占时间片反而会降低性能</b> 
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-1-1-2" class="outline-4">
+<h4 id="sec-1-1-2">多线程</h4>
+<div class="outline-text-4" id="text-1-1-2">
+<p>
+随着硬件性能的提升，CPU的核数越来越越多，很多服务器标配已经达到32或64核。通过多线程并发编程，可以充分利用多核CPU的处理能力，提升系统的处理效率和并发性能
+</p>
+
+<p>
+从2005年开始，随着多核处理器的逐步普及，java的多线程并发编程也逐渐流行起来，当时商用主流的JDK版本是1.4，用户可以通过 <b>new Thread() 的方式创建新的线程</b> 
+</p>
+
+<p>
+由于JDK1.4并没有提供类似线程池这样的线程管理容器，多线程之间的同步、协作、创建和销毁等工作都需要用户自己实现。由于 <b>创建和销毁线程是个相对比较重量级的操作，因此，这种原始的多线程编程效率和性能都不高</b> 
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-1-1-3" class="outline-4">
+<h4 id="sec-1-1-3">线程池</h4>
+<div class="outline-text-4" id="text-1-1-3">
+<p>
+为了提升Java多线程编程的效率和性能，降低用户开发难度。JDK1.5推出了 <b>java.util.concurrent</b> 并发编程包。在并发编程类库中，提供了 <b>线程池、线程安全容器、原子类</b> 等新的类库，极大的提升了Java多线程编程的效率，降低了开发难度
+</p>
+
+<p>
+从JDK1.5开始， <b>基于线程池的并发编程已经成为Java多核编程的主流</b> 
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-1-2" class="outline-3">
+<h3 id="sec-1-2">Reactor模型</h3>
+<div class="outline-text-3" id="text-1-2">
+<p>
+无论是C++还是Java编写的网络框架，大多数都是基于Reactor模式进行设计和开发，Reactor模式 <b>基于事件驱动，特别适合处理海量的I/O事件</b> 
+</p>
+</div>
+
+<div id="outline-container-sec-1-2-1" class="outline-4">
+<h4 id="sec-1-2-1">单线程模型</h4>
+<div class="outline-text-4" id="text-1-2-1">
+<p>
+Reactor单线程模型，指的是所有的IO操作都在同一个NIO线程上面完成，NIO线程的职责如下：
+</p>
+<ol class="org-ol">
+<li>作为NIO服务端，接收客户端的TCP连接
+</li>
+<li>作为NIO客户端，向服务端发起TCP连接
+</li>
+<li>读取通信对端的请求或者应答消息
+</li>
+<li>向通信对端发送消息请求或者应答消息
+</li>
+</ol>
+
+<p>
+Reactor单线程模型示意图如下所示：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/reactor-single-thread.png" alt="reactor-single-thread.png" width="70%" />
+</p>
+</div>
+
+<p>
+由于Reactor模式使用的是异步非阻塞IO，所有的IO操作都不会导致阻塞，理论上一个线程可以独立处理所有IO相关的操作。从架构层面看，一个NIO线程确实可以完成其承担的职责。例如，通过Acceptor类接收客户端的TCP连接请求消息，链路建立成功之后，通过Dispatch将对应的ByteBuffer派发到指定的Handler上进行消息解码。用户线程可以通过消息编码通过NIO线程将消息发送给客户端
+</p>
+
+<p>
+对于一些小容量应用场景，可以使用单线程模型。但是对于高负载、大并发的应用场景却不合适，主要原因如下：
+</p>
+<ul class="org-ul">
+<li>一个NIO线程同时处理成百上千的链路，性能上无法支撑，即便NIO线程的CPU负荷达到100%，也无法满足海量消息的编码、解码、读取和发送
+</li>
+<li>当NIO线程负载过重之后，处理速度将变慢，这会导致大量客户端连接超时，超时之后往往会进行重发，这更加重了NIO线程的负载，最终会导致大量消息积压和处理超时，成为系统的性能瓶颈
+</li>
+<li>可靠性问题：一旦NIO线程意外跑飞，或者进入死循环，会导致整个系统通信模块不可用，不能接收和处理外部消息，造成节点故障
+</li>
+</ul>
+
+<p>
+为了解决这些问题，演进出了 <b>Reactor多线程模型</b> 
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-1-2-2" class="outline-4">
+<h4 id="sec-1-2-2">多线程模型</h4>
+<div class="outline-text-4" id="text-1-2-2">
+<p>
+Rector多线程模型与单线程模型最大的区别就是有一组NIO线程处理IO操作，它的原理图如下：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/reactor-multi-threads.png" alt="reactor-multi-threads.png" width="70%" />
+</p>
+</div>
+
+<p>
+Reactor多线程模型的特点：
+</p>
+<ul class="org-ul">
+<li>有专门一个NIO线程 <b>Acceptor线程</b> 用于监听服务端，接收客户端的TCP连接请求
+</li>
+<li>网络IO操作读、写等由 <b>一个NIO线程池</b> 负责，线程池可以采用标准的JDK线程池实现，它包含一个任务队列和N个可用的线程，由这些NIO线程负责消息的读取、解码、编码和发送
+</li>
+<li><b>1个NIO线程可以同时处理N条链路，但是1个链路只对应1个NIO线程</b> ，防止发生并发操作问题
+</li>
+</ul>
+
+<p>
+在绝大多数场景下，Reactor多线程模型都可以满足性能需求。但是，在极个别特殊场景中， <b>一个NIO线程负责监听和处理所有的客户端连接可能会存在性能问题</b> 。例如并发百万客户端连接，或者服务端需要对客户端握手进行安全认证，但是认证本身非常损耗性能。在这类场景下，单独一个Acceptor线程可能会存在性能不足问题，为了解决性能问题，产生了第三种Reactor线程模型 <b>主从Reactor多线程模型</b> 
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-1-2-3" class="outline-4">
+<h4 id="sec-1-2-3">主从Reactor多线程模型</h4>
+<div class="outline-text-4" id="text-1-2-3">
+<p>
+主从Reactor线程模型的特点是：
+</p>
+<ul class="org-ul">
+<li>服务端用于接收客户端连接的不再是个1个单独的NIO线程，而是一个独立的NIO线程池
+</li>
+<li>Acceptor接收到客户端TCP连接请求处理完成后（可能包含接入认证等），将新创建的SocketChannel注册到IO线程池（sub reactor线程池）的某个IO线程上，由它负责SocketChannel的读写和编解码工作
+</li>
+<li>Acceptor线程池仅仅只用于客户端的登陆、握手和安全认证，一旦链路建立成功，就将链路注册到后端subReactor线程池的IO线程上，由IO线程负责后续的IO操作
+</li>
+</ul>
+
+<p>
+它的线程模型如下图所示：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/reactor-prim-sub-threads.png" alt="reactor-prim-sub-threads.png" width="70%" />
+</p>
+</div>
+
+<pre class="example">
+利用主从NIO线程模型，可以解决1个服务端监听线程无法有效处理所有客户端连接的性能不足问题
+</pre>
+
+<p>
+它的工作流程总结如下：
+</p>
+<ol class="org-ol">
+<li>从主线程池中随机选择一个Reactor线程作为Acceptor线程，用于绑定监听端口，接收客户端连接
+</li>
+<li>Acceptor线程接收客户端连接请求之后创建新的SocketChannel，将其注册到主线程池的其它Reactor线程上，由其负责接入认证、IP黑白名单过滤、握手等操作
+</li>
+<li>业务层的链路正式建立，将SocketChannel从主线程池的Reactor线程的多路复用器上摘除，重新注册到Sub线程池的线程上，用于处理I/O的读写操作
+</li>
+</ol>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div id="postamble" class="status">
+
+		  <br/>
+		  <div class='ds-thread'></div>
+		  <script>
+		  var duoshuoQuery = {short_name:'klose911'};
+		  (function() {
+					  var dsThread = document.getElementsByClassName('ds-thread')[0];
+					  dsThread.setAttribute('data-thread-key', document.title);
+					  dsThread.setAttribute('data-title', document.title);
+					  dsThread.setAttribute('data-url', window.location.href);
+					  var ds = document.createElement('script');
+					  ds.type = 'text/javascript';ds.async = true;
+					  ds.src = (document.location.protocol == 'https:' ? 'https:' : 'http:') + '//static.duoshuo.com/embed.js';
+					  ds.charset = 'UTF-8';
+					  (document.getElementsByTagName('head')[0] 
+						|| document.getElementsByTagName('body')[0]).appendChild(ds);
+					  })();
+		  </script>
+		  <script>
+		  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+			(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+			m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+			})(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+		  ga('create', 'UA-90850421-1', 'auto');
+		  ga('send', 'pageview');
+		  </script>
+</div>
+</body>
+</html>
