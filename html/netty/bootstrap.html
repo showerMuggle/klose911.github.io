@@ -848,6 +848,38 @@ future.syncUninterruptibly();
 
 <div id="outline-container-sec-2" class="outline-2">
 <h2 id="sec-2">关闭之前已经引导的客户端或服务器</h2>
+<div class="outline-text-2" id="text-2">
+<p>
+引导应用程序启动并运行，但是迟早也需要关闭它。当然你可以让 JVM处理所有退出但这不会满足 <b>优雅</b> 的定义，是指干净地释放资源。关闭一个Netty 的应用程序并不复杂，但有几件事要记住：
+</p>
+<ul class="org-ul">
+<li>关闭 EventLoopGroup 将处理任何悬而未决的事件和任务并随后释放所有活动线程。EventLoopGroup.shutdownGracefully()这个调用将返回一个 Future 用来通知关闭完成
+</li>
+<li>shutdownGracefully() 也是一个异步操作，所以 <b>需要阻塞直到它完成或注册一个侦听器直到返回的 Future</b> 来通知完成
+</li>
+</ul>
+
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #98fb98;">EventLoopGroup</span> <span style="color: #eedd82;">group</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">NioEventLoopGroup</span>() <span style="color: #ff4500;">//</span><span style="color: #ff4500;">1 &#21019;&#24314; EventLoopGroup &#29992;&#20110;&#22788;&#29702; I/O</span>
+    Bootstrap bootstrap = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">Bootstrap</span>(); <span style="color: #ff4500;">//</span><span style="color: #ff4500;">2 &#21019;&#24314;&#19968;&#20010;&#26032;&#30340; Bootstrap &#24182;&#19988;&#37197;&#32622;&#20182;</span>
+bootstrap.group(group)
+.channel(NioSocketChannel.<span style="color: #00ffff;">class</span>);
+...
+...
+<span style="color: #98fb98;">Future</span>&lt;?&gt; future = group.shutdownGracefully(); <span style="color: #ff4500;">//</span><span style="color: #ff4500;">3 &#26368;&#32456;&#20248;&#38597;&#30340;&#20851;&#38381; EventLoopGroup &#37322;&#25918;&#36164;&#28304;&#12290;&#36825;&#20010;&#20063;&#20250;&#20851;&#38381;&#20013;&#24403;&#21069;&#20351;&#29992;&#30340; Channel</span>
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">block until the group has shutdown</span>
+future.sync();
+</pre>
+</div>
+
+<pre class="example">
+当然在调用EventLoopGroup.shutdownGracefully()之前可以显示调用 Channel.close() 关闭活动管道
+
+在所有情况下，记得关闭EventLoopGroup 本身
+</pre>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
