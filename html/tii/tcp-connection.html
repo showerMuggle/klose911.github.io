@@ -195,7 +195,18 @@ for the JavaScript code in this tag.
 </ul>
 </li>
 <li><a href="#sec-6">TCP选项</a></li>
-<li><a href="#sec-7">TCP服务器设计</a></li>
+<li><a href="#sec-7">TCP服务器设计</a>
+<ul>
+<li><a href="#sec-7-1">TCP服务器端口号</a></li>
+<li><a href="#sec-7-2">限定的本地IP地址</a></li>
+<li><a href="#sec-7-3">限定的远端IP地址</a></li>
+<li><a href="#sec-7-4">呼入连接请求队列</a>
+<ul>
+<li><a href="#sec-7-4-1">实例</a></li>
+</ul>
+</li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
@@ -1259,6 +1270,452 @@ MSS选项设置为512，后面是NOP，接着是窗口扩大选项
 
 <div id="outline-container-sec-7" class="outline-2">
 <h2 id="sec-7">TCP服务器设计</h2>
+<div class="outline-text-2" id="text-7">
+<p>
+大多数的TCP服务器进程是并发的。当一个新的连接请求到达服务器时，服务器接受这个请求，并调用一个新进程来处理这个新的客户请求。不同的操作系统使用不同的技术来调用新的服务器进程。在Unix系统下，常用的技术是使用fork函数来创建新的进程。如果系统支持，也可使用轻型进程，即线程
+</p>
+
+<p>
+当一个服务器进程接受一来自客户进程的服务请求时是如何处理端口的？如果多个连接请求几乎同时到达会发生什么情况？
+</p>
+</div>
+
+<div id="outline-container-sec-7-1" class="outline-3">
+<h3 id="sec-7-1">TCP服务器端口号</h3>
+<div class="outline-text-3" id="text-7-1">
+<p>
+通过观察任何一个TCP服务器，可以了解TCP如何处理端口号。使用netstat命令来观察telnet服务器。下面是在没有telnet连接时的显示：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">sun$ netstat -a -n -f inet
+</pre>
+</div>
+
+<pre class="example">
+Active Internet Connections (including servers)
+Proto Recv-Q Send-Q Local-Address Foreign-Address State
+tcp   0      0      *.23          *.*             LISTEN
+</pre>
+
+<ul class="org-ul">
+<li><b>-a</b> 标志显示网络中的所有主机端，而不仅仅是处于ESTABLISHED的主机端。 <b>-n</b> 标志将以点分十进制的形式显示IP地址，而不是通过DNS将地址转化为主机名，同时还要求显示端口号(23)而不是服务名称(telnet）。 <b>-f inet</b> 选项则仅要求显示使用TCP或UDP的主机
+</li>
+<li>显示的本地地址为 * <b>.23</b> ，星号通常又称为通配符。这表示传入的连接请求 <b>SYN</b> 将被任何一个本地接口所接收。如果该主机是多接口主机，将制定其中的一个IP地址为本地IP地址，并且只接收来自这个接口的连接。本地端口为 <b>23</b> ，这是 <b>telnet</b> 的熟知端口号
+</li>
+<li>远端地址显示为 <b>.</b> ，表示还不知道远端IP地址和端口号，因为该端还处于LISTEN状态，正等待连接请求的到达
+</li>
+</ul>
+
+<p>
+现在在主机slip（140.252.13.65）启动一个telnet客户程序来连接这个telnet服务器。以下是netstat程序的输出行：
+</p>
+<pre class="example">
+Active Internet Connections (including servers)
+Proto Recv-Q Send-Q Local-Address        Foreign-Address         State
+tcp   0      0      140.252.13.33.23     140.252.13.65.1029      ESTABLISHED
+tcp   0      0      *.23                 *.*                     LISTEN
+</pre>
+
+<ul class="org-ul">
+<li>端口为23的第1行表示处于ESTABLISHED状态的连接。另外还显示了这个连接的本地IP地址、本地端口号、远端IP地址和远端端口号。本地IP地址为该连接请求到达的接口（以太网接口，140.252.13.33）
+</li>
+<li>处于LISTEN状态的服务器进程仍然存在。这个服务器进程是当前telnet服务器用于接收其他的连接请求。当传入的连接请求到达并被接收时， <b>系统内核中的TCP模块就创建一个处于ESTABLISHED状态的进程</b> 
+</li>
+<li>处于ESTABLISHED状态的连接的端口不会变化：也是23， <b>与处于LISTEN状态的进程相同</b> 
+</li>
+</ul>
+
+
+<p>
+现在在主机slip上启动另一个telnet客户进程，并仍与这个telnet服务器进行连接。以下是netstat程序的输出行：
+</p>
+<pre class="example">
+Active Internet Connections (including servers)
+Proto Recv-Q Send-Q Local-Address        Foreign-Address         State
+tcp   0      0      140.252.13.33.23     140.252.13.65.1030      ESTABLISHED
+tcp   0      0      140.252.13.33.23     140.252.13.65.1029      ESTABLISHED
+tcp   0      0      *.23                 *.*                     LISTEN
+</pre>
+
+<ul class="org-ul">
+<li>现在有两条从相同主机到相同服务器的处于ESTABLISHED的连接。它们的本地端口号均为23。由于它们的远端端口号不同，这不会造成冲突。因为 <b>每个telnet客户进程要使用一个外设端口，并且这个外设端口会选择为主机(slip)当前未曾使用的端口，因此它们的端口号肯定不同</b>
+</li>
+<li>再次重申TCP使用由本地地址和远端地址组成的4元组：目的IP地址、目的端口号、源IP地址和源端口号来处理传入的多个连接请求。 <b>TCP仅通过目的端口号无法确定那个进程接收了一个连接请求</b>
+</li>
+<li>在三个使用端口23的进程中， <b>只有处于LISTEN的进程能够接收新的连接请求</b> 。处于ESTABLISHED的进程将不能接收SYN报文段，而处于LISTEN的进程将不能接收数据报文段
+</li>
+</ul>
+
+<p>
+最后从主机solaris上启动第3个Telnet客户进程，这个主机通过SLIP链路与主机sun相连，而不是以太网接口：
+</p>
+<pre class="example">
+Active Internet Connections (including servers)
+Proto Recv-Q Send-Q Local-Address        Foreign-Address         State
+tcp   0      0      140.252.1.29.23      140.252.13.65.1031      ESTABLISHED
+tcp   0      0      140.252.13.33.23     140.252.13.65.1030      ESTABLISHED
+tcp   0      0      140.252.13.33.23     140.252.13.65.1029      ESTABLISHED
+tcp   0      0      *.23                 *.*                     LISTEN
+</pre>
+
+<ul class="org-ul">
+<li>现在第一个ESTABLISHED连接的本地IP地址对应多地址主机sun中的SLIP链路接口地址(140.252.1.29)
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-7-2" class="outline-3">
+<h3 id="sec-7-2">限定的本地IP地址</h3>
+<div class="outline-text-3" id="text-7-2">
+<p>
+现在来看下当服务器不能任选其本地IP地址而必须使用特定的IP地址时的情况。如果为sock程序指明一个IP地址（或主机名），并将它作为服务器，那么该IP地址就成为处于LISTEN服务器的本地IP地址。例如：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">sun$ sock -s 140.252.1.29 8888
+</pre>
+</div>
+
+<p>
+使这个服务器程序的连接仅局限于来自SLIP接口(140.252.1.29)。netstat的显示说明了这一点：
+</p>
+
+<pre class="example">
+Active Internet Connections (including servers)
+Proto Recv-Q Send-Q Local-Address           Foreign-Address State
+tcp   0      0      140.252.1.29.8888       *.*             LISTEN
+</pre>
+
+<p>
+如果从主机solaris通过SLIP链路与这个服务器相连接，它将正常工作：
+</p>
+<pre class="example">
+Active Internet Connections (including servers)
+Proto Recv-Q Send-Q Local-Address           Foreign-Address       State
+tcp   0      0      140.252.1.29.8888       140.252.1.32.34614    ESTABLISHED
+tcp   0      0      140.252.1.29.8888       *.*                   LISTEN
+</pre>
+
+<p>
+但如果试图从以太网(140.252.13)中的主机与这个服务器进行连接，连接请求将被TCP模块拒绝。如果使用tcpdump来观察这一切，对连接请求SYN的响应是一个如图所示的RST：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/remote-port-interface-access-dump.png" alt="remote-port-interface-access-dump.png" width="70%" />
+</p>
+</div>
+
+<p>
+这个连接请求将不会到达服务器的应用程序，因为它根据应用程序中指定的本地IP地址被 <b>内核中的TCP模块拒绝</b> 
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-7-3" class="outline-3">
+<h3 id="sec-7-3">限定的远端IP地址</h3>
+<div class="outline-text-3" id="text-7-3">
+<p>
+UDP服务器通常在指定IP本地地址和本地端口外，还能指定远端IP地址和远端端口。RFC 793中显示的接口函数允许一个服务器在执行被动打开时，可指明远端插口（等待一个特定的客户执行主动打开），也可不指明远端插口（等待任何客户）
+</p>
+
+<p>
+遗憾的是，大多数API都不支持这么做。 <b>服务器必须不指明远端插口，而等待连接请求的到来，然后服务器程序自己检查客户端的IP地址和端口号</b> 
+</p>
+
+<p>
+下表总结了TCP服务器进行连接时三种类型的地址绑定：
+</p>
+<ul class="org-ul">
+<li>lport: 服务器的熟知端口
+</li>
+<li>localIP: 必须是一个本地接口的IP地址
+</li>
+<li>表中行的顺序正是TCP模块在收到一个连接请求时确定本地地址的顺序：
+<ul class="org-ul">
+<li>最常使用的绑定（第1行，如果支持的话）将最先尝试
+</li>
+<li>最不常用的（最后一行两端的IP地址都没有制定）将最后尝试
+</li>
+</ul>
+</li>
+</ul>
+<table border="2" cellspacing="0" cellpadding="6" rules="groups" frame="hsides">
+
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">本地地址</td>
+<td class="left">远端地址</td>
+<td class="left">描述</td>
+</tr>
+
+<tr>
+<td class="left">localIP.lport</td>
+<td class="left">foreignIP.fport</td>
+<td class="left">限制到一个客户进程（通常不支持）</td>
+</tr>
+
+<tr>
+<td class="left">localIP.lport</td>
+<td class="left"><b>.</b></td>
+<td class="left">限制为达到一个本地网络接口：localIP的连接</td>
+</tr>
+
+<tr>
+<td class="left">*.lport</td>
+<td class="left"><b>.</b></td>
+<td class="left">接受发往lport的所有连接</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+
+<div id="outline-container-sec-7-4" class="outline-3">
+<h3 id="sec-7-4">呼入连接请求队列</h3>
+<div class="outline-text-3" id="text-7-4">
+<p>
+一个并发服务器调用一个新的进程来处理每个客户请求，因此处于被动连接请求的服务器应该始终准备处理下一个呼入的连接请求。那正是使用并发服务器的根本原因。但仍有可能出现当服务器在创建一个新的进程时，或操作系统正忙于处理优先级更高的进程时，到达多个连接请求。当服务器正处于忙时，TCP是如何处理这些呼入的连接请求？
+</p>
+
+<p>
+在伯克利的TCP实现中采用以下规则：
+</p>
+<ol class="org-ol">
+<li>正等待连接请求的一端有一个固定长度的连接队列，该队列中的连接已被TCP接受（即三次握手已经完成），但还没有被应用层所接受
+<ul class="org-ul">
+<li>TCP接受一个连接是 <b>将其放入这个队列</b>
+</li>
+<li>应用层接受连接是 <b>将其从该队列中移出</b> 
+</li>
+</ul>
+</li>
+<li>应用层将指明该队列的最大长度，这个值通常称为积压值。它的取值范围是 <b>0~5</b> 之间的整数，包括0和5
+<ul class="org-ul">
+<li>大多数的应用程序都将这个值说明为5
+</li>
+</ul>
+</li>
+<li>当一个连接请求（即SYN）到达时，TCP使用一个算法：根据当前连接队列中的连接数来确定是否接收这个连接。我们期望应用层说明的积压值为这一端点所能允许接受连接的最大数目，但情况不是那么简单
+<ul class="org-ul">
+<li>积压值：说明的是TCP监听的端点已被TCP接受而 <b>等待应用层接受的最大连接数</b> 。这个积压值 <b>对系统所允许的最大连接数，或者并发服务器所能并发处理的客户数，并无影响</b> 
+<ul class="org-ul">
+<li>Solaris系统：规定的值正如所期望的
+</li>
+<li>传统的BSD系统：将这个值设置为积压值乘3除以2，再加1
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>如果对于新的连接请求，该TCP监听的端点的连接队列中还有空间，TCP模块将对SYN进行确认并完成连接的建立。但应用层只有在三次握手中的第三个报文段收到后才会知道这个新连接时。   + 当客户进程的主动打开成功但服务器的应用层还不知道这个新的连接时，它可能会认为服务器进程已经准备好接收数据了, <b>如果发生这种情况，服务器的TCP仅将接收的数据放入缓冲队列</b> 
+</li>
+<li>如果对于新的连接请求，连接队列中已没有空间，TCP将不理会收到的SYN。也不发回任何报文段, <b>即不发回RST</b> 
+<ul class="org-ul">
+<li>如果应用层不能及时接受已被TCP接受的连接，这些连接可能占满整个连接队列， <b>客户的主动打开最终将超时</b> 
+</li>
+</ul>
+</li>
+</ol>
+
+<p>
+下表显示了积压值与传统的伯克利系统和Solaris2.2所能允许的最大接受连接数之间的关系：
+</p>
+<!-- This HTML table template is generated by emacs 25.2.1 -->
+<table border="1">
+  <tr>
+    <td rowspan="2" align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;积压值&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td colspan="2" align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;最大排队的连接数&nbsp;&nbsp;
+    </td>
+  </tr>
+  <tr>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;传统BSD&nbsp;
+    </td>
+    <td align="left" valign="top">
+      Solrais2.2
+    </td>
+  </tr>
+  <tr>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;0&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;1&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;0&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+  </tr>
+  <tr>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;1&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;2&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;1&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+  </tr>
+  <tr>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;2&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;4&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;2&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+  </tr>
+  <tr>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;3&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;5&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;3&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+  </tr>
+  <tr>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;4&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;7&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;4&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+  </tr>
+  <tr>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;5&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;8&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;&nbsp;&nbsp;&nbsp;5&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+  </tr>
+</table>
+</div>
+
+<div id="outline-container-sec-7-4-1" class="outline-4">
+<h4 id="sec-7-4-1">实例</h4>
+<div class="outline-text-4" id="text-7-4-1">
+<p>
+通过sock程序能了解这种情况。使用新的选项 <b>-O</b> 来让它在创建一个新的服务器进程后而没有接受任何连接请求之前暂停下来。如果在它暂停期间又调用了多个客户进程，它将导致接受连接队列被填满，通过tcpdump能够看到这一切：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">bsdi$ sock -s -v -q1 -O30 5555
+</pre>
+</div>
+<ul class="org-ul">
+<li><b>-q1</b> : 将服务器端的积压值置1。在这种情况下，传统的BSD系统中的队列允许接受两个连接请求
+</li>
+<li><b>-O30</b>: 使程序在接受任何客户连接之前暂停30秒。在这30秒内，可启动其他客户进程来填充这个队列。在主机sun上启动4个客户进程
+</li>
+</ul>
+
+<p>
+图18-24显示了tcpdump的输出：
+</p>
+
+<div class="figure">
+<p><img src="pic/tcp-connection-backlog-dump.png" alt="tcp-connection-backlog-dump.png" width="70%" />
+</p>
+</div>
+
+<ul class="org-ul">
+<li>报文段1～3：端口为1090的第一个客户连接请求被TCP接受
+</li>
+<li>报文段4～6：端口为1091的第2个客户连接请求也被TCP接受
+<ul class="org-ul">
+<li>服务器的应用仍处于休眠状态，还未接受任何连接。目前的一切工作都由内核中的TCP模块完成
+</li>
+<li>两个客户进程已经成功地完成了它们的主动打开，因为它们建立连接的三次握手已经完成
+</li>
+</ul>
+</li>
+<li>报文段7：启动第3个客户进程，端口1092
+</li>
+<li>报文段8：启动第4个客户进程，端口1093
+<ul class="org-ul">
+<li>由于服务器的连接队列已满，TCP将不理会两个SYN
+</li>
+</ul>
+</li>
+<li>这两个客户进程在报文段9,10,11,12,15重发它们的SYN
+<ul class="org-ul">
+<li>第4个客户进程的第3个SYN重传被接受了，因为服务器程序的30秒休眠结束后，它将已接受的两个连接从队列中移出，使连接队列变空
+</li>
+<li>服务器程序接收连接的时间是28.19，小于30的原因在于启动服务器程序后它需要几秒的时间来启动第1个客户进程(报文段1，显示的就是启动时间)
+</li>
+</ul>
+</li>
+<li>报文段15～17：第3个客户进程的第4个SYN重传这时将被接受
+</li>
+</ul>
+
+<p>
+服务器程序先接受第4个客户连接（端口1093）的原因是 <b>服务器程序30秒休眠与客户程序重传之间的定时交互作用</b> ：
+</p>
+<pre class="example">
+我们期望接收连接队列按先进先出顺序传递给应用层。如TCP接受了端口为1090和1091的连接，我们希望应用层先接受端口为1090的连接，然后再接受端口为1091的连接
+
+但许多伯克利的TCP实现都出现按后进先出的传递顺序，这个错误已存在了多年。产商最近已开始改正这个错误，但在如SunOS 4.13等系统中仍存在这个问题
+</pre>
+
+<p>
+当队列已满时，TCP将不理会传入的SYN， <b>也不发回RST</b> 作为应答，因为 <b>这是一个软错误，而不是一个硬错误</b> 。通常队列已满是由于应用程序或操作系统忙造成的，这样可防止应用程序对传入的连接进行服务。这个条件在一个很短的时间内可以改变。 <b>但如果服务器的TCP以系统复位作为响应，客户进程的主动打开将被废弃</b> （如果服务器程序没有启动就会遇到）。由于不应答SYN， <b>服务器程序迫使客户TCP随后重传SYN</b> ，以等待连接队列有空间接受新的连接
+</p>
+
+<p>
+这个例子中有一个巧妙之处，这在大多TCP/IP的具体实现中都能见到，就是 <b>如果服务器的连接队列未满时，TCP将接受传入的连接请求，但并不让应用层了解该连接源于何处（即不告知源IP地址和源端口）</b> 。这不是TCP所要求的，而只是共同的实现技术：
+</p>
+<pre class="example">
+如果一个API向应用程序提供了解连接请求的到来的方法，并允许应用程序选择是否接受连接
+
+事实上当应用程序假定被告知连接请求已经到来时，TCP的三次握手已经结束！
+
+其他运输层的实现可能将连接请求的到达与接受分开（如OSI的运输层），但TCP不是这样
+
+Solaris 2.2提供了一个选项使TCP只有在应用程序说可以接受（tcp_eager_listeners），才允许接受传入的连接请求
+</pre>
+
+<p>
+这种行为也意味着TCP服务器 <b>无法使客户进程的主动打开失效</b> 。当一个新的客户连接传递给服务器的应用程序时，TCP的三次握手就结束了，客户的主动打开已经完全成功。 <b>如果服务器的应用程序此时看到客户的IP地址和端口号，并决定是否为该客户进行服务，服务器所能做的就是关闭连接（发送FIN），或者复位连接（发送RST）</b> 。无论哪种情况，客户进程都认为一切正常，因为它的主动打开已经完成，并且已经向服务器程序发送过请求
+</p>
+
+<p>
+<a href="tcp-transmission.html">Next：TCP 交互数据流</a>
+</p>
+</div>
+</div>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
