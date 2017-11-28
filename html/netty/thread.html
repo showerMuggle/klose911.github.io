@@ -160,7 +160,33 @@ for the JavaScript code in this tag.
 </li>
 </ul>
 </li>
-<li><a href="#sec-2">Netty线程模型</a></li>
+<li><a href="#sec-2">Netty线程模型</a>
+<ul>
+<li><a href="#sec-2-1">服务端线程模型</a>
+<ul>
+<li><a href="#sec-2-1-1">从用户线程发起创建服务端</a></li>
+<li><a href="#sec-2-1-2">Acceptor线程绑定监听端口，启动NIO服务端</a></li>
+<li><a href="#sec-2-1-3">监听客户端连接</a></li>
+<li><a href="#sec-2-1-4">监听网络读事件</a></li>
+<li><a href="#sec-2-1-5">处理读写事件</a></li>
+</ul>
+</li>
+<li><a href="#sec-2-2">客户端线程模型</a>
+<ul>
+<li><a href="#sec-2-2-1">建立客户端连接</a></li>
+<li><a href="#sec-2-2-2">发起连接操作</a></li>
+<li><a href="#sec-2-2-3">Selector发起轮询操作</a></li>
+<li><a href="#sec-2-2-4">I/O读写</a></li>
+<li><a href="#sec-2-2-5">总结</a></li>
+</ul>
+</li>
+<li><a href="#sec-2-3">Reactor线程NioEventLoop</a>
+<ul>
+<li><a href="#sec-2-3-1">NioEventLoop介绍</a></li>
+</ul>
+</li>
+</ul>
+</li>
 <li><a href="#sec-3">总结</a></li>
 </ul>
 </div>
@@ -351,8 +377,315 @@ Reactor多线程模型的特点：
 
 <div id="outline-container-sec-2" class="outline-2">
 <h2 id="sec-2">Netty线程模型</h2>
+<div class="outline-text-2" id="text-2">
+<p>
+事实上，Netty的线程模型与1.2章节中介绍的三种Reactor线程模型相似，下面通过Netty服务端和客户端的线程处理流程图来介绍Netty的线程模型
+</p>
 </div>
 
+<div id="outline-container-sec-2-1" class="outline-3">
+<h3 id="sec-2-1">服务端线程模型</h3>
+<div class="outline-text-3" id="text-2-1">
+<p>
+一种比较流行的做法是服务端监听线程和IO线程分离，类似于Reactor的多线程模型，它的工作原理图如下：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/netty-server-thread-process.png" alt="netty-server-thread-process.png" width="70%" />
+</p>
+</div>
+
+<p>
+下面结合Netty的源码，对服务端创建线程工作流程进行介绍：
+</p>
+</div>
+
+<div id="outline-container-sec-2-1-1" class="outline-4">
+<h4 id="sec-2-1-1">从用户线程发起创建服务端</h4>
+<div class="outline-text-4" id="text-2-1-1">
+<p>
+第一步，从用户线程发起创建服务端操作，代码如下：
+</p>
+
+<div class="figure">
+<p><img src="pic/netty-create-server-bootstrap.png" alt="netty-create-server-bootstrap.png" width="70%" />
+</p>
+</div>
+
+<p>
+通常情况下，服务端的创建是在用户进程启动的时候进行，因此一般由Main函数或者启动类负责创建， 服务端的创建由业务线程负责完成
+</p>
+
+<p>
+在创建服务端的时候实例化了2个EventLoopGroup：
+</p>
+<pre class="example">
+1个EventLoopGroup实际就是一个EventLoop线程组，负责管理EventLoop的申请和释放*
+</pre>
+<ul class="org-ul">
+<li>EventLoopGroup管理的线程数：可以通过构造函数设置，如果没有设置，默认取 <b>-Dio.netty.eventLoopThreads</b> ，如果该系统参数也没有指定，则为可用的CPU内核数 * 2
+</li>
+<li>bossGroup线程组:：实际就是Acceptor线程池，负责处理客户端的TCP连接请求，如果系统只有一个服务端端口需要监听，则建议bossGroup线程组线程数设置为1
+</li>
+<li>workerGroup：是真正负责I/O读写操作的线程组，通过ServerBootstrap的group方法进行设置，用于后续的Channel绑定
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-2-1-2" class="outline-4">
+<h4 id="sec-2-1-2">Acceptor线程绑定监听端口，启动NIO服务端</h4>
+<div class="outline-text-4" id="text-2-1-2">
+<p>
+第二步，Acceptor线程绑定监听端口，启动NIO服务端
+</p>
+
+<p>
+从bossGroup中选择一个Acceptor线程监听服务端，相关代码如下：
+</p>
+
+<div class="figure">
+<p><img src="pic/netty-server-create-channel.png" alt="netty-server-create-channel.png" width="70%" />
+</p>
+</div>
+
+<p>
+其中group()返回的就是bossGroup，next方法用于从线程组中获取可用线程来选择Acceptor线程，代码如下：
+</p>
+
+<div class="figure">
+<p><img src="pic/netty-eventloop-group-next.png" alt="netty-eventloop-group-next.png" width="70%" />
+</p>
+</div>
+
+
+<p>
+服务端Channel创建完成之后，将其注册到多路复用器Selector上，用于接收客户端的TCP连接，核心代码如下：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/netty-register-server-channel-socket.png" alt="netty-register-server-channel-socket.png" width="70%" /> 
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-1-3" class="outline-4">
+<h4 id="sec-2-1-3">监听客户端连接</h4>
+<div class="outline-text-4" id="text-2-1-3">
+<p>
+如果监听到客户端连接，则创建客户端SocketChannel连接，重新注册到workerGroup的IO线程上
+</p>
+
+<p>
+首先看Acceptor如何处理客户端的接入：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/netty-acceptor-accept.png" alt="netty-acceptor-accept.png" width="70%" />
+</p>
+</div>
+
+<p>
+调用unsafe的read（）方法，对于NioServerSocketChannel，它调用了NioMessageUnsafe的read()方法，代码如下：
+</p>
+
+<div class="figure">
+<p><img src="pic/nio-message-unsafe-read.png" alt="nio-message-unsafe-read.png" width="70%" />
+</p>
+</div>
+
+<p>
+最终它会调用NioServerSocketChannel的doReadMessages方法，代码如下：
+</p>
+
+<div class="figure">
+<p><img src="pic/nio-server-socket-channel-do-read-message.png" alt="nio-server-socket-channel-do-read-message.png" width="70%" />
+</p>
+</div>
+
+<p>
+其中childEventLoopGroup就是之前的workerGroup, 从中选择一个I/O线程负责网络消息的读写
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-1-4" class="outline-4">
+<h4 id="sec-2-1-4">监听网络读事件</h4>
+<div class="outline-text-4" id="text-2-1-4">
+<p>
+第四步，选择IO线程之后，将SocketChannel注册到多路复用器上，监听READ操作：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/netty-register-socket-channel-for-read.png" alt="netty-register-socket-channel-for-read.png" width="70%" />
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-1-5" class="outline-4">
+<h4 id="sec-2-1-5">处理读写事件</h4>
+<div class="outline-text-4" id="text-2-1-5">
+<p>
+处理网络的I/O读写事件，核心代码如下：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/netty-server-io-process.png" alt="netty-server-io-process.png" width="70%" />
+</p>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-2" class="outline-3">
+<h3 id="sec-2-2">客户端线程模型</h3>
+<div class="outline-text-3" id="text-2-2">
+<p>
+相比于服务端，客户端的线程模型简单一些，它的工作原理如下：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/netty-client-thread-model.png" alt="netty-client-thread-model.png" width="70%" />
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-2-1" class="outline-4">
+<h4 id="sec-2-2-1">建立客户端连接</h4>
+<div class="outline-text-4" id="text-2-2-1">
+<p>
+第一步，由用户线程发起客户端连接，示例代码如下：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/netty-client-boot-strap.png" alt="netty-client-boot-strap.png" width="70%" />
+</p>
+</div>
+
+<p>
+相比于服务端，客户端只需要创建一个EventLoopGroup，因为它不需要独立的线程去监听客户端连接，也没必要通过一个单独的客户端线程去连接服务端。Netty是 <b>异步事件驱动的NIO框架，它的连接和所有IO操作都是异步的，因此不需要创建单独的连接线程</b> 。相关代码如下：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/netty-client-create-channel.png" alt="netty-client-create-channel.png" width="70%" />
+</p>
+</div>
+
+<p>
+当前的group()就是之前传入的EventLoopGroup，从中获取可用的IO线程EventLoop，然后作为参数设置到新创建的NioSocketChannel中
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-2-2" class="outline-4">
+<h4 id="sec-2-2-2">发起连接操作</h4>
+<div class="outline-text-4" id="text-2-2-2">
+<p>
+第二步，发起连接操作，判断连接结果，代码如下：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/netty-client-do-connect.png" alt="netty-client-do-connect.png" width="70%" />
+</p>
+</div>
+
+<p>
+判断连接结果：
+</p>
+<ul class="org-ul">
+<li>如果没有连接成功：则监听连接网络操作位SelectionKey.OP_CONNECT
+</li>
+<li>如果连接成功：则调用pipeline().fireChannelActive()将监听位修改为READ
+</li>
+</ul>
+</div>
+</div>
+
+
+<div id="outline-container-sec-2-2-3" class="outline-4">
+<h4 id="sec-2-2-3">Selector发起轮询操作</h4>
+<div class="outline-text-4" id="text-2-2-3">
+<p>
+第三步，由NioEventLoop的多路复用器轮询连接操作结果，代码如下：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/netty-client-selector.png" alt="netty-client-selector.png" width="70%" />
+</p>
+</div>
+
+<p>
+判断连接结果：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/netty-client-check-connection-result.png" alt="netty-client-check-connection-result.png" width="70%" />
+</p>
+</div>
+
+<p>
+如果或连接成功，重新设置监听位为READ：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/netty-client-set-read-interest-op.png" alt="netty-client-set-read-interest-op.png" width="70%" />
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-2-4" class="outline-4">
+<h4 id="sec-2-2-4">I/O读写</h4>
+<div class="outline-text-4" id="text-2-2-4">
+<p>
+第四步，由NioEventLoop线程负责I/O读写，同服务端
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-2-5" class="outline-4">
+<h4 id="sec-2-2-5">总结</h4>
+<div class="outline-text-4" id="text-2-2-5">
+<p>
+客户端线程模型如下：
+</p>
+<ol class="org-ol">
+<li>由用户线程负责初始化客户端资源，发起连接操作
+</li>
+<li>如果连接成功，将SocketChannel注册到IO线程组的NioEventLoop线程中，监听读操作位
+</li>
+<li>如果没有立即连接成功，将SocketChannel注册到IO线程组的NioEventLoop线程中，监听连接操作位
+</li>
+<li>连接成功之后，修改监听位为READ，但是不需要切换线程
+</li>
+</ol>
+</div>
+</div>
+</div>
+
+
+<div id="outline-container-sec-2-3" class="outline-3">
+<h3 id="sec-2-3">Reactor线程NioEventLoop</h3>
+<div class="outline-text-3" id="text-2-3">
+</div><div id="outline-container-sec-2-3-1" class="outline-4">
+<h4 id="sec-2-3-1">NioEventLoop介绍</h4>
+</div>
+</div>
+</div>
 <div id="outline-container-sec-3" class="outline-2">
 <h2 id="sec-3">总结</h2>
 </div>
