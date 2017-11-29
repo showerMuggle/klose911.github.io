@@ -182,7 +182,34 @@ for the JavaScript code in this tag.
 </li>
 <li><a href="#sec-2-3">Reactor线程NioEventLoop</a>
 <ul>
-<li><a href="#sec-2-3-1">NioEventLoop介绍</a></li>
+<li><a href="#sec-2-3-1">NioEventLoop介绍</a>
+<ul>
+<li><a href="#sec-2-3-1-1">执行用户自定义Task</a></li>
+<li><a href="#sec-2-3-1-2">实现定时任务</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#sec-2-4">NioEventLoop设计原理</a>
+<ul>
+<li><a href="#sec-2-4-1">串行化设计避免线程竞争</a>
+<ul>
+<li><a href="#sec-2-4-1-1">串行执行Handler链</a></li>
+</ul>
+</li>
+<li><a href="#sec-2-4-2">定时任务与时间轮算法</a>
+<ul>
+<li><a href="#sec-2-4-2-1">定时轮</a></li>
+</ul>
+</li>
+<li><a href="#sec-2-4-3">聚焦而不是膨胀</a></li>
+</ul>
+</li>
+<li><a href="#sec-2-5">Netty线程开发最佳实践</a>
+<ul>
+<li><a href="#sec-2-5-1">时间可控的简单业务</a></li>
+<li><a href="#sec-2-5-2">复杂和时间不可控业务</a></li>
+<li><a href="#sec-2-5-3">业务线程避免直接操作ChannelHandler</a></li>
 </ul>
 </li>
 </ul>
@@ -594,10 +621,29 @@ Reactor多线程模型的特点：
 第二步，发起连接操作，判断连接结果，代码如下：
 </p>
 
+<div class="org-src-container">
 
-<div class="figure">
-<p><img src="pic/netty-client-do-connect.png" alt="netty-client-do-connect.png" width="70%" />
-</p>
+<pre class="src src-java"><span style="color: #7fffd4;">@Override</span>
+<span style="color: #00ffff;">protected</span> <span style="color: #98fb98;">boolean</span> <span style="color: #87cefa;">doConnect</span>(<span style="color: #98fb98;">SocketAddress</span> <span style="color: #eedd82;">remoteAddress</span>, <span style="color: #98fb98;">SocketAddress</span> <span style="color: #eedd82;">localAddress</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Exception</span> {
+    <span style="color: #00ffff;">if</span> (localAddress != <span style="color: #7fffd4;">null</span>) {
+        javaChannel().socket().bind(localAddress);
+    }
+
+    <span style="color: #98fb98;">boolean</span> <span style="color: #eedd82;">success</span> = <span style="color: #7fffd4;">false</span>;
+    <span style="color: #00ffff;">try</span> {
+        <span style="color: #98fb98;">boolean</span> <span style="color: #eedd82;">connected</span> = javaChannel().connect(remoteAddress);
+        <span style="color: #00ffff;">if</span> (!connected) {
+            selectionKey().interestOps(<span style="color: #7fffd4;">SelectionKey</span>.OP_CONNECT);
+        }
+        success = <span style="color: #7fffd4;">true</span>;
+        <span style="color: #00ffff;">return</span> connected;
+    } <span style="color: #00ffff;">finally</span> {
+        <span style="color: #00ffff;">if</span> (!success) {
+            doClose();
+        }
+    }
+}
+</pre>
 </div>
 
 <p>
@@ -620,34 +666,67 @@ Reactor多线程模型的特点：
 第三步，由NioEventLoop的多路复用器轮询连接操作结果，代码如下：
 </p>
 
+<div class="org-src-container">
 
-<div class="figure">
-<p><img src="pic/netty-client-selector.png" alt="netty-client-selector.png" width="70%" />
-</p>
+<pre class="src src-java"><span style="color: #00ffff;">if</span> ((readyOps &amp; <span style="color: #7fffd4;">SelectionKey</span>.OP_CONNECT) != 0) {
+    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">remove OP_CONNECT as otherwise Selector.select(..) will always return without blocking</span>
+    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">See https://github.com/netty/netty/issues/924</span>
+    <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">ops</span> = k.interestOps();
+    ops &amp;= ~<span style="color: #7fffd4;">SelectionKey</span>.OP_CONNECT;
+    k.interestOps(ops);
+
+    unsafe.finishConnect();
+}
+</pre>
 </div>
 
 <p>
 判断连接结果：
 </p>
 
+<div class="org-src-container">
 
-<div class="figure">
-<p><img src="pic/netty-client-check-connection-result.png" alt="netty-client-check-connection-result.png" width="70%" />
-</p>
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">finishConnect</span>() {
+    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">Note this method is invoked by the event loop only if the connection attempt was</span>
+    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">neither cancelled nor timed out.</span>
+
+    <span style="color: #98fb98;">assert</span> <span style="color: #87cefa;">eventLoop</span>().inEventLoop();
+
+    <span style="color: #00ffff;">try</span> {
+        <span style="color: #98fb98;">boolean</span> <span style="color: #eedd82;">wasActive</span> = isActive();
+        doFinishConnect();
+        fulfillConnectPromise(connectPromise, wasActive);
+</pre>
 </div>
-
 <p>
 如果或连接成功，重新设置监听位为READ：
 </p>
 
+<div class="org-src-container">
 
-<div class="figure">
-<p><img src="pic/netty-client-set-read-interest-op.png" alt="netty-client-set-read-interest-op.png" width="70%" />
-</p>
-</div>
-</div>
-</div>
+<pre class="src src-java"><span style="color: #7fffd4;">@Override</span>
+<span style="color: #00ffff;">protected</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">doBeginRead</span>() <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Exception</span> {
+    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">Channel.read() or ChannelHandlerContext.read() was called</span>
+    <span style="color: #00ffff;">if</span> (inputShutdown) {
+        <span style="color: #00ffff;">return</span>;
+    }
 
+    <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">SelectionKey</span> <span style="color: #eedd82;">selectionKey</span> = <span style="color: #00ffff;">this</span>.selectionKey;
+    <span style="color: #00ffff;">if</span> (!selectionKey.isValid()) {
+        <span style="color: #00ffff;">return</span>;
+    }
+
+    readPending = <span style="color: #7fffd4;">true</span>;
+
+    <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">interestOps</span> = selectionKey.interestOps();
+    <span style="color: #00ffff;">if</span> ((interestOps &amp; readInterestOp) == 0) {
+        selectionKey.interestOps(interestOps | readInterestOp);
+    }
+}
+</pre>
+</div>
+</div>
+</div>
 <div id="outline-container-sec-2-2-4" class="outline-4">
 <h4 id="sec-2-2-4">I/O读写</h4>
 <div class="outline-text-4" id="text-2-2-4">
@@ -683,11 +762,442 @@ Reactor多线程模型的特点：
 <div class="outline-text-3" id="text-2-3">
 </div><div id="outline-container-sec-2-3-1" class="outline-4">
 <h4 id="sec-2-3-1">NioEventLoop介绍</h4>
+<div class="outline-text-4" id="text-2-3-1">
+<p>
+NioEventLoop是Netty的Reactor线程，它的职责如下：
+</p>
+<ul class="org-ul">
+<li>服务端Acceptor线程：负责处理客户端的请求接入
+</li>
+<li>客户端Connecor线程：负责注册监听连接操作位，用于判断异步连接结果
+</li>
+<li>IO线程：监听网络读操作位，负责从SocketChannel中读取报文
+</li>
+<li>IO线程：负责向SocketChannel写入报文发送给对方，如果发生写半包，会自动注册监听写事件，用于后续继续发送半包数据，直到数据全部发送完成
+</li>
+<li>定时任务线程：执行定时任务，例如链路空闲检测和发送心跳消息等
+</li>
+<li>线程执行器：执行普通的任务线程(Runnable)
+</li>
+</ul>
+
+<p>
+在服务端和客户端线程模型章节我们已经详细介绍了NioEventLoop如何处理网络IO事件，下面简单看下它是如何处理定时任务和执行普通的Runnable的
+</p>
+</div>
+
+<div id="outline-container-sec-2-3-1-1" class="outline-5">
+<h5 id="sec-2-3-1-1">执行用户自定义Task</h5>
+<div class="outline-text-5" id="text-2-3-1-1">
+<p>
+首先NioEventLoop继承SingleThreadEventExecutor，这就意味着它实际上是一个线程个数为1的线程池，类继承关系如下所示：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/nio-event-loop-class-hierachy.png" alt="nio-event-loop-class-hierachy.png" width="70%" />
+</p>
+</div>
+
+<p>
+其中，线程池和任务队列定义如下：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">private</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">EventExecutorGroup</span> <span style="color: #eedd82;">parent</span>;
+<span style="color: #00ffff;">private</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">Queue</span>&lt;<span style="color: #98fb98;">Runnable</span>&gt; <span style="color: #eedd82;">taskQueue</span>;
+<span style="color: #00ffff;">private</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">Thread</span> <span style="color: #eedd82;">thread</span>;
+<span style="color: #00ffff;">private</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">Semaphore</span> <span style="color: #eedd82;">threadLock</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">Semaphore</span>(0);
+<span style="color: #00ffff;">private</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">Set</span>&lt;<span style="color: #98fb98;">Runnable</span>&gt; <span style="color: #eedd82;">shutdownHooks</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">LinkedHashSet</span>&lt;<span style="color: #98fb98;">Runnable</span>&gt;();
+</pre>
+</div>
+
+<p>
+对于用户而言，直接调用NioEventLoop的execute(Runnable task)方法即可执行自定义的Task，代码实现如下：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #7fffd4;">@Override</span>
+<span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">execute</span>(<span style="color: #98fb98;">Runnable</span> <span style="color: #eedd82;">task</span>) {
+    <span style="color: #00ffff;">if</span> (task == <span style="color: #7fffd4;">null</span>) {
+        <span style="color: #00ffff;">throw</span> <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">NullPointerException</span>(<span style="color: #ffa07a;">"task"</span>);
+    }
+
+    <span style="color: #98fb98;">boolean</span> <span style="color: #eedd82;">inEventLoop</span> = inEventLoop();
+    <span style="color: #00ffff;">if</span> (inEventLoop) {
+        addTask(task);
+    } <span style="color: #00ffff;">else</span> {
+        startThread();
+        addTask(task);
+        <span style="color: #00ffff;">if</span> (isShutdown() &amp;&amp; removeTask(task)) {
+            reject();
+        }
+    }
+
+    <span style="color: #00ffff;">if</span> (!addTaskWakesUp &amp;&amp; wakesUpForTask(task)) {
+        wakeup(inEventLoop);
+    }
+}
+</pre>
 </div>
 </div>
 </div>
+
+<div id="outline-container-sec-2-3-1-2" class="outline-5">
+<h5 id="sec-2-3-1-2">实现定时任务</h5>
+<div class="outline-text-5" id="text-2-3-1-2">
+<p>
+NioEventLoop实现ScheduledExecutorService：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/nio-event-loop-interface-hirearchy.png" alt="nio-event-loop-interface-hirearchy.png" width="70%" />
+</p>
+</div>
+
+<p>
+通过调用SingleThreadEventExecutor的schedule系列方法，可以在NioEventLoop中执行Netty或者用户自定义的定时任务，接口定义如下：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/single-event-executor-schedule.png" alt="single-event-executor-schedule.png" width="70%" />
+</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-4" class="outline-3">
+<h3 id="sec-2-4">NioEventLoop设计原理</h3>
+<div class="outline-text-3" id="text-2-4">
+</div><div id="outline-container-sec-2-4-1" class="outline-4">
+<h4 id="sec-2-4-1">串行化设计避免线程竞争</h4>
+<div class="outline-text-4" id="text-2-4-1">
+<p>
+当系统在运行过程中，如果频繁的进行线程上下文切换，会带来额外的性能损耗。多线程并发执行某个业务流程，业务开发者还需要时刻对线程安全保持警惕，哪些数据可能会被并发修改，如何保护？这不仅降低了开发效率，也会带来额外的性能损耗
+</p>
+</div>
+
+<div id="outline-container-sec-2-4-1-1" class="outline-5">
+<h5 id="sec-2-4-1-1">串行执行Handler链</h5>
+<div class="outline-text-5" id="text-2-4-1-1">
+<p>
+为了解决上述问题，Netty采用了串行化设计理念，从消息的读取、编码以及后续Handler的执行，始终都由IO线程NioEventLoop负责，这就意外着整个流程不会进行线程上下文的切换，数据也不会面临被并发修改的风险，对于用户而言，甚至不需要了解Netty的线程细节，这确实是个非常好的设计理念，它的工作原理图如下：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/netty-handler-chain.png" alt="netty-handler-chain.png" width="70%" />
+</p>
+</div>
+
+<ul class="org-ul">
+<li>一个NioEventLoop聚合了一个多路复用器Selector，因此 <b>可以处理成百上千的客户端连接</b>
+</li>
+<li>Netty的处理策略是每当有一个新的客户端接入，则从NioEventLoop线程组中顺序获取一个可用的NioEventLoop，当到达数组上限之后，重新返回到0，通过这种方式，可以 <b>基本保证各个NioEventLoop的负载均衡</b>
+</li>
+<li>一个客户端连接只注册到一个NioEventLoop上，这样就 <b>避免了多个IO线程</b> 去并发操作它
+</li>
+</ul>
+
+<p>
+Netty通过串行化设计理念降低了用户的开发难度，提升了处理性能。利用线程组实现了多个串行化线程水平并行执行，线程之间并没有交集，这样既可以充分利用多核提升并行处理能力，同时避免了线程上下文的切换和并发保护带来的额外性能损耗
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-4-2" class="outline-4">
+<h4 id="sec-2-4-2">定时任务与时间轮算法</h4>
+<div class="outline-text-4" id="text-2-4-2">
+<p>
+在Netty中，有很多功能依赖定时任务，比较典型的有两种：
+</p>
+<ol class="org-ol">
+<li>客户端连接超时控制
+</li>
+<li>链路空闲检测
+</li>
+</ol>
+
+<p>
+一种比较常用的设计理念是在NioEventLoop中聚合JDK的定时任务线程池ScheduledExecutorService，通过它来执行定时任务。这样做单纯从性能角度看不是最优，原因有如下三点：
+</p>
+<ul class="org-ul">
+<li>在IO线程中聚合了一个独立的定时任务线程池，这样在处理过程中会存在线程上下文切换问题，这就打破了Netty的串行化设计理念
+</li>
+<li>存在多线程并发操作问题，因为定时任务Task和IO线程NioEventLoop可能同时访问并修改同一份数据
+</li>
+<li>JDK的ScheduledExecutorService从性能角度看，存在性能优化空间
+</li>
+</ul>
+
+<pre class="example">
+最早面临上述问题的是操作系统和协议栈，例如TCP协议栈，其可靠传输依赖超时重传机制，因此每个通过TCP传输的 packet 都需要一个 timer来调度 timeout 事件
+
+这类超时可能是海量的，如果为每个超时都创建一个定时器，从性能和资源消耗角度看都是不合理的
+</pre>
+</div>
+
+<div id="outline-container-sec-2-4-2-1" class="outline-5">
+<h5 id="sec-2-4-2-1">定时轮</h5>
+<div class="outline-text-5" id="text-2-4-2-1">
+<p>
+Netty的定时任务调度基于时间轮算法调度：
+</p>
+
+<pre class="example">
+     根据George Varghese和Tony Lauck 1996年的论文提出了一种定时轮的方式来管理和维护大量的timer调度
+</pre>
+
+<p>
+定时轮是一种数据结构，其主体是一个循环列表，每个列表中包含一个称之为slot的结构，它的原理图如下：
+</p>
+
+<div class="figure">
+<p><img src="pic/time-wheel-alogrithm.png" alt="time-wheel-alogrithm.png" width="70%" />
+</p>
+</div>
+
+<p>
+定时轮的工作原理可以类比于时钟，如上图箭头（指针）按某一个方向按固定频率轮动，每一次跳动称为一个tick。这样可以看出定时轮由个3个重要的属性参数：
+</p>
+<ul class="org-ul">
+<li>ticksPerWheel: 一轮的tick数
+</li>
+<li>tickDuration: 一个tick的持续时间
+</li>
+<li>timeUnit: 时间单位
+</li>
+</ul>
+
+<p>
+例如当ticksPerWheel=60，tickDuration=1，timeUnit=秒，这就和时钟的秒针走动完全类似了
+</p>
+
+<p>
+时间轮的执行由NioEventLoop来负责检测，首先看任务队列中是否有超时的定时任务和普通任务，如果有则按照比例循环执行这些任务，代码如下：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #7fffd4;">@Override</span>
+<span style="color: #00ffff;">protected</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">run</span>() {
+    <span style="color: #00ffff;">for</span> (;;) {
+        <span style="color: #98fb98;">boolean</span> <span style="color: #eedd82;">oldWakenUp</span> = wakenUp.getAndSet(<span style="color: #7fffd4;">false</span>);
+        <span style="color: #00ffff;">try</span> {
+            <span style="color: #00ffff;">if</span> (hasTasks()) {
+                selectNow();
+            } <span style="color: #00ffff;">else</span> {
+</pre>
+</div>
+
+<p>
+如果没有需要理解执行的任务，则调用Selector的select方法进行等待，等待的时间为定时任务队列中第一个超时的定时任务时延，代码如下：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">private</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">select</span>(<span style="color: #98fb98;">boolean</span> <span style="color: #eedd82;">oldWakenUp</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">IOException</span> {
+    <span style="color: #98fb98;">Selector</span> <span style="color: #eedd82;">selector</span> = <span style="color: #00ffff;">this</span>.selector;
+    <span style="color: #00ffff;">try</span> {
+        <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">selectCnt</span> = 0;
+        <span style="color: #98fb98;">long</span> <span style="color: #eedd82;">currentTimeNanos</span> = System.nanoTime();
+        <span style="color: #98fb98;">long</span> <span style="color: #eedd82;">selectDeadLineNanos</span> = currentTimeNanos + delayNanos(currentTimeNanos);
+        <span style="color: #00ffff;">for</span> (;;) {
+            <span style="color: #98fb98;">long</span> <span style="color: #eedd82;">timeoutMillis</span> = (selectDeadLineNanos - currentTimeNanos + 500000L) / 1000000L;
+            <span style="color: #00ffff;">if</span> (timeoutMillis &lt;= 0) {
+                <span style="color: #00ffff;">if</span> (selectCnt == 0) {
+                    selector.selectNow();
+                    selectCnt = 1;
+                }
+                <span style="color: #00ffff;">break</span>;
+            }
+
+            <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">selectedKeys</span> = selector.select(timeoutMillis);
+</pre>
+</div>
+
+<p>
+从定时任务Task队列中弹出delay最小的Task，计算超时时间，代码如下：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">protected</span> <span style="color: #98fb98;">long</span> <span style="color: #87cefa;">delayNanos</span>(<span style="color: #98fb98;">long</span> <span style="color: #eedd82;">currentTimeNanos</span>) {
+    <span style="color: #98fb98;">ScheduledFutureTask</span>&lt;?&gt; <span style="color: #eedd82;">scheduledTask</span> = peekScheduledTask();
+    <span style="color: #00ffff;">if</span> (scheduledTask == <span style="color: #7fffd4;">null</span>) {
+        <span style="color: #00ffff;">return</span> SCHEDULE_PURGE_INTERVAL;
+    }
+
+    <span style="color: #00ffff;">return</span> scheduledTask.delayNanos(currentTimeNanos);
+}
+</pre>
+</div>
+
+<p>
+经过周期tick之后，扫描定时任务列表，将超时的定时任务移除到普通任务队列中，等待执行，相关代码如下：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">private</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">fetchFromScheduledTaskQueue</span>() {
+    <span style="color: #00ffff;">if</span> (hasScheduledTasks()) {
+        <span style="color: #98fb98;">long</span> <span style="color: #eedd82;">nanoTime</span> = AbstractScheduledEventExecutor.nanoTime();
+        <span style="color: #00ffff;">for</span> (;;) {
+            <span style="color: #98fb98;">Runnable</span> <span style="color: #eedd82;">scheduledTask</span> = pollScheduledTask(nanoTime);
+            <span style="color: #00ffff;">if</span> (scheduledTask == <span style="color: #7fffd4;">null</span>) {
+                <span style="color: #00ffff;">break</span>;
+            }
+            taskQueue.add(scheduledTask);
+        }
+    }
+}
+</pre>
+</div>
+
+<p>
+检测和拷贝任务完成之后，就执行超时的定时任务，代码如下：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">protected</span> <span style="color: #98fb98;">boolean</span> <span style="color: #87cefa;">runAllTasks</span>() {
+    fetchFromScheduledTaskQueue();
+    <span style="color: #98fb98;">Runnable</span> <span style="color: #eedd82;">task</span> = pollTask();
+    <span style="color: #00ffff;">if</span> (task == <span style="color: #7fffd4;">null</span>) {
+        <span style="color: #00ffff;">return</span> <span style="color: #7fffd4;">false</span>;
+    }
+
+    <span style="color: #00ffff;">for</span> (;;) {
+        <span style="color: #00ffff;">try</span> {
+            task.run();
+        } <span style="color: #00ffff;">catch</span> (<span style="color: #98fb98;">Throwable</span> <span style="color: #eedd82;">t</span>) {
+            logger.warn(<span style="color: #ffa07a;">"A task raised an exception."</span>, t);
+        }
+
+        task = pollTask();
+        <span style="color: #00ffff;">if</span> (task == <span style="color: #7fffd4;">null</span>) {
+            lastExecutionTime = ScheduledFutureTask.nanoTime();
+            <span style="color: #00ffff;">return</span> <span style="color: #7fffd4;">true</span>;
+        }
+    }
+}
+</pre>
+</div>
+
+<p>
+为了保证定时任务的执行不会因为过度挤占IO事件的处理，Netty提供了IO执行比例供用户设置，用户可以设置分配给IO的执行比例， <b>防止因为海量定时任务的执行导致IO处理超时或者积压</b> 
+</p>
+
+<p>
+因为获取系统的纳秒时间是件耗时的操作，所以Netty每执行64个定时任务检测一次是否达到执行的上限时间，达到则退出。如果没有执行完，放到下次Selector轮询时再处理，给IO事件的处理提供机会，代码如下：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">Check timeout every 64 tasks because nanoTime() is relatively expensive.</span>
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">XXX: Hard-coded value - will make it configurable if it is really a problem.</span>
+<span style="color: #00ffff;">if</span> ((runTasks &amp; 0x3F) == 0) {
+    lastExecutionTime = ScheduledFutureTask.nanoTime();
+    <span style="color: #00ffff;">if</span> (lastExecutionTime &gt;= deadline) {
+        <span style="color: #00ffff;">break</span>;
+    }
+}
+
+task = pollTask();
+<span style="color: #00ffff;">if</span> (task == <span style="color: #7fffd4;">null</span>) {
+    lastExecutionTime = ScheduledFutureTask.nanoTime();
+    <span style="color: #00ffff;">break</span>;
+}
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-4-3" class="outline-4">
+<h4 id="sec-2-4-3">聚焦而不是膨胀</h4>
+<div class="outline-text-4" id="text-2-4-3">
+<p>
+Netty是个异步高性能的NIO框架，它并不是个业务运行容器，因此它 <b>不需要也不应该提供业务容器和业务线程</b> 。合理的设计模式是Netty <b>只负责提供和管理NIO线程</b> ，其它的业务层线程模型由用户自己集成，Netty不应该提供此类功能，只要将分层划分清楚，就会更有利于用户集成和扩展
+</p>
+
+<p>
+令人遗憾的是在Netty 3系列版本中，Netty提供了类似Mina异步Filter的ExecutionHandler，它聚合了JDK的线程池java.util.concurrent.Executor，用户异步执行后续的Handler
+</p>
+
+<p>
+ExecutionHandler是为了解决部分用户Handler可能存在执行时间不确定而导致IO线程被意外阻塞或者挂住，从需求合理性角度分析这类需求本身是合理的，但是Netty提供该功能却并不合适。原因总结如下：
+</p>
+<ol class="org-ol">
+<li>它打破了Netty坚持的串行化设计理念，在消息的接收和处理过程中发生了线程切换并引入新的线程池，打破了自身架构坚守的设计原则，实际是一种架构妥协
+</li>
+<li>潜在的线程并发安全问题，如果异步Handler也操作它前面的用户Handler，而用户Handler又没有进行线程安全保护，这就会导致隐蔽和致命的线程安全问题
+</li>
+<li>用户开发的复杂性，引入ExecutionHandler，打破了原来的ChannelPipeline串行执行模式，用户需要理解Netty底层的实现细节，关心线程安全等问题，这会导致得不偿失
+</li>
+</ol>
+
+<p>
+鉴于上述原因，Netty的后续版本彻底删除了ExecutionHandler，而且也没有提供类似的相关功能类，把精力聚焦在Netty的IO线程NioEventLoop上，这无疑是一种巨大的进步，Netty重新开始聚焦在IO线程本身，而不是提供用户相关的业务线程模型
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-5" class="outline-3">
+<h3 id="sec-2-5">Netty线程开发最佳实践</h3>
+<div class="outline-text-3" id="text-2-5">
+</div><div id="outline-container-sec-2-5-1" class="outline-4">
+<h4 id="sec-2-5-1">时间可控的简单业务</h4>
+<div class="outline-text-4" id="text-2-5-1">
+<p>
+如果业务非常简单，执行时间非常短，不需要与外部网元交互、访问数据库和磁盘，不需要等待其它资源，则建议 <b>直接在业务ChannelHandler</b> 中执行，不需要再启业务的线程或者线程池。避免线程上下文切换，也不存在线程并发问题
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-5-2" class="outline-4">
+<h4 id="sec-2-5-2">复杂和时间不可控业务</h4>
+<div class="outline-text-4" id="text-2-5-2">
+<p>
+对于此类业务，不建议直接在业务ChannelHandler中启动线程或者线程池处理，建议 <b>将不同的业务统一封装成Task，统一投递到后端的业务线程池中进行处理</b> 
+</p>
+
+<p>
+过多的业务ChannelHandler会带来开发效率和可维护性问题，不要把Netty当作业务容器，对于大多数复杂的业务产品，仍然需要集成或者开发自己的业务容器，做好和Netty的架构分层
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-5-3" class="outline-4">
+<h4 id="sec-2-5-3">业务线程避免直接操作ChannelHandler</h4>
+<div class="outline-text-4" id="text-2-5-3">
+<p>
+对于ChannelHandler，IO线程和业务线程都可能会操作，因为业务通常是多线程模型，这样就会存在多线程操作ChannelHandler。为了尽量避免多线程并发问题，建议按照Netty自身的做法，通过将 <b>操作封装成独立的Task由NioEventLoop统一执行</b> ，而不是业务线程直接操作，相关代码如下所示：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/netty-execute-business-logic.png" alt="netty-execute-business-logic.png" width="70%" />
+</p>
+</div>
+
+<p>
+如果你确认并发访问的数据或者并发操作是安全的，则无需多此一举，这个需要根据具体的业务场景进行判断，灵活处理
+</p>
+</div>
+</div>
+</div>
+</div>
+
 <div id="outline-container-sec-3" class="outline-2">
 <h2 id="sec-3">总结</h2>
+<div class="outline-text-2" id="text-3">
+<p>
+尽管Netty的线程模型并不复杂，但是如何合理利用Netty开发出高性能、高并发的业务产品，仍然是个有挑战的工作。只有充分理解了Netty的线程模型和设计原理，才能开发出高质量的产品
+</p>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
