@@ -142,6 +142,192 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="tii.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">TCP：成块数据流</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#sec-1">滑动窗口协议</a>
+<ul>
+<li><a href="#sec-1-1">正常数据流</a>
+<ul>
+<li><a href="#sec-1-1-1">快的接收方和慢的发送方</a></li>
+<li><a href="#sec-1-1-2">快的发送方和慢的接收方</a></li>
+</ul>
+</li>
+<li><a href="#sec-1-2">滑动窗口</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<p>
+以前看到TFTP使用了停止等待协议。数据发送方在发送下一个数据块之前需要等待接收对已发送数据的确认。本章将介绍TCP所使用的被称为 <b>滑动窗口协议</b> 的另一种形式的流量控制方法。该协议允许发送方在停止并等待确认前可以连续发送多个分组。由于发送方不必每发一个分组就停下来等待确认，因此该协议可以加速数据的传输
+</p>
+
+
+<p>
+还将介绍TCP的PUSH标志，该标志在前面的许多例子中都出现过。此外，还要介绍慢启动，TCP使用该技术在一个连接上建立数据流，最后介绍成块数据流的吞吐量
+</p>
+
+<div id="outline-container-sec-1" class="outline-2">
+<h2 id="sec-1">滑动窗口协议</h2>
+<div class="outline-text-2" id="text-1">
+</div><div id="outline-container-sec-1-1" class="outline-3">
+<h3 id="sec-1-1">正常数据流</h3>
+<div class="outline-text-3" id="text-1-1">
+<p>
+先从主机svr4单向传输8192个字节到主机bsdi开始。在bsdi上运行sock程序作为服务器：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">bsdi$ sock -i -s 7777
+</pre>
+</div>
+
+<p>
+其中，标志 <b>-i</b> 和 <b>-s</b> 指示程序作为一个 <b>吸收</b> 服务器运行（从网络上读取并丢弃数据），服务器端口指明为7777。相应的客户程序运行为：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">svr4$ sock -i -n8 bsdi 7777
+</pre>
+</div>
+
+<p>
+该命令指示客户向网络发送8个1024字节的数据。图20-1显示了这个过程的时间系列。我们在输出的前3个报文段中显示了每一端MSS的值：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/tcp-sink-sock-sequences.png" alt="tcp-sink-sock-sequences.png" width="70%" />
+</p>
+</div>
+
+<ul class="org-ul">
+<li>报文段4~6：发送方首先传送3个数据报文段
+</li>
+<li>报文段：仅确认了前两个数据报文段
+<ul class="org-ul">
+<li>这可以从其确认序号为2048而不是3073看出：
+<ol class="org-ol">
+<li>当一个分组到达时，它首先被设备中断例程进行处理，然后放置到IP的输入队列中。三个报文段4、5和6依次到达并按接收顺序放到IP的输入队列。IP将按同样顺序将它们交给TCP
+</li>
+<li>当TCP处理报文段4时，该连接被标记为产生一个经受时延的确认
+</li>
+<li>TCP处理下一报文段5，由于TCP现在有两个未完成的报文段需要确认，因此产生一个序号为2048的ACK（报文段7），并清除该连接产生经受时延的确认标志
+</li>
+<li>TCP处理下一个报文段（6），而连接又被标志为产生一个经受时延的确认
+</li>
+<li>在报文段9到来之前，由于时延定时器溢出，因此产生一个序号为3073的ACK（报文段8）
+</li>
+<li>报文段8中的窗口大小为3072，表明在TCP的接收缓存中还有1024个字节的数据等待被应用程序读取
+</li>
+</ol>
+</li>
+</ul>
+</li>
+<li>报文段11~16：说明了通常使用的 <b>隔一个报文段确认</b> 的策略
+<ul class="org-ul">
+<li>报文段11、12和13到达并被放入IP的接收队列：
+<ul class="org-ul">
+<li>当报文段11被处理时，连接被标记为产生一个经受时延的确认
+</li>
+<li>当报文段12被处理时，它们的ACK（报文段14）被产生且连接的经受时延的确认标志被清除
+</li>
+<li>报文段13使得连接再次被标记为产生经受时延
+</li>
+<li>但在时延定时器溢出之前，报文段15处理完毕，因此该确认立刻被发送
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+<pre class="example">
+  报文段7、14和16中的ACK确认了两个收到的报文段是很重要的
+
+  使用TCP的滑动窗口协议时，接收方不必确认每一个收到的分组
+
+  在TCP中，ACK是累积的：它们表示接收方已经正确收到了一直到确认序号减1的所有字节
+
+  在本例中，三个确认的数据为2048字节而两个确认的数据为1024字节
+</pre>
+
+<p>
+用tcpdump看到的是TCP的动态活动情况。在线路上看到的分组顺序依赖于许多无法控制的因素：
+</p>
+<ul class="org-ul">
+<li>发送方TCP的实现
+</li>
+<li>接收方TCP的实现
+</li>
+<li>接收进程读取数据：依赖于操作系统的调度
+</li>
+<li>网络的动态性：如以太网的冲突和退避等
+</li>
+</ul>
+
+<p>
+对两个TCP而言： <b>没有一种单一的、正确的方法来交换给定数量的数据</b> 
+</p>
+</div>
+
+<div id="outline-container-sec-1-1-1" class="outline-4">
+<h4 id="sec-1-1-1">快的接收方和慢的发送方</h4>
+<div class="outline-text-4" id="text-1-1-1">
+<p>
+图20-2显示了在同样两个主机之间交换同样数据时的另一个时间系列，它们是在图20-1所示的几分钟之后截获的：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/tcp-sink-sock-sequences-2.png" alt="tcp-sink-sock-sequences-2.png" width="70%" />
+</p>
+</div>
+
+<p>
+这一次接收方没有发送一个序号为3073的ACK，而是等待并发送序号为4097的ACK。接收方仅发送了4个ACK（报文段7、10、12和15）：三个确认了2048字节，另一个确认了1024字节。最后1024字节数据的ACK出现在报文段17中，它与FIN的ACK一道发送
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-1-1-2" class="outline-4">
+<h4 id="sec-1-1-2">快的发送方和慢的接收方</h4>
+<div class="outline-text-4" id="text-1-1-2">
+<p>
+图20-3显示了另外一个时间系列。这次是从一个快的发送方到一个慢的接收方。它的动态活动情况又有所不同：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/tcp-sink-sock-sequences-3.png" alt="tcp-sink-sock-sequences-3.png" width="70%" />
+</p>
+</div>
+
+<ul class="org-ul">
+<li>发送方发送4个背靠背的数据报文段去填充接收方的窗口，然后停下来等待一个ACK 
+</li>
+<li>接收方发送ACK（报文段8），但通告其窗口大小为0，这说明接收方已收到所有数据，但这些数据都在接收方的TCP缓冲区，因为应用程序还没有机会读取这些数据
+</li>
+<li>另一个ACK在17.4ms后发送，表明接收方现在可以接收另外的4096个字节的数据。虽然这看起来像一个ACK，但由于它并不确认任何新数据，只是用来增加窗口的右边沿，因此被称为 <b>窗口更新</b>
+</li>
+<li>发送方发送最后4个报文段（10~13），再次填充了接收方的窗口。注意到报文段13中包括两个比特标志： <b>PUSH</b> 和 <b>FIN</b> 
+</li>
+<li>随后从接收方传来另外两个ACK，它们确认了最后的4096字节的数据（从4097到8192字节）和FIN（标号为8192）
+</li>
+</ul>
+</div>
+</div>
+</div>
+
+
+<div id="outline-container-sec-1-2" class="outline-3">
+<h3 id="sec-1-2">滑动窗口</h3>
+</div>
+</div>
 </div>
 <div id="postamble" class="status">
 
