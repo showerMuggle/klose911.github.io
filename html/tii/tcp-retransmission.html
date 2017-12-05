@@ -142,7 +142,113 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="tii.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">TCP：超时和重传</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#sec-1">简单例子</a>
+<ul>
+<li><a href="#sec-1-1">指数退避</a></li>
+</ul>
+</li>
+<li><a href="#sec-2">往返时间测量</a></li>
+</ul>
+</div>
+</div>
+<p>
+TCP提供可靠的运输层。它使用的方法之一就是确认从另一端收到的数据。但数据和确认都有可能会丢失。TCP通过在发送时 <b>设置一个定时器</b> 来解决这种问题。如果当定时器溢出时还没有收到确认，它就重传该数据。对任何实现而言，关键之处就在于 <b>超时和重传的策略</b> ，即怎样决定超时间隔和如何确定重传的频率
+</p>
 
+<p>
+已经看到过两个超时和重传的例子：
+</p>
+<ul class="org-ul">
+<li>ICMP端口不能到达的例子中，看到TFTP客户使用UDP实现了一个简单的超时和重传机制：假定5秒是一个适当的时间间隔，并每隔5秒进行重传
+</li>
+<li>在向一个不存在的主机发送ARP的例子中，当TCP试图建立连接的时候，在每个重传之间使用一个较长的时延来重传SYN
+</li>
+</ul>
+
+<p>
+对每个连接，TCP管理4个不同的定时器：
+</p>
+<ol class="org-ol">
+<li><b>重传</b> 定时器：当希望收到另一端的确认。在本章将详细讨论这个定时器以及一些相关的问题，如拥塞避免
+</li>
+<li><b>坚持</b> 定时器：使窗口大小信息保持不断流动，即使另一端关闭了其接收窗口
+</li>
+<li><b>保活</b> 定时器：可检测到一个空闲连接的另一端何时崩溃或重启
+</li>
+<li><b>2MSL</b> 定时器：测量一个连接处于TIME_WAIT状态的时间，已经介绍过了
+</li>
+</ol>
+
+<p>
+本章以一个简单的TCP超时和重传的例子开始，然后转向一个更复杂的例子。该例子可以观察到TCP时钟管理的所有细节。看到TCP的典型实现是怎样测量TCP报文段的往返时间以及TCP如何使用这些测量结果来为下一个将要传输的报文段建立重传超时时间。接着将研究TCP的 <b>拥塞避免</b> ：当分组丢失时TCP所采取的动作，并提供一个分组丢失的实际例子。最后将介绍较新的 <b>快速重传</b> 和 <b>快速恢复</b> 算法，并介绍该算法如何使TCP检测分组丢失比等待时钟超时更快
+</p>
+
+<div id="outline-container-sec-1" class="outline-2">
+<h2 id="sec-1">简单例子</h2>
+<div class="outline-text-2" id="text-1">
+<p>
+首先观察TCP所使用的重传机制，先将建立一个连接，发送一些分组来证明一切正常，然后拔掉电缆，发送更多的数据，再观察TCP的行为：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/tcp-retransmission-simple-example.png" alt="tcp-retransmission-simple-example.png" width="70%" />
+</p>
+</div>
+
+<p>
+图21-1表示的是tcpdump的输出结果：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/tcp-retransmission-simple-dump.png" alt="tcp-retransmission-simple-dump.png" width="70%" />
+</p>
+</div>
+
+<ul class="org-ul">
+<li>第1、2和3行：正常的TCP连接建立的过程
+</li>
+<li>第4行："hello,world"（12个字符加上回车和换行）的传输过程
+</li>
+<li>第5行：其确认
+</li>
+<li>svr4拔掉了以太网电缆
+</li>
+<li>第6行："and hi"将被发送
+</li>
+<li>第7~18行：这个报文段的 <b>12次重传</b> 
+</li>
+<li>第19行：发送方的TCP最终放弃并发送一个 <b>RST信号</b>
+</li>
+</ul>
+</div>
+
+<div id="outline-container-sec-1-1" class="outline-3">
+<h3 id="sec-1-1">指数退避</h3>
+<div class="outline-text-3" id="text-1-1">
+<p>
+检查连续重传之间不同的时间差，它们取整后分别为1、3、6、12、24、48和多个64秒。后面将看到当第一次发送后所设置的超时时间实际上为1.5秒（它在首次发送后的1.0136秒而不是精确的1.5秒后，发生的原因已经解释过），此后该时间在每次重传时增加1倍并直至64秒
+</p>
+
+<p>
+这个倍乘关系被称为 <b>指数退避</b> 。可以将该例子与TFTP例子比较，在那里每次重传总是在前一次的5秒后发生 
+</p>
+
+<p>
+首次分组传输（第6行，24.480秒）与复位信号传输（第19行，566.488秒）之间的时间差约为 <b>9分钟</b> 
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2" class="outline-2">
+<h2 id="sec-2">往返时间测量</h2>
+</div>
 </div>
 <div id="postamble" class="status">
 
