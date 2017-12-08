@@ -152,7 +152,12 @@ for the JavaScript code in this tag.
 <li><a href="#sec-2-3-1">linear regression</a></li>
 </ul>
 </li>
-<li><a href="#sec-2-4">tf.estimator</a></li>
+</ul>
+</li>
+<li><a href="#sec-3">tf.estimator</a>
+<ul>
+<li><a href="#sec-3-1">Basic usage</a></li>
+<li><a href="#sec-3-2">custom model</a></li>
 </ul>
 </li>
 </ul>
@@ -571,9 +576,166 @@ This more complicated program can still be visualized in TensorBoard:
 </div>
 </div>
 </div>
+</div>
 
-<div id="outline-container-sec-2-4" class="outline-3">
-<h3 id="sec-2-4">tf.estimator</h3>
+<div id="outline-container-sec-3" class="outline-2">
+<h2 id="sec-3">tf.estimator</h2>
+<div class="outline-text-2" id="text-3">
+<p>
+<b>tf.estimator</b> is a high-level TensorFlow library that simplifies the mechanics of machine learning, including the following:
+</p>
+<ul class="org-ul">
+<li>running training loops
+</li>
+<li>running evaluation loops
+</li>
+<li>managing data sets
+</li>
+</ul>
+
+<p>
+tf.estimator defines many common models
+</p>
+</div>
+
+<div id="outline-container-sec-3-1" class="outline-3">
+<h3 id="sec-3-1">Basic usage</h3>
+<div class="outline-text-3" id="text-3-1">
+<p>
+Notice how much simpler the linear regression program becomes with tf.estimator:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #ff4500;"># </span><span style="color: #ff4500;">NumPy is often used to load, manipulate and preprocess data.</span>
+<span style="color: #00ffff;">import</span> numpy <span style="color: #00ffff;">as</span> np
+<span style="color: #00ffff;">import</span> tensorflow <span style="color: #00ffff;">as</span> tf
+
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">Declare list of features. We only have one numeric feature. There are many</span>
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">other types of columns that are more complicated and useful.</span>
+<span style="color: #eedd82;">feature_columns</span> = [tf.feature_column.numeric_column(<span style="color: #ffa07a;">"x"</span>, shape=[1])]
+
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">An estimator is the front end to invoke training (fitting) and evaluation</span>
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">(inference). There are many predefined types like linear regression,</span>
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">linear classification, and many neural network classifiers and regressors.</span>
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">The following code provides an estimator that does linear regression.</span>
+<span style="color: #eedd82;">estimator</span> = tf.estimator.LinearRegressor(feature_columns=feature_columns)
+
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">TensorFlow provides many helper methods to read and set up data sets.</span>
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">Here we use two data sets: one for training and one for evaluation</span>
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">We have to tell the function how many batches</span>
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">of data (num_epochs) we want and how big each batch should be.</span>
+<span style="color: #eedd82;">x_train</span> = np.array([1., 2., 3., 4.])
+<span style="color: #eedd82;">y_train</span> = np.array([0., -1., -2., -3.])
+<span style="color: #eedd82;">x_eval</span> = np.array([2., 5., 8., 1.])
+<span style="color: #eedd82;">y_eval</span> = np.array([-1.01, -4.1, -7, 0.])
+<span style="color: #eedd82;">input_fn</span> = tf.estimator.inputs.numpy_input_fn(
+<span style="background-color: #1a1a1a;"> </span>   {<span style="color: #ffa07a;">"x"</span>: x_train}, y_train, batch_size=4, num_epochs=<span style="color: #7fffd4;">None</span>, shuffle=<span style="color: #7fffd4;">True</span>)
+<span style="color: #eedd82;">train_input_fn</span> = tf.estimator.inputs.numpy_input_fn(
+<span style="background-color: #1a1a1a;"> </span>   {<span style="color: #ffa07a;">"x"</span>: x_train}, y_train, batch_size=4, num_epochs=1000, shuffle=<span style="color: #7fffd4;">False</span>)
+<span style="color: #eedd82;">eval_input_fn</span> = tf.estimator.inputs.numpy_input_fn(
+<span style="background-color: #1a1a1a;"> </span>   {<span style="color: #ffa07a;">"x"</span>: x_eval}, y_eval, batch_size=4, num_epochs=1000, shuffle=<span style="color: #7fffd4;">False</span>)
+
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">We can invoke 1000 training steps by invoking the  method and passing the</span>
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">training data set.</span>
+estimator.train(input_fn=input_fn, steps=1000)
+
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">Here we evaluate how well our model did.</span>
+<span style="color: #eedd82;">train_metrics</span> = estimator.evaluate(input_fn=train_input_fn)
+<span style="color: #eedd82;">eval_metrics</span> = estimator.evaluate(input_fn=eval_input_fn)
+<span style="color: #00ffff;">print</span>(<span style="color: #ffa07a;">"train metrics: %r"</span>% train_metrics)
+<span style="color: #00ffff;">print</span>(<span style="color: #ffa07a;">"eval metrics: %r"</span>% eval_metrics)
+</pre>
+</div>
+
+<p>
+When run, it produces something like:
+</p>
+
+<pre class="example">
+train metrics: {'average_loss': 7.8779564e-08, 'loss': 3.1511826e-07, 'global_step': 1000}
+eval metrics: {'average_loss': 0.0025512243, 'loss': 0.010204897, 'global_step': 1000}
+</pre>
+
+<p>
+Notice how our eval data has a higher loss, but it is still close to zero. That means we are learning properly
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-3-2" class="outline-3">
+<h3 id="sec-3-2">custom model</h3>
+<div class="outline-text-3" id="text-3-2">
+<p>
+tf.estimator does not lock you into its predefined models. Suppose we wanted to create a custom model that is not built into TensorFlow. We can still retain the high level abstraction of data set, feeding, training, etc. of tf.estimator. For illustration, we will show how to implement our own equivalent model to LinearRegressor using our knowledge of the lower level TensorFlow API
+</p>
+
+<p>
+To define a custom model that works with tf.estimator, we need to use <b>tf.estimator.Estimator</b> . tf.estimator.LinearRegressor is actually a sub-class of tf.estimator.Estimator. Instead of sub-classing Estimator, we simply provide Estimator a function <b>model_fn</b> that tells tf.estimator how it can evaluate predictions, training steps, and loss. The code is as follows:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #00ffff;">import</span> numpy <span style="color: #00ffff;">as</span> np
+<span style="color: #00ffff;">import</span> tensorflow <span style="color: #00ffff;">as</span> tf
+
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">Declare list of features, we only have one real-valued feature</span>
+<span style="color: #00ffff;">def</span> <span style="color: #87cefa;">model_fn</span>(features, labels, mode):
+<span style="background-color: #1a1a1a;"> </span>   <span style="color: #ff4500;"># </span><span style="color: #ff4500;">Build a linear model and predict values</span>
+<span style="background-color: #1a1a1a;"> </span> <span style="color: #eedd82;">W</span> = tf.get_variable(<span style="color: #ffa07a;">"W"</span>, [1], dtype=tf.float64)
+<span style="background-color: #1a1a1a;"> </span> <span style="color: #eedd82;">b</span> = tf.get_variable(<span style="color: #ffa07a;">"b"</span>, [1], dtype=tf.float64)
+<span style="background-color: #1a1a1a;"> </span> <span style="color: #eedd82;">y</span> = W*features[<span style="color: #ffa07a;">'x'</span>] + b
+<span style="background-color: #1a1a1a;"> </span> <span style="color: #ff4500;"># </span><span style="color: #ff4500;">Loss sub-graph</span>
+<span style="background-color: #1a1a1a;"> </span> <span style="color: #eedd82;">loss</span> = tf.reduce_sum(tf.square(y - labels))
+<span style="background-color: #1a1a1a;"> </span> <span style="color: #ff4500;"># </span><span style="color: #ff4500;">Training sub-graph</span>
+<span style="background-color: #1a1a1a;"> </span> <span style="color: #eedd82;">global_step</span> = tf.train.get_global_step()
+<span style="background-color: #1a1a1a;"> </span> <span style="color: #eedd82;">optimizer</span> = tf.train.GradientDescentOptimizer(0.01)
+<span style="background-color: #1a1a1a;"> </span> <span style="color: #eedd82;">train</span> = tf.group(optimizer.minimize(loss),
+<span style="background-color: #1a1a1a;"> </span>   <span style="background-color: #1a1a1a;"> </span>   <span style="background-color: #1a1a1a;"> </span>   <span style="background-color: #1a1a1a;"> </span>   <span style="background-color: #1a1a1a;"> </span>  tf.assign_add(global_step, 1))
+<span style="background-color: #1a1a1a;"> </span> <span style="color: #ff4500;"># </span><span style="color: #ff4500;">EstimatorSpec connects subgraphs we built to the</span>
+<span style="background-color: #1a1a1a;"> </span> <span style="color: #ff4500;"># </span><span style="color: #ff4500;">appropriate functionality.</span>
+<span style="background-color: #1a1a1a;"> </span> <span style="color: #00ffff;">return</span> tf.estimator.EstimatorSpec(
+<span style="background-color: #1a1a1a;"> </span>   <span style="background-color: #1a1a1a;"> </span> mode=mode,
+<span style="background-color: #1a1a1a;"> </span>   <span style="background-color: #1a1a1a;"> </span> predictions=y,
+<span style="background-color: #1a1a1a;"> </span>   <span style="background-color: #1a1a1a;"> </span> loss=loss,
+<span style="background-color: #1a1a1a;"> </span>   <span style="background-color: #1a1a1a;"> </span> train_op=train)
+
+<span style="color: #eedd82;">estimator</span> = tf.estimator.Estimator(model_fn=model_fn)
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">define our data sets</span>
+<span style="color: #eedd82;">x_train</span> = np.array([1., 2., 3., 4.])
+<span style="color: #eedd82;">y_train</span> = np.array([0., -1., -2., -3.])
+<span style="color: #eedd82;">x_eval</span> = np.array([2., 5., 8., 1.])
+<span style="color: #eedd82;">y_eval</span> = np.array([-1.01, -4.1, -7., 0.])
+<span style="color: #eedd82;">input_fn</span> = tf.estimator.inputs.numpy_input_fn(
+<span style="background-color: #1a1a1a;"> </span>   {<span style="color: #ffa07a;">"x"</span>: x_train}, y_train, batch_size=4, num_epochs=<span style="color: #7fffd4;">None</span>, shuffle=<span style="color: #7fffd4;">True</span>)
+<span style="color: #eedd82;">train_input_fn</span> = tf.estimator.inputs.numpy_input_fn(
+<span style="background-color: #1a1a1a;"> </span>   {<span style="color: #ffa07a;">"x"</span>: x_train}, y_train, batch_size=4, num_epochs=1000, shuffle=<span style="color: #7fffd4;">False</span>)
+<span style="color: #eedd82;">eval_input_fn</span> = tf.estimator.inputs.numpy_input_fn(
+<span style="background-color: #1a1a1a;"> </span>   {<span style="color: #ffa07a;">"x"</span>: x_eval}, y_eval, batch_size=4, num_epochs=1000, shuffle=<span style="color: #7fffd4;">False</span>)
+
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">train</span>
+estimator.train(input_fn=input_fn, steps=1000)
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">Here we evaluate how well our model did.</span>
+<span style="color: #eedd82;">train_metrics</span> = estimator.evaluate(input_fn=train_input_fn)
+<span style="color: #eedd82;">eval_metrics</span> = estimator.evaluate(input_fn=eval_input_fn)
+<span style="color: #00ffff;">print</span>(<span style="color: #ffa07a;">"train metrics: %r"</span>% train_metrics)
+<span style="color: #00ffff;">print</span>(<span style="color: #ffa07a;">"eval metrics: %r"</span>% eval_metrics)
+</pre>
+</div>
+
+<p>
+When run, it produces:
+</p>
+
+<pre class="example">
+train metrics: {'average_loss': 7.8779564e-08, 'loss': 3.1511826e-07, 'global_step': 1000}
+eval metrics: {'average_loss': 0.0025512243, 'loss': 0.010204897, 'global_step': 1000}
+</pre>
+
+<p>
+Notice: how the contents of the custom <b>model_fn()</b> function are very similar to our manual model training loop from the lower level API
+</p>
+</div>
 </div>
 </div>
 </div>
