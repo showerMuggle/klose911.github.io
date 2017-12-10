@@ -188,7 +188,7 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#sec-1">简单例子</a>
+<li><a href="#sec-1">简单实例</a>
 <ul>
 <li><a href="#sec-1-1">指数退避</a></li>
 </ul>
@@ -218,7 +218,17 @@ for the JavaScript code in this tag.
 <li><a href="#sec-3-3">拥塞举例（续）</a></li>
 </ul>
 </li>
-<li><a href="#sec-4">按每条路由进行度量</a></li>
+<li><a href="#sec-4">其他</a>
+<ul>
+<li><a href="#sec-4-1">按每条路由进行度量</a></li>
+<li><a href="#sec-4-2">ICMP的差错</a>
+<ul>
+<li><a href="#sec-4-2-1">实例</a></li>
+</ul>
+</li>
+<li><a href="#sec-4-3">重新分组</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
@@ -255,7 +265,7 @@ TCP提供可靠的运输层。它使用的方法之一就是确认从另一端�
 </p>
 
 <div id="outline-container-sec-1" class="outline-2">
-<h2 id="sec-1">简单例子</h2>
+<h2 id="sec-1">简单实例</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 首先观察TCP所使用的重传机制，先将建立一个连接，发送一些分组来证明一切正常，然后拔掉电缆，发送更多的数据，再观察TCP的行为：
@@ -1828,7 +1838,245 @@ cwnd的值一直持续增加，从图21-9中对应于报文段12的最终取值�
 
 
 <div id="outline-container-sec-4" class="outline-2">
-<h2 id="sec-4">按每条路由进行度量</h2>
+<h2 id="sec-4">其他</h2>
+<div class="outline-text-2" id="text-4">
+</div><div id="outline-container-sec-4-1" class="outline-3">
+<h3 id="sec-4-1">按每条路由进行度量</h3>
+<div class="outline-text-3" id="text-4-1">
+<p>
+较新的TCP实现在路由表项中维持许多在本章已经介绍过的指标。当一个TCP连接关闭时，如果已经发送了足够多的数据来获得有意义统计资料，且目的结点的路由表项不是一个默认的表项，那么下列信息就保存在路由表项中以备下次使用：被平滑的RTT、被平滑的均值偏差以及慢启动门限。所谓 <i>足够多的数据</i> 是指16个窗口的数据，这样就可得到16个RTT采样，从而使被平滑的RTT过滤器能够集中在正确结果的5%以内
+</p>
+
+<p>
+而且，管理员可以使用route(8)命令来设置给定路由的度量：前一段中给出的三个指标以及MT、输出的带宽时延乘积和输入的带宽时延乘积
+</p>
+
+<p>
+当建立一个新的连接时，不论是主动还是被动，如果该连接将要使用的路由表项已经有这些度量的值，则用这些度量来对相应的变量进行初始化
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-4-2" class="outline-3">
+<h3 id="sec-4-2">ICMP的差错</h3>
+<div class="outline-text-3" id="text-4-2">
+<p>
+看一下TCP是怎样处理一个给定的连接返回的ICMP的差错。TCP能够遇到的最常见的ICMP差错就是 <b>源站抑制</b> <b>主机不可达</b> <b>网络不可达</b> 
+</p>
+
+<p>
+当前基于伯克利的实现对这些错误的处理是：
+</p>
+<ul class="org-ul">
+<li>源站抑制：拥塞窗口 <b>cwnd被置为1个报文段大小来发起慢启动</b> ，但是 <b>慢启动门限ssthresh没有变化</b> 所以窗口将打开直至它或者开放了所有的通路（受窗口大小和往返时间的限制）或者发生了拥塞
+</li>
+<li>主机不可达或网络不可达：实际上都被忽略，因为这两个差错都被认为是短暂现象。这有可能是由于中间路由器被关闭而导致选路协议要花费数分钟才能稳定到另一个替换路由。在这个过程中就可能发生这两个ICMP差错中的一个，但是连接并不必被关闭。相反，TCP试图发送引起该差错的数据，尽管最终有可能会超时
+</li>
+</ul>
+
+<pre class="example">
+  当前基于伯克利的实现记录发生的ICMP差错，如果连接超时，ICMP差错被转换为一个更合适的的差错码而不是“连接超时”
+
+  早期的BSD实现在任何时候收到一个主机不可达或网络不可达的ICMP差错时会不正确的放弃连接
+</pre>
+</div>
+
+<div id="outline-container-sec-4-2-1" class="outline-4">
+<h4 id="sec-4-2-1">实例</h4>
+<div class="outline-text-4" id="text-4-2-1">
+<p>
+可以通过在连接中拨号SLIP链路的断开来观察一个ICMP主机不可达的差错是如何被处理的。建立一个从主机slip到主机aix的连接。在建立连接并发送一些数据之后，在路由器sun和netb之间的SLIP链路被断开，这引起sun上的默认路由表项被移去，预计sun对目的为140.252.1以太网的IP数据报响应ICMP主机不可达，以此来观察TCP如何处理这些ICMP差错：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">slip $ sock aix echo <span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#36816;&#34892;sock&#31243;&#24207;</span>
+
+<span style="color: #b0c4de;">test</span> line <span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#38190;&#20837;&#26412;&#34892;</span>
+<span style="color: #b0c4de;">test</span> line <span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#23427;&#30340;&#22238;&#26174;</span>
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#27492;&#26102;&#25346;&#26029;SLIP&#38142;&#36335;</span>
+
+another line <span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#28982;&#21518;&#38190;&#20837;&#26412;&#34892;&#24182;&#35266;&#23519;&#20854;&#34892;&#20026;</span>
+<span style="color: #ff4500;">#</span><span style="color: #ff4500;">SLIP&#38142;&#36335;&#27492;&#26102;&#37325;&#26032;&#24314;&#31435;</span>
+
+another line <span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#35813;&#34892;&#21450;&#20854;&#22238;&#26174;&#34987;&#20132;&#25442;</span>
+
+line number 3
+line number 3
+
+the last line
+<span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#27492;&#26102;&#25346;&#26029;SLIP&#38142;&#36335;,&#19988;&#27809;&#26377;&#37325;&#26032;&#24314;&#31435;</span>
+
+<span style="color: #b0c4de;">read</span> error: no route to host <span style="color: #ff4500;">#</span><span style="color: #ff4500;">TCP&#26368;&#32456;&#25918;&#24323;</span>
+</pre>
+</div>
+
+<p>
+图21-12显示了在路由器bsdi上截获的tcpdump的相应输出：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/tcp-slip-aix-dump.png" alt="tcp-slip-aix-dump.png" width="70%" />
+</p>
+</div>
+
+<ul class="org-ul">
+<li>第1行：连接到在主机aix上的回显服务器并键入"test line"
+</li>
+<li>第2行：被回显
+</li>
+<li>第3行：回显被确认
+</li>
+</ul>
+
+<p>
+断开了SLIP链路：
+</p>
+<ul class="org-ul">
+<li>键入"another line"，并希望看到TCP超时和重传报文。的确，这一行在收到应答前被发送了6次
+</li>
+<li>第4~13行：显示了第1次传输和接着的4次重传
+<ul class="org-ul">
+<li>每个都产生了一个来自路由器sun的ICMP主机不可达。从slip来的IP数据报发往路由器bsdi（sun的默认路由器），并到达检测到链路中断的sun
+</li>
+</ul>
+</li>
+</ul>
+
+<p>
+在发生这些重传时，SLIP链路又被连通：
+</p>
+<ul class="org-ul">
+<li>第14行：重传被交付
+</li>
+<li>第15行：来自aix的回显
+</li>
+<li>第16行：这个回显的确认
+<ul class="org-ul">
+<li><b>TCP忽略ICMP主机不可达的差错并坚持重传</b>
+</li>
+<li>每一次重传超时中的指数退避：
+<ul class="org-ul">
+<li>第1次约为2.5秒
+</li>
+<li>接着乘2（约5秒）
+</li>
+<li>乘4（约10秒）
+</li>
+<li>乘8（约20秒）
+</li>
+<li>乘14（约40秒）
+</li>
+</ul>
+</li>
+</ul>
+</li>
+
+<li>第17行：键入输入的第3行（"line number 3"）被发送
+</li>
+<li>第18行：回显
+</li>
+<li>第19行：回显进行确认
+</li>
+</ul>
+
+
+<p>
+现在观察在接收到ICMP主机不可达后，TCP重传并放弃的情况。再次断开SLIP链路，键入"the last line"，并观察到在TCP放弃之前该行被发送了13次（已经从结果中删除了第30~43行，它们是额外的重传）
+</p>
+
+<p>
+然而，sock程序在最终放弃时打印出来的差错信息： <b>没有到达主机的路由</b>  这表明TCP保存了它在连接上收到的ICMP差错，并在最终放弃时打印出该差错，而不是 <i>连接超时</i> 
+</p>
+
+<pre class="example">
+  注意到第22~46行与第6~14行不同的重传间隔
+
+  键入的第3行在第17~19行被发送和确认时（无任何重传），TCP更新了它的估计器
+
+  最初的重传超时时间现在是3秒，后续取值为6,12,24,48，直至上限64
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-4-3" class="outline-3">
+<h3 id="sec-4-3">重新分组</h3>
+<div class="outline-text-3" id="text-4-3">
+<p>
+当TCP超时并重传时，它不一定要重传同样的报文段。相反，TCP允许 <b>进行重新分组而发送一个较大的报文段</b> ，这将有助于提高性能（当然，这个较大的报文段不能够超过接收方声明的MSS）。在协议中这是允许的，因为TCP是使用字节序号而不是报文段序号来进行识别它所要发送的数据和进行确认。
+</p>
+
+<p>
+在实际中，可以很容易地看到这一点。使用sock程序连接到丢弃服务器并键入一行。接着拔掉以太网电缆并再键入一行。当这一行被重传时，键入第3行。我们预期下一个重传包含第2次和第3次键入的数据：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">bsdi $ sock svr4 discard
+
+hello there <span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#31532;&#19968;&#34892;&#21457;&#36865;&#25104;&#21151;</span>
+<span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#25509;&#30528;&#26029;&#24320;&#20197;&#22826;&#32593;&#30005;&#32518;</span>
+
+line number 2 <span style="color: #ff4500;">#</span><span style="color: #ff4500;">&#26412;&#34892;&#34987;&#37325;&#20256;</span>
+and 3 <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#22312;&#31532;2&#34892;&#21457;&#36865;&#25104;&#21151;&#20043;&#21069;&#38190;&#20837;&#26412;&#34892;</span>
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#37325;&#26032;&#36830;&#25509;&#20197;&#22826;&#32593;&#30005;&#32518;</span>
+</pre>
+</div>
+
+<p>
+图21-13显示了tcpdump的输出：
+</p>
+
+<div class="figure">
+<p><img src="pic/tcp-repacket.png" alt="tcp-repacket.png" width="70%" />
+</p>
+</div>
+
+<ul class="org-ul">
+<li>第1行：显示了"hello there"被发送
+</li>
+<li>第2行："hello there"的ACK
+</li>
+</ul>
+
+<p>
+接着拔掉以太网电缆并键入"line number 2"（14字节，包括换行）
+</p>
+
+<ul class="org-ul">
+<li>第3行："line number 2"被发送
+</li>
+<li>第4行和第行：重传"line number3"
+</li>
+</ul>
+
+<p>
+键入"and 3"（6个字节，包括换行）
+</p>
+<ul class="org-ul">
+<li>第6行：这个重传包括20个字节：键入的两行
+</li>
+<li>第7~8行：继续重传这两行
+</li>
+<li>第9行：当重传到达时，它确认了这20字节的数据
+</li>
+</ul>
+
+<p>
+<a href="tcp-persist-alarm.html">Next：TCP 坚持定时器</a>
+</p>
+
+<p>
+<a href="tcp-bucket-transmission.html">Previous：TCP 成块数据流</a>
+</p>
+
+<p>
+<a href="tii.html">Home：目录</a>
+</p>
+</div>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
