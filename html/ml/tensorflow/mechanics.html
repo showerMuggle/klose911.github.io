@@ -142,6 +142,642 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="tensorflow.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">Tensorflow运行方式</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#sec-1">准备文件</a></li>
+<li><a href="#sec-2">下载</a></li>
+<li><a href="#sec-3">输入与占位符</a></li>
+<li><a href="#sec-4">构建图表</a>
+<ul>
+<li><a href="#sec-4-1">推理</a>
+<ul>
+<li><a href="#sec-4-1-1">初始化</a></li>
+<li><a href="#sec-4-1-2">操作</a></li>
+</ul>
+</li>
+<li><a href="#sec-4-2">损失</a></li>
+<li><a href="#sec-4-3">训练</a></li>
+<li><a href="#sec-4-4">训练模型</a></li>
+</ul>
+</li>
+<li><a href="#sec-5">图表</a></li>
+<li><a href="#sec-6">会话</a></li>
+<li><a href="#sec-7">训练循环</a>
+<ul>
+<li><a href="#sec-7-1">向图表提供反馈</a></li>
+<li><a href="#sec-7-2">检查状态</a></li>
+<li><a href="#sec-7-3">保存检查点</a></li>
+</ul>
+</li>
+<li><a href="#sec-8">评估模型</a></li>
+<li><a href="#sec-9">构建评估图表</a></li>
+<li><a href="#sec-10">评估图表的输出</a></li>
+</ul>
+</div>
+</div>
+<p>
+本章的目标：展示如何利用TensorFlow使用MNIST数据集训练并评估一个用于识别手写数字的简易前馈神经网络
+</p>
+
+<div id="outline-container-sec-1" class="outline-2">
+<h2 id="sec-1">准备文件</h2>
+</div>
+
+<div id="outline-container-sec-2" class="outline-2">
+<h2 id="sec-2">下载</h2>
+<div class="outline-text-2" id="text-2">
+<p>
+在 <b>run<sub>training</sub>()</b> 方法的一开始， <b>input<sub>data</sub>.read<sub>data</sub><sub>sets</sub>()</b> 函数会确保你的本地训练文件夹中，已经下载了正确的数据，然后将这些数据解压并返回一个含有DataSet实例的字典：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #eedd82;">data_sets</span> = input_data.read_data_sets(FLAGS.train_dir, FLAGS.fake_data)
+</pre>
+</div>
+
+<pre class="example">
+  注意：fake_data标记是用于单元测试的
+</pre>
+
+<table border="2" cellspacing="0" cellpadding="6" rules="groups" frame="hsides">
+
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">数据集</td>
+<td class="left">目的</td>
+</tr>
+
+<tr>
+<td class="left">data<sub>sets</sub>.train</td>
+<td class="left">55000个图像和标签（labels），作为主要训练集</td>
+</tr>
+
+<tr>
+<td class="left">data<sub>sets</sub>.validation</td>
+<td class="left">5000个图像和标签，用于迭代验证训练准确度</td>
+</tr>
+
+<tr>
+<td class="left">data<sub>sets</sub>.test</td>
+<td class="left">10000个图像和标签，用于最终测试训练准确度</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+
+<div id="outline-container-sec-3" class="outline-2">
+<h2 id="sec-3">输入与占位符</h2>
+<div class="outline-text-2" id="text-3">
+<p>
+placeholder<sub>inputs</sub>()函数将生成两个tf.placeholder操作，定义传入图表中的shape参数，shape参数中包括batch<sub>size值，后续还会将实际的训练用例传入图表：</sub>
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #eedd82;">images_placeholder</span> = tf.placeholder(tf.float32, shape=(batch_size,
+                                                       IMAGE_PIXELS))
+<span style="color: #eedd82;">labels_placeholder</span> = tf.placeholder(tf.int32, shape=(batch_size))
+</pre>
+</div>
+
+<p>
+在训练循环的后续步骤中，传入的整个图像和标签数据集会被切片，以符合每一个操作所设置的batch<sub>size值，占位符操作将会填补以符合这个batch</sub><sub>size值。然后使用feed</sub><sub>dict参数，将数据传入sess</sub>.run()函数
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-4" class="outline-2">
+<h2 id="sec-4">构建图表</h2>
+<div class="outline-text-2" id="text-4">
+<p>
+在为数据创建占位符之后，就可以运行mnist.py文件，经过三阶段的模式函数操作：
+</p>
+<ol class="org-ol">
+<li>inference(): 尽可能地构建好图表，满足促使神经网络向前反馈并做出预测的要求
+</li>
+<li>loss(): 往inference图表中添加生成损失所需要的操作
+</li>
+<li>training(): 往损失图表中添加计算并应用梯度所需的操作
+</li>
+</ol>
+
+
+<div class="figure">
+<p><img src="pic/mnist_subgraph.png" alt="mnist_subgraph.png" width="90%" />
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-4-1" class="outline-3">
+<h3 id="sec-4-1">推理</h3>
+<div class="outline-text-3" id="text-4-1">
+<p>
+inference()函数会尽可能地构建图表，做到返回包含了预测结果的Tensor
+</p>
+<ol class="org-ol">
+<li>接受图像占位符为输入
+</li>
+<li>借助ReLu激活函数，构建一对完全连接层
+</li>
+<li>一个有着十个节点、指明了输出logits模型的线性层
+</li>
+</ol>
+
+<p>
+每一层都创建于一个唯一的 <b>tf.name<sub>scope</sub></b> 之下，创建于该作用域之下的所有元素都将带有其前缀
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #00ffff;">with</span> tf.name_scope(<span style="color: #ffa07a;">'hidden1'</span>) <span style="color: #00ffff;">as</span> scope:
+</pre>
+</div>
+</div>
+
+<div id="outline-container-sec-4-1-1" class="outline-4">
+<h4 id="sec-4-1-1">初始化</h4>
+<div class="outline-text-4" id="text-4-1-1">
+<p>
+在定义的作用域中，每一层所使用的权重和偏差都在 <b>tf.Variable实例</b> 中生成，并且包含了各自期望的shape：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #eedd82;">weights</span> = tf.Variable(
+<span style="background-color: #1a1a1a;"> </span>   tf.truncated_normal([IMAGE_PIXELS, hidden1_units],
+                        stddev=1.0 / math.sqrt(<span style="color: #b0c4de;">float</span>(IMAGE_PIXELS))),
+<span style="background-color: #1a1a1a;"> </span>   name=<span style="color: #ffa07a;">'weights'</span>)
+<span style="color: #eedd82;">biases</span> = tf.Variable(tf.zeros([hidden1_units]),
+                     name=<span style="color: #ffa07a;">'biases'</span>)
+</pre>
+</div>
+
+<ul class="org-ul">
+<li>当这些层是在 <b>hidden1</b> 作用域下生成时，赋予权重变量的独特名称将会是 <b>hidden1/weights</b>
+</li>
+<li>每个变量在构建时，都会获得初始化操作：
+<ul class="org-ul">
+<li>通过 <b>tf.truncated<sub>normal</sub></b> 函数初始化权重变量，给赋予的shape则是一个二维tensor：
+<ul class="org-ul">
+<li>第一个维度代表该层中权重变量所连接的单元数量
+</li>
+<li>第二个维度代表该层中权重变量所连接到的单元数量
+</li>
+<li>对于名叫hidden1的第一层，相应的维度则是[IMAGE<sub>PIXELS</sub>, hidden1<sub>units]，因为权重变量将图像输入连接到了hidden1层</sub>
+</li>
+<li>tf.truncated<sub>normal初始函数将根据所得到的均值和标准差，生成一个随机分布</sub>
+</li>
+</ul>
+</li>
+</ul>
+<p>
++通过tf.zeros函数初始化偏差变量，确保所有偏差的起始值都是0
+</p>
+<ul class="org-ul">
+<li>它们的shape则是其在该层中所接到的单元数量
+</li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-4-1-2" class="outline-4">
+<h4 id="sec-4-1-2">操作</h4>
+<div class="outline-text-4" id="text-4-1-2">
+<p>
+图表的三个主要操作，分别是：
+</p>
+<ul class="org-ul">
+<li>两个tf.nn.relu操作，它们中嵌入了隐藏层所需的tf.matmul
+</li>
+<li>logits模型所需的另外一个tf.matmul
+</li>
+</ul>
+
+<p>
+三者依次生成，各自的tf.Variable实例则与输入占位符或下一层的输出tensor所连接：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #eedd82;">hidden1</span> = tf.nn.relu(tf.matmul(images, weights) + biases)
+<span style="color: #eedd82;">hidden2</span> = tf.nn.relu(tf.matmul(hidden1, weights) + biases)
+<span style="color: #eedd82;">logits</span> = tf.matmul(hidden2, weights) + biases
+</pre>
+</div>
+
+<p>
+最后，程序会返回包含了输出结果的 <b>logits</b> Tensor
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-4-2" class="outline-3">
+<h3 id="sec-4-2">损失</h3>
+<div class="outline-text-3" id="text-4-2">
+<p>
+loss()函数通过添加所需的损失操作，进一步构建图表
+</p>
+
+<p>
+首先labels<sub>placeholer中的值，将被编码为一个含有1</sub>-hot values的Tensor。例如，如果类标识符为“3”，那么该值就会被转换为 [0, 0, 0, 1, 0, 0, 0, 0, 0, 0]：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #eedd82;">batch_size</span> = tf.size(labels)
+<span style="color: #eedd82;">labels</span> = tf.expand_dims(labels, 1)
+<span style="color: #eedd82;">indices</span> = tf.expand_dims(tf.<span style="color: #b0c4de;">range</span>(0, batch_size, 1), 1)
+<span style="color: #eedd82;">concated</span> = tf.concat(1, [indices, labels])
+<span style="color: #eedd82;">onehot_labels</span> = tf.sparse_to_dense(
+<span style="background-color: #1a1a1a;"> </span>   concated, tf.pack([batch_size, NUM_CLASSES]), 1.0, 0.0)
+</pre>
+</div>
+
+<p>
+之后，又添加一个 <b>tf.nn.softmax<sub>cross</sub><sub>entropy</sub><sub>with</sub><sub>logits</sub></b> 操作，用来比较inference()函数与1-hot标签所输出的logits Tensor：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #eedd82;">cross_entropy</span> = tf.nn.softmax_cross_entropy_with_logits(logits,
+                                                        onehot_labels,
+                                                        name=<span style="color: #ffa07a;">'xentropy'</span>)
+</pre>
+</div>
+
+<p>
+然后，使用 <b>tf.reduce<sub>mean</sub></b> 函数，计算batch维度（第一维度）下交叉熵的平均值，将该值作为总损失：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #eedd82;">loss</span> = tf.reduce_mean(cross_entropy, name=<span style="color: #ffa07a;">'xentropy_mean'</span>)
+</pre>
+</div>
+
+<p>
+最后，程序会返回包含了损失值的Tensor
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-4-3" class="outline-3">
+<h3 id="sec-4-3">训练</h3>
+<div class="outline-text-3" id="text-4-3">
+<p>
+training()函数添加了通过梯度下降将损失最小化所需的操作
+</p>
+
+<p>
+首先，该函数从loss()函数中获取损失Tensor，将其交给 <b>tf.scalar<sub>summary</sub></b> ，后者在与SummaryWriter配合使用时，可以向事件文件中生成汇总值，每次写入汇总值时，它都会释放损失Tensor的当前值：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python">tf.scalar_summary(loss.op.name, loss)
+</pre>
+</div>
+
+<p>
+接下来，实例化一个 <b>tf.train.GradientDescentOptimizer</b> ，负责按照所要求的学习效率应用梯度下降法：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #eedd82;">optimizer</span> = tf.train.GradientDescentOptimizer(FLAGS.learning_rate)
+</pre>
+</div>
+
+<p>
+之后，生成一个变量用于保存全局训练步骤的数值，并使用minimize()函数更新系统中的三角权重、增加全局步骤的操作。根据惯例，这个操作被称为 train<sub>op，是TensorFlow会话诱发一个完整训练步骤所必须运行的操作：</sub>
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #eedd82;">global_step</span> = tf.Variable(0, name=<span style="color: #ffa07a;">'global_step'</span>, trainable=<span style="color: #7fffd4;">False</span>)
+<span style="color: #eedd82;">train_op</span> = optimizer.minimize(loss, global_step=global_step)
+</pre>
+</div>
+
+<p>
+最后，程序返回包含了 <b>训练操作输出</b> 结果的Tensor
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-4-4" class="outline-3">
+<h3 id="sec-4-4">训练模型</h3>
+<div class="outline-text-3" id="text-4-4">
+<p>
+一旦图表构建完毕，就通过 <b>fully<sub>connected</sub><sub>feed</sub>.py</b> 文件中的用户代码进行循环地迭代式训练和评估
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-5" class="outline-2">
+<h2 id="sec-5">图表</h2>
+<div class="outline-text-2" id="text-5">
+<p>
+在run<sub>training</sub>()这个函数的一开始，是一个Python语言中的 <b>with</b> 命令，这个命令表明所有已经构建的 <b>操作都要与默认的tf.Graph全局实例</b> 关联起来：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #00ffff;">with</span> tf.Graph().as_default():
+</pre>
+</div>
+
+<p>
+<b>tf.Graph实例</b> 是一系列可以作为整体执行的操作：
+</p>
+<pre class="example">
+TensorFlow的大部分场景只需要依赖默认图表一个实例即可
+
+利用多个图表的更加复杂的使用场景也是可能的
+</pre>
+</div>
+</div>
+
+<div id="outline-container-sec-6" class="outline-2">
+<h2 id="sec-6">会话</h2>
+<div class="outline-text-2" id="text-6">
+<p>
+完成全部的构建准备、生成全部所需的操作之后，就可以创建一个tf.Session，用于运行图表：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #eedd82;">sess</span> = tf.Session()
+</pre>
+</div>
+
+<p>
+另外，也可以利用 <b>with代码块生成Session</b> ，限制作用域：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #00ffff;">with</span> tf.Session() <span style="color: #00ffff;">as</span> sess:
+</pre>
+</div>
+
+<p>
+Session函数中没有传入参数，表明该代码将会依附于（如果还没有创建会话，则会创建新的会话）默认的本地会话
+</p>
+
+<p>
+生成会话之后，所有tf.Variable实例都会立即通过调用各自初始化操作中的sess.run()函数进行初始化：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #eedd82;">init</span> = tf.initialize_all_variables()
+sess.run(init)
+</pre>
+</div>
+
+<p>
+sess.run()方法将会运行图表中与作为参数传入的操作相对应的完整子集。在初次调用时，init操作只包含了变量初始化程序tf.group。图表的其他部分不会在这里，而是在下面的训练循环运行
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-7" class="outline-2">
+<h2 id="sec-7">训练循环</h2>
+<div class="outline-text-2" id="text-7">
+<p>
+完成会话中变量的初始化之后，就可以开始训练了。
+</p>
+
+<p>
+训练的每一步都是通过用户代码控制，而能实现有效训练的最简单循环就是：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #00ffff;">for</span> step <span style="color: #00ffff;">in</span> <span style="color: #b0c4de;">xrange</span>(max_steps):
+<span style="background-color: #1a1a1a;"> </span>   sess.run(train_op)
+</pre>
+</div>
+
+<p>
+这里要更为复杂一点，原因是必须把输入的数据根据每一步的情况进行切分，以匹配之前生成的占位符
+</p>
+</div>
+
+<div id="outline-container-sec-7-1" class="outline-3">
+<h3 id="sec-7-1">向图表提供反馈</h3>
+<div class="outline-text-3" id="text-7-1">
+<p>
+执行每一步时，代码会生成一个反馈字典，其中包含对应步骤中训练所要使用的例子，这些例子的哈希键就是其所代表的 <b>占位符操作</b>
+</p>
+
+<p>
+<b>fill<sub>feed</sub><sub>dict</sub></b> 函数会查询给定的DataSet，索要下一批次batch<sub>size的图像和标签，与占位符相匹配的Tensor则会包含下一批次的图像和标签：</sub>
+</p>
+
+
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #eedd82;">images_feed</span>, <span style="color: #eedd82;">labels_feed</span> = data_set.next_batch(FLAGS.batch_size)
+</pre>
+</div>
+
+<p>
+然后，以占位符为哈希键，创建一个Python字典对象，键值则是其代表的反馈Tensor：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #eedd82;">feed_dict</span> = {
+<span style="background-color: #1a1a1a;"> </span>   images_placeholder: images_feed,
+<span style="background-color: #1a1a1a;"> </span>   labels_placeholder: labels_feed,
+}
+</pre>
+</div>
+
+<p>
+这个字典随后作为feed<sub>dict参数，传入sess</sub>.run()函数中，为这一步的训练提供输入样例
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-7-2" class="outline-3">
+<h3 id="sec-7-2">检查状态</h3>
+<div class="outline-text-3" id="text-7-2">
+<p>
+在运行sess.run函数时，要在代码中明确其需要获取的两个值： <b>[train<sub>op</sub>, loss]</b> 
+</p>
+
+
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #00ffff;">for</span> step <span style="color: #00ffff;">in</span> <span style="color: #b0c4de;">xrange</span>(FLAGS.max_steps):
+<span style="background-color: #1a1a1a;"> </span>   <span style="color: #eedd82;">feed_dict</span> = fill_feed_dict(data_sets.train,
+                               images_placeholder,
+                               labels_placeholder)
+<span style="background-color: #1a1a1a;"> </span>   <span style="color: #eedd82;">_</span>, <span style="color: #eedd82;">loss_value</span> = sess.run([train_op, loss],
+                             feed_dict=feed_dict)
+</pre>
+</div>
+
+<p>
+因为要获取这两个值，sess.run()会返回一个有两个元素的元组。其中每一个Tensor对象，对应了返回的元组中的numpy数组，而这些数组中包含了当前这步训练中对应Tensor的值。由于train<sub>op并不会产生输出，其在返回的元祖中的对应元素就是None，所以会被抛弃。但是，如果模型在训练中出现偏差，loss</sub> Tensor的值可能会变成NaN，所以要获取它的值，并记录下来
+</p>
+
+<p>
+假设训练一切正常，没有出现NaN，训练循环会每隔100个训练步骤，就打印一行简单的状态文本，告知用户当前的训练状态：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #00ffff;">if</span> step % 100 == 0:
+<span style="background-color: #1a1a1a;"> </span>   <span style="color: #00ffff;">print</span> <span style="color: #ffa07a;">'Step %d: loss = %.2f (%.3f sec)'</span> % (step, loss_value, duration)
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-7-3" class="outline-3">
+<h3 id="sec-7-3">保存检查点</h3>
+<div class="outline-text-3" id="text-7-3">
+<p>
+为了得到可以用来后续恢复模型以进一步训练或评估的检查点文件，实例化一个 <b>tf.train.Saver</b> 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #eedd82;">saver</span> = tf.train.Saver()
+</pre>
+</div>
+
+<p>
+在训练循环中，将定期调用 <b>saver.save()</b> 方法，向训练文件夹中写入包含了当前所有可训练变量值得检查点文件：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python">saver.save(sess, FLAGS.train_dir, global_step=step)
+</pre>
+</div>
+
+<p>
+这样，以后就可以使用 <b>saver.restore()</b> 方法，重载模型的参数，继续训练：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python">saver.restore(sess, FLAGS.train_dir)
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-8" class="outline-2">
+<h2 id="sec-8">评估模型</h2>
+<div class="outline-text-2" id="text-8">
+<p>
+每隔一千个训练步骤，代码会尝试使用训练数据集与测试数据集，对模型进行评估。do<sub>eval函数会被调用三次，分别使用训练数据集、验证数据集合测试数据集：</sub>
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #00ffff;">print</span> <span style="color: #ffa07a;">'Training Data Eval:'</span>
+do_eval(sess,
+        eval_correct,
+        images_placeholder,
+        labels_placeholder,
+        data_sets.train)
+<span style="color: #00ffff;">print</span> <span style="color: #ffa07a;">'Validation Data Eval:'</span>
+do_eval(sess,
+        eval_correct,
+        images_placeholder,
+        labels_placeholder,
+        data_sets.validation)
+<span style="color: #00ffff;">print</span> <span style="color: #ffa07a;">'Test Data Eval:'</span>
+do_eval(sess,
+        eval_correct,
+        images_placeholder,
+        labels_placeholder,
+        data_sets.test)
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-9" class="outline-2">
+<h2 id="sec-9">构建评估图表</h2>
+<div class="outline-text-2" id="text-9">
+<p>
+在打开默认图表之前，应该先调用 <b>get<sub>data</sub>(train=False)</b> 函数，抓取测试数据集
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #eedd82;">test_all_images</span>, <span style="color: #eedd82;">test_all_labels</span> = get_data(train=<span style="color: #7fffd4;">False</span>)
+</pre>
+</div>
+
+<p>
+在进入训练循环之前，应该先调用mnist.py文件中的 <b>evaluation</b> 函数，传入的logits和标签参数要与loss函数的一致。这样做事为了先构建Eval操作：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #eedd82;">eval_correct</span> = mnist.evaluation(logits, labels_placeholder)
+</pre>
+</div>
+
+<p>
+evaluation函数会生成tf.nn.in<sub>top</sub><sub>k</sub> 操作，如果 <b>在K个最有可能的预测中可以发现真的标签，那么这个操作就会将模型输出标记为正确</b> 。这里把K的值设置为1，也就是只有在预测是真的标签时，才判定它是正确的
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-10" class="outline-2">
+<h2 id="sec-10">评估图表的输出</h2>
+<div class="outline-text-2" id="text-10">
+<p>
+创建一个循环，往其中添加feed<sub>dict，并在调用sess</sub>.run()函数时传入eval<sub>correct操作，目的就是用给定的数据集评估模型</sub>
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #00ffff;">for</span> step <span style="color: #00ffff;">in</span> <span style="color: #b0c4de;">xrange</span>(steps_per_epoch):
+<span style="background-color: #1a1a1a;"> </span>   <span style="color: #eedd82;">feed_dict</span> = fill_feed_dict(data_set,
+                               images_placeholder,
+                               labels_placeholder)
+<span style="background-color: #1a1a1a;"> </span>   <span style="color: #eedd82;">true_count</span> += sess.run(eval_correct, feed_dict=feed_dict)
+</pre>
+</div>
+
+<p>
+<b>true<sub>count</sub></b> 变量会累加所有in<sub>top</sub><sub>k操作判定为正确的预测之和。接下来，只需要将正确测试的总数，除以例子总数，就可以得出准确率了：</sub>
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #eedd82;">precision</span> = <span style="color: #b0c4de;">float</span>(true_count) / <span style="color: #b0c4de;">float</span>(num_examples)
+<span style="color: #00ffff;">print</span> <span style="color: #ffa07a;">'  Num examples: %d  Num correct: %d  Precision @ 1: %0.02f'</span> % (
+<span style="background-color: #1a1a1a;"> </span>   num_examples, true_count, precision)
+</pre>
+</div>
+</div>
+</div>
 </div>
 <div id="postamble" class="status">
 
