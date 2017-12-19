@@ -152,6 +152,8 @@ for the JavaScript code in this tag.
 <li><a href="#sec-4">建立图形</a></li>
 <li><a href="#sec-5">训练模型</a></li>
 <li><a href="#sec-6">结果可视化</a></li>
+<li><a href="#sec-7">嵌套学习的评估: 类比推理</a></li>
+<li><a href="#sec-8">优化实现</a></li>
 </ul>
 </div>
 </div>
@@ -293,7 +295,7 @@ Word2vec是一种可以进行 <b>高效率词嵌套学习的预测模型</b> 。
 </p>
 <pre class="example">
   从技术层面来说，这种方法叫做负抽样
-
+  
   使用这个损失函数在数学层面上也有很好的解释：这个更新过程也近似于softmax函数的更新
 </pre>
 <p>
@@ -405,7 +407,7 @@ the quick brown fox jumped over the lazy dog
 </p>
 <pre class="example">
   简单起见，假设已经把语料库中的文字整型化了，这样每个整型代表一个单词
-
+  
   细节请查看 tensorflow/g3doc/tutorials/word2vec/word2vec_basic.py
 </pre>
 
@@ -495,6 +497,57 @@ Skip-Gram模型有两个输入：
 <p><img src="pic/tsne.png" alt="tsne.png" width="70%" />
 </p>
 </div>
+
+
+<p>
+可以看到相似的单词被聚类在一起。对word2vec模型更复杂的实现需要用到TensorFlow一些更高级的特性，具体是实现可以参考 tensorflow/models/embedding/word2vec.py
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-7" class="outline-2">
+<h2 id="sec-7">嵌套学习的评估: 类比推理</h2>
+<div class="outline-text-2" id="text-7">
+<p>
+词嵌套在NLP的预测问题中是非常有用且使用广泛地。如果要检测一个模型是否是可以成熟地区分词性或者区分专有名词的模型，最简单的办法就是直接检验它的预测词性、语义关系的能力，比如让它解决形如 <i>king is to queen as father is to ?</i> 这样的问题。这种方法叫做类比推理 
+</p>
+
+<p>
+如何执行这样的评估，可以看build_eval_graph()和 eval()这两个函数在下面源码中的使用 tensorflow/models/embedding/word2vec.py.
+</p>
+
+<p>
+超参数的选择对该问题解决的准确性有巨大的影响。想要模型具有很好的表现，需要有一个巨大的训练数据集，同时仔细调整参数的选择并且使用例如二次抽样的一些技巧
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-8" class="outline-2">
+<h2 id="sec-8">优化实现</h2>
+<div class="outline-text-2" id="text-8">
+<p>
+以上简单的例子展示了TensorFlow的灵活性。比如说，可以很轻松得用现成的tf.nn.sampled_softmax_loss()来代替tf.nn.nce_loss()构成目标函数。如果你对损失函数想做新的尝试，你可以用TensorFlow手动编写新的目标函数的表达式，然后用控制器执行计算。这种灵活性的价值体现在，探索一个机器学习模型时，可以很快地遍历这些尝试，从中选出最优。
+</p>
+
+<p>
+一旦你有了一个满意的模型结构，或许它就可以使实现运行地更高效（在短时间内覆盖更多的数据）。比如说，在本教程中使用的简单代码，实际运行速度都不错，因为使用Python来读取和填装数据，而这些在TensorFlow后台只需执行非常少的工作。如果你发现你的模型在输入数据时存在严重的瓶颈，你可以根据自己的实际问题自行实现一个数据阅读器。对于Skip-Gram 模型，已经完成了如下这个例子 tensorflow/models/embedding/word2vec.py
+</p>
+
+<p>
+如果I/O问题对你的模型已经不再是个问题，并且想进一步地优化性能，或许你可以自行编写TensorFlow操作单元，添加一个新的操作。相应的，也提供了Skip-Gram模型的例子 tensorflow/models/embedding/word2vec_optimized.py。请自行调节以上几个过程的标准，使模型在每个运行阶段有更好地性能
+</p>
+
+<p>
+<a href="rnn.html">Next：递归神经网络</a>
+</p>
+
+<p>
+<a href="mechanics.og">Previous：运行方式</a>
+</p>
+
+<p>
+<a href="tensorflow.html">目录</a>
+</p>
 </div>
 </div>
 </div>
