@@ -142,6 +142,241 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="tii.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">TCP：未来和性能</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#sec-1">路径MTU发现</a>
+<ul>
+<li><a href="#sec-1-1">实例</a></li>
+<li><a href="#sec-1-2">分组大小</a></li>
+</ul>
+</li>
+<li><a href="#sec-2">长肥管道</a></li>
+</ul>
+</div>
+</div>
+<p>
+TCP已经在从1200b/s的拨号SLIP链路到以太数据链路上运行了许多年。在80年代和90年代初期，以太网是运行TCP/IP最主要的数据链路方式。虽然TCP在比以太网速率高的环境（如T2电话线、FDDI及千兆比网络）中也能够正确运行，但在这些高速率环境下，TCP的某些限制就会暴露出来
+</p>
+
+<p>
+本章讨论TCP的一些修改建议，这些建议可以使TCP在高速率环境中获得最大的吞吐量：
+</p>
+<ul class="org-ul">
+<li>讨论 <b>路径MTU发现</b> 机制，主要关注它如何与TCP协同工作。这个机制通常可以使TCP为非本地的连接使用大于536字节的MTU，从而增加吞吐量
+</li>
+<li>接着介绍 <b>长肥</b> 管道，也就是那些具有很大的带宽时延乘积的网络，以及TCP在这些网络上所具有的局限性。为处理长肥管道，描述两个新的TCP选项：
+<ul class="org-ul">
+<li><b>窗口扩大</b> 选项：用来增加TCP的最大窗口，使之超过65535字节
+</li>
+<li><b>时间戳</b> 选项：可以使TCP对报文段进行更加精确的RTT测量，还可以在高速率下对可能发生的序号回绕提供保护
+</li>
+<li><b>T/TCP</b> ：为增加事务功能而对TCP进行的修改
+<ul class="org-ul">
+<li>通信的事务模式以客户的请求将被服务器应答的响应为主要特征。这是客户服务器计算的常见模型
+</li>
+<li>T/TCP的目的就是减少两端交换的报文段数量，避免三次握手和使用4个报文段进行连接的关闭，从而使客户可以在一个RTT和处理请求所必需的时间内收到服务器的应答
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+<p>
+这些新选项中令人印象最深刻的就是它们与现有的TCP实现能够 <b>向后兼容</b> 即包括这些新选项的系统仍然可以与原有的旧系统进行交互。除了在一个ICMP报文中为路径MTU发现增加了一个额外字段之外，这些新的选项只需要在那些需要使用它们的端系统中进行实现
+</p>
+
+<ul class="org-ul">
+<li>最后介绍近来发表的有关 <b>TCP性能</b> 的图例
+</li>
+</ul>
+
+
+<div id="outline-container-sec-1" class="outline-2">
+<h2 id="sec-1">路径MTU发现</h2>
+<div class="outline-text-2" id="text-1">
+<p>
+曾经描述过 <b>路径MTU</b> 的概念。这是当前在两个主机之间的路径上任何网络上的最小MTU。路径MTU发现在IP首部中继承并设置 <b>不要分片（DF）比特</b> 来发现当前路径上的路由器是否需要对正在发送的IP数据报进行分片。在11.6节观察到如果一个待转发的IP数据报被设置DF比特，而其长度又超过了MTU，那么路由器将返回 <i>ICMP不可达的差错</i> 在11.7节显示了某版本的traceroute程序使用该机制来决定目的地的路径MTU。在11.8节看到UDP是怎样处理路径MTU发现的。在本节将讨论这个机制是如何按照RFC 1191中规定的那样在TCP中进行使用的
+</p>
+
+<p>
+TCP的路径MTU发现按如下方式进行：
+</p>
+<ol class="org-ol">
+<li>在连接建立时，TCP使用输出接口或对端声明的MSS中的最小MTU作为起始的报文段大小
+<ul class="org-ul">
+<li>路径MTU发现不允许TCP超过对端声明的MSS
+</li>
+<li>如果对端没有指定一个MSS，则默认为536
+</li>
+</ul>
+</li>
+<li>一旦选定了起始的报文段大小，在该连接上的所有被TCP发送的IP数据报都将被设置DF比特
+<ul class="org-ul">
+<li>如果某个中间路由器需要对一个设置了DF标志的数据报进行分片，它就丢弃这个数据报，并产生一个ICMP的 <b>不能分片</b> 差错
+</li>
+</ul>
+</li>
+<li>如果收到这个ICMP差错，TCP就减少段大小并进行重传
+<ul class="org-ul">
+<li>如果路由器产生的是一个较新的该类ICMP差错，则报文段大小被设置为下一跳的MTU减去IP和TCP的首部长度
+</li>
+<li>如果是一个较旧的该类ICMP差错，则必须尝试下一个可能的最小MTU
+</li>
+<li>当由这个ICMP差错引起的重传发生时，拥塞窗口不需要变化，但要 <b>启动慢启动</b> 
+</li>
+</ul>
+</li>
+</ol>
+
+<pre class="example">
+由于路由可以动态变化，因此在最后一次减少路径MTU的一段时间以后，可以尝试使用一个较大的值，直到等于对端声明的MSS或输出接口MTU的最小值
+
+RFC 1191推荐这个时间间隔为10分钟
+</pre>
+
+<ul class="org-ul">
+<li>在对非本地目的地，默认的MSS通常为536字节，路径MTU发现可以避免在通过MTU小于576的中间链路时进行分片
+</li>
+<li>对于本地目的主机，也可以避免在中间链路（如以太网）的MTU小于端点网络（如令牌环网）的情况下进行分片
+</li>
+<li>但为了能使路径MTU更加有用和充分利用MTU大于576的广域网，一个实现必须停止使用为非本地目的制定的536的MTU默认值
+</li>
+<li>MSS的一个较好的选择是输出接口的MTU（当然要减去IP和TCP的首部大小），现在MTU的值一般是1500-40=1460
+</li>
+</ul>
+</div>
+
+
+<div id="outline-container-sec-1-1" class="outline-3">
+<h3 id="sec-1-1">实例</h3>
+<div class="outline-text-3" id="text-1-1">
+<p>
+在某个中间路由器的MTU比任一个端点接口MTU小的情况下，能够观察路径MTU发现是如何工作的。图24-1显示了这个例子的拓扑结构：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/tcp-mtu-sample.png" alt="tcp-mtu-sample.png" width="70%" />
+</p>
+</div>
+
+<p>
+从主机solaris（支持路径MTU发现机制）到主机slip建立一个连接。在这里把slip接口的MTU设置为552，而不是通常的296。这使得slip通告一个512的MSS。但是在bsdi上的SLIP链路上的MTU为296，这就引起超过256的TCP报文段被分片。于是就可以观察在solaris上的路径MTU发现是如何进行处理的
+</p>
+
+<p>
+在solaris上运行sock程序并向slip上的丢弃服务器进行一个512字节的写操作：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">solaris$ sock -i -n1 -w512 slip discard
+</pre>
+</div>
+
+<p>
+图24-2是在主机sun的SLIP接口上收集的tcpdump的输出结果：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/tcp-mtu-find-dump.png" alt="tcp-mtu-find-dump.png" width="70%" />
+</p>
+</div>
+
+
+<ul class="org-ul">
+<li>第1和第2行：互相通告MSS值
+</li>
+<li>第3行：solaris发送一个包含512字节的数据和对SYN的确认报文段
+</li>
+<li>第4行：产生了一个ICMP差错，这是路由器bsdi产生较新的 <b>包含输出接口MTU</b> 的ICMP差错
+</li>
+<li>第5行：在这个差错回到solaris之前，就发送了FIN
+</li>
+<li>第6行：由于slip没有收到被路由器bsdi丢弃的512字节的数据，因此并不期望接收这个序号 <i>513</i> 所以用它期望的序号 <i>1</i> 进行了响应
+</li>
+<li>第7和9行：ICMP差错返回到了solaris，solaris用两个256字节的报文段重传了512字节的数据
+<ul class="org-ul">
+<li>因为在bsdi后面可能还有具有更小的MTU的路由器，因此这两个报文段都设置了 <b>DF比特</b> 
+</li>
+</ul>
+</li>
+</ul>
+
+<p>
+接着是一个较长的传输过程（持续了大约15分钟），在最初的512字节变为256字节以后，solaris没有再尝试使用更大的报文段
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-1-2" class="outline-3">
+<h3 id="sec-1-2">分组大小</h3>
+<div class="outline-text-3" id="text-1-2">
+<p>
+常识来说较大的分组比较好，因为发送较少的大分组比发送较多的小分组 <b>花费</b> 要少 <i>假定分组的大小不足以引起分片，否则会引起其他方面的问题</i> 这些减少的花费与网络（分组首部负荷）、路由器（选路的决定）和主机（协议处理和设备中断）等有关。但并非所有的人都同意这种观点
+</p>
+
+<p>
+通过4个路由器发送8192个字节，每个路由器与一个T1电话线（1544000b/s）相连。首先使用两个4096字节的分组，如图24-3所示：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/tcp-large-mtu.png" alt="tcp-large-mtu.png" width="70%" />
+</p>
+</div>
+
+<p>
+问题在于路由器是 <b>存储转发设备</b> 它们通常接收整个输入分组，检验包含IP检验和的IP首部，进行选路判决，然后开始发送输出分组。在这个图中，可以假定在理想情况下这些在路由器内部进行的操作不花费时间（水平点状线）。然而，从R1到R4它需要花费4个单位时间来发送所有的8192字节。每一跳的时间为：
+</p>
+
+<pre class="example">
+(4096 + 40) * 8 / 1544000 = 21.4ms/跳
+</pre>
+
+<p>
+其中，将TCP和IP的首部算为40字节，每个字节是8bit。发送数据的整个时间为分组个数加上跳数减1，从图中可以看到是4个单位时间 <b>85.6秒</b> 每个链路空闲2个单位时间 <b>42.8秒</b> 
+</p>
+
+<p>
+图24-4显示了发送16个512字节的分组时所发生的情况：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/tcp-small-mtu.png" alt="tcp-small-mtu.png" width="70%" />
+</p>
+</div>
+
+<p>
+这将花费更多的单位时间，但是由于发送的分组较短，因此每个单位时间较小：
+</p>
+<pre class="example">
+(512 + 40) * 8 / 1544000 = 2.9ms/跳
+</pre>
+
+<p>
+现在总时间为 (18×2.9) = <b>52.2ms</b> 每个链路也空闲2个单位的时间即 <b>5.8ms</b>
+</p>
+
+<pre class="example">
+  在这个例子中，忽略了确认返回所需要的时间、连接建立和终止以及链路可能被其他流量共享等的影响
+</pre>
+
+<p>
+根据现有的测量表明： <b>分组并不一定是越大越好</b> 需要在更多的网络上对该领域进行更多的研究
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2" class="outline-2">
+<h2 id="sec-2">长肥管道</h2>
+</div>
 </div>
 <div id="postamble" class="status">
 
