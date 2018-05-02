@@ -183,25 +183,28 @@ for the JavaScript code in this tag.
 </li>
 <li><a href="#sec-7">数据</a>
 <ul>
-<li><a href="#sec-7-1">new 分配</a></li>
-<li><a href="#sec-7-2">构造函数与复合字面</a></li>
-<li><a href="#sec-7-3">make分配</a></li>
-<li><a href="#sec-7-4">数组</a></li>
-<li><a href="#sec-7-5">切片</a>
+<li><a href="#sec-7-1">new 分配</a>
 <ul>
-<li><a href="#sec-7-5-1">二维切片</a></li>
+<li><a href="#sec-7-1-1">构造函数与复合字面</a></li>
 </ul>
 </li>
-<li><a href="#sec-7-6">映射</a></li>
-<li><a href="#sec-7-7">打印</a></li>
-<li><a href="#sec-7-8">追加</a></li>
+<li><a href="#sec-7-2">make分配</a></li>
+<li><a href="#sec-7-3">数组</a></li>
+<li><a href="#sec-7-4">切片</a>
+<ul>
+<li><a href="#sec-7-4-1">二维切片</a></li>
+</ul>
+</li>
+<li><a href="#sec-7-5">映射</a></li>
+<li><a href="#sec-7-6">打印</a></li>
+<li><a href="#sec-7-7">追加</a></li>
 </ul>
 </li>
 <li><a href="#sec-8">初始化</a>
 <ul>
 <li><a href="#sec-8-1">常量</a></li>
 <li><a href="#sec-8-2">变量</a></li>
-<li><a href="#sec-8-3">初始化</a></li>
+<li><a href="#sec-8-3">init函数</a></li>
 </ul>
 </li>
 <li><a href="#sec-9">方法</a>
@@ -212,10 +215,13 @@ for the JavaScript code in this tag.
 <li><a href="#sec-10">接口与其它类型</a>
 <ul>
 <li><a href="#sec-10-1">接口</a></li>
-<li><a href="#sec-10-2">类型转换</a></li>
-<li><a href="#sec-10-3">接口转换与类型断言</a></li>
-<li><a href="#sec-10-4">通用性</a></li>
-<li><a href="#sec-10-5">接口与方法</a></li>
+<li><a href="#sec-10-2">类型转换</a>
+<ul>
+<li><a href="#sec-10-2-1">接口转换与类型断言</a></li>
+</ul>
+</li>
+<li><a href="#sec-10-3">通用性</a></li>
+<li><a href="#sec-10-4">接口与方法</a></li>
 </ul>
 </li>
 <li><a href="#sec-11">空白标识符</a>
@@ -267,7 +273,7 @@ Go 是一门全新的语言。尽管它从既有的语言中借鉴了许多理�
 </p>
 
 <p>
-举例来说，你无需花时间将结构体中的字段注释对齐，gofmt 将为你代劳。 假如有以下声明
+举例来说，无需花时间将结构体中的字段注释对齐，gofmt 将为你代劳。 假如有以下声明
 </p>
 
 <div class="org-src-container">
@@ -1165,62 +1171,979 @@ leaving: b
 <div class="outline-text-2" id="text-7">
 </div><div id="outline-container-sec-7-1" class="outline-3">
 <h3 id="sec-7-1">new 分配</h3>
+<div class="outline-text-3" id="text-7-1">
+<p>
+Go提供了两种分配原语，即内建函数 new 和 make。 它们所做的事情不同，所应用的类型也不同。它们可能会引起混淆，但规则却很简单。 让我们先来看看 new。这是个 <b>用来分配内存的内建函数</b> ， 但与其它语言中的同名函数不同， 它 <b>不会初始化内存</b> ，只会将 <b>内存置零</b> 。 也就是说， <span class="underline">new(T) 会为类型为 T 的新项分配已置零的内存空间， 并返回它的地址，也就是一个类型为 *T 的值</span> 用Go的术语来说，*它返回一个指针， 该指针指向新分配的，类型为 T 的零值* 
+</p>
+
+<p>
+既然 new 返回的内存已置零，那么 <b>当你设计数据结构时， 每种类型的零值就不必进一步初始化了，这意味着该数据结构的使用者只需用 new 创建一个新的对象就能正常工作</b> 例如，bytes.Buffer 的文档中提到 <span class="underline">零值的 Buffer 就是已准备就绪的缓冲区</span>  同样， <span class="underline">sync.Mutex 并没有显式的构造函数或 Init 方法， 而是零值的 sync.Mutex 就已经被定义为已解锁的互斥锁了</span> 
+</p>
+
+<p>
+<b>零值属性</b> 可以带来各种好处。考虑以下类型声明：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">type</span> <span style="color: #98fb98;">SyncedBuffer</span> <span style="color: #00ffff;">struct</span> {
+        lock    sync.Mutex
+        buffer  bytes.Buffer
+}
+</pre>
+</div>
+
+<p>
+SyncedBuffer 类型的值也是在 <b>声明时就分配好内存就绪</b>  后续代码中， p 和 v 无需进一步处理即可正确工作 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go">p := <span style="color: #b0c4de;">new</span>(<span style="color: #98fb98;">SyncedBuffer</span>)  <span style="color: #ff4500;">// </span><span style="color: #ff4500;">type *SyncedBuffer</span>
+<span style="color: #00ffff;">var</span> v SyncedBuffer      <span style="color: #ff4500;">// </span><span style="color: #ff4500;">type  SyncedBuffer</span>
+</pre>
+</div>
+</div>
+
+<div id="outline-container-sec-7-1-1" class="outline-4">
+<h4 id="sec-7-1-1">构造函数与复合字面</h4>
+<div class="outline-text-4" id="text-7-1-1">
+<p>
+有时零值还不够好，这时就需要一个初始化构造函数，如来自 os 包中的这段代码所示：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">func</span> <span style="color: #87cefa;">NewFile</span>(fd <span style="color: #98fb98;">int</span>, name <span style="color: #98fb98;">string</span>) *<span style="color: #98fb98;">File</span> {
+        <span style="color: #00ffff;">if</span> fd &lt; 0 {
+                <span style="color: #00ffff;">return</span> <span style="color: #7fffd4;">nil</span>
+        }
+        f := <span style="color: #b0c4de;">new</span>(<span style="color: #98fb98;">File</span>)
+        f.fd = fd
+        f.name = name
+        f.dirinfo = <span style="color: #7fffd4;">nil</span>
+        f.nepipe = 0
+        <span style="color: #00ffff;">return</span> f
+}
+</pre>
+</div>
+
+<p>
+这里显得代码过于冗长。可通过 <b>复合字面</b> 来简化它， 该表达式在 <b>每次求值时都会创建新的实例</b> 
+</p>
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">func</span> <span style="color: #87cefa;">NewFile</span>(fd <span style="color: #98fb98;">int</span>, name <span style="color: #98fb98;">string</span>) *<span style="color: #98fb98;">File</span> {
+        <span style="color: #00ffff;">if</span> fd &lt; 0 {
+                <span style="color: #00ffff;">return</span> <span style="color: #7fffd4;">nil</span>
+        }
+        f := <span style="color: #98fb98;">File</span>{fd, name, <span style="color: #7fffd4;">nil</span>, 0}
+        <span style="color: #00ffff;">return</span> &amp;f
+}
+</pre>
+</div>
+
+<ul class="org-ul">
+<li>请注意 <b>返回一个局部变量的地址完全没有问题</b> 这点与C不同(在C里面这样的返回必须使用malloc)。该局部变量对应的数据在函数返回后依然有效。实际上 <span class="underline">每当获取一个复合字面的地址时，都将为一个新的实例分配内存</span>  因此可以将上面的最后两行代码合并： 
+</li>
+</ul>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">return</span> &amp;<span style="color: #98fb98;">File</span>{fd, name, <span style="color: #7fffd4;">nil</span>, 0}
+</pre>
+</div>
+
+<ul class="org-ul">
+<li>复合字面的字段必须按顺序全部列出。但如果以 <b>字段:值</b>  对的形式明确地标出元素，初始化字段时就可以按任何顺序出现，未给出的字段值将赋予零值。因此，可以用如下形式： 
+</li>
+</ul>
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">return</span> &amp;<span style="color: #98fb98;">File</span>{fd: fd, name: name}
+</pre>
+</div>
+
+<ul class="org-ul">
+<li>少数情况下，若复合字面不包括任何字段，它将创建该类型的零值。 <b>表达式 new(File) 和 &amp;File{} 是等价的</b> 
+</li>
+
+<li>复合字面同样可用于创建数组、切片以及映射，字段标签是索引还是映射键则视情况而定。 在下例初始化过程中，无论 Enone、Eio 和 Einval 的值是什么，只要它们的标签不同就行
+</li>
+</ul>
+
+<div class="org-src-container">
+
+<pre class="src src-go">a := [...]<span style="color: #98fb98;">string</span>   {Enone: <span style="color: #ffa07a;">"no error"</span>, Eio: <span style="color: #ffa07a;">"Eio"</span>, Einval: <span style="color: #ffa07a;">"invalid argument"</span>}
+s := []<span style="color: #98fb98;">string</span>      {Enone: <span style="color: #ffa07a;">"no error"</span>, Eio: <span style="color: #ffa07a;">"Eio"</span>, Einval: <span style="color: #ffa07a;">"invalid argument"</span>}
+m := <span style="color: #00ffff;">map</span>[<span style="color: #98fb98;">int</span>]<span style="color: #98fb98;">string</span>{Enone: <span style="color: #ffa07a;">"no error"</span>, Eio: <span style="color: #ffa07a;">"Eio"</span>, Einval: <span style="color: #ffa07a;">"invalid argument"</span>}
+</pre>
+</div>
+</div>
+</div>
 </div>
 
 <div id="outline-container-sec-7-2" class="outline-3">
-<h3 id="sec-7-2">构造函数与复合字面</h3>
+<h3 id="sec-7-2">make分配</h3>
+<div class="outline-text-3" id="text-7-2">
+<p>
+内建函数 make(T, args) 的目的不同于 new(T)。它只用于创建 <b>切片、映射和信道</b> ，并返回类型为 <b>T</b> （而非  <span class="underline">*T</span> ）的一个 <b>已初始化</b> （而 <b>非置零</b> ）的值
+</p>
+
+<p>
+出现这种用差异的原因在于: 这三种类型本质上为 <b>引用数据类型，它们在使用前必须初始化</b> 例如，切片是一个具有三项内容的描述符，包含一个指向（数组内部）数据的指针、长度以及容量， 在这三项被初始化之前，该切片为 nil。对于切片、映射和信道， <b>make 用于初始化其内部的数据结构并准备好将要使用的值</b> 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #b0c4de;">make</span>([]<span style="color: #98fb98;">int</span>, 10, 100)
+</pre>
+</div>
+
+<p>
+会分配一个具有100个 int 的数组空间，接着创建一个长度为10， 容量为100并指向该数组中前10个元素的切片结构。与此相反，new([]int) 会返回一个指向新分配的，已置零的切片结构， 即一个指向 nil 切片值的指针
+</p>
+
+<p>
+下面的例子阐明了 new 和 make 之间的区别：  
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">var</span> p *[]<span style="color: #98fb98;">int</span> = <span style="color: #b0c4de;">new</span>([]<span style="color: #98fb98;">int</span>)       <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#20998;&#37197;&#20999;&#29255;&#32467;&#26500;&#65307;*p == nil&#65307;&#22522;&#26412;&#27809;&#29992;</span>
+<span style="color: #00ffff;">var</span> v  []<span style="color: #98fb98;">int</span> = <span style="color: #b0c4de;">make</span>([]<span style="color: #98fb98;">int</span>, 100) <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#20999;&#29255; v &#29616;&#22312;&#24341;&#29992;&#20102;&#19968;&#20010;&#20855;&#26377; 100 &#20010; int &#20803;&#32032;&#30340;&#26032;&#25968;&#32452;</span>
+
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#27809;&#24517;&#35201;&#30340;&#22797;&#26434;&#65306;</span>
+<span style="color: #00ffff;">var</span> p *[]<span style="color: #98fb98;">int</span> = <span style="color: #b0c4de;">new</span>([]<span style="color: #98fb98;">int</span>)
+*p = <span style="color: #b0c4de;">make</span>([]<span style="color: #98fb98;">int</span>, 100, 100)
+
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#20064;&#24815;&#29992;&#27861;&#65306;</span>
+v := <span style="color: #b0c4de;">make</span>([]<span style="color: #98fb98;">int</span>, 100)
+</pre>
+</div>
+
+<p>
+请记住: 
+</p>
+<ul class="org-ul">
+<li><b>make 只适用于映射、切片和信道且不返回指针</b>
+</li>
+<li><b>若要获得明确的指针， 请使用 new 分配内存</b> 
+</li>
+</ul>
+</div>
 </div>
 
 <div id="outline-container-sec-7-3" class="outline-3">
-<h3 id="sec-7-3">make分配</h3>
+<h3 id="sec-7-3">数组</h3>
+<div class="outline-text-3" id="text-7-3">
+<p>
+在详细规划内存布局时，数组是非常有用的，有时还能避免过多的内存分配， 但它们主要用作切片的构件
+</p>
+
+<p>
+以下为数组在Go和C中的主要区别。在Go中，
+</p>
+<ul class="org-ul">
+<li>数组是值: <b>将一个数组赋予另一个数组会复制其所有元素</b> 
+</li>
+<li><b>若将某个数组传入某个函数，它将接收到该数组的一份副本而非指针</b>
+</li>
+<li>数组的大小是其类型的一部分。类型 [ 10 ]int 和 [ 20 ]int 是不同的
+</li>
+</ul>
+
+<p>
+数组为值的属性很有用，但代价高昂。*若你想要C那样的行为和效率，可以传递一个指向该数组的指针* 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">func</span> <span style="color: #87cefa;">Sum</span>(a *[3]<span style="color: #98fb98;">float64</span>) (sum <span style="color: #98fb98;">float64</span>) {
+        <span style="color: #00ffff;">for</span> _, v := <span style="color: #00ffff;">range</span> *a {
+                sum += v
+        }
+        <span style="color: #00ffff;">return</span>
+}
+
+array := [...]<span style="color: #98fb98;">float64</span>{7.0, 8.5, 9.1}
+x := <span style="color: #87cefa;">Sum</span>(&amp;array)  <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#27880;&#24847;&#26174;&#24335;&#30340;&#21462;&#22336;&#25805;&#20316;</span>
+</pre>
 </div>
 
+<p>
+但这并不是Go的习惯用法 <b>切片</b> 才是
+</p>
+</div>
+</div>
 <div id="outline-container-sec-7-4" class="outline-3">
-<h3 id="sec-7-4">数组</h3>
+<h3 id="sec-7-4">切片</h3>
+<div class="outline-text-3" id="text-7-4">
+<p>
+切片通过对数组进行封装，为数据序列提供了更通用、强大而方便的接口。 除了 <b>矩阵变换</b> 这类需要明确维度的情况外，Go中的大部分数组编程都是通过切片来完成的
+</p>
+
+<ul class="org-ul">
+<li>切片保存了对底层数组的引用， <b>若将某个切片赋予另一个切片，它们会引用同一个数组</b>
+</li>
+<li><b>若某个函数将一个切片作为参数传入，则它对该切片元素的修改对调用者而言同样可见， 这可以理解为传递了底层数组的指针</b> 
+</li>
+</ul>
+
+<p>
+Read 函数可接受一个切片实参 而非一个指针和一个计数, <b>切片的长度决定了可读取数据的上限</b> 以下为 os 包中 File 类型的 Read 方法签名:
+</p>
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">func</span> (file *<span style="color: #98fb98;">File</span>) <span style="color: #87cefa;">Read</span>(buf []<span style="color: #98fb98;">byte</span>) (n <span style="color: #98fb98;">int</span>, err <span style="color: #98fb98;">error</span>)
+</pre>
+</div>
+
+<p>
+该方法返回读取的字节数和一个错误值（若有的话）。若要从更大的缓冲区 b 中读取前32个字节，只需对其进行切片即可
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go">n, err := f.<span style="color: #87cefa;">Read</span>(buf[0:32])
+</pre>
+</div>
+
+<p>
+这种切片的方法常用且高效。若不谈效率，以下片段同样能读取该缓冲区的前32个字节
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">var</span> n int
+<span style="color: #00ffff;">var</span> err error
+<span style="color: #00ffff;">for</span> i := 0; i &lt; 32; i++ {
+        nbytes, e := f.<span style="color: #87cefa;">Read</span>(buf[i:i+1])  <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#35835;&#21462;&#19968;&#20010;&#23383;&#33410;</span>
+        <span style="color: #00ffff;">if</span> nbytes == 0 || e != <span style="color: #7fffd4;">nil</span> {
+                err = e
+                <span style="color: #00ffff;">break</span>
+        }
+        n += nbytes
+}
+</pre>
+</div>
+
+<ul class="org-ul">
+<li>只要切片不超出底层数组的限制， <b>它的长度就是可变的，只需将它赋予其自身的切片即可</b>
+</li>
+<li>切片的容量可通过内建函数 <b>cap</b>  获得，它将给出该切片可取得的最大长度
+</li>
+</ul>
+
+<p>
+以下是将数据追加到切片的函数。若数据超出其容量，则会重新分配该切片。返回值即为所得的切片。 该函数中所使用的 len 和 cap 在应用于 nil 切片时是合法的，它会返回0
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">func</span> <span style="color: #87cefa;">Append</span>(slice, data []<span style="color: #98fb98;">byte</span>) []<span style="color: #98fb98;">byte</span> {
+        l := <span style="color: #b0c4de;">len</span>(slice)
+        <span style="color: #00ffff;">if</span> l + <span style="color: #b0c4de;">len</span>(data) &gt; <span style="color: #b0c4de;">cap</span>(slice) {  <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#37325;&#26032;&#20998;&#37197;</span>
+                <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#20026;&#20102;&#21518;&#38754;&#30340;&#22686;&#38271;&#65292;&#38656;&#20998;&#37197;&#20004;&#20221;&#12290;</span>
+                newSlice := <span style="color: #b0c4de;">make</span>([]<span style="color: #98fb98;">byte</span>, (l+<span style="color: #b0c4de;">len</span>(data))*2)
+                <span style="color: #ff4500;">// </span><span style="color: #ff4500;">copy &#20989;&#25968;&#26159;&#39044;&#22768;&#26126;&#30340;&#65292;&#19988;&#21487;&#29992;&#20110;&#20219;&#20309;&#20999;&#29255;&#31867;&#22411;&#12290;</span>
+                <span style="color: #b0c4de;">copy</span>(newSlice, slice)
+                slice = newSlice
+        }
+        slice = slice[0:l+<span style="color: #b0c4de;">len</span>(data)]
+        <span style="color: #00ffff;">for</span> i, c := <span style="color: #00ffff;">range</span> data {
+                slice[l+i] = c
+        }
+        <span style="color: #00ffff;">return</span> slice
+}
+</pre>
+</div>
+
+<p>
+最终我们必须返回切片，因为尽管 Append 可修改 slice 的元素，但 <b>切片自身（其运行时数据结构包含指针、长度和容量）是通过值传递的</b> 
+</p>
+</div>
+
+<div id="outline-container-sec-7-4-1" class="outline-4">
+<h4 id="sec-7-4-1">二维切片</h4>
+<div class="outline-text-4" id="text-7-4-1">
+<p>
+Go的数组和切片都是一维的。要创建等价的二维数组或切片，就 <b>必须定义一个数组的数组， 或切片的切片</b> 就像这样：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">type</span> <span style="color: #98fb98;">Transform</span> [3][3]<span style="color: #98fb98;">float64</span>  <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#19968;&#20010; 3x3 &#30340;&#25968;&#32452;&#65292;&#20854;&#23454;&#26159;&#21253;&#21547;&#22810;&#20010;&#25968;&#32452;&#30340;&#19968;&#20010;&#25968;&#32452;&#12290;</span>
+<span style="color: #00ffff;">type</span> <span style="color: #98fb98;">LinesOfText</span> [][]<span style="color: #98fb98;">byte</span>     <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#21253;&#21547;&#22810;&#20010;&#23383;&#33410;&#20999;&#29255;&#30340;&#19968;&#20010;&#20999;&#29255;&#12290;</span>
+</pre>
+</div>
+
+<p>
+由于切片长度是可变的，因此其 <b>内部可能拥有多个不同长度的切片</b> 在 LinesOfText 例子中，这是种常见的情况：每行都有其自己的长度
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go">text := <span style="color: #98fb98;">LinesOfText</span>{
+        []<span style="color: #87cefa;">byte</span>(<span style="color: #ffa07a;">"Now is the time"</span>),
+        []<span style="color: #87cefa;">byte</span>(<span style="color: #ffa07a;">"for all good gophers"</span>),
+        []<span style="color: #87cefa;">byte</span>(<span style="color: #ffa07a;">"to bring some fun to the party."</span>),
+}
+</pre>
+</div>
+
+<p>
+有时必须分配一个二维数组，例如在处理像素的扫描行时，这种情况就会发生。 有两种方式来达到这个目的：
+</p>
+<ol class="org-ol">
+<li>独立地分配每一个切片
+</li>
+<li>只分配一个数组， 将各个切片都指向它
+</li>
+</ol>
+
+<p>
+采用哪种方式取决于你的应用：
+</p>
+<ul class="org-ul">
+<li>若切片会增长或收缩， 就应该通过独立分配来避免覆盖下一行
+</li>
+<li>若不会，用单次分配来构造对象会更加高效
+</li>
+</ul>
+
+<p>
+以下是这两种方法的大概代码，仅供参考。首先是一次一行的： 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#20998;&#37197;&#39030;&#23618;&#20999;&#29255;&#12290;</span>
+picture := <span style="color: #b0c4de;">make</span>([][]<span style="color: #98fb98;">uint8</span>, YSize) <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#27599; y &#20010;&#21333;&#20803;&#19968;&#34892;&#12290;</span>
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#36941;&#21382;&#34892;&#65292;&#20026;&#27599;&#19968;&#34892;&#37117;&#20998;&#37197;&#20999;&#29255;</span>
+<span style="color: #00ffff;">for</span> i := <span style="color: #00ffff;">range</span> picture {
+        picture[i] = <span style="color: #b0c4de;">make</span>([]<span style="color: #98fb98;">uint8</span>, XSize)
+}
+</pre>
+</div>
+
+<p>
+现在是一次分配，对行进行切片： 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#20998;&#37197;&#39030;&#23618;&#20999;&#29255;&#65292;&#21644;&#21069;&#38754;&#19968;&#26679;&#12290;</span>
+picture := <span style="color: #b0c4de;">make</span>([][]<span style="color: #98fb98;">uint8</span>, YSize) <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#27599; y &#20010;&#21333;&#20803;&#19968;&#34892;&#12290;</span>
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#20998;&#37197;&#19968;&#20010;&#22823;&#30340;&#20999;&#29255;&#26469;&#20445;&#23384;&#25152;&#26377;&#20687;&#32032;</span>
+pixels := <span style="color: #b0c4de;">make</span>([]<span style="color: #98fb98;">uint8</span>, XSize*YSize) <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#25317;&#26377;&#31867;&#22411; []uint8&#65292;&#23613;&#31649;&#22270;&#29255;&#26159; [][]uint8.</span>
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#36941;&#21382;&#34892;&#65292;&#20174;&#21097;&#20313;&#20687;&#32032;&#20999;&#29255;&#30340;&#21069;&#38754;&#20999;&#20986;&#27599;&#34892;&#26469;&#12290;</span>
+<span style="color: #00ffff;">for</span> i := <span style="color: #00ffff;">range</span> picture {
+        picture[i], pixels = pixels[:XSize], pixels[XSize:]
+}
+</pre>
+</div>
+</div>
+</div>
 </div>
 
 <div id="outline-container-sec-7-5" class="outline-3">
-<h3 id="sec-7-5">切片</h3>
+<h3 id="sec-7-5">映射</h3>
 <div class="outline-text-3" id="text-7-5">
-</div><div id="outline-container-sec-7-5-1" class="outline-4">
-<h4 id="sec-7-5-1">二维切片</h4>
+<p>
+映射是方便而强大的内建数据结构：
+</p>
+<ul class="org-ul">
+<li>可以关联不同类型的值。 <b>其键可以是任何相等性操作符支持的类型</b> 如整数、浮点数、复数、字符串、指针、接口（只要其动态类型支持相等性判断）、结构以及数组
+</li>
+<li><b>切片不能用作映射键</b> 因为它们的相等性还未定义
+</li>
+<li>与切片一样，映射也是引用类型。 <b>若将映射传入函数中，并更改了该映射的内容，则此修改对调用者同样可见</b> 
+</li>
+</ul>
+
+<p>
+映射可使用一般的复合字面语法进行构建，其键-值对使用冒号分隔，因此可在初始化时很容易地构建它们 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">var</span> timeZone = <span style="color: #00ffff;">map</span>[<span style="color: #98fb98;">string</span>]<span style="color: #98fb98;">int</span>{
+        <span style="color: #ffa07a;">"UTC"</span>:  0*60*60,
+        <span style="color: #ffa07a;">"EST"</span>: -5*60*60,
+        <span style="color: #ffa07a;">"CST"</span>: -6*60*60,
+        <span style="color: #ffa07a;">"MST"</span>: -7*60*60,
+        <span style="color: #ffa07a;">"PST"</span>: -8*60*60,
+}
+</pre>
+</div>
+
+<p>
+赋值和获取映射值的语法类似于数组，不同的是映射的索引不必为整数
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go">offset := timeZone[<span style="color: #ffa07a;">"EST"</span>]
+</pre>
+</div>
+
+<p>
+若试图通过映射中不存在的键来取值，就会返回与该映射中项的类型对应的零值。 例如，若某个映射包含整数，当查找一个不存在的键时会返回 0。 <b>集合可实现成一个值类型为 bool 的映射。将该映射中的项置为 true 可将该值放入集合中，此后通过简单的索引操作即可判断是否存在</b> 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go">attended := <span style="color: #00ffff;">map</span>[<span style="color: #98fb98;">string</span>]<span style="color: #98fb98;">bool</span>{
+        <span style="color: #ffa07a;">"Ann"</span>: <span style="color: #7fffd4;">true</span>,
+        <span style="color: #ffa07a;">"Joe"</span>: <span style="color: #7fffd4;">true</span>,
+        ...
+}
+
+<span style="color: #00ffff;">if</span> attended[person] { <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#33509;&#26576;&#20154;&#19981;&#22312;&#27492;&#26144;&#23556;&#20013;&#65292;&#21017;&#20026; false</span>
+        fmt.<span style="color: #87cefa;">Println</span>(person, <span style="color: #ffa07a;">"&#27491;&#22312;&#24320;&#20250;"</span>)
+}
+</pre>
+</div>
+
+<p>
+有时需要区分某项是不存在还是其值为零值。如对于一个值本应为零的 "UTC" 条目，也可能是由于不存在该项而得到零值。可以使用多重赋值的形式来分辨这种情况
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">var</span> seconds int
+<span style="color: #00ffff;">var</span> ok bool
+seconds, ok = timeZone[tz]
+</pre>
+</div>
+
+<p>
+在下面的例子中，若 tz 存在， seconds 就会被赋予适当的值，且 ok 会被置为 true； 若不存在，seconds 则会被置为零，而 ok 会被置为 false
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">func</span> <span style="color: #87cefa;">offset</span>(tz <span style="color: #98fb98;">string</span>) <span style="color: #98fb98;">int</span> {
+        <span style="color: #00ffff;">if</span> seconds, ok := timeZone[tz]; ok {
+                <span style="color: #00ffff;">return</span> seconds
+        }
+        log.<span style="color: #87cefa;">Println</span>(<span style="color: #ffa07a;">"unknown time zone:"</span>, tz)
+        <span style="color: #00ffff;">return</span> 0
+}
+</pre>
+</div>
+
+<p>
+若仅需判断映射中是否存在某项而不关心实际的值，可使用空白标识符 （<sub>）来代替该值的一般变量</sub>
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go">_, present := timeZone[tz]
+</pre>
+</div>
+
+<p>
+要删除映射中的某项，可使用内建函数 <b>delete</b> 它以映射及要被删除的键为实参。 <b>即便对应的键不在该映射中，此操作也是安全的</b> 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #b0c4de;">delete</span>(timeZone, <span style="color: #ffa07a;">"PDT"</span>)  <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#29616;&#22312;&#29992;&#26631;&#20934;&#26102;&#38388;</span>
+</pre>
+</div>
 </div>
 </div>
 
 <div id="outline-container-sec-7-6" class="outline-3">
-<h3 id="sec-7-6">映射</h3>
+<h3 id="sec-7-6">打印</h3>
+<div class="outline-text-3" id="text-7-6">
+<p>
+Go采用的 <b>格式化打印</b> 风格和C的 printf 族类似，但却更加丰富而通用。 这些函数位于 fmt 包中，且函数名首字母均为大写：如 fmt.Printf、fmt.Fprintf，fmt.Sprintf 等。 <b>字符串函数（Sprintf 等）会返回一个字符串，而非填充给定的缓冲区</b>
+</p>
+
+<p>
+无需提供一个格式字符串。每个 Printf、Fprintf 和 Sprintf 都分别对应另外的函数，如 Print 与 Println。 这些函数并 <b>不接受格式字符串，而是为每个实参生成一种默认格式</b> 。 <b>Println 系列的函数还会在实参中插入空格，并在输出时追加一个换行符</b> ，而 Print 版本仅在 <b>操作数两侧都没有字符串时才添加空白</b> 
+</p>
+
+<p>
+以下示例中各行产生的输出都是一样的 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go">fmt.<span style="color: #87cefa;">Printf</span>(<span style="color: #ffa07a;">"Hello %d\n"</span>, 23) <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#26684;&#24335;&#21270;&#25171;&#21360;</span>
+fmt.<span style="color: #87cefa;">Fprint</span>(os.Stdout, <span style="color: #ffa07a;">"Hello "</span>, 23, <span style="color: #ffa07a;">"\n"</span>) <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#26684;&#24335;&#21270;&#25171;&#21360;&#21040;&#26631;&#20934;&#36755;&#20986;&#27969;</span>
+fmt.<span style="color: #87cefa;">Println</span>(<span style="color: #ffa07a;">"Hello"</span>, 23) <span style="color: #ff4500;">// </span><span style="color: #ff4500;">Hello&#21644;23&#20043;&#38388;&#25554;&#20837;&#31354;&#26684;</span>
+fmt.<span style="color: #87cefa;">Println</span>(fmt.<span style="color: #87cefa;">Sprint</span>(<span style="color: #ffa07a;">"Hello "</span>, 23)) <span style="color: #ff4500;">// </span><span style="color: #ff4500;">Springt&#36820;&#22238;&#19968;&#20010;&#23383;&#31526;&#20018;</span>
+</pre>
 </div>
 
+<p>
+fmt.Fprint 一类的格式化打印函数可接受任何实现了 io.Writer 接口的对象作为第一个实参, 变量os.Stdout 与 os.Stderr 都是人们熟知的例子
+</p>
+
+<p>
+与C的不同：
+</p>
+<ul class="org-ul">
+<li>像 %d 这样的数值格式并不接受表示符号或大小的标记， 打印例程会根据实参的类型来决定这些属性 
+</li>
+</ul>
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">var</span> x uint64 = 1&lt;&lt;64 - 1
+fmt.<span style="color: #87cefa;">Printf</span>(<span style="color: #ffa07a;">"%d %x; %d %x\n"</span>, x, x, <span style="color: #87cefa;">int64</span>(x), <span style="color: #87cefa;">int64</span>(x))
+</pre>
+</div>
+
+<pre class="example">
+18446744073709551615 ffffffffffffffff; -1 -1 
+</pre>
+
+<ul class="org-ul">
+<li>若你只想要默认的转换，如使用十进制的整数，你可以使用通用的格式 %v（对应值）；其结果与 Print 和 Println 的输出完全相同。此外，这种格式还能打印任意值，甚至包括数组、结构体和映射。 以下是打印上一节中定义的时区映射的语句
+</li>
+</ul>
+
+<div class="org-src-container">
+
+<pre class="src src-go">fmt.<span style="color: #87cefa;">Printf</span>(<span style="color: #ffa07a;">"%v\n"</span>, timeZone)  <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#25110;&#21482;&#29992; fmt.Println(timeZone)</span>
+</pre>
+</div>
+
+<pre class="example">
+map[CST:-21600 PST:-28800 EST:-18000 UTC:0 MST:-25200]
+</pre>
+
+<p>
+映射中的键可能按任意顺序输出
+</p>
+<ul class="org-ul">
+<li>当打印结构体时
+<ul class="org-ul">
+<li>%+v 会为结构体的每个字段添上字段名
+</li>
+<li>%#v 将完全按照Go的语法打印值
+</li>
+</ul>
+</li>
+</ul>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">type</span> <span style="color: #98fb98;">T</span> <span style="color: #00ffff;">struct</span> {
+        a int
+        b float64
+        c string
+}
+t := &amp;<span style="color: #98fb98;">T</span>{ 7, -2.35, <span style="color: #ffa07a;">"abc\tdef"</span> }
+fmt.<span style="color: #87cefa;">Printf</span>(<span style="color: #ffa07a;">"%v\n"</span>, t)
+fmt.<span style="color: #87cefa;">Printf</span>(<span style="color: #ffa07a;">"%+v\n"</span>, t)
+fmt.<span style="color: #87cefa;">Printf</span>(<span style="color: #ffa07a;">"%#v\n"</span>, t)
+fmt.<span style="color: #87cefa;">Printf</span>(<span style="color: #ffa07a;">"%#v\n"</span>, timeZone)
+</pre>
+</div>
+
+<pre class="example">
+&amp;{7 -2.35 abc   def}
+&amp;{a:7 b:-2.35 c:abc     def}
+&amp;main.T{a:7, b:-2.35, c:"abc\tdef"}
+map[string] int{"CST":-21600, "PST":-28800, "EST":-18000, "UTC":0, "MST":-25200}
+</pre>
+
+<ul class="org-ul">
+<li>请注意其中的&amp;符号 当遇到 string 或 []byte 值时：
+<ul class="org-ul">
+<li>可使用 %q 产生带引号的字符串（%q 格式也可用于整数和符文，它会产生一个带单引号的符文常量） 
+</li>
+<li>而格式 %#q 会尽可能使用反引号
+</li>
+<li>%x 还可用于字符串、字节数组以及整数，并生成一个很长的十六进制字符串
+</li>
+<li>带空格的格式（% x）还会在字节之间插入空格
+</li>
+</ul>
+</li>
+
+<li>另一种实用的格式是 %T，它会打印某个值的类型
+</li>
+</ul>
+<div class="org-src-container">
+
+<pre class="src src-go">fmt.<span style="color: #87cefa;">Printf</span>(<span style="color: #ffa07a;">"%T\n"</span>, timeZone)
+</pre>
+</div>
+
+<pre class="example">
+map[string] int
+</pre>
+
+<ul class="org-ul">
+<li>若想控制自定义类型的默认格式，只需为该类型定义一个具有 String() string 签名的方法。对于简单的类型 T，可进行如下操作
+</li>
+</ul>
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">func</span> (t *<span style="color: #98fb98;">T</span>) <span style="color: #87cefa;">String</span>() <span style="color: #98fb98;">string</span> {
+        <span style="color: #00ffff;">return</span> fmt.<span style="color: #87cefa;">Sprintf</span>(<span style="color: #ffa07a;">"%d/%g/%q"</span>, t.a, t.b, t.c)
+}
+fmt.<span style="color: #87cefa;">Printf</span>(<span style="color: #ffa07a;">"%v\n"</span>, t)
+</pre>
+</div>
+
+<pre class="example">
+7/-2.35/"abc\tdef"
+</pre>
+
+<p>
+如果需要像指向 T 的指针那样打印类型 T 的值， String 的接收者就必须是值类型的；上面的例子中接收者是一个指针， 因为这对结构来说更高效而通用
+</p>
+
+<p>
+String 方法也可调用 Sprintf， 因为打印例程可以完全重入并按这种方式封装。不过要理解这种方式，还有一个重要的细节： <b>请勿通过调用 Sprintf 来构造 String 方法，因为它会无限递归你的的 String 方法!!!</b> 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">type</span> <span style="color: #98fb98;">MyString</span> <span style="color: #98fb98;">string</span>
+
+<span style="color: #00ffff;">func</span> (m <span style="color: #98fb98;">MyString</span>) <span style="color: #87cefa;">String</span>() <span style="color: #98fb98;">string</span> {
+        <span style="color: #00ffff;">return</span> fmt.<span style="color: #87cefa;">Sprintf</span>(<span style="color: #ffa07a;">"MyString=%s"</span>, m) <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#38169;&#35823;&#65306;&#20250;&#26080;&#38480;&#36882;&#24402;</span>
+}
+</pre>
+</div>
+
+<p>
+要解决这个问题也很简单：将该实参转换为基本的字符串类型，它没有这个方法
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">type</span> <span style="color: #98fb98;">MyString</span> <span style="color: #98fb98;">string</span>
+<span style="color: #00ffff;">func</span> (m <span style="color: #98fb98;">MyString</span>) <span style="color: #87cefa;">String</span>() <span style="color: #98fb98;">string</span> {
+        <span style="color: #00ffff;">return</span> fmt.<span style="color: #87cefa;">Sprintf</span>(<span style="color: #ffa07a;">"MyString=%s"</span>, <span style="color: #87cefa;">string</span>(m)) <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#21487;&#20197;&#65306;&#27880;&#24847;&#36716;&#25442;</span>
+}
+</pre>
+</div>
+
+<ul class="org-ul">
+<li>另一种打印技术就是将打印例程的实参直接传入另一个这样的例程。Printf 的签名为其最后的实参使用了 <b>&#x2026;interface{}</b>  类型，这样格式的后面就能出现任意数量，任意类型的形参了
+</li>
+</ul>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">func</span> <span style="color: #87cefa;">Printf</span>(format <span style="color: #98fb98;">string</span>, v ...<span style="color: #00ffff;">interface</span>{}) (n <span style="color: #98fb98;">int</span>, err <span style="color: #98fb98;">error</span>)
+</pre>
+</div>
+
+<p>
+在 Printf 函数中，v 看起来更像是 []interface{} 类型的变量，但如果将它传递到另一个变参函数中，它就像是常规实参列表了。 以下是之前用过的 log.Println 的实现。它直接将其实参传递给 fmt.Sprintln 进行实际的格式化
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">Println &#36890;&#36807; fmt.Println &#30340;&#26041;&#24335;&#23558;&#26085;&#24535;&#25171;&#21360;&#21040;&#26631;&#20934;&#35760;&#24405;&#22120;&#12290;</span>
+<span style="color: #00ffff;">func</span> <span style="color: #87cefa;">Println</span>(v ...<span style="color: #00ffff;">interface</span>{}) {
+        std.<span style="color: #87cefa;">Output</span>(2, fmt.<span style="color: #87cefa;">Sprintln</span>(v...))  <span style="color: #ff4500;">// </span><span style="color: #ff4500;">Output &#25509;&#21463;&#24418;&#21442; (int, string) , &#23558; ... &#20889;&#22312; v &#20043;&#21518;&#26469;&#21578;&#35785;&#32534;&#35793;&#22120;&#23558; v &#35270;&#20316;&#19968;&#20010;&#23454;&#21442;&#21015;&#34920;</span>
+}
+</pre>
+</div>
+
+<p>
+该 Sprintln 嵌套调用中，我们 <b>将 &#x2026; 写在 v 之后来告诉编译器将 v 视作一个实参列表</b> ，否则它会将 v 当做单一的切片实参来传递
+</p>
+
+<p>
+顺便一提，&#x2026; 形参可指定具体的类型，例如从整数列表中选出最小值的函数 min，其形参可为 &#x2026;int 类型
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">func</span> <span style="color: #87cefa;">Min</span>(a ...<span style="color: #98fb98;">int</span>) <span style="color: #98fb98;">int</span> {
+        min := <span style="color: #87cefa;">int</span>(^<span style="color: #87cefa;">uint</span>(0) &gt;&gt; 1)  <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#26368;&#22823;&#30340; int</span>
+        <span style="color: #00ffff;">for</span> _, i := <span style="color: #00ffff;">range</span> a {
+                <span style="color: #00ffff;">if</span> i &lt; min {
+                        min = i
+                }
+        }
+        <span style="color: #00ffff;">return</span> min
+}
+</pre>
+</div>
+</div>
+</div>
 <div id="outline-container-sec-7-7" class="outline-3">
-<h3 id="sec-7-7">打印</h3>
+<h3 id="sec-7-7">追加</h3>
+<div class="outline-text-3" id="text-7-7">
+<p>
+现在要对内建函数 <b>append</b>  的设计进行补充说明。append 函数的签名不同于前面我们自定义的 Append 函数。大致来说，它就像这样： 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">func</span> <span style="color: #b0c4de;">append</span>(slice []<span style="color: #98fb98;">T</span>, &#20803;&#32032; ...<span style="color: #98fb98;">T</span>) []<span style="color: #98fb98;">T</span>
+</pre>
 </div>
 
-<div id="outline-container-sec-7-8" class="outline-3">
-<h3 id="sec-7-8">追加</h3>
-</div>
+<p>
+其中的 T 为 <b>任意给定类型的占位符</b> 实际上，无法在Go中编写一个类型 T 由调用者决定的函数。这也就是为何 append 为内建函数的原因：它需要编译器的支持 
+</p>
+
+<p>
+append 会在 <b>切片末尾追加元素并返回结果</b> 必须返回结果， 原因与手写的 Append 一样，即底层数组可能会被改变。以下简单的例子 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go">x := []<span style="color: #98fb98;">int</span>{1,2,3}
+x = <span style="color: #b0c4de;">append</span>(x, 4, 5, 6)
+fmt.<span style="color: #87cefa;">Println</span>(x)
+</pre>
 </div>
 
+<pre class="example">
+[1 2 3 4 5 6]
+</pre>
+
+<p>
+append 有点像 Printf 那样 <b>可接受任意数量的实参</b> 
+</p>
+
+<p>
+但如果要像 Append 那样将一个切片追加到另一个切片中呢？ 很简单：在调用的地方使用 &#x2026;，就像在上面调用 Output 那样。以下代码片段的输出与上一个相同
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go">x := []<span style="color: #98fb98;">int</span>{1,2,3}
+y := []<span style="color: #98fb98;">int</span>{4,5,6}
+x = <span style="color: #b0c4de;">append</span>(x, y...) <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#32780;&#19981;&#26159;append(x, y) </span>
+fmt.<span style="color: #87cefa;">Println</span>(x)
+</pre>
+</div>
+
+<p>
+如果没有 &#x2026;，它就会由于 <b>类型错误而无法编译</b>  因为 y 不是 int 类型的
+</p>
+</div>
+</div>
+</div>
 <div id="outline-container-sec-8" class="outline-2">
 <h2 id="sec-8">初始化</h2>
 <div class="outline-text-2" id="text-8">
-</div><div id="outline-container-sec-8-1" class="outline-3">
-<h3 id="sec-8-1">常量</h3>
+<p>
+尽管从表面上看，Go的初始化过程与C或C++并不算太大，但它确实更为强大。 在初始化过程中，不仅可以构建复杂的结构，还能正确处理不同包对象间的初始化顺序
+</p>
 </div>
 
+<div id="outline-container-sec-8-1" class="outline-3">
+<h3 id="sec-8-1">常量</h3>
+<div class="outline-text-3" id="text-8-1">
+<p>
+Go中的常量就是不变量：
+</p>
+<ul class="org-ul">
+<li>在 <b>编译时创建，即便它们可能是函数中定义的局部变量</b>
+</li>
+<li>只能是 <b>数字、字符（符文）、字符串或布尔值</b>
+</li>
+<li>由于编译时的限制， <b>定义它们的表达式必须也是可被编译器求值的常量表达式</b> 
+<ul class="org-ul">
+<li>1&lt;&lt;3 就是一个常量表达式，而 math.Sin(math.Pi/4) 则不是，因为对 <b>math.Sin 的函数调用</b> 在运行时才会发生
+</li>
+</ul>
+</li>
+</ul>
+
+<p>
+在Go中，枚举常量使用枚举器 iota 创建。由于 iota 可为表达式的一部分，而表达式可以被隐式地重复，这样也就更容易构建复杂的值的集合了
+</p>
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">type</span> <span style="color: #98fb98;">ByteSize</span> <span style="color: #98fb98;">float64</span>
+
+<span style="color: #00ffff;">const</span> (
+        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#36890;&#36807;&#36171;&#20104;&#31354;&#30333;&#26631;&#35782;&#31526;&#26469;&#24573;&#30053;&#31532;&#19968;&#20010;&#20540;</span>
+        _           = <span style="color: #7fffd4;">iota</span> <span style="color: #ff4500;">// </span><span style="color: #ff4500;">ignore first value by assigning to blank identifier</span>
+        KB ByteSize = 1 &lt;&lt; (10 * <span style="color: #7fffd4;">iota</span>)
+        MB
+        GB
+        TB
+        PB
+        EB
+        ZB
+        YB
+)
+</pre>
+</div>
+
+<p>
+由于可将 String 之类的方法附加在用户定义的类型上， 因此它就为打印时自动格式化任意值提供了可能性，即便是作为一个通用类型的一部分。 尽管常常会看到这种技术应用于结构体，但它对于像 ByteSize 之类的浮点数标量等类型也是有用的
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">func</span> (b <span style="color: #98fb98;">ByteSize</span>) <span style="color: #87cefa;">String</span>() <span style="color: #98fb98;">string</span> {
+        <span style="color: #00ffff;">switch</span> {
+        <span style="color: #00ffff;">case</span> b &gt;= YB:
+                <span style="color: #00ffff;">return</span> fmt.<span style="color: #87cefa;">Sprintf</span>(<span style="color: #ffa07a;">"%.2fYB"</span>, b/YB)
+        <span style="color: #00ffff;">case</span> b &gt;= ZB:
+                <span style="color: #00ffff;">return</span> fmt.<span style="color: #87cefa;">Sprintf</span>(<span style="color: #ffa07a;">"%.2fZB"</span>, b/ZB)
+        <span style="color: #00ffff;">case</span> b &gt;= EB:
+                <span style="color: #00ffff;">return</span> fmt.<span style="color: #87cefa;">Sprintf</span>(<span style="color: #ffa07a;">"%.2fEB"</span>, b/EB)
+        <span style="color: #00ffff;">case</span> b &gt;= PB:
+                <span style="color: #00ffff;">return</span> fmt.<span style="color: #87cefa;">Sprintf</span>(<span style="color: #ffa07a;">"%.2fPB"</span>, b/PB)
+        <span style="color: #00ffff;">case</span> b &gt;= TB:
+                <span style="color: #00ffff;">return</span> fmt.<span style="color: #87cefa;">Sprintf</span>(<span style="color: #ffa07a;">"%.2fTB"</span>, b/TB)
+        <span style="color: #00ffff;">case</span> b &gt;= GB:
+                <span style="color: #00ffff;">return</span> fmt.<span style="color: #87cefa;">Sprintf</span>(<span style="color: #ffa07a;">"%.2fGB"</span>, b/GB)
+        <span style="color: #00ffff;">case</span> b &gt;= MB:
+                <span style="color: #00ffff;">return</span> fmt.<span style="color: #87cefa;">Sprintf</span>(<span style="color: #ffa07a;">"%.2fMB"</span>, b/MB)
+        <span style="color: #00ffff;">case</span> b &gt;= KB:
+                <span style="color: #00ffff;">return</span> fmt.<span style="color: #87cefa;">Sprintf</span>(<span style="color: #ffa07a;">"%.2fKB"</span>, b/KB)
+        }
+        <span style="color: #00ffff;">return</span> fmt.<span style="color: #87cefa;">Sprintf</span>(<span style="color: #ffa07a;">"%.2fB"</span>, b)
+}
+</pre>
+</div>
+
+<p>
+表达式 YB 会打印出 1.00YB，而 ByteSize(1e13) 则会打印出 9.09
+</p>
+
+<p>
+在这里用 Sprintf 实现 ByteSize 的 String 方法很安全（不会无限递归），这倒不是因为类型转换，而是它以 %f 调用了 Sprintf，它并不是一种字符串格式：Sprintf 只会在它需要字符串时才调用 String 方法，而 %f 需要一个浮点数值
+</p>
+</div>
+</div>
 <div id="outline-container-sec-8-2" class="outline-3">
 <h3 id="sec-8-2">变量</h3>
+<div class="outline-text-3" id="text-8-2">
+<p>
+变量的初始化与常量类似，但其 <b>初始值也可以是在运行时才被计算的一般表达式</b> 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">var</span> (
+        home   = os.<span style="color: #87cefa;">Getenv</span>(<span style="color: #ffa07a;">"HOME"</span>)
+        user   = os.<span style="color: #87cefa;">Getenv</span>(<span style="color: #ffa07a;">"USER"</span>)
+        gopath = os.<span style="color: #87cefa;">Getenv</span>(<span style="color: #ffa07a;">"GOPATH"</span>)
+)
+</pre>
+</div>
+</div>
 </div>
 
 <div id="outline-container-sec-8-3" class="outline-3">
-<h3 id="sec-8-3">初始化</h3>
-</div>
-</div>
+<h3 id="sec-8-3">init函数</h3>
+<div class="outline-text-3" id="text-8-3">
+<p>
+每个源文件都可以通过定义自己的无参数 init 函数来设置一些必要的状态。 （ <span class="underline">每个文件都可以拥有多个 init 函数</span> ）而它的结束就意味着初始化结束： <b>只有该包中的所有变量声明都通过它们的初始化器求值后 init 才会被调用， 而那些 init 只有在所有已导入的包都被初始化后才会被求值</b> 
+</p>
 
+<p>
+除了那些不能被表示成声明的初始化外，init 函数还常被用在 <b>程序真正开始执行前，检验或校正程序的状态</b> 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">func</span> <span style="color: #87cefa;">init</span>() {
+        <span style="color: #00ffff;">if</span> user == <span style="color: #ffa07a;">""</span> {
+                log.<span style="color: #87cefa;">Fatal</span>(<span style="color: #ffa07a;">"$USER not set"</span>)
+        }
+        <span style="color: #00ffff;">if</span> home == <span style="color: #ffa07a;">""</span> {
+                home = <span style="color: #ffa07a;">"/home/"</span> + user
+        }
+        <span style="color: #00ffff;">if</span> gopath == <span style="color: #ffa07a;">""</span> {
+                gopath = home + <span style="color: #ffa07a;">"/go"</span>
+        }
+        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">gopath &#21487;&#36890;&#36807;&#21629;&#20196;&#34892;&#20013;&#30340; --gopath &#26631;&#35760;&#35206;&#30422;&#25481;&#12290;</span>
+        flag.<span style="color: #87cefa;">StringVar</span>(&amp;gopath, <span style="color: #ffa07a;">"gopath"</span>, gopath, <span style="color: #ffa07a;">"override default GOPATH"</span>)
+}
+</pre>
+</div>
+</div>
+</div>
+</div>
 <div id="outline-container-sec-9" class="outline-2">
 <h2 id="sec-9">方法</h2>
 <div class="outline-text-2" id="text-9">
 </div><div id="outline-container-sec-9-1" class="outline-3">
 <h3 id="sec-9-1">指针 vs 值</h3>
+<div class="outline-text-3" id="text-9-1">
+<p>
+正如 ByteSize 那样，可以为任何已命名的类型（除了指针或接口）定义方法； 接收者可不必为结构体
+</p>
+
+<p>
+在之前讨论切片时，编写了一个 Append 函数。 也可将其定义为切片的方法。为此，首先要声明一个已命名的类型来绑定该方法， 然后使该方法的接收者成为该类型的值
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">type</span> <span style="color: #98fb98;">ByteSlice</span> []<span style="color: #98fb98;">byte</span>
+
+<span style="color: #00ffff;">func</span> (slice <span style="color: #98fb98;">ByteSlice</span>) <span style="color: #87cefa;">Append</span>(data []<span style="color: #98fb98;">byte</span>) []<span style="color: #98fb98;">byte</span> {
+        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#20027;&#20307;&#21644;&#21069;&#38754;&#30456;&#21516;&#12290;</span>
+}
+</pre>
+</div>
+
+<p>
+<b>仍然需要该方法返回更新后的切片</b> 为了消除这种不便，可通过重新定义该方法， 将一个指向 ByteSlice 的指针作为该方法的接收者， 这样该方法就能重写调用者提供的切片了
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">func</span> (p *<span style="color: #98fb98;">ByteSlice</span>) <span style="color: #87cefa;">Append</span>(data []<span style="color: #98fb98;">byte</span>) {
+        slice := *p
+        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#20027;&#20307;&#21644;&#21069;&#38754;&#30456;&#21516;&#65292;&#20294;&#27809;&#26377; return&#12290;</span>
+        *p = slice
+}
+</pre>
+</div>
+
+<p>
+其实可以做得更好。若将函数修改为与标准 Write 类似的方法，就像这样
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">func</span> (p *<span style="color: #98fb98;">ByteSlice</span>) <span style="color: #87cefa;">Write</span>(data []<span style="color: #98fb98;">byte</span>) (n <span style="color: #98fb98;">int</span>, err <span style="color: #98fb98;">error</span>) {
+        slice := *p
+        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#20381;&#26087;&#21644;&#21069;&#38754;&#30456;&#21516;&#12290;</span>
+        *p = slice
+        <span style="color: #00ffff;">return</span> <span style="color: #b0c4de;">len</span>(data), <span style="color: #7fffd4;">nil</span>
+}
+</pre>
+</div>
+
+<p>
+那么类型 <span class="underline">*ByteSlice</span> 就满足了标准的 <b>io.Writer</b> 接口，这将非常实用。 例如可以通过打印将内容写入 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">var</span> b ByteSlice
+fmt.<span style="color: #87cefa;">Fprintf</span>(&amp;b, <span style="color: #ffa07a;">"This hour has %d days\n"</span>, 7)
+</pre>
+</div>
+<p>
+将 ByteSlice 的地址传入，因为只有 *ByteSlice 才满足 io.Writer
+</p>
+
+<p>
+以指针或值为接收者的区别在于 <b>值方法可通过指针和值调用， 而指针方法只能通过指针来调用</b>
+</p>
+
+<p>
+因为指针方法可以修改接收者；通过值调用它们会导致方法接收到该值的副本， 因此任何修改都将被丢弃，因此该语言不允许这种错误。不过有个方便的例外 <b>若该值是可寻址的， 那么该语言就会自动插入取址操作符来对付一般的通过值调用的指针方法</b> 在例子中，变量 b 是可寻址的，因此只需通过 b.Write 来调用它的 Write 方法，编译器会将它重写为 (&amp;b).Write
+</p>
+</div>
 </div>
 </div>
 
@@ -1229,25 +2152,380 @@ leaving: b
 <div class="outline-text-2" id="text-10">
 </div><div id="outline-container-sec-10-1" class="outline-3">
 <h3 id="sec-10-1">接口</h3>
-</div>
+<div class="outline-text-3" id="text-10-1">
+<p>
+Go中的接口为指定对象的行为提供了一种方法：如果某样东西可以完成 <b>这个</b>  那么它就可以用在 <b>这里</b> 已经见过许多简单的示例了：通过实现 String 方法，可以自定义打印函数，而通过 Write 方法，Fprintf 则能对任何对象产生输出。在Go代码中， 仅包含一两种方法的接口很常见，且其名称通常来自于实现它的方法， 如 io.Writer 就是实现了 Write 的一类对象
+</p>
 
+<p>
+每种类型都能实现多个接口。例如一个实现了 sort.Interface 接口的集合就可通过 sort 包中的例程进行排序。该接口包括 Len()、Less(i, j int) bool 以及 Swap(i, j int)，另外，该集合仍然可以有一个自定义的格式化器。 以下特意构建的例子 Sequence 就同时满足这两种情况
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">type</span> <span style="color: #98fb98;">Sequence</span> []<span style="color: #98fb98;">int</span>
+
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">Methods required by sort.Interface.</span>
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">sort.Interface &#25152;&#38656;&#30340;&#26041;&#27861;&#12290;</span>
+<span style="color: #00ffff;">func</span> (s <span style="color: #98fb98;">Sequence</span>) <span style="color: #87cefa;">Len</span>() <span style="color: #98fb98;">int</span> {
+        <span style="color: #00ffff;">return</span> <span style="color: #b0c4de;">len</span>(s)
+}
+<span style="color: #00ffff;">func</span> (s <span style="color: #98fb98;">Sequence</span>) <span style="color: #87cefa;">Less</span>(i, j <span style="color: #98fb98;">int</span>) <span style="color: #98fb98;">bool</span> {
+        <span style="color: #00ffff;">return</span> s[i] &lt; s[j]
+}
+<span style="color: #00ffff;">func</span> (s <span style="color: #98fb98;">Sequence</span>) <span style="color: #87cefa;">Swap</span>(i, j <span style="color: #98fb98;">int</span>) {
+        s[i], s[j] = s[j], s[i]
+}
+
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">Method for printing - sorts the elements before printing.</span>
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#29992;&#20110;&#25171;&#21360;&#30340;&#26041;&#27861; - &#22312;&#25171;&#21360;&#21069;&#23545;&#20803;&#32032;&#36827;&#34892;&#25490;&#24207;&#12290;</span>
+<span style="color: #00ffff;">func</span> (s <span style="color: #98fb98;">Sequence</span>) <span style="color: #87cefa;">String</span>() <span style="color: #98fb98;">string</span> {
+        sort.<span style="color: #87cefa;">Sort</span>(s)
+        str := <span style="color: #ffa07a;">"["</span>
+        <span style="color: #00ffff;">for</span> i, elem := <span style="color: #00ffff;">range</span> s {
+                <span style="color: #00ffff;">if</span> i &gt; 0 {
+                        str += <span style="color: #ffa07a;">" "</span>
+                }
+                str += fmt.<span style="color: #87cefa;">Sprint</span>(elem)
+        }
+        <span style="color: #00ffff;">return</span> str + <span style="color: #ffa07a;">"]"</span>
+}
+</pre>
+</div>
+</div>
+</div>
 <div id="outline-container-sec-10-2" class="outline-3">
 <h3 id="sec-10-2">类型转换</h3>
+<div class="outline-text-3" id="text-10-2">
+<p>
+Sequence 的 String 方法重新实现了 Sprint 为切片实现的功能。若在调用 Sprint 之前将 Sequence 转换为纯粹的 []int，就能共享已实现的功能
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">func</span> (s <span style="color: #98fb98;">Sequence</span>) <span style="color: #87cefa;">String</span>() <span style="color: #98fb98;">string</span> {
+        sort.<span style="color: #87cefa;">Sort</span>(s)
+        <span style="color: #00ffff;">return</span> fmt.<span style="color: #87cefa;">Sprint</span>([]<span style="color: #87cefa;">int</span>(s)) <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#23558; Sequence &#36716;&#25442;&#20026;&#32431;&#31929;&#30340; []int</span>
+}
+</pre>
+</div>
+<p>
+该方法是通过类型转换技术，在 String 方法中安全调用 Sprintf 的另个一例子。若忽略类型名的话，这两种类型（Sequence和 []int）其实是相同的，因此在二者之间进行转换是合法的。 <b>转换过程并不会创建新值，它只是值暂让现有的时看起来有个新类型而已</b> （ <span class="underline">还有些合法转换则会创建新值，如从整数转换为浮点数等</span> ）
+</p>
+
+<p>
+在Go程序中，为访问不同的方法集而进行类型转换的情况非常常见。 例如，可使用现有的 sort.IntSlice 类型来简化整个示例： 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">type</span> <span style="color: #98fb98;">Sequence</span> []<span style="color: #98fb98;">int</span>
+
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">// &#29992;&#20110;&#25171;&#21360;&#30340;&#26041;&#27861; - &#22312;&#25171;&#21360;&#21069;&#23545;&#20803;&#32032;&#36827;&#34892;&#25490;&#24207;&#12290;</span>
+<span style="color: #00ffff;">func</span> (s <span style="color: #98fb98;">Sequence</span>) <span style="color: #87cefa;">String</span>() <span style="color: #98fb98;">string</span> {
+        sort.<span style="color: #87cefa;">IntSlice</span>(s).<span style="color: #87cefa;">Sort</span>()
+        <span style="color: #00ffff;">return</span> fmt.<span style="color: #87cefa;">Sprint</span>([]<span style="color: #87cefa;">int</span>(s))
+}
+</pre>
 </div>
 
+<p>
+现在，不必让 Sequence 实现多个接口（排序和打印）， <b>可通过将数据条目转换为多种类型（Sequence、sort.IntSlice 和 []int）来使用相应的功能，每次转换都完成一部分工作</b>  这在实践中虽然有些不同寻常，但往往却很有效 
+</p>
+</div>
+<div id="outline-container-sec-10-2-1" class="outline-4">
+<h4 id="sec-10-2-1">接口转换与类型断言</h4>
+<div class="outline-text-4" id="text-10-2-1">
+<p>
+<b>类型选择</b> 是类型转换的一种形式：它接受一个接口，在选择 （switch）中根据其判断选择对应的情况（case）， 并在某种意义上将其转换为该种类型。以下代码为 fmt.Printf 通过类型选择将值转换为字符串的简化版。若它已经为字符串，需要该接口中实际的字符串值； 若它有 String 方法，则需要调用该方法所得的结果
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">type</span> <span style="color: #98fb98;">Stringer</span> <span style="color: #00ffff;">interface</span> {
+        <span style="color: #87cefa;">String</span>() string
+}
+
+<span style="color: #00ffff;">var</span> value <span style="color: #00ffff;">interface</span>{} <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#35843;&#29992;&#32773;&#25552;&#20379;&#30340;&#20540;</span>
+<span style="color: #00ffff;">switch</span> str := value.(<span style="color: #00ffff;">type</span>) {
+<span style="color: #00ffff;">case</span> string:
+        <span style="color: #00ffff;">return</span> str
+<span style="color: #00ffff;">case</span> Stringer:
+        <span style="color: #00ffff;">return</span> str.<span style="color: #87cefa;">String</span>()
+}
+</pre>
+</div>
+
+<p>
+第一种情况获取具体的值，第二种将该接口转换为另一个接口。这种方式对于混合类型来说非常完美
+</p>
+
+<p>
+若只关心一种类型呢？若知道该值拥有一个 string 而想要提取它呢？ 只需一种情况的类型选择就行，但它需要 <b>类型断言</b> 类型断言接受一个接口值， 并从中提取指定的明确类型的值
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go">value.(<span style="color: #98fb98;">typeName</span>) <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#20854;&#35821;&#27861;&#20511;&#37492;&#33258;&#31867;&#22411;&#36873;&#25321;&#24320;&#22836;&#30340;&#23376;&#21477;&#65292;&#20294;&#23427;&#38656;&#35201;&#19968;&#20010;&#26126;&#30830;&#30340;&#31867;&#22411;&#65292; &#32780;&#38750; type &#20851;&#38190;&#23383;</span>
+</pre>
+</div>
+
+<p>
+而其结果则是拥有静态类型 typeName 的新值。该类型必须为该接口所拥有的具体类型， 或者该值可转换成的第二种接口类型。要提取知道在该值中的字符串，可以这样： 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go">str := value.(<span style="color: #98fb98;">string</span>)
+</pre>
+</div>
+
+<p>
+但若它所转换的值中不包含字符串，该程序就会以 <b>运行时错误崩溃</b> 为避免这种情况， 需使用 <b>逗号, ok</b> 惯用测试它能安全地判断该值是否为字符串： 
+</p>
+<div class="org-src-container">
+
+<pre class="src src-go">str, ok := value.(<span style="color: #98fb98;">string</span>)
+<span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#26159;&#21542;string&#31867;&#22411;</span>
+<span style="color: #00ffff;">if</span> ok {
+        fmt.<span style="color: #87cefa;">Printf</span>(<span style="color: #ffa07a;">"&#23383;&#31526;&#20018;&#20540;&#20026; %q\n"</span>, str)
+} <span style="color: #00ffff;">else</span> {
+        fmt.<span style="color: #87cefa;">Printf</span>(<span style="color: #ffa07a;">"&#35813;&#20540;&#38750;&#23383;&#31526;&#20018;\n"</span>)
+}
+</pre>
+</div>
+
+<p>
+<b>若类型断言失败，str 将继续存在且为字符串类型，但它将拥有零值，即空字符串</b>
+</p>
+
+<p>
+最后有个 if-else 语句，它等价于本节开头的类型选择
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">if</span> str, ok := value.(<span style="color: #98fb98;">string</span>); ok {
+        <span style="color: #00ffff;">return</span> str
+} <span style="color: #00ffff;">else</span> <span style="color: #00ffff;">if</span> str, ok := value.(<span style="color: #98fb98;">Stringer</span>); ok {
+        <span style="color: #00ffff;">return</span> str.<span style="color: #87cefa;">String</span>()
+}
+</pre>
+</div>
+</div>
+</div>
+</div>
 <div id="outline-container-sec-10-3" class="outline-3">
-<h3 id="sec-10-3">接口转换与类型断言</h3>
+<h3 id="sec-10-3">通用性</h3>
+<div class="outline-text-3" id="text-10-3">
+<p>
+若某种现有的类型仅实现了一个接口，且除此之外并无可导出的方法，则该类型本身就无需导出。 <b>仅导出该接口能更专注于其行为而非实现，其它属性不同的实现则能镜像该原始类型的行为</b>  这也能够避免为每个通用接口的实例重复编写文档。
+</p>
+
+<p>
+在这种情况下 <b>构造函数应当返回一个接口值而非实现的类型</b> 例如在 hash 库中，crc32.NewIEEE 和 adler32.New 都返回接口类型 hash.Hash32。要在Go程序中用Adler-32算法替代CRC-32， 只需修改构造函数调用即可，其余代码则不受算法改变的影响
+</p>
+
+<p>
+同样的方式能将 crypto 包中多种联系在一起的流密码算法与块密码算法分开。 crypto/cipher 包中的 Block 接口指定了块密码算法的行为， 它为单独的数据块提供加密。接着，和 bufio 包类似，任何实现了该接口的密码包都能被用于构造以 Stream 为接口表示的流密码，而无需知道块加密的细节
+</p>
+
+<p>
+crypto/cipher 接口看其来就像这样： 
+</p>
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">type</span> <span style="color: #98fb98;">Block</span> <span style="color: #00ffff;">interface</span> {
+        <span style="color: #87cefa;">BlockSize</span>() int
+        <span style="color: #87cefa;">Encrypt</span>(src, dst []<span style="color: #98fb98;">byte</span>)
+        <span style="color: #87cefa;">Decrypt</span>(src, dst []<span style="color: #98fb98;">byte</span>)
+}
+
+<span style="color: #00ffff;">type</span> <span style="color: #98fb98;">Stream</span> <span style="color: #00ffff;">interface</span> {
+        <span style="color: #87cefa;">XORKeyStream</span>(dst, src []<span style="color: #98fb98;">byte</span>)
+}
+</pre>
 </div>
 
+<p>
+这是计数器模式CTR流的定义，它将块加密改为流加密，注意 <b>块加密的细节已被抽象化了</b> 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">NewCTR &#36820;&#22238;&#19968;&#20010; Stream&#65292;&#20854;&#21152;&#23494;/&#35299;&#23494;&#20351;&#29992;&#35745;&#25968;&#22120;&#27169;&#24335;&#20013;&#32473;&#23450;&#30340; Block &#36827;&#34892;</span>
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">iv &#30340;&#38271;&#24230;&#24517;&#39035;&#19982; Block &#30340;&#22359;&#22823;&#23567;&#30456;&#21516;</span>
+<span style="color: #00ffff;">func</span> <span style="color: #87cefa;">NewCTR</span>(block <span style="color: #98fb98;">Block</span>, iv []<span style="color: #98fb98;">byte</span>) <span style="color: #98fb98;">Stream</span>
+</pre>
+</div>
+
+<p>
+NewCTR 的应用并不仅限于特定的加密算法和数据源，它适用于任何对 Block 接口和 Stream 的实现。因为它们返回接口值， 所以用其它加密模式来代替CTR只需做局部的更改。构造函数的调用过程必须被修改， 但由于其周围的代码只能将它看做 Stream，因此它们不会注意到其中的区别 
+</p>
+</div>
+</div>
 <div id="outline-container-sec-10-4" class="outline-3">
-<h3 id="sec-10-4">通用性</h3>
+<h3 id="sec-10-4">接口与方法</h3>
+<div class="outline-text-3" id="text-10-4">
+<p>
+<b>由于几乎任何类型都能添加方法，因此几乎任何类型都能满足一个接口</b> 一个很直观的例子就是 http 包中定义的 Handler 接口。任何实现了 Handler 的对象都能够处理HTTP请求 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">type</span> <span style="color: #98fb98;">Handler</span> <span style="color: #00ffff;">interface</span> {
+        <span style="color: #87cefa;">ServeHTTP</span>(ResponseWriter, *Request)
+}
+</pre>
 </div>
 
-<div id="outline-container-sec-10-5" class="outline-3">
-<h3 id="sec-10-5">接口与方法</h3>
-</div>
+<p>
+ResponseWriter 接口提供了对方法的访问，这些方法需要响应客户端的请求: 
+</p>
+<ul class="org-ul">
+<li>由于这些方法包含了标准的 Write 方法，因此 http.ResponseWriter 可用于任何 io.Writer 适用的场景
+</li>
+<li>Request 结构体包含已解析的客户端请求
+</li>
+</ul>
+
+<p>
+为简单起见，假设所有的HTTP请求都是GET方法，而忽略POST方法， 这种简化不会影响处理程序的建立方式。这里有个短小却完整的处理程序实现， 它用于记录某个页面被访问的次数
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#31616;&#21333;&#30340;&#35745;&#25968;&#22120;&#26381;&#21153;&#12290;</span>
+<span style="color: #00ffff;">type</span> <span style="color: #98fb98;">Counter</span> <span style="color: #00ffff;">struct</span> {
+        n int
+}
+
+<span style="color: #00ffff;">func</span> (ctr *<span style="color: #98fb98;">Counter</span>) <span style="color: #87cefa;">ServeHTTP</span>(w <span style="color: #98fb98;">http.ResponseWriter</span>, req *<span style="color: #98fb98;">http.Request</span>) {
+        ctr.n++
+        fmt.<span style="color: #87cefa;">Fprintf</span>(w, <span style="color: #ffa07a;">"counter = %d\n"</span>, ctr.n) <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#27880;&#24847; Fprintf &#22914;&#20309;&#33021;&#36755;&#20986;&#21040; http.ResponseWriter</span>
+}
+</pre>
 </div>
 
+<p>
+作为参考，这里演示了如何将这样一个服务器添加到URL树的一个节点上
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">import</span> <span style="color: #ffa07a;">"net/http"</span>
+...
+ctr := <span style="color: #b0c4de;">new</span>(<span style="color: #98fb98;">Counter</span>)
+http.<span style="color: #87cefa;">Handle</span>(<span style="color: #ffa07a;">"/counter"</span>, ctr)
+</pre>
+</div>
+
+<p>
+但为什么 Counter 要是结构体呢？一个整数就够了。 <b>但是接收者必须为指针，增量操作对于调用者才可见</b> 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#31616;&#21333;&#30340;&#35745;&#25968;&#22120;&#26381;&#21153;&#12290;</span>
+<span style="color: #00ffff;">type</span> <span style="color: #98fb98;">Counter</span> <span style="color: #98fb98;">int</span>
+
+<span style="color: #00ffff;">func</span> (ctr *<span style="color: #98fb98;">Counter</span>) <span style="color: #87cefa;">ServeHTTP</span>(w <span style="color: #98fb98;">http.ResponseWriter</span>, req *<span style="color: #98fb98;">http.Request</span>) {
+        *ctr++
+        fmt.<span style="color: #87cefa;">Fprintf</span>(w, <span style="color: #ffa07a;">"counter = %d\n"</span>, *ctr)
+}
+</pre>
+</div>
+
+<p>
+当页面被访问时，怎样通知你的程序去更新一些内部状态呢？ <b>为Web页面绑定个信道吧</b> 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#27599;&#27425;&#27983;&#35272;&#35813;&#20449;&#36947;&#37117;&#20250;&#21457;&#36865;&#19968;&#20010;&#25552;&#37266;&#12290;</span>
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#65288;&#21487;&#33021;&#38656;&#35201;&#24102;&#32531;&#20914;&#30340;&#20449;&#36947;&#12290;&#65289;</span>
+<span style="color: #00ffff;">type</span> <span style="color: #98fb98;">Chan</span> <span style="color: #00ffff;">chan</span> *<span style="color: #98fb98;">http.Request</span>
+
+<span style="color: #00ffff;">func</span> (ch <span style="color: #98fb98;">Chan</span>) <span style="color: #87cefa;">ServeHTTP</span>(w <span style="color: #98fb98;">http.ResponseWriter</span>, req *<span style="color: #98fb98;">http.Request</span>) {
+        ch &lt;- req
+        fmt.<span style="color: #87cefa;">Fprint</span>(w, <span style="color: #ffa07a;">"notification sent"</span>)
+}
+</pre>
+</div>
+
+<p>
+最后，假设我们需要输出调用服务器二进制程序时使用的实参 /args。 很简单，写个打印实参的函数就行了
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">func</span> <span style="color: #87cefa;">ArgServer</span>() {
+        fmt.<span style="color: #87cefa;">Println</span>(os.Args)
+}
+</pre>
+</div>
+
+<p>
+如何将它转换为HTTP服务器呢？ 可以将 ArgServer 实现为某种可忽略值的方法，不过还有种更简单的方法。 <b>既然可以为除指针和接口以外的任何类型定义方法，同样也能为一个函数写一个方法</b>  http 包包含以下代码： 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">HandlerFunc &#31867;&#22411;&#26159;&#19968;&#20010;&#36866;&#37197;&#22120;&#65292;&#23427;&#20801;&#35768;&#23558;&#26222;&#36890;&#20989;&#25968;&#29992;&#20570;HTTP&#22788;&#29702;&#31243;&#24207;&#12290;</span>
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#33509; f &#26159;&#20010;&#20855;&#26377;&#36866;&#24403;&#31614;&#21517;&#30340;&#20989;&#25968;&#65292;HandlerFunc(f) &#23601;&#26159;&#20010;&#35843;&#29992; f &#30340;&#22788;&#29702;&#31243;&#24207;&#23545;&#35937;&#12290;</span>
+<span style="color: #00ffff;">type</span> <span style="color: #98fb98;">HandlerFunc</span> <span style="color: #00ffff;">func</span>(<span style="color: #98fb98;">ResponseWriter</span>, *<span style="color: #98fb98;">Request</span>) <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#36825;&#26159;&#19968;&#20010;&#20197;&#21069;C&#35821;&#35328;&#30340;&#20989;&#25968;&#25351;&#38024;&#65281;&#65281;&#65281;</span>
+
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">ServeHTTP calls f(c, req).</span>
+<span style="color: #00ffff;">func</span> (f <span style="color: #98fb98;">HandlerFunc</span>) <span style="color: #87cefa;">ServeHTTP</span>(w <span style="color: #98fb98;">ResponseWriter</span>, req *<span style="color: #98fb98;">Request</span>) {
+        <span style="color: #87cefa;">f</span>(w, req)
+}
+</pre>
+</div>
+
+<p>
+HandlerFunc 是个具有 ServeHTTP 方法的类型， 因此该类型的值就能处理HTTP请求。来看看该方法的实现： <b>接收者是一个函数 f，而该方法调用 f。这看起来很奇怪，但不必大惊小怪， 区别在于接收者变成了一个信道，而方法通过该信道发送消息</b> 
+</p>
+
+<p>
+为了将 ArgServer 实现成HTTP服务器，首先得让它拥有合适的签名
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#23454;&#21442;&#26381;&#21153;&#22120;&#12290;</span>
+<span style="color: #00ffff;">func</span> <span style="color: #87cefa;">ArgServer</span>(w <span style="color: #98fb98;">http.ResponseWriter</span>, req *<span style="color: #98fb98;">http.Request</span>) {
+        fmt.<span style="color: #87cefa;">Fprintln</span>(w, os.Args)
+}
+</pre>
+</div>
+
+<p>
+ArgServer 和 HandlerFunc 现在拥有了相同的签名， 因此我们可将其转换为这种类型以访问它的方法，就像我们将 Sequence 转换为 IntSlice 以访问 IntSlice.Sort 那样。 建立代码非常简单： 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go">http.<span style="color: #87cefa;">Handle</span>(<span style="color: #ffa07a;">"/args"</span>, http.<span style="color: #87cefa;">HandlerFunc</span>(ArgServer)) <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#27880;&#24847;&#65292;&#36825;&#37324;&#26159;&#31867;&#22411;&#36716;&#25442;&#65292;&#32780;&#19981;&#26159;&#20989;&#25968;&#35843;&#29992;&#65281;&#65281;&#65281;</span>
+</pre>
+</div>
+
+<ol class="org-ol">
+<li>当有人访问 /args 页面时，安装到该页面的处理程序就有了值 ArgServer 和类型 HandlerFunc
+</li>
+<li>HTTP服务器会以 ArgServer 为接收者，调用该类型的 ServeHTTP 方法 
+</li>
+<li>会反过来调用 ArgServer（通过 f(c, req)） 
+</li>
+<li>接着实参就会被显示出来 
+</li>
+</ol>
+
+<p>
+在这里，通过一个结构体，一个整数，一个信道和一个函数，建立了一个HTTP服务器， 这一切都是因为接口只是方法的集和，而几乎任何类型都能定义方法 
+</p>
+</div>
+</div>
+</div>
 <div id="outline-container-sec-11" class="outline-2">
 <h2 id="sec-11">空白标识符</h2>
 <div class="outline-text-2" id="text-11">

@@ -11,7 +11,7 @@
 
 在Go中另辟蹊径，让机器来处理大部分的格式化问题。 *gofmt* 程序（也可用 go fmt，它以包为处理对象而非源文件）将Go程序按照标准风格缩进、 对齐，保留注释并在需要时重新格式化。若你想知道如何处理一些新的代码布局，请尝试运行 gofmt；若结果仍不尽人意，请重新组织你的程序（或提交有关 gofmt 的Bug），而不必为此纠结
 
-举例来说，你无需花时间将结构体中的字段注释对齐，gofmt 将为你代劳。 假如有以下声明
+举例来说，无需花时间将结构体中的字段注释对齐，gofmt 将为你代劳。 假如有以下声明
 
 #+BEGIN_SRC go
   type T struct {
@@ -570,47 +570,854 @@ Go的 defer 语句用于预设一个函数调用（ *推迟执行函数* ）， 
 * 数据
 
 ** new 分配
+ Go提供了两种分配原语，即内建函数 new 和 make。 它们所做的事情不同，所应用的类型也不同。它们可能会引起混淆，但规则却很简单。 让我们先来看看 new。这是个 *用来分配内存的内建函数* ， 但与其它语言中的同名函数不同， 它 *不会初始化内存* ，只会将 *内存置零* 。 也就是说， _new(T) 会为类型为 T 的新项分配已置零的内存空间， 并返回它的地址，也就是一个类型为 *T 的值_ 用Go的术语来说，*它返回一个指针， 该指针指向新分配的，类型为 T 的零值* 
 
-** 构造函数与复合字面
+既然 new 返回的内存已置零，那么 *当你设计数据结构时， 每种类型的零值就不必进一步初始化了，这意味着该数据结构的使用者只需用 new 创建一个新的对象就能正常工作* 例如，bytes.Buffer 的文档中提到 _零值的 Buffer 就是已准备就绪的缓冲区_  同样， _sync.Mutex 并没有显式的构造函数或 Init 方法， 而是零值的 sync.Mutex 就已经被定义为已解锁的互斥锁了_ 
+
+ *零值属性* 可以带来各种好处。考虑以下类型声明：
+
+#+BEGIN_SRC go
+  type SyncedBuffer struct {
+          lock    sync.Mutex
+          buffer  bytes.Buffer
+  }
+#+END_SRC
+
+SyncedBuffer 类型的值也是在 *声明时就分配好内存就绪*  后续代码中， p 和 v 无需进一步处理即可正确工作 
+
+#+BEGIN_SRC go
+  p := new(SyncedBuffer)  // type *SyncedBuffer
+  var v SyncedBuffer      // type  SyncedBuffer
+#+END_SRC
+
+*** 构造函数与复合字面
+有时零值还不够好，这时就需要一个初始化构造函数，如来自 os 包中的这段代码所示：
+
+#+BEGIN_SRC go
+  func NewFile(fd int, name string) *File {
+          if fd < 0 {
+                  return nil
+          }
+          f := new(File)
+          f.fd = fd
+          f.name = name
+          f.dirinfo = nil
+          f.nepipe = 0
+          return f
+  }
+#+END_SRC
+
+这里显得代码过于冗长。可通过 *复合字面* 来简化它， 该表达式在 *每次求值时都会创建新的实例* 
+#+BEGIN_SRC go
+  func NewFile(fd int, name string) *File {
+          if fd < 0 {
+                  return nil
+          }
+          f := File{fd, name, nil, 0}
+          return &f
+  }
+#+END_SRC
+
++ 请注意 *返回一个局部变量的地址完全没有问题* 这点与C不同(在C里面这样的返回必须使用malloc)。该局部变量对应的数据在函数返回后依然有效。实际上 _每当获取一个复合字面的地址时，都将为一个新的实例分配内存_  因此可以将上面的最后两行代码合并： 
+
+#+BEGIN_SRC go
+  return &File{fd, name, nil, 0}
+#+END_SRC
+
++ 复合字面的字段必须按顺序全部列出。但如果以 *字段:值*  对的形式明确地标出元素，初始化字段时就可以按任何顺序出现，未给出的字段值将赋予零值。因此，可以用如下形式： 
+#+BEGIN_SRC go
+  return &File{fd: fd, name: name}
+#+END_SRC
+
++ 少数情况下，若复合字面不包括任何字段，它将创建该类型的零值。 *表达式 new(File) 和 &File{} 是等价的* 
+
++ 复合字面同样可用于创建数组、切片以及映射，字段标签是索引还是映射键则视情况而定。 在下例初始化过程中，无论 Enone、Eio 和 Einval 的值是什么，只要它们的标签不同就行
+
+#+BEGIN_SRC go
+  a := [...]string   {Enone: "no error", Eio: "Eio", Einval: "invalid argument"}
+  s := []string      {Enone: "no error", Eio: "Eio", Einval: "invalid argument"}
+  m := map[int]string{Enone: "no error", Eio: "Eio", Einval: "invalid argument"}
+#+END_SRC 
 
 ** make分配
+内建函数 make(T, args) 的目的不同于 new(T)。它只用于创建 *切片、映射和信道* ，并返回类型为 *T* （而非  _*T_ ）的一个 *已初始化* （而 *非置零* ）的值
+
+出现这种用差异的原因在于: 这三种类型本质上为 *引用数据类型，它们在使用前必须初始化* 例如，切片是一个具有三项内容的描述符，包含一个指向（数组内部）数据的指针、长度以及容量， 在这三项被初始化之前，该切片为 nil。对于切片、映射和信道， *make 用于初始化其内部的数据结构并准备好将要使用的值* 
+
+#+BEGIN_SRC go
+  make([]int, 10, 100)
+#+END_SRC 
+
+会分配一个具有100个 int 的数组空间，接着创建一个长度为10， 容量为100并指向该数组中前10个元素的切片结构。与此相反，new([]int) 会返回一个指向新分配的，已置零的切片结构， 即一个指向 nil 切片值的指针
+
+下面的例子阐明了 new 和 make 之间的区别：  
+
+#+BEGIN_SRC go
+  var p *[]int = new([]int)       // 分配切片结构；*p == nil；基本没用
+  var v  []int = make([]int, 100) // 切片 v 现在引用了一个具有 100 个 int 元素的新数组
+
+  // 没必要的复杂：
+  var p *[]int = new([]int)
+  ,*p = make([]int, 100, 100)
+
+  // 习惯用法：
+  v := make([]int, 100)
+#+END_SRC
+
+请记住: 
++ *make 只适用于映射、切片和信道且不返回指针*
++ *若要获得明确的指针， 请使用 new 分配内存* 
 
 ** 数组
+在详细规划内存布局时，数组是非常有用的，有时还能避免过多的内存分配， 但它们主要用作切片的构件
 
+以下为数组在Go和C中的主要区别。在Go中，
++ 数组是值: *将一个数组赋予另一个数组会复制其所有元素* 
++ *若将某个数组传入某个函数，它将接收到该数组的一份副本而非指针*
++ 数组的大小是其类型的一部分。类型 [ 10 ]int 和 [ 20 ]int 是不同的
+
+数组为值的属性很有用，但代价高昂。*若你想要C那样的行为和效率，可以传递一个指向该数组的指针* 
+
+#+BEGIN_SRC go
+  func Sum(a *[3]float64) (sum float64) {
+          for _, v := range *a {
+                  sum += v
+          }
+          return
+  }
+
+  array := [...]float64{7.0, 8.5, 9.1}
+  x := Sum(&array)  // 注意显式的取址操作
+#+END_SRC
+
+但这并不是Go的习惯用法 *切片* 才是
 ** 切片
+切片通过对数组进行封装，为数据序列提供了更通用、强大而方便的接口。 除了 *矩阵变换* 这类需要明确维度的情况外，Go中的大部分数组编程都是通过切片来完成的
+
++ 切片保存了对底层数组的引用， *若将某个切片赋予另一个切片，它们会引用同一个数组*
++ *若某个函数将一个切片作为参数传入，则它对该切片元素的修改对调用者而言同样可见， 这可以理解为传递了底层数组的指针* 
+
+Read 函数可接受一个切片实参 而非一个指针和一个计数, *切片的长度决定了可读取数据的上限* 以下为 os 包中 File 类型的 Read 方法签名:
+#+BEGIN_SRC go
+  func (file *File) Read(buf []byte) (n int, err error)
+#+END_SRC
+ 
+该方法返回读取的字节数和一个错误值（若有的话）。若要从更大的缓冲区 b 中读取前32个字节，只需对其进行切片即可
+
+#+BEGIN_SRC go
+  n, err := f.Read(buf[0:32])
+#+END_SRC
+
+这种切片的方法常用且高效。若不谈效率，以下片段同样能读取该缓冲区的前32个字节
+
+#+BEGIN_SRC go
+  var n int
+  var err error
+  for i := 0; i < 32; i++ {
+          nbytes, e := f.Read(buf[i:i+1])  // 读取一个字节
+          if nbytes == 0 || e != nil {
+                  err = e
+                  break
+          }
+          n += nbytes
+  }
+#+END_SRC
+
++ 只要切片不超出底层数组的限制， *它的长度就是可变的，只需将它赋予其自身的切片即可*
++ 切片的容量可通过内建函数 *cap*  获得，它将给出该切片可取得的最大长度
+
+以下是将数据追加到切片的函数。若数据超出其容量，则会重新分配该切片。返回值即为所得的切片。 该函数中所使用的 len 和 cap 在应用于 nil 切片时是合法的，它会返回0
+
+#+BEGIN_SRC go
+  func Append(slice, data []byte) []byte {
+          l := len(slice)
+          if l + len(data) > cap(slice) {  // 重新分配
+                  // 为了后面的增长，需分配两份。
+                  newSlice := make([]byte, (l+len(data))*2)
+                  // copy 函数是预声明的，且可用于任何切片类型。
+                  copy(newSlice, slice)
+                  slice = newSlice
+          }
+          slice = slice[0:l+len(data)]
+          for i, c := range data {
+                  slice[l+i] = c
+          }
+          return slice
+  }
+#+END_SRC
+
+最终我们必须返回切片，因为尽管 Append 可修改 slice 的元素，但 *切片自身（其运行时数据结构包含指针、长度和容量）是通过值传递的* 
 
 ***  二维切片
+Go的数组和切片都是一维的。要创建等价的二维数组或切片，就 *必须定义一个数组的数组， 或切片的切片* 就像这样：
+
+#+BEGIN_SRC go
+  type Transform [3][3]float64  // 一个 3x3 的数组，其实是包含多个数组的一个数组。
+  type LinesOfText [][]byte     // 包含多个字节切片的一个切片。
+#+END_SRC 
+
+由于切片长度是可变的，因此其 *内部可能拥有多个不同长度的切片* 在 LinesOfText 例子中，这是种常见的情况：每行都有其自己的长度
+
+#+BEGIN_SRC go
+  text := LinesOfText{
+          []byte("Now is the time"),
+          []byte("for all good gophers"),
+          []byte("to bring some fun to the party."),
+  }
+#+END_SRC 
+
+有时必须分配一个二维数组，例如在处理像素的扫描行时，这种情况就会发生。 有两种方式来达到这个目的：
+1. 独立地分配每一个切片
+2. 只分配一个数组， 将各个切片都指向它
+
+采用哪种方式取决于你的应用：
++ 若切片会增长或收缩， 就应该通过独立分配来避免覆盖下一行
++ 若不会，用单次分配来构造对象会更加高效
+
+以下是这两种方法的大概代码，仅供参考。首先是一次一行的： 
+
+#+BEGIN_SRC go
+  // 分配顶层切片。
+  picture := make([][]uint8, YSize) // 每 y 个单元一行。
+  // 遍历行，为每一行都分配切片
+  for i := range picture {
+          picture[i] = make([]uint8, XSize)
+  }
+#+END_SRC
+
+现在是一次分配，对行进行切片： 
+
+#+BEGIN_SRC go
+  // 分配顶层切片，和前面一样。
+  picture := make([][]uint8, YSize) // 每 y 个单元一行。
+  // 分配一个大的切片来保存所有像素
+  pixels := make([]uint8, XSize*YSize) // 拥有类型 []uint8，尽管图片是 [][]uint8.
+  // 遍历行，从剩余像素切片的前面切出每行来。
+  for i := range picture {
+          picture[i], pixels = pixels[:XSize], pixels[XSize:]
+  }
+#+END_SRC
 
 ** 映射
+ 映射是方便而强大的内建数据结构：
++ 可以关联不同类型的值。 *其键可以是任何相等性操作符支持的类型* 如整数、浮点数、复数、字符串、指针、接口（只要其动态类型支持相等性判断）、结构以及数组
++  *切片不能用作映射键* 因为它们的相等性还未定义
++ 与切片一样，映射也是引用类型。 *若将映射传入函数中，并更改了该映射的内容，则此修改对调用者同样可见* 
+
+映射可使用一般的复合字面语法进行构建，其键-值对使用冒号分隔，因此可在初始化时很容易地构建它们 
+
+#+BEGIN_SRC go
+  var timeZone = map[string]int{
+          "UTC":  0*60*60,
+          "EST": -5*60*60,
+          "CST": -6*60*60,
+          "MST": -7*60*60,
+          "PST": -8*60*60,
+  }
+#+END_SRC
+
+赋值和获取映射值的语法类似于数组，不同的是映射的索引不必为整数
+
+#+BEGIN_SRC go
+  offset := timeZone["EST"]
+#+END_SRC
+
+若试图通过映射中不存在的键来取值，就会返回与该映射中项的类型对应的零值。 例如，若某个映射包含整数，当查找一个不存在的键时会返回 0。 *集合可实现成一个值类型为 bool 的映射。将该映射中的项置为 true 可将该值放入集合中，此后通过简单的索引操作即可判断是否存在* 
+
+#+BEGIN_SRC go
+  attended := map[string]bool{
+          "Ann": true,
+          "Joe": true,
+          ...
+  }
+
+  if attended[person] { // 若某人不在此映射中，则为 false
+          fmt.Println(person, "正在开会")
+  }
+#+END_SRC
+
+ 有时需要区分某项是不存在还是其值为零值。如对于一个值本应为零的 "UTC" 条目，也可能是由于不存在该项而得到零值。可以使用多重赋值的形式来分辨这种情况
+
+ #+BEGIN_SRC go
+   var seconds int
+   var ok bool
+   seconds, ok = timeZone[tz]
+ #+END_SRC
+
+ 在下面的例子中，若 tz 存在， seconds 就会被赋予适当的值，且 ok 会被置为 true； 若不存在，seconds 则会被置为零，而 ok 会被置为 false
+
+#+BEGIN_SRC go
+  func offset(tz string) int {
+          if seconds, ok := timeZone[tz]; ok {
+                  return seconds
+          }
+          log.Println("unknown time zone:", tz)
+          return 0
+  }
+#+END_SRC
+
+若仅需判断映射中是否存在某项而不关心实际的值，可使用空白标识符 （_）来代替该值的一般变量
+
+#+BEGIN_SRC go
+  _, present := timeZone[tz]
+#+END_SRC
+
+要删除映射中的某项，可使用内建函数 *delete* 它以映射及要被删除的键为实参。 *即便对应的键不在该映射中，此操作也是安全的* 
+
+#+BEGIN_SRC go
+  delete(timeZone, "PDT")  // 现在用标准时间
+#+END_SRC
 
 ** 打印
+ Go采用的 *格式化打印* 风格和C的 printf 族类似，但却更加丰富而通用。 这些函数位于 fmt 包中，且函数名首字母均为大写：如 fmt.Printf、fmt.Fprintf，fmt.Sprintf 等。 *字符串函数（Sprintf 等）会返回一个字符串，而非填充给定的缓冲区*
 
+无需提供一个格式字符串。每个 Printf、Fprintf 和 Sprintf 都分别对应另外的函数，如 Print 与 Println。 这些函数并 *不接受格式字符串，而是为每个实参生成一种默认格式* 。 *Println 系列的函数还会在实参中插入空格，并在输出时追加一个换行符* ，而 Print 版本仅在 *操作数两侧都没有字符串时才添加空白* 
+
+以下示例中各行产生的输出都是一样的 
+
+#+BEGIN_SRC go
+  fmt.Printf("Hello %d\n", 23) //格式化打印
+  fmt.Fprint(os.Stdout, "Hello ", 23, "\n") //格式化打印到标准输出流
+  fmt.Println("Hello", 23) // Hello和23之间插入空格
+  fmt.Println(fmt.Sprint("Hello ", 23)) // Springt返回一个字符串
+#+END_SRC
+
+fmt.Fprint 一类的格式化打印函数可接受任何实现了 io.Writer 接口的对象作为第一个实参, 变量os.Stdout 与 os.Stderr 都是人们熟知的例子
+
+与C的不同：
++ 像 %d 这样的数值格式并不接受表示符号或大小的标记， 打印例程会根据实参的类型来决定这些属性 
+#+BEGIN_SRC go :results output :exports result
+  var x uint64 = 1<<64 - 1
+  fmt.Printf("%d %x; %d %x\n", x, x, int64(x), int64(x))
+#+END_SRC
+
+#+RESULTS:
+: 18446744073709551615 ffffffffffffffff; -1 -1 
+
++ 若你只想要默认的转换，如使用十进制的整数，你可以使用通用的格式 %v（对应值）；其结果与 Print 和 Println 的输出完全相同。此外，这种格式还能打印任意值，甚至包括数组、结构体和映射。 以下是打印上一节中定义的时区映射的语句
+
+#+BEGIN_SRC go :results output :exports result
+  fmt.Printf("%v\n", timeZone)  // 或只用 fmt.Println(timeZone)
+#+END_SRC
+
+#+RESULTS:
+: map[CST:-21600 PST:-28800 EST:-18000 UTC:0 MST:-25200]
+
+映射中的键可能按任意顺序输出
++ 当打印结构体时
+  + %+v 会为结构体的每个字段添上字段名
+  + %#v 将完全按照Go的语法打印值
+
+#+BEGIN_SRC go :results output :exports result
+  type T struct {
+          a int
+          b float64
+          c string
+  }
+  t := &T{ 7, -2.35, "abc\tdef" }
+  fmt.Printf("%v\n", t)
+  fmt.Printf("%+v\n", t)
+  fmt.Printf("%#v\n", t)
+  fmt.Printf("%#v\n", timeZone)
+#+END_SRC
+
+#+RESULTS:
+: &{7 -2.35 abc   def}
+: &{a:7 b:-2.35 c:abc     def}
+: &main.T{a:7, b:-2.35, c:"abc\tdef"}
+: map[string] int{"CST":-21600, "PST":-28800, "EST":-18000, "UTC":0, "MST":-25200}
+
++ 请注意其中的&符号 当遇到 string 或 []byte 值时：
+    + 可使用 %q 产生带引号的字符串（%q 格式也可用于整数和符文，它会产生一个带单引号的符文常量） 
+   + 而格式 %#q 会尽可能使用反引号
+   + %x 还可用于字符串、字节数组以及整数，并生成一个很长的十六进制字符串
+   + 带空格的格式（% x）还会在字节之间插入空格
+
++ 另一种实用的格式是 %T，它会打印某个值的类型
+#+BEGIN_SRC go :results output :exports result
+  fmt.Printf("%T\n", timeZone)
+#+END_SRC
+
+#+RESULTS:
+: map[string] int
+
++  若想控制自定义类型的默认格式，只需为该类型定义一个具有 String() string 签名的方法。对于简单的类型 T，可进行如下操作
+#+BEGIN_SRC go :results output :exports result
+  func (t *T) String() string {
+          return fmt.Sprintf("%d/%g/%q", t.a, t.b, t.c)
+  }
+  fmt.Printf("%v\n", t)
+#+END_SRC
+
+#+RESULTS:
+: 7/-2.35/"abc\tdef"
+
+ 如果需要像指向 T 的指针那样打印类型 T 的值， String 的接收者就必须是值类型的；上面的例子中接收者是一个指针， 因为这对结构来说更高效而通用
+
+String 方法也可调用 Sprintf， 因为打印例程可以完全重入并按这种方式封装。不过要理解这种方式，还有一个重要的细节： *请勿通过调用 Sprintf 来构造 String 方法，因为它会无限递归你的的 String 方法!!!* 
+
+#+BEGIN_SRC go
+  type MyString string
+
+  func (m MyString) String() string {
+          return fmt.Sprintf("MyString=%s", m) // 错误：会无限递归
+  }
+#+END_SRC
+
+要解决这个问题也很简单：将该实参转换为基本的字符串类型，它没有这个方法
+
+#+BEGIN_SRC go
+  type MyString string
+  func (m MyString) String() string {
+          return fmt.Sprintf("MyString=%s", string(m)) // 可以：注意转换
+  }
+#+END_SRC
+
++  另一种打印技术就是将打印例程的实参直接传入另一个这样的例程。Printf 的签名为其最后的实参使用了 *...interface{}*  类型，这样格式的后面就能出现任意数量，任意类型的形参了
+
+#+BEGIN_SRC go
+  func Printf(format string, v ...interface{}) (n int, err error) 
+#+END_SRC
+ 
+在 Printf 函数中，v 看起来更像是 []interface{} 类型的变量，但如果将它传递到另一个变参函数中，它就像是常规实参列表了。 以下是之前用过的 log.Println 的实现。它直接将其实参传递给 fmt.Sprintln 进行实际的格式化
+
+#+BEGIN_SRC go
+  // Println 通过 fmt.Println 的方式将日志打印到标准记录器。
+  func Println(v ...interface{}) {
+          std.Output(2, fmt.Sprintln(v...))  // Output 接受形参 (int, string) , 将 ... 写在 v 之后来告诉编译器将 v 视作一个实参列表
+  }
+#+END_SRC 
+
+该 Sprintln 嵌套调用中，我们 *将 ... 写在 v 之后来告诉编译器将 v 视作一个实参列表* ，否则它会将 v 当做单一的切片实参来传递
+
+顺便一提，... 形参可指定具体的类型，例如从整数列表中选出最小值的函数 min，其形参可为 ...int 类型
+
+#+BEGIN_SRC go
+  func Min(a ...int) int {
+          min := int(^uint(0) >> 1)  // 最大的 int
+          for _, i := range a {
+                  if i < min {
+                          min = i
+                  }
+          }
+          return min
+  }
+#+END_SRC
 ** 追加
+现在要对内建函数 *append*  的设计进行补充说明。append 函数的签名不同于前面我们自定义的 Append 函数。大致来说，它就像这样： 
 
+#+BEGIN_SRC go
+  func append(slice []T, 元素 ...T) []T
+#+END_SRC
+
+其中的 T 为 *任意给定类型的占位符* 实际上，无法在Go中编写一个类型 T 由调用者决定的函数。这也就是为何 append 为内建函数的原因：它需要编译器的支持 
+
+append 会在 *切片末尾追加元素并返回结果* 必须返回结果， 原因与手写的 Append 一样，即底层数组可能会被改变。以下简单的例子 
+
+#+BEGIN_SRC go :results output :exports result
+  x := []int{1,2,3}
+  x = append(x, 4, 5, 6)
+  fmt.Println(x) 
+#+END_SRC
+
+#+RESULTS:
+: [1 2 3 4 5 6]
+
+append 有点像 Printf 那样 *可接受任意数量的实参* 
+
+但如果要像 Append 那样将一个切片追加到另一个切片中呢？ 很简单：在调用的地方使用 ...，就像在上面调用 Output 那样。以下代码片段的输出与上一个相同
+
+#+BEGIN_SRC go
+  x := []int{1,2,3}
+  y := []int{4,5,6}
+  x = append(x, y...) // 而不是append(x, y) 
+  fmt.Println(x) 
+#+END_SRC
+
+如果没有 ...，它就会由于 *类型错误而无法编译*  因为 y 不是 int 类型的
 * 初始化
+ 尽管从表面上看，Go的初始化过程与C或C++并不算太大，但它确实更为强大。 在初始化过程中，不仅可以构建复杂的结构，还能正确处理不同包对象间的初始化顺序
 
 ** 常量
+ Go中的常量就是不变量：
++ 在 *编译时创建，即便它们可能是函数中定义的局部变量*
++ 只能是 *数字、字符（符文）、字符串或布尔值*
++ 由于编译时的限制， *定义它们的表达式必须也是可被编译器求值的常量表达式* 
+    +  1<<3 就是一个常量表达式，而 math.Sin(math.Pi/4) 则不是，因为对 *math.Sin 的函数调用* 在运行时才会发生
 
+在Go中，枚举常量使用枚举器 iota 创建。由于 iota 可为表达式的一部分，而表达式可以被隐式地重复，这样也就更容易构建复杂的值的集合了
+#+BEGIN_SRC go
+  type ByteSize float64
+
+  const (
+          // 通过赋予空白标识符来忽略第一个值
+          _           = iota // ignore first value by assigning to blank identifier
+          KB ByteSize = 1 << (10 * iota)
+          MB
+          GB
+          TB
+          PB
+          EB
+          ZB
+          YB
+  )
+#+END_SRC
+
+由于可将 String 之类的方法附加在用户定义的类型上， 因此它就为打印时自动格式化任意值提供了可能性，即便是作为一个通用类型的一部分。 尽管常常会看到这种技术应用于结构体，但它对于像 ByteSize 之类的浮点数标量等类型也是有用的
+
+#+BEGIN_SRC go
+  func (b ByteSize) String() string {
+          switch {
+          case b >= YB:
+                  return fmt.Sprintf("%.2fYB", b/YB)
+          case b >= ZB:
+                  return fmt.Sprintf("%.2fZB", b/ZB)
+          case b >= EB:
+                  return fmt.Sprintf("%.2fEB", b/EB)
+          case b >= PB:
+                  return fmt.Sprintf("%.2fPB", b/PB)
+          case b >= TB:
+                  return fmt.Sprintf("%.2fTB", b/TB)
+          case b >= GB:
+                  return fmt.Sprintf("%.2fGB", b/GB)
+          case b >= MB:
+                  return fmt.Sprintf("%.2fMB", b/MB)
+          case b >= KB:
+                  return fmt.Sprintf("%.2fKB", b/KB)
+          }
+          return fmt.Sprintf("%.2fB", b)
+  }
+#+END_SRC
+
+表达式 YB 会打印出 1.00YB，而 ByteSize(1e13) 则会打印出 9.09
+
+在这里用 Sprintf 实现 ByteSize 的 String 方法很安全（不会无限递归），这倒不是因为类型转换，而是它以 %f 调用了 Sprintf，它并不是一种字符串格式：Sprintf 只会在它需要字符串时才调用 String 方法，而 %f 需要一个浮点数值
 ** 变量
+变量的初始化与常量类似，但其 *初始值也可以是在运行时才被计算的一般表达式* 
 
-** 初始化
+#+BEGIN_SRC go
+  var (
+          home   = os.Getenv("HOME")
+          user   = os.Getenv("USER")
+          gopath = os.Getenv("GOPATH")
+  )
+#+END_SRC
 
+** init函数
+每个源文件都可以通过定义自己的无参数 init 函数来设置一些必要的状态。 （ _每个文件都可以拥有多个 init 函数_ ）而它的结束就意味着初始化结束： *只有该包中的所有变量声明都通过它们的初始化器求值后 init 才会被调用， 而那些 init 只有在所有已导入的包都被初始化后才会被求值* 
+
+除了那些不能被表示成声明的初始化外，init 函数还常被用在 *程序真正开始执行前，检验或校正程序的状态* 
+
+#+BEGIN_SRC go
+  func init() {
+          if user == "" {
+                  log.Fatal("$USER not set")
+          }
+          if home == "" {
+                  home = "/home/" + user
+          }
+          if gopath == "" {
+                  gopath = home + "/go"
+          }
+          // gopath 可通过命令行中的 --gopath 标记覆盖掉。
+          flag.StringVar(&gopath, "gopath", gopath, "override default GOPATH")
+  }
+#+END_SRC
 * 方法
 
 ** 指针 vs 值
+正如 ByteSize 那样，可以为任何已命名的类型（除了指针或接口）定义方法； 接收者可不必为结构体
+
+在之前讨论切片时，编写了一个 Append 函数。 也可将其定义为切片的方法。为此，首先要声明一个已命名的类型来绑定该方法， 然后使该方法的接收者成为该类型的值
+
+#+BEGIN_SRC go
+  type ByteSlice []byte
+
+  func (slice ByteSlice) Append(data []byte) []byte {
+          // 主体和前面相同。
+  }
+#+END_SRC
+
+*仍然需要该方法返回更新后的切片* 为了消除这种不便，可通过重新定义该方法， 将一个指向 ByteSlice 的指针作为该方法的接收者， 这样该方法就能重写调用者提供的切片了
+
+#+BEGIN_SRC go
+  func (p *ByteSlice) Append(data []byte) {
+          slice := *p
+          // 主体和前面相同，但没有 return。
+          ,*p = slice
+  }
+#+END_SRC
+
+其实可以做得更好。若将函数修改为与标准 Write 类似的方法，就像这样
+
+#+BEGIN_SRC go
+  func (p *ByteSlice) Write(data []byte) (n int, err error) {
+          slice := *p
+          // 依旧和前面相同。
+          ,*p = slice
+          return len(data), nil
+  }
+#+END_SRC
+
+那么类型 _*ByteSlice_ 就满足了标准的 *io.Writer* 接口，这将非常实用。 例如可以通过打印将内容写入 
+
+#+BEGIN_SRC go
+  var b ByteSlice
+  fmt.Fprintf(&b, "This hour has %d days\n", 7)
+#+END_SRC
+将 ByteSlice 的地址传入，因为只有 *ByteSlice 才满足 io.Writer
+
+以指针或值为接收者的区别在于 *值方法可通过指针和值调用， 而指针方法只能通过指针来调用*
+
+因为指针方法可以修改接收者；通过值调用它们会导致方法接收到该值的副本， 因此任何修改都将被丢弃，因此该语言不允许这种错误。不过有个方便的例外 *若该值是可寻址的， 那么该语言就会自动插入取址操作符来对付一般的通过值调用的指针方法* 在例子中，变量 b 是可寻址的，因此只需通过 b.Write 来调用它的 Write 方法，编译器会将它重写为 (&b).Write
 
 * 接口与其它类型
 
 ** 接口
+ Go中的接口为指定对象的行为提供了一种方法：如果某样东西可以完成 *这个*  那么它就可以用在 *这里* 已经见过许多简单的示例了：通过实现 String 方法，可以自定义打印函数，而通过 Write 方法，Fprintf 则能对任何对象产生输出。在Go代码中， 仅包含一两种方法的接口很常见，且其名称通常来自于实现它的方法， 如 io.Writer 就是实现了 Write 的一类对象
 
+每种类型都能实现多个接口。例如一个实现了 sort.Interface 接口的集合就可通过 sort 包中的例程进行排序。该接口包括 Len()、Less(i, j int) bool 以及 Swap(i, j int)，另外，该集合仍然可以有一个自定义的格式化器。 以下特意构建的例子 Sequence 就同时满足这两种情况
+
+#+BEGIN_SRC go
+  type Sequence []int
+
+  // Methods required by sort.Interface.
+  // sort.Interface 所需的方法。
+  func (s Sequence) Len() int {
+          return len(s)
+  }
+  func (s Sequence) Less(i, j int) bool {
+          return s[i] < s[j]
+  }
+  func (s Sequence) Swap(i, j int) {
+          s[i], s[j] = s[j], s[i]
+  }
+
+  // Method for printing - sorts the elements before printing.
+  // 用于打印的方法 - 在打印前对元素进行排序。
+  func (s Sequence) String() string {
+          sort.Sort(s)
+          str := "["
+          for i, elem := range s {
+                  if i > 0 {
+                          str += " "
+                  }
+                  str += fmt.Sprint(elem)
+          }
+          return str + "]"
+  }
+#+END_SRC
 ** 类型转换
+Sequence 的 String 方法重新实现了 Sprint 为切片实现的功能。若在调用 Sprint 之前将 Sequence 转换为纯粹的 []int，就能共享已实现的功能
 
-** 接口转换与类型断言
+#+BEGIN_SRC go
+  func (s Sequence) String() string {
+          sort.Sort(s)
+          return fmt.Sprint([]int(s)) //将 Sequence 转换为纯粹的 []int
+  }
+#+END_SRC
+该方法是通过类型转换技术，在 String 方法中安全调用 Sprintf 的另个一例子。若忽略类型名的话，这两种类型（Sequence和 []int）其实是相同的，因此在二者之间进行转换是合法的。 *转换过程并不会创建新值，它只是值暂让现有的时看起来有个新类型而已* （ _还有些合法转换则会创建新值，如从整数转换为浮点数等_ ）
 
+在Go程序中，为访问不同的方法集而进行类型转换的情况非常常见。 例如，可使用现有的 sort.IntSlice 类型来简化整个示例： 
+
+#+BEGIN_SRC go
+  type Sequence []int
+
+  // // 用于打印的方法 - 在打印前对元素进行排序。
+  func (s Sequence) String() string {
+          sort.IntSlice(s).Sort()
+          return fmt.Sprint([]int(s))
+  }
+#+END_SRC
+
+现在，不必让 Sequence 实现多个接口（排序和打印）， *可通过将数据条目转换为多种类型（Sequence、sort.IntSlice 和 []int）来使用相应的功能，每次转换都完成一部分工作*  这在实践中虽然有些不同寻常，但往往却很有效 
+*** 接口转换与类型断言
+*类型选择* 是类型转换的一种形式：它接受一个接口，在选择 （switch）中根据其判断选择对应的情况（case）， 并在某种意义上将其转换为该种类型。以下代码为 fmt.Printf 通过类型选择将值转换为字符串的简化版。若它已经为字符串，需要该接口中实际的字符串值； 若它有 String 方法，则需要调用该方法所得的结果
+
+#+BEGIN_SRC go
+  type Stringer interface {
+          String() string
+  }
+
+  var value interface{} // 调用者提供的值
+  switch str := value.(type) {
+  case string:
+          return str
+  case Stringer:
+          return str.String()
+  }
+#+END_SRC
+
+第一种情况获取具体的值，第二种将该接口转换为另一个接口。这种方式对于混合类型来说非常完美
+
+若只关心一种类型呢？若知道该值拥有一个 string 而想要提取它呢？ 只需一种情况的类型选择就行，但它需要 *类型断言* 类型断言接受一个接口值， 并从中提取指定的明确类型的值
+
+#+BEGIN_SRC go
+  value.(typeName) // 其语法借鉴自类型选择开头的子句，但它需要一个明确的类型， 而非 type 关键字 
+#+END_SRC
+
+而其结果则是拥有静态类型 typeName 的新值。该类型必须为该接口所拥有的具体类型， 或者该值可转换成的第二种接口类型。要提取知道在该值中的字符串，可以这样： 
+
+#+BEGIN_SRC go
+  str := value.(string)
+#+END_SRC
+
+但若它所转换的值中不包含字符串，该程序就会以 *运行时错误崩溃* 为避免这种情况， 需使用 *逗号, ok* 惯用测试它能安全地判断该值是否为字符串： 
+#+BEGIN_SRC go
+  str, ok := value.(string)
+  //是否string类型
+  if ok {
+          fmt.Printf("字符串值为 %q\n", str)
+  } else {
+          fmt.Printf("该值非字符串\n")
+  }
+#+END_SRC
+
+*若类型断言失败，str 将继续存在且为字符串类型，但它将拥有零值，即空字符串*
+
+最后有个 if-else 语句，它等价于本节开头的类型选择
+
+#+BEGIN_SRC go
+  if str, ok := value.(string); ok {
+          return str
+  } else if str, ok := value.(Stringer); ok {
+          return str.String()
+  }
+#+END_SRC
 ** 通用性
+若某种现有的类型仅实现了一个接口，且除此之外并无可导出的方法，则该类型本身就无需导出。 *仅导出该接口能更专注于其行为而非实现，其它属性不同的实现则能镜像该原始类型的行为*  这也能够避免为每个通用接口的实例重复编写文档。
 
+在这种情况下 *构造函数应当返回一个接口值而非实现的类型* 例如在 hash 库中，crc32.NewIEEE 和 adler32.New 都返回接口类型 hash.Hash32。要在Go程序中用Adler-32算法替代CRC-32， 只需修改构造函数调用即可，其余代码则不受算法改变的影响
+
+同样的方式能将 crypto 包中多种联系在一起的流密码算法与块密码算法分开。 crypto/cipher 包中的 Block 接口指定了块密码算法的行为， 它为单独的数据块提供加密。接着，和 bufio 包类似，任何实现了该接口的密码包都能被用于构造以 Stream 为接口表示的流密码，而无需知道块加密的细节
+
+crypto/cipher 接口看其来就像这样： 
+#+BEGIN_SRC go
+  type Block interface {
+          BlockSize() int
+          Encrypt(src, dst []byte)
+          Decrypt(src, dst []byte)
+  }
+
+  type Stream interface {
+          XORKeyStream(dst, src []byte)
+  }
+#+END_SRC 
+
+这是计数器模式CTR流的定义，它将块加密改为流加密，注意 *块加密的细节已被抽象化了* 
+
+#+BEGIN_SRC go
+  // NewCTR 返回一个 Stream，其加密/解密使用计数器模式中给定的 Block 进行
+  // iv 的长度必须与 Block 的块大小相同
+  func NewCTR(block Block, iv []byte) Stream
+#+END_SRC
+
+NewCTR 的应用并不仅限于特定的加密算法和数据源，它适用于任何对 Block 接口和 Stream 的实现。因为它们返回接口值， 所以用其它加密模式来代替CTR只需做局部的更改。构造函数的调用过程必须被修改， 但由于其周围的代码只能将它看做 Stream，因此它们不会注意到其中的区别 
 ** 接口与方法
+*由于几乎任何类型都能添加方法，因此几乎任何类型都能满足一个接口* 一个很直观的例子就是 http 包中定义的 Handler 接口。任何实现了 Handler 的对象都能够处理HTTP请求 
 
+#+BEGIN_SRC go
+  type Handler interface {
+          ServeHTTP(ResponseWriter, *Request)
+  }
+#+END_SRC
+
+ResponseWriter 接口提供了对方法的访问，这些方法需要响应客户端的请求: 
++ 由于这些方法包含了标准的 Write 方法，因此 http.ResponseWriter 可用于任何 io.Writer 适用的场景
++ Request 结构体包含已解析的客户端请求
+
+为简单起见，假设所有的HTTP请求都是GET方法，而忽略POST方法， 这种简化不会影响处理程序的建立方式。这里有个短小却完整的处理程序实现， 它用于记录某个页面被访问的次数
+
+#+BEGIN_SRC go
+  // 简单的计数器服务。
+  type Counter struct {
+          n int
+  }
+
+  func (ctr *Counter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+          ctr.n++
+          fmt.Fprintf(w, "counter = %d\n", ctr.n) // 注意 Fprintf 如何能输出到 http.ResponseWriter
+  }
+#+END_SRC
+
+作为参考，这里演示了如何将这样一个服务器添加到URL树的一个节点上
+
+#+BEGIN_SRC go
+  import "net/http"
+  ...
+  ctr := new(Counter)
+  http.Handle("/counter", ctr)
+#+END_SRC
+ 
+但为什么 Counter 要是结构体呢？一个整数就够了。 *但是接收者必须为指针，增量操作对于调用者才可见* 
+
+#+BEGIN_SRC go
+  // 简单的计数器服务。
+  type Counter int
+
+  func (ctr *Counter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+          ,*ctr++
+          fmt.Fprintf(w, "counter = %d\n", *ctr)
+  }
+#+END_SRC
+
+当页面被访问时，怎样通知你的程序去更新一些内部状态呢？ *为Web页面绑定个信道吧* 
+
+#+BEGIN_SRC go
+  // 每次浏览该信道都会发送一个提醒。
+  // （可能需要带缓冲的信道。）
+  type Chan chan *http.Request
+
+  func (ch Chan) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+          ch <- req
+          fmt.Fprint(w, "notification sent")
+  }
+#+END_SRC
+
+最后，假设我们需要输出调用服务器二进制程序时使用的实参 /args。 很简单，写个打印实参的函数就行了
+
+#+BEGIN_SRC go
+  func ArgServer() {
+          fmt.Println(os.Args)
+  }
+#+END_SRC
+
+如何将它转换为HTTP服务器呢？ 可以将 ArgServer 实现为某种可忽略值的方法，不过还有种更简单的方法。 *既然可以为除指针和接口以外的任何类型定义方法，同样也能为一个函数写一个方法*  http 包包含以下代码： 
+
+#+BEGIN_SRC go
+  // HandlerFunc 类型是一个适配器，它允许将普通函数用做HTTP处理程序。
+  // 若 f 是个具有适当签名的函数，HandlerFunc(f) 就是个调用 f 的处理程序对象。
+  type HandlerFunc func(ResponseWriter, *Request) //这是一个以前C语言的函数指针！！！
+
+  // ServeHTTP calls f(c, req).
+  func (f HandlerFunc) ServeHTTP(w ResponseWriter, req *Request) {
+          f(w, req)
+  }
+#+END_SRC
+
+HandlerFunc 是个具有 ServeHTTP 方法的类型， 因此该类型的值就能处理HTTP请求。来看看该方法的实现： *接收者是一个函数 f，而该方法调用 f。这看起来很奇怪，但不必大惊小怪， 区别在于接收者变成了一个信道，而方法通过该信道发送消息* 
+
+为了将 ArgServer 实现成HTTP服务器，首先得让它拥有合适的签名
+
+#+BEGIN_SRC go
+  // 实参服务器。
+  func ArgServer(w http.ResponseWriter, req *http.Request) {
+          fmt.Fprintln(w, os.Args)
+  }
+#+END_SRC
+
+ArgServer 和 HandlerFunc 现在拥有了相同的签名， 因此我们可将其转换为这种类型以访问它的方法，就像我们将 Sequence 转换为 IntSlice 以访问 IntSlice.Sort 那样。 建立代码非常简单： 
+
+#+BEGIN_SRC go
+  http.Handle("/args", http.HandlerFunc(ArgServer)) //注意，这里是类型转换，而不是函数调用！！！
+#+END_SRC
+
+1. 当有人访问 /args 页面时，安装到该页面的处理程序就有了值 ArgServer 和类型 HandlerFunc
+2. HTTP服务器会以 ArgServer 为接收者，调用该类型的 ServeHTTP 方法 
+3. 会反过来调用 ArgServer（通过 f(c, req)） 
+4. 接着实参就会被显示出来 
+
+在这里，通过一个结构体，一个整数，一个信道和一个函数，建立了一个HTTP服务器， 这一切都是因为接口只是方法的集和，而几乎任何类型都能定义方法 
 * 空白标识符
 
 ** 多重赋值中的空白标识符
