@@ -237,19 +237,24 @@ for the JavaScript code in this tag.
 <ul>
 <li><a href="#sec-13-1">通过通信共享内存</a></li>
 <li><a href="#sec-13-2">Go程</a></li>
-<li><a href="#sec-13-3">信道</a></li>
-<li><a href="#sec-13-4">信道中的信道</a></li>
-<li><a href="#sec-13-5">并行化</a></li>
-<li><a href="#sec-13-6">可能泄露的缓冲区</a></li>
+<li><a href="#sec-13-3">信道</a>
+<ul>
+<li><a href="#sec-13-3-1">信道中的信道</a></li>
+</ul>
+</li>
+<li><a href="#sec-13-4">并行化</a></li>
+<li><a href="#sec-13-5">可能泄露的缓冲区</a></li>
 </ul>
 </li>
 <li><a href="#sec-14">错误</a>
 <ul>
-<li><a href="#sec-14-1">panic</a></li>
-<li><a href="#sec-14-2">恢复</a></li>
+<li><a href="#sec-14-1">panic</a>
+<ul>
+<li><a href="#sec-14-1-1">恢复</a></li>
 </ul>
 </li>
-<li><a href="#sec-15">一个Web服务器</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
@@ -258,7 +263,7 @@ Go 是一门全新的语言。尽管它从既有的语言中借鉴了许多理�
 </p>
 
 <p>
-本文档就如何编写清晰、地道的Go代码提供了一些技巧。它是对语言规范、 Go语言之旅以及 如何使用Go编程的补充说明
+本文档就如何编写清晰、地道的Go代码提供了一些技巧。它是对语言规范、 Go语言之旅以及如何使用Go编程的补充说明
 </p>
 
 <div id="outline-container-sec-1" class="outline-2">
@@ -2529,69 +2534,1016 @@ ArgServer 和 HandlerFunc 现在拥有了相同的签名， 因此我们可将�
 <div id="outline-container-sec-11" class="outline-2">
 <h2 id="sec-11">空白标识符</h2>
 <div class="outline-text-2" id="text-11">
-</div><div id="outline-container-sec-11-1" class="outline-3">
+<p>
+空白标识符可被 <b>赋予或声明为任何类型的任何值，而其值会被无害地丢弃</b> 它有点像Unix中的 <b>/dev/null</b> 文件：它表示只写的值，在需要变量但不需要实际值的地方用作占位符
+</p>
+</div>
+<div id="outline-container-sec-11-1" class="outline-3">
 <h3 id="sec-11-1">多重赋值中的空白标识符</h3>
+<div class="outline-text-3" id="text-11-1">
+<p>
+for range 循环中对空表标识符的用法是一种具体情况，更一般的情况即为 <b>多重赋值</b> 
+</p>
+
+<p>
+<b>若某次赋值需要匹配多个左值，但其中某个变量不会被程序使用， 那么用空白标识符来代替该变量可避免创建无用的变量，并能清楚地表明该值将被丢弃</b> 例如，当调用某个函数时，它会返回一个值和一个错误，但只有错误很重要，那么可使用空白标识符来丢弃无关的值
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">if</span> _, err := os.<span style="color: #87cefa;">Stat</span>(path); os.<span style="color: #87cefa;">IsNotExist</span>(err) {
+        fmt.<span style="color: #87cefa;">Printf</span>(<span style="color: #ffa07a;">"%s does not exist\n"</span>, path)
+}
+</pre>
 </div>
 
+<p>
+偶尔会看见为忽略错误而丢弃错误值的代码，这是种糟糕的实践 <b>请务必检查错误返回， 它们会提供错误的理由</b> 
+</p>
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#28866;&#20195;&#30721;&#65281;&#33509;&#36335;&#24452;&#19981;&#23384;&#22312;&#65292;&#23427;&#23601;&#20250;&#23849;&#28291;</span>
+fi, _ := os.<span style="color: #87cefa;">Stat</span>(path)
+<span style="color: #00ffff;">if</span> fi.<span style="color: #87cefa;">IsDir</span>() {
+        fmt.<span style="color: #87cefa;">Printf</span>(<span style="color: #ffa07a;">"%s is a directory\n"</span>, path)
+}
+</pre>
+</div>
+</div>
+</div>
 <div id="outline-container-sec-11-2" class="outline-3">
 <h3 id="sec-11-2">未使用的导入和变量</h3>
+<div class="outline-text-3" id="text-11-2">
+<p>
+若导入某个包或声明某个变量而不使用它就会产生错误。未使用的包会让程序膨胀并拖慢编译速度， 而已初始化但未使用的变量不仅会浪费计算能力，还有可能暗藏着更大的Bug。然而 <b>在程序开发过程中，经常会产生未使用的导入和变量。虽然以后会用到它们， 但为了完成编译又不得不删除它们才行</b> 这很让人烦恼。空白标识符就能提供一个工作空间
+</p>
+
+<p>
+这个写了一半的程序有两个未使用的导入（fmt 和 io）以及一个未使用的变量（fd），因此它不能编译， 但若到目前为止代码还是正确的，我们还是很乐意看到它们的
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">package</span> main
+
+<span style="color: #00ffff;">import</span> (
+        <span style="color: #ffa07a;">"fmt"</span>
+        <span style="color: #ffa07a;">"io"</span>
+        <span style="color: #ffa07a;">"log"</span>
+        <span style="color: #ffa07a;">"os"</span>
+)
+
+<span style="color: #00ffff;">func</span> <span style="color: #87cefa;">main</span>() {
+        fd, err := os.<span style="color: #87cefa;">Open</span>(<span style="color: #ffa07a;">"test.go"</span>)
+        <span style="color: #00ffff;">if</span> err != <span style="color: #7fffd4;">nil</span> {
+                log.<span style="color: #87cefa;">Fatal</span>(err)
+        }
+        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">TODO: use fd.</span>
+}
+</pre>
+</div>
+
+<p>
+要让编译器停止关于未使用导入的抱怨，需要空白标识符来引用已导入包中的符号。 同样，将未使用的变量 fd 赋予空白标识符也能关闭未使用变量错误。 该程序的以下版本可以编译
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">package</span> main
+
+<span style="color: #00ffff;">import</span> (
+    <span style="color: #ffa07a;">"fmt"</span>
+    <span style="color: #ffa07a;">"io"</span>
+    <span style="color: #ffa07a;">"log"</span>
+    <span style="color: #ffa07a;">"os"</span>
+)
+
+<span style="color: #00ffff;">var</span> _ = fmt.Printf <span style="color: #ff4500;">// </span><span style="color: #ff4500;">For debugging; delete when done. // &#29992;&#20110;&#35843;&#35797;&#65292;&#32467;&#26463;&#26102;&#21024;&#38500;&#12290;</span>
+<span style="color: #00ffff;">var</span> _ io.Reader    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">For debugging; delete when done. // &#29992;&#20110;&#35843;&#35797;&#65292;&#32467;&#26463;&#26102;&#21024;&#38500;&#12290;</span>
+
+<span style="color: #00ffff;">func</span> <span style="color: #87cefa;">main</span>() {
+    fd, err := os.<span style="color: #87cefa;">Open</span>(<span style="color: #ffa07a;">"test.go"</span>)
+    <span style="color: #00ffff;">if</span> err != <span style="color: #7fffd4;">nil</span> {
+        log.<span style="color: #87cefa;">Fatal</span>(err)
+    }
+    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">TODO: use fd.</span>
+    _ = fd
+}
+</pre>
+</div>
+
+<p>
+按照惯例，应在导入并加以注释后，再使全局声明导入错误静默，这样可以让它们更易找到， 并作为以后清理它的提醒
+</p>
+</div>
 </div>
 
 <div id="outline-container-sec-11-3" class="outline-3">
 <h3 id="sec-11-3">为副作用而导入</h3>
+<div class="outline-text-3" id="text-11-3">
+<p>
+像前例中 fmt 或 io 这种未使用的导入总应在最后被使用或移除： 空白赋值会将代码标识为工作正在进行中。但有时 <b>导入某个包只是为了其副作用，而没有任何明确的使用</b> 。例如，在 net/http/pprof 包的 init 函数中记录了HTTP处理程序的调试信息。它有个可导出的API， 但大部分客户端只需要该处理程序的记录和通过Web叶访问数据。只为了其副作用来导入该包， 只需将包重命名为空白标识符：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">import</span> _ <span style="color: #ffa07a;">"net/http/pprof"</span>
+</pre>
 </div>
 
+<p>
+这种导入格式能明确表示该包是为其副作用而导入的，因为没有其它使用该包的可能： 在此文件中，它没有名字。（若它有名字而没有使用，编译器就会拒绝该程序! ） 
+</p>
+</div>
+</div>
 <div id="outline-container-sec-11-4" class="outline-3">
 <h3 id="sec-11-4">接口检查</h3>
+<div class="outline-text-3" id="text-11-4">
+<p>
+就像在前面接口中讨论的那样， 一个类型无需显式地声明它实现了某个接口。取而代之 <b>该类型只要实现了某个接口的方法， 其实就实现了该接口</b> 在实践中，大部分接口转换都是静态的，因此会在编译时检测。 例如，将一个 *os.File 传入一个预期的 io.Reader 函数将不会被编译， 除非 *os.File 实现了 io.Reader 接口
+</p>
+
+<p>
+尽管有些接口检查会在运行时进行。encoding/json 包中就有个实例它定义了一个 Marshaler 接口。当JSON编码器接收到一个实现了该接口的值，那么该编码器就会调用该值的编组方法， 将其转换为JSON，而非进行标准的类型转换。 编码器在运行时通过类型断言检查其属性，就像这样：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go">m, ok := val.(<span style="color: #98fb98;">json.Marshaler</span>)
+</pre>
+</div>
+
+<p>
+若只需要判断某个类型是否是实现了某个接口，而不需要实际使用接口本身 （可能是错误检查部分），就使用空白标识符来忽略类型断言的值： 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">if</span> _, ok := val.(<span style="color: #98fb98;">json.Marshaler</span>); ok {
+        fmt.<span style="color: #87cefa;">Printf</span>(<span style="color: #ffa07a;">"value %v of type %T implements json.Marshaler\n"</span>, val, val)
+}
+</pre>
+</div>
+
+<p>
+当需要确保某个包中实现的类型一定满足该接口时，就会遇到这种情况。 若某个类型（例如 json.RawMessage） 需要一种定制的JSON表现时，它应当实现 json.Marshaler， 不过现在没有静态转换可以让编译器去自动验证它。 <b>若该类型通过忽略转换失败来满足该接口， 那么JSON编码器仍可工作，但它却不会使用定制的实现</b> 为确保其实现正确， 可在该包中用空白标识符声明
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">var</span> _ json.Marshaler = (*RawMessage)(<span style="color: #7fffd4;">nil</span>)
+</pre>
+</div>
+
+<p>
+在此声明中，调用了一个 *RawMessage 转换并将其赋予了 Marshaler，以此来要求 *RawMessage 实现 Marshaler，这时其属性就会在编译时被检测。 若 json.Marshaler 接口被更改，此包将无法通过编译， 而则会注意到它需要更新
+</p>
+
+<p>
+在这种结构中出现空白标识符， <b>即表示该声明的存在只是为了类型检查</b> 。 不过 <b>请不要为满足接口就将它用于任何类型</b> 。作为约定， <b>仅当代码中不存在静态类型转换时才能这种声明</b> 毕竟这是种罕见的情况
+</p>
+</div>
 </div>
 </div>
 
 <div id="outline-container-sec-12" class="outline-2">
 <h2 id="sec-12">内嵌</h2>
+<div class="outline-text-2" id="text-12">
+<p>
+Go并不提供典型的，类型驱动的子类化概念，但通过将类型内嵌到结构体或接口中， 它就能 <span class="underline">借鉴</span> 部分实现
+</p>
+
+<p>
+接口内嵌非常简单。之前提到过 io.Reader 和 io.Writer 接口，这里是它们的定义：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">type</span> <span style="color: #98fb98;">Reader</span> <span style="color: #00ffff;">interface</span> {
+        <span style="color: #87cefa;">Read</span>(p []<span style="color: #98fb98;">byte</span>) (n int, err error)
+}
+
+<span style="color: #00ffff;">type</span> <span style="color: #98fb98;">Writer</span> <span style="color: #00ffff;">interface</span> {
+        <span style="color: #87cefa;">Write</span>(p []<span style="color: #98fb98;">byte</span>) (n int, err error)
+}
+</pre>
+</div>
+
+<p>
+io 包也导出了一些其它接口，以此来阐明对象所需实现的方法。 例如 io.ReadWriter 就是个包含 Read 和 Write 的接口。可以通过显示地列出这两个方法来指明 io.ReadWriter， 但通过将这两个接口内嵌到新的接口中显然更容易且更具启发性，就像这样： 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">ReadWriter &#25509;&#21475;&#32467;&#21512;&#20102; Reader &#21644; Writer &#25509;&#21475;&#12290;</span>
+<span style="color: #00ffff;">type</span> <span style="color: #98fb98;">ReadWriter</span> <span style="color: #00ffff;">interface</span> {
+        Reader
+        Writer
+}
+</pre>
+</div>
+
+<p>
+正如它看起来那样：ReadWriter 能够做任何 Reader 和 Writer 可以做到的事情，它是 <b>内嵌接口的联合体</b> （它们必须是不相交的方法集） <b>只有接口能被嵌入到接口中</b>
+</p>
+
+<p>
+同样的基本想法可以应用在结构体中，但其意义更加深远。bufio 包中有 bufio.Reader 和 bufio.Writer 这两个结构体类型， 它们每一个都实现了与 io 包中相同意义的接口。此外，bufio 还通过结合 reader/writer 并将其内嵌到结构体中，实现了带缓冲的 reader/writer：它列出了结构体中的类型，但并未给予它们字段名
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">ReadWriter &#23384;&#20648;&#20102;&#25351;&#21521; Reader &#21644; Writer &#30340;&#25351;&#38024;&#12290;</span>
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#23427;&#23454;&#29616;&#20102; io.ReadWriter&#12290;</span>
+<span style="color: #00ffff;">type</span> <span style="color: #98fb98;">ReadWriter</span> <span style="color: #00ffff;">struct</span> {
+        *Reader  <span style="color: #ff4500;">// </span><span style="color: #ff4500;">*bufio.Reader</span>
+        *Writer  <span style="color: #ff4500;">// </span><span style="color: #ff4500;">*bufio.Writer</span>
+}
+</pre>
+</div>
+
+<p>
+内嵌的元素为指向结构体的指针，当然它们在使用前必须被初始化为指向有效结构体的指针。 ReadWriter 结构体和通过如下方式定义： 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">type</span> <span style="color: #98fb98;">ReadWriter</span> <span style="color: #00ffff;">struct</span> {
+        reader *Reader
+        writer *Writer
+}
+</pre>
+</div>
+<p>
+但为了提升该字段的方法并满足 io 接口，同样需要提供转发的方法， 就像这样： 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">func</span> (rw *<span style="color: #98fb98;">ReadWriter</span>) <span style="color: #87cefa;">Read</span>(p []<span style="color: #98fb98;">byte</span>) (n <span style="color: #98fb98;">int</span>, err <span style="color: #98fb98;">error</span>) {
+        <span style="color: #00ffff;">return</span> rw.reader.<span style="color: #87cefa;">Read</span>(p)
+}
+</pre>
+</div>
+
+<p>
+而通过 <b>直接内嵌结构体，就能避免如此繁琐</b> 内嵌类型的方法可以直接引用，这意味着 bufio.ReadWriter 不仅包括 bufio.Reader 和 bufio.Writer 的方法，它还同时满足下列三个接口： io.Reader、io.Writer 以及 io.ReadWriter
+</p>
+
+<p>
+还有种区分内嵌与子类的重要手段。 <b>当内嵌一个类型时，该类型的方法会成为外部类型的方法， 但当它们被调用时，该方法的接收者是内部类型，而非外部的</b> 在例子中，当 bufio.ReadWriter 的 Read 方法被调用时， 它与之前写的转发方法具有同样的效果；接收者是 ReadWriter 的 reader 字段，而非 ReadWriter 本身
+</p>
+
+<p>
+内嵌同样可以提供便利。这个例子展示了一个内嵌字段和一个常规的命名字段
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">type</span> <span style="color: #98fb98;">Job</span> <span style="color: #00ffff;">struct</span> {
+        Command string
+        *log.Logger
+}
+</pre>
+</div>
+<p>
+Job 类型现在有了 Log、Logf 和 *log.Logger 的其它方法。当然可以为 Logger 提供一个字段名，但完全不必这么做。现在，一旦初始化后，就能记录 Job 了： 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go">job.<span style="color: #87cefa;">Log</span>(<span style="color: #ffa07a;">"starting now..."</span>)
+</pre>
+</div>
+
+<p>
+Logger 是 Job 结构体的常规字段， 因此我们可在 Job 的构造函数中，通过一般的方式来初始化它，就像这样： 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">func</span> <span style="color: #87cefa;">NewJob</span>(command <span style="color: #98fb98;">string</span>, logger *<span style="color: #98fb98;">log.Logger</span>) *<span style="color: #98fb98;">Job</span> {
+        <span style="color: #00ffff;">return</span> &amp;<span style="color: #98fb98;">Job</span>{command, logger}
+}
+</pre>
+</div>
+
+<p>
+或通过复合字面： 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go">job := &amp;<span style="color: #98fb98;">Job</span>{command, log.<span style="color: #87cefa;">New</span>(os.Stderr, <span style="color: #ffa07a;">"Job: "</span>, log.Ldate)}
+</pre>
+</div>
+
+<p>
+若需要直接引用内嵌字段，可以忽略包限定名，直接将该字段的类型名作为字段名， 就像在 ReaderWriter 结构体的 Read 方法中做的那样。 若需要访问 Job 类型的变量 job 的 <b>log.Logger， *可以直接写作 job.Logger</b> 若想精炼 Logger 的方法时， 这会非常有用
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">func</span> (job *<span style="color: #98fb98;">Job</span>) <span style="color: #87cefa;">Logf</span>(format <span style="color: #98fb98;">string</span>, args ...<span style="color: #00ffff;">interface</span>{}) {
+        job.Logger.<span style="color: #87cefa;">Logf</span>(<span style="color: #ffa07a;">"%q: %s"</span>, job.Command, fmt.<span style="color: #87cefa;">Sprintf</span>(format, args...))
+}
+</pre>
+</div>
+
+<p>
+内嵌类型会引入命名冲突的问题，但解决规则却很简单
+</p>
+<ol class="org-ol">
+<li>字段或方法 X 会隐藏该类型中更深层嵌套的其它项 X。若 log.Logger 包含一个名为 Command 的字段或方法，Job 的 Command 字段会覆盖它
+</li>
+<li>若相同的嵌套层级上出现同名冲突，通常会产生一个错误。若 Job 结构体中包含名为 Logger 的字段或方法，再将 log.Logger 内嵌到其中的话就会产生错误。然而，若重名永远不会在该类型定义之外的程序中使用，那就不会出错。 这种限定能够在外部嵌套类型发生修改时提供某种保护。 因此，就算添加的字段与另一个子类型中的字段相冲突，只要这两个相同的字段永远不会被使用就没问题
+</li>
+</ol>
+</div>
 </div>
 
 <div id="outline-container-sec-13" class="outline-2">
 <h2 id="sec-13">并发</h2>
 <div class="outline-text-2" id="text-13">
-</div><div id="outline-container-sec-13-1" class="outline-3">
+<p>
+并发编程是个很大的论题。但限于篇幅，这里仅讨论一些Go特有的东西
+</p>
+</div>
+
+<div id="outline-container-sec-13-1" class="outline-3">
 <h3 id="sec-13-1">通过通信共享内存</h3>
+<div class="outline-text-3" id="text-13-1">
+<p>
+在并发编程中，为实现对共享变量的正确访问需要精确的控制，这在多数环境下都很困难。 Go语言另辟蹊径，它将共享的值通过信道传递，实际上，多个独立执行的线程从不会主动共享。 在任意给定的时间点，只有一个Go程能够访问该值。数据竞争从设计上就被杜绝了。 为了提倡这种思考方式，将它简化为一句口号：
+</p>
+
+<pre class="example">
+   不要通过共享内存来通信，而应通过通信来共享内存
+</pre>
+
+<p>
+这种方法意义深远。例如，引用计数通过为整数变量添加互斥锁来很好地实现。 但作为一种高级方法，通过信道来控制访问能够让你写出更简洁，正确的程序。
+</p>
+
+<p>
+可以从典型的单线程运行在单CPU之上的情形来审视这种模型。它无需提供同步原语。 现在考虑另一种情况，它也无需同步。现在让它们俩进行通信。若将通信过程看做同步， 那就完全不需要其它同步了。例如，Unix管道就与这种模型完美契合。 尽管Go的并发处理方式来源于Hoare的通信顺序处理（CSP）， 它依然可以看做是类型安全的Unix管道的实现
+</p>
+</div>
 </div>
 
 <div id="outline-container-sec-13-2" class="outline-3">
 <h3 id="sec-13-2">Go程</h3>
+<div class="outline-text-3" id="text-13-2">
+<p>
+Go程是因为现有的术语—线程、协程、进程等等—无法准确传达它的含义。 Go程具有简单的模型：它是 <b>与其它Go程并发运行在同一地址空间的函数</b> 。它是轻量级的， 所有小号几乎就只有栈空间的分配。而且栈最开始是非常小的，所以它们很廉价， 仅在需要时才会随着堆空间的分配（和释放）而变化
+</p>
+
+<p>
+Go程在多线程操作系统上 <b>可实现多路复用，因此若一个线程阻塞，比如说等待I/O， 那么其它的线程就会运行</b> Go程的设计隐藏了线程创建和管理的诸多复杂性。
+</p>
+
+<p>
+在函数或方法前添加 go 关键字能够在新的Go程中调用它。当调用完成后， 该Go程也会安静地退出。（ <span class="underline">效果有点像Unix Shell中的 &amp; 符号，它能让命令在后台运行</span> ）
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">go</span> list.<span style="color: #87cefa;">Sort</span>()  <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#24182;&#21457;&#36816;&#34892; list.Sort&#65292;&#26080;&#38656;&#31561;&#23427;&#32467;&#26463;</span>
+</pre>
 </div>
 
+<p>
+匿名函数在Go程调用中非常有用
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">func</span> <span style="color: #87cefa;">Announce</span>(message <span style="color: #98fb98;">string</span>, delay <span style="color: #98fb98;">time.Duration</span>) {
+        <span style="color: #00ffff;">go</span> <span style="color: #00ffff;">func</span>() {
+                time.<span style="color: #87cefa;">Sleep</span>(delay)
+                fmt.<span style="color: #87cefa;">Println</span>(message)
+        }()  <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#27880;&#24847;&#25324;&#21495; - &#24517;&#39035;&#35843;&#29992;&#35813;&#20989;&#25968;</span>
+}
+</pre>
+</div>
+
+<p>
+在Go中，匿名函数都是闭包： <b>其实现在保证了函数内引用变量的生命周期与函数的活动时间相同</b> 
+</p>
+
+<p>
+这些函数没什么实用性，因为它们没有实现完成时的信号处理。因此，需要 <b>信道</b> 
+</p>
+</div>
+</div>
 <div id="outline-container-sec-13-3" class="outline-3">
 <h3 id="sec-13-3">信道</h3>
+<div class="outline-text-3" id="text-13-3">
+<p>
+信道与映射一样，也需要通过 <b>make</b> 来分配内存。其结果值充当了 <b>对底层数据结构的引用</b> 若提供了一个可选的整数形参，它就会 <b>为该信道设置缓冲区大小，默认值是零，表示不带缓冲的或同步的信道</b> 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go">ci := <span style="color: #b0c4de;">make</span>(<span style="color: #00ffff;">chan</span> <span style="color: #98fb98;">int</span>)            <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#25972;&#25968;&#31867;&#22411;&#30340;&#26080;&#32531;&#20914;&#20449;&#36947;</span>
+cj := <span style="color: #b0c4de;">make</span>(<span style="color: #00ffff;">chan</span> <span style="color: #98fb98;">int</span>, 0)         <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#25972;&#25968;&#31867;&#22411;&#30340;&#26080;&#32531;&#20914;&#20449;&#36947;</span>
+cs := <span style="color: #b0c4de;">make</span>(<span style="color: #00ffff;">chan</span> *<span style="color: #98fb98;">os.File</span>, 100)  <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#25351;&#21521;&#25991;&#20214;&#25351;&#38024;&#30340;&#24102;&#32531;&#20914;&#20449;&#36947;</span>
+</pre>
+</div>
+
+<p>
+<b>无缓冲信道在通信时会同步交换数据，它能确保（两个Go程的）计算处于确定状态</b> 
+</p>
+
+<p>
+信道有很多惯用法，从这里开始了解。在上一节中，在后台启动了排序操作。 信道使得启动的Go程等待排序完成
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go">c := <span style="color: #b0c4de;">make</span>(<span style="color: #00ffff;">chan</span> <span style="color: #98fb98;">int</span>)  <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#20998;&#37197;&#19968;&#20010;&#20449;&#36947;</span>
+
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#22312;Go&#31243;&#20013;&#21551;&#21160;&#25490;&#24207;&#12290;&#24403;&#23427;&#23436;&#25104;&#21518;&#65292;&#22312;&#20449;&#36947;&#19978;&#21457;&#36865;&#20449;&#21495;</span>
+<span style="color: #00ffff;">go</span> <span style="color: #00ffff;">func</span>() {
+        list.<span style="color: #87cefa;">Sort</span>()
+        c &lt;- 1  <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#21457;&#36865;&#20449;&#21495;&#65292;&#20160;&#20040;&#20540;&#26080;&#25152;&#35859;&#12290;</span>
+}()
+
+<span style="color: #87cefa;">doSomethingForAWhile</span>()
+&lt;-c   <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#31561;&#24453;&#25490;&#24207;&#32467;&#26463;&#65292;&#20002;&#24323;&#21457;&#26469;&#30340;&#20540;</span>
+</pre>
+</div>
+
+<p>
+接收者在收到数据前会一直阻塞：
+</p>
+<ul class="org-ul">
+<li>若信道是不带缓冲的，那么在接收者收到值前，发送者会一直阻塞
+</li>
+<li>若信道是带缓冲的，则发送者仅在值被复制到缓冲区前阻塞
+<ul class="org-ul">
+<li>若缓冲区已满，发送者会一直等待直到某个接收者取出一个值为止
+</li>
+</ul>
+</li>
+</ul>
+
+<p>
+带缓冲的信道可被用作信号量，例如限制吞吐量。在下例中，进入的请求会被传递给 handle，它从信道中接收值，处理请求后将值发回该信道中，以便让该 <span class="underline">信号量</span> 准备迎接下一次请求。信道缓冲区的容量决定了 <b>同时调用 process 的数量上限，因此在初始化时首先要填充至它的容量上限</b> 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">var</span> sem = <span style="color: #b0c4de;">make</span>(<span style="color: #00ffff;">chan</span> <span style="color: #98fb98;">int</span>, MaxOutstanding)
+
+<span style="color: #00ffff;">func</span> <span style="color: #87cefa;">handle</span>(r *<span style="color: #98fb98;">Request</span>) {
+        sem &lt;- 1 <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#20687;&#20449;&#36947;&#21457;&#36865;&#20540;1, &#22914;&#26524;&#20449;&#36947;&#28385;&#20102;&#65292;&#21017;&#31561;&#24453;&#32531;&#23384;&#21306;&#28165;&#31354;</span>
+        <span style="color: #87cefa;">process</span>(r)  <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#21487;&#33021;&#38656;&#35201;&#24456;&#38271;&#26102;&#38388;</span>
+        &lt;-sem    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#23436;&#25104;&#21518;&#28165;&#31354;&#19968;&#20010;&#32531;&#23384;&#21306;&#20449;&#21495;&#65307;&#20351;&#19979;&#19968;&#20010;&#35831;&#27714;&#21487;&#20197;&#36816;&#34892;</span>
+}
+
+<span style="color: #00ffff;">func</span> <span style="color: #87cefa;">Serve</span>(queue <span style="color: #00ffff;">chan</span> *<span style="color: #98fb98;">Request</span>) {
+        <span style="color: #00ffff;">for</span> {
+                req := &lt;-queue <span style="color: #ff4500;">//</span><span style="color: #ff4500;">queue&#20013;&#33719;&#21462;&#30340;&#28040;&#24687;&#34987;&#36171;&#20540;&#32473;req</span>
+                <span style="color: #00ffff;">go</span> <span style="color: #87cefa;">handle</span>(req)  <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#26080;&#38656;&#31561;&#24453; handle &#32467;&#26463;&#12290;</span>
+        }
+}
+</pre>
+</div>
+
+<p>
+<b>由于数据同步发生在信道的接收端</b> （也就是说发送发生在&gt;接受之前），因此 <b>信号必须在信道的接收端获取，而非发送端</b> 。然而，它却有个设计问题：尽管只有 MaxOutstanding 个Go程能同时运行，但 Serve 还是 <b>为每个进入的请求都创建了新的Go程</b> 其结果就是，若请求来得很快， 该程序就会无限地消耗资源。为了弥补这种不足，必须通过修改 Serve 来 <b>限制创建Go程</b> 这是个明显的解决方案，但要当心修复后出现的Bug
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">func</span> <span style="color: #87cefa;">Serve</span>(queue <span style="color: #00ffff;">chan</span> *<span style="color: #98fb98;">Request</span>) {
+        <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#19981;&#26029;&#20174; channel &#25509;&#25910;&#20540;&#65292;&#30452;&#21040;&#23427;&#34987;&#20851;&#38381;</span>
+        <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#21482;&#26377;&#21457;&#36865;&#32773;&#25165;&#33021;&#20851;&#38381; channel&#65292;&#32780;&#19981;&#26159;&#25509;&#25910;&#32773;&#65281;</span>
+        <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#21521;&#19968;&#20010;&#24050;&#32463;&#20851;&#38381;&#30340; channel &#21457;&#36865;&#25968;&#25454;&#20250;&#24341;&#36215; panic&#65281;</span>
+        <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#36890;&#24120;&#19981;&#38656;&#35201;&#20851;&#38381; channel&#65292;&#38500;&#38750;&#26159;&#24819;&#20572;&#27490;&#24490;&#29615;&#65281;</span>
+        <span style="color: #00ffff;">for</span> req := <span style="color: #00ffff;">range</span> queue {
+                sem &lt;- 1
+                <span style="color: #00ffff;">go</span> <span style="color: #00ffff;">func</span>() {
+                        <span style="color: #87cefa;">process</span>(req) <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#36825;&#20799;&#26377;Bug&#65292;&#35299;&#37322;&#35265;&#19979;&#12290;</span>
+                        &lt;-sem
+                }()
+        }
+}
+</pre>
+</div>
+
+<p>
+Bug出现在Go的 for 循环中 <b>该循环变量在每次迭代时会被重用，因此 req 变量会在所有的Go程间共享</b> 这不是我们想要的。需要确保 req 对于每个Go程来说都是唯一的。有一种方法能够做到，就是 <b>将 req 的值作为实参传入到该Go程的闭包中</b> ：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">func</span> <span style="color: #87cefa;">Serve</span>(queue <span style="color: #00ffff;">chan</span> *<span style="color: #98fb98;">Request</span>) {
+        <span style="color: #00ffff;">for</span> req := <span style="color: #00ffff;">range</span> queue {
+                sem &lt;- 1
+                <span style="color: #00ffff;">go</span> <span style="color: #00ffff;">func</span>(r *<span style="color: #98fb98;">Request</span>) {
+                        <span style="color: #87cefa;">process</span>(r)
+                        &lt;-sem
+                }(req)
+        }
+}
+</pre>
+</div>
+
+<p>
+比较前后两个版本，观察该闭包声明和运行中的差别。 另一种解决方案就是 <b>以相同的名字创建新的变量</b> 如例中所示：  
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">func</span> <span style="color: #87cefa;">Serve</span>(queue <span style="color: #00ffff;">chan</span> *<span style="color: #98fb98;">Request</span>) {
+        <span style="color: #00ffff;">for</span> req := <span style="color: #00ffff;">range</span> queue {
+                req := req <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#20026;&#35813;Go&#31243;&#21019;&#24314; req &#30340;&#26032;&#23454;&#20363;</span>
+                sem &lt;- 1
+                <span style="color: #00ffff;">go</span> <span style="color: #00ffff;">func</span>() {
+                        <span style="color: #87cefa;">process</span>(req)
+                        &lt;-sem
+                }()
+        }
+}
+</pre>
+</div>
+
+<p>
+它的写法看起来有点奇怪 
+</p>
+<div class="org-src-container">
+
+<pre class="src src-go">req := req
+</pre>
+</div>
+
+<p>
+但在Go中这样做是合法且惯用的。用相同的名字获得了该变量的一个新的版本， 以此来局部地刻意屏蔽循环变量，使它对每个Go程保持唯一
+</p>
+
+<p>
+回到编写服务器的一般问题上来。另一种管理资源的好方法就是 <b>启动固定数量的 handle Go程，一起从请求信道中读取数据。Go程的数量限制了同时调用 process 的数量</b> Serve 同样会接收一个通知退出的信道， 在启动所有Go程后，它将阻塞并暂停从信道中接收消息
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">func</span> <span style="color: #87cefa;">handle</span>(queue <span style="color: #00ffff;">chan</span> *<span style="color: #98fb98;">Request</span>) {
+        <span style="color: #00ffff;">for</span> r := <span style="color: #00ffff;">range</span> queue {
+                <span style="color: #87cefa;">process</span>(r)
+        }
+}
+
+<span style="color: #00ffff;">func</span> <span style="color: #87cefa;">Serve</span>(clientRequests <span style="color: #00ffff;">chan</span> *<span style="color: #98fb98;">Request</span>, quit <span style="color: #00ffff;">chan</span> <span style="color: #98fb98;">bool</span>) {
+        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#21551;&#21160;&#22788;&#29702;&#31243;&#24207;</span>
+        <span style="color: #00ffff;">for</span> i := 0; i &lt; MaxOutstanding; i++ {
+                <span style="color: #00ffff;">go</span> <span style="color: #87cefa;">handle</span>(clientRequests)
+        }
+        &lt;-quit  <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#31561;&#24453;&#36890;&#30693;&#36864;&#20986;</span>
+}
+</pre>
+</div>
+</div>
+
+<div id="outline-container-sec-13-3-1" class="outline-4">
+<h4 id="sec-13-3-1">信道中的信道</h4>
+<div class="outline-text-4" id="text-13-3-1">
+<p>
+Go最重要的特性就是 <b>信道是一等值</b> 它可以被分配并像其它值到处传递。 这种特性通常被用来实现安全、并行的多路分解
+</p>
+
+<p>
+在上一节的例子中，handle 是个非常理想化的请求处理程序， 但并未定义它所处理的请求类型。若该类型包含一个可用于回复的信道， 那么每一个客户端都能为其回应提供自己的路径。以下为 Request 类型的大概定义 
+</p>
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">type</span> <span style="color: #98fb98;">Request</span> <span style="color: #00ffff;">struct</span> {
+        args        []<span style="color: #98fb98;">int</span>
+        f           <span style="color: #00ffff;">func</span>([]<span style="color: #98fb98;">int</span>) <span style="color: #98fb98;">int</span>
+        resultChan  <span style="color: #00ffff;">chan</span> <span style="color: #98fb98;">int</span>
+}
+</pre>
+</div>
+
+<p>
+客户端提供了一个函数及其实参，此外在请求对象中还有个 <b>接收应答的信道</b> 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">func</span> <span style="color: #87cefa;">sum</span>(a []<span style="color: #98fb98;">int</span>) (s <span style="color: #98fb98;">int</span>) {
+        <span style="color: #00ffff;">for</span> _, v := <span style="color: #00ffff;">range</span> a {
+                s += v
+        }
+        <span style="color: #00ffff;">return</span>
+}
+
+request := &amp;<span style="color: #98fb98;">Request</span>{[]<span style="color: #98fb98;">int</span>{3, 4, 5}, sum, <span style="color: #b0c4de;">make</span>(<span style="color: #00ffff;">chan</span> <span style="color: #98fb98;">int</span>)}
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#21457;&#36865;&#35831;&#27714;</span>
+clientRequests &lt;- request
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#31561;&#24453;&#22238;&#24212;</span>
+fmt.<span style="color: #87cefa;">Printf</span>(<span style="color: #ffa07a;">"answer: %d\n"</span>, &lt;-request.resultChan)
+</pre>
+</div>
+
+<p>
+服务器端需要修改成：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">func</span> <span style="color: #87cefa;">handle</span>(queue <span style="color: #00ffff;">chan</span> *<span style="color: #98fb98;">Request</span>) {
+        <span style="color: #00ffff;">for</span> req := <span style="color: #00ffff;">range</span> queue {
+                req.resultChan &lt;- req.<span style="color: #87cefa;">f</span>(req.args)
+        }
+}
+</pre>
+</div>
+
+<p>
+要使其实际可用还有很多工作要做，这些代码仅能实现一个 <b>速率有限、并行、非阻塞RPC系统的框架，而且它并不包含互斥锁</b> 
+</p>
+</div>
+</div>
 </div>
 
 <div id="outline-container-sec-13-4" class="outline-3">
-<h3 id="sec-13-4">信道中的信道</h3>
+<h3 id="sec-13-4">并行化</h3>
+<div class="outline-text-3" id="text-13-4">
+<p>
+如果计算过程能够被分为几块可独立执行的过程，它就可以在每块计算结束时向信道发送信号，从而实现并行处理
+</p>
+
+<p>
+对一系列向量项进行极耗资源的操作， 而每个项的值计算是完全独立的
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">type</span> <span style="color: #98fb98;">Vector</span> []<span style="color: #98fb98;">float64</span>
+
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#23558;&#27492;&#25805;&#24212;&#29992;&#33267; v[i], v[i+1] ... &#30452;&#21040; v[n-1]</span>
+<span style="color: #00ffff;">func</span> (v <span style="color: #98fb98;">Vector</span>) <span style="color: #87cefa;">DoSome</span>(i, n <span style="color: #98fb98;">int</span>, u <span style="color: #98fb98;">Vector</span>, c <span style="color: #00ffff;">chan</span> <span style="color: #98fb98;">int</span>) {
+        <span style="color: #00ffff;">for</span> ; i &lt; n; i++ {
+                v[i] += u.<span style="color: #87cefa;">Op</span>(v[i])
+        }
+        c &lt;- 1    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#21457;&#20449;&#21495;&#34920;&#31034;&#36825;&#19968;&#22359;&#35745;&#31639;&#23436;&#25104;&#12290;</span>
+}
+</pre>
+</div>
+
+<p>
+在循环中启动了独立的处理块，每个CPU将执行一个处理。 它们有可能以乱序的形式完成并结束，但这没有关系，只需在所有Go程开始后接收，并统计信道中的完成信号即可
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">const</span> NCPU = 4  <span style="color: #ff4500;">// </span><span style="color: #ff4500;">CPU&#26680;&#24515;&#25968;</span>
+
+<span style="color: #00ffff;">func</span> (v <span style="color: #98fb98;">Vector</span>) <span style="color: #87cefa;">DoAll</span>(u <span style="color: #98fb98;">Vector</span>) {
+        c := <span style="color: #b0c4de;">make</span>(<span style="color: #00ffff;">chan</span> <span style="color: #98fb98;">int</span>, NCPU)  <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#32531;&#20914;&#21306;&#26159;&#21487;&#36873;&#30340;&#65292;&#20294;&#26126;&#26174;&#29992;&#19978;&#26356;&#22909;</span>
+        <span style="color: #00ffff;">for</span> i := 0; i &lt; NCPU; i++ {
+                <span style="color: #00ffff;">go</span> v.<span style="color: #87cefa;">DoSome</span>(i*<span style="color: #b0c4de;">len</span>(v)/NCPU, (i+1)*<span style="color: #b0c4de;">len</span>(v)/NCPU, u, c)
+        }
+        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#25490;&#31354;&#20449;&#36947;</span>
+        <span style="color: #00ffff;">for</span> i := 0; i &lt; NCPU; i++ {
+                &lt;-c    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#31561;&#24453;&#20219;&#21153;&#23436;&#25104;</span>
+        }
+        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#19968;&#20999;&#23436;&#25104;</span>
+}
+</pre>
+</div>
+
+<p>
+目前Go运行时的实现默认 <b>并不会并行执行代码，它只为用户层代码提供单一的处理核心</b> 任意数量的Go程都可能在系统调用中被阻塞，而在任意时刻默认只有一个会执行用户层代码。 它应当变得更智能，而且它将来肯定会变得更智能。但现在 <b>若你希望CPU并行执行， 就必须告诉运行时你希望同时有多少Go程能执行代码</b> 有两种途径可意识形态：
+</p>
+<ol class="org-ol">
+<li>在运行你的工作时将 GOMAXPROCS 环境变量设为你要使用的核心数
+</li>
+<li>要么导入 runtime 包并调用 runtime.GOMAXPROCS(NCPU)。 runtime.NumCPU() 的值可能很有用，它会返回当前机器的逻辑CPU核心数。 当然，随着调度算法和运行时的改进，将来会不再需要这种方法。
+</li>
+</ol>
+
+<p>
+注意不要混淆并发和并行的概念：
+</p>
+<ul class="org-ul">
+<li>并发是用可独立执行的组件构造程序的方法
+</li>
+<li>而并行则是为了效率在多CPU上平行地进行计算
+</li>
+</ul>
+
+<p>
+尽管Go的并发特性能够让某些问题更易构造成并行计算， 但Go仍然是种并发而非并行的语言，且Go的模型并不适合所有的并行问题
+</p>
+</div>
 </div>
 
 <div id="outline-container-sec-13-5" class="outline-3">
-<h3 id="sec-13-5">并行化</h3>
+<h3 id="sec-13-5">可能泄露的缓冲区</h3>
+<div class="outline-text-3" id="text-13-5">
+<p>
+并发编程的工具甚至能很容易地表达非并发的思想。这里有个提取自RPC包的例子。 客户端Go程从某些来源，可能是网络中循环接收数据。为避免分配和释放缓冲区， 它保存了一个空闲链表，使用一个带缓冲信道表示。若信道为空，就会分配新的缓冲区。 一旦消息缓冲区就绪，它将通过 serverChan 被发送到服务器
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">var</span> freeList = <span style="color: #b0c4de;">make</span>(<span style="color: #00ffff;">chan</span> *<span style="color: #98fb98;">Buffer</span>, 100)
+<span style="color: #00ffff;">var</span> serverChan = <span style="color: #b0c4de;">make</span>(<span style="color: #00ffff;">chan</span> *<span style="color: #98fb98;">Buffer</span>)
+
+<span style="color: #00ffff;">func</span> <span style="color: #87cefa;">client</span>() {
+        <span style="color: #00ffff;">for</span> {
+                <span style="color: #00ffff;">var</span> b *Buffer
+                <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#33509;&#32531;&#20914;&#21306;&#21487;&#29992;&#23601;&#29992;&#23427;&#65292;&#19981;&#21487;&#29992;&#23601;&#20998;&#37197;&#20010;&#26032;&#30340;</span>
+                <span style="color: #00ffff;">select</span> {
+                <span style="color: #00ffff;">case</span> b = &lt;-freeList:
+                        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#33719;&#21462;&#19968;&#20010;&#65292;&#19981;&#20570;&#21035;&#30340;</span>
+                <span style="color: #00ffff;">default</span>:
+                        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#38750;&#31354;&#38386;&#65292;&#22240;&#27492;&#20998;&#37197;&#19968;&#20010;&#26032;&#30340;</span>
+                        b = <span style="color: #b0c4de;">new</span>(<span style="color: #98fb98;">Buffer</span>)
+                }
+                <span style="color: #87cefa;">load</span>(b)              <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#20174;&#32593;&#32476;&#20013;&#35835;&#21462;&#19979;&#19968;&#26465;&#28040;&#24687;</span>
+                serverChan &lt;- b   <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#21457;&#36865;&#33267;&#26381;&#21153;&#22120;</span>
+        }
+}
+</pre>
 </div>
 
-<div id="outline-container-sec-13-6" class="outline-3">
-<h3 id="sec-13-6">可能泄露的缓冲区</h3>
-</div>
+<p>
+服务器从客户端循环接收每个消息，处理它们，并将缓冲区返回给空闲列表 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">func</span> <span style="color: #87cefa;">server</span>() {
+        <span style="color: #00ffff;">for</span> {
+                b := &lt;-serverChan    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#31561;&#24453;&#24037;&#20316;</span>
+                <span style="color: #87cefa;">process</span>(b)
+                <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#33509;&#32531;&#20914;&#21306;&#26377;&#31354;&#38388;&#23601;&#37325;&#29992;&#23427;</span>
+                <span style="color: #00ffff;">select</span> {
+                <span style="color: #00ffff;">case</span> freeList &lt;- b:
+                        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#23558;&#32531;&#20914;&#21306;&#25918;&#22823;&#31354;&#38386;&#21015;&#34920;&#20013;&#65292;&#19981;&#20570;&#21035;&#30340;</span>
+                <span style="color: #00ffff;">default</span>:
+                        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#31354;&#38386;&#21015;&#34920;&#24050;&#28385;&#65292;&#20445;&#25345;&#23601;&#22909;</span>
+                }
+        }
+}
+</pre>
 </div>
 
+<p>
+客户端试图从 freeList 中获取缓冲区；若没有缓冲区可用，它就将分配一个新的。服务器将 b 放回空闲列表 freeList 中直到列表已满，此时缓冲区将被丢弃，并被垃圾回收器回收。（select 语句中的 default 子句在没有条件符合时执行，这也就意味着 selects 永远不会被阻塞。） 依靠带缓冲的信道和垃圾回收器的记录， 仅用短短几行代码就构建了一个可能导致缓冲区槽位泄露的空闲列表 
+</p>
+</div>
+</div>
+</div>
 <div id="outline-container-sec-14" class="outline-2">
 <h2 id="sec-14">错误</h2>
 <div class="outline-text-2" id="text-14">
-</div><div id="outline-container-sec-14-1" class="outline-3">
+<p>
+库例程通常需要向调用者返回某种类型的错误提示。之前提到过，Go语言的多值返回特性， 使得它在返回常规的值时，还能轻松地返回详细的错误描述。按照约定，错误的类型通常为 error，这是一个内建的简单接口
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">type</span> <span style="color: #98fb98;">error</span> <span style="color: #00ffff;">interface</span> {
+        <span style="color: #87cefa;">Error</span>() string
+}
+</pre>
+</div>
+
+<p>
+库的编写者通过更丰富的底层模型可以轻松实现这个接口，这样不仅能看见错误，还能提供一些上下文。例如，os.Open 可返回一个 <b>os.PathError</b> 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">PathError &#35760;&#24405;&#19968;&#20010;&#38169;&#35823;&#20197;&#21450;&#20135;&#29983;&#35813;&#38169;&#35823;&#30340;&#36335;&#24452;&#21644;&#25805;&#20316;&#12290;</span>
+<span style="color: #00ffff;">type</span> <span style="color: #98fb98;">PathError</span> <span style="color: #00ffff;">struct</span> {
+        Op string    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">"open"&#12289;"unlink" &#31561;&#31561;</span>
+        Path string  <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#30456;&#20851;&#32852;&#30340;&#25991;&#20214;</span>
+        Err error    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#30001;&#31995;&#32479;&#35843;&#29992;&#36820;&#22238;</span>
+}
+
+<span style="color: #00ffff;">func</span> (e *<span style="color: #98fb98;">PathError</span>) <span style="color: #87cefa;">Error</span>() <span style="color: #98fb98;">string</span> {
+        <span style="color: #00ffff;">return</span> e.Op + <span style="color: #ffa07a;">" "</span> + e.Path + <span style="color: #ffa07a;">": "</span> + e.Err.<span style="color: #87cefa;">Error</span>()
+}
+</pre>
+</div>
+
+<p>
+PathError的 Error 会生成如下错误信息： 
+</p>
+
+<pre class="example">
+open /etc/passwx: no such file or directory
+</pre>
+
+<p>
+这种错误包含了出错的文件名、操作和触发的操作系统错误，即便在产生该错误的调用和输出的错误信息相距甚远时，它也会非常有用，这比苍白的 <span class="underline">不存在该文件或目录</span> 更具说明性
+</p>
+
+<p>
+<b>错误字符串应尽可能地指明它们的来源，例如产生该错误的包名前缀</b> 例如在 image 包中，由于未知格式导致解码错误的字符串为 <span class="underline">image: unknown format</span> 
+</p>
+
+<p>
+若调用者关心错误的完整细节，可 <b>使用类型选择或者类型断言来查看特定错误，并抽取其细节</b> 对于 PathErrors，它应该还包含检查内部的 Err 字段以进行可能的错误恢复
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">for</span> try := 0; try &lt; 2; try++ {
+        file, err = os.<span style="color: #87cefa;">Create</span>(filename)
+        <span style="color: #00ffff;">if</span> err == <span style="color: #7fffd4;">nil</span> {
+                <span style="color: #00ffff;">return</span>
+        }
+        <span style="color: #00ffff;">if</span> e, ok := err.(*<span style="color: #98fb98;">os.PathError</span>); ok &amp;&amp; e.Err == syscall.ENOSPC {
+                <span style="color: #87cefa;">deleteTempFiles</span>()  <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#24674;&#22797;&#19968;&#20123;&#31354;&#38388;&#12290;</span>
+                <span style="color: #00ffff;">continue</span>
+        }
+        <span style="color: #00ffff;">return</span>
+}
+</pre>
+</div>
+
+<p>
+这里的第二条 if 是另一种类型断言:
+</p>
+<ul class="org-ul">
+<li>若它失败， ok 将为 false，而 e 则为nil
+</li>
+<li>若它成功，ok 将为 true，这意味着该错误属于 *os.PathError 类型，而 e 能够检测关于该错误的更多信息
+</li>
+</ul>
+</div>
+
+<div id="outline-container-sec-14-1" class="outline-3">
 <h3 id="sec-14-1">panic</h3>
+<div class="outline-text-3" id="text-14-1">
+<p>
+向调用者报告错误的一般方式就是将 error 作为额外的值返回。 标准的 Read 方法就是个众所周知的实例，它返回一个字节计数和一个 error。但如果错误时不可恢复的呢？有时程序就是不能继续运行
+</p>
+
+<p>
+为此，提供了内建的 <b>panic</b> 函数，它会产生一个运行时错误并终止程序。该函数接受一个任意类型的实参（一般为字符串），并在程序终止时打印。 它还能表明发生了意料之外的事情，比如从无限循环中退出了
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#29992;&#29275;&#39039;&#27861;&#35745;&#31639;&#31435;&#26041;&#26681;&#30340;&#19968;&#20010;&#29609;&#20855;&#23454;&#29616;&#12290;</span>
+<span style="color: #00ffff;">func</span> <span style="color: #87cefa;">CubeRoot</span>(x <span style="color: #98fb98;">float64</span>) <span style="color: #98fb98;">float64</span> {
+        z := x/3   <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#20219;&#24847;&#21021;&#22987;&#20540;</span>
+        <span style="color: #00ffff;">for</span> i := 0; i &lt; 1e6; i++ {
+                prevz := z
+                z -= (z*z*z-x) / (3*z*z)
+                <span style="color: #00ffff;">if</span> <span style="color: #87cefa;">veryClose</span>(z, prevz) {
+                        <span style="color: #00ffff;">return</span> z
+                }
+        }
+        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#19968;&#30334;&#19975;&#27425;&#36845;&#20195;&#24182;&#26410;&#25910;&#25947;&#65292;&#20107;&#24773;&#20986;&#38169;&#20102;&#12290;</span>
+        <span style="color: #b0c4de;">panic</span>(fmt.<span style="color: #87cefa;">Sprintf</span>(<span style="color: #ffa07a;">"CubeRoot(%g) did not converge"</span>, x))
+}
+</pre>
 </div>
 
-<div id="outline-container-sec-14-2" class="outline-3">
-<h3 id="sec-14-2">恢复</h3>
+<ul class="org-ul">
+<li>这仅仅是个示例 <b>实际的库函数应避免 panic</b> 若问题可以被屏蔽或解决，最好就是让程序继续运行而不是终止整个程序
+<ul class="org-ul">
+<li>一个 <b>可能的反例就是初始化</b> ：若某个库真的不能让自己工作，且有足够理由产生Panic，那就由它去吧
+</li>
+</ul>
+</li>
+</ul>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">var</span> user = os.<span style="color: #87cefa;">Getenv</span>(<span style="color: #ffa07a;">"USER"</span>)
+
+<span style="color: #00ffff;">func</span> <span style="color: #87cefa;">init</span>() {
+        <span style="color: #00ffff;">if</span> user == <span style="color: #ffa07a;">""</span> {
+                <span style="color: #b0c4de;">panic</span>(<span style="color: #ffa07a;">"no value for $USER"</span>)
+        }
+}
+</pre>
 </div>
+</div>
+<div id="outline-container-sec-14-1-1" class="outline-4">
+<h4 id="sec-14-1-1">恢复</h4>
+<div class="outline-text-4" id="text-14-1-1">
+<p>
+当 panic 被调用后（包括不明确的运行时错误，例如切片检索越界或类型断言失败）， 程序将：
+</p>
+<ol class="org-ol">
+<li>立刻终止当前函数的执行
+</li>
+<li>开始回溯Go程的栈
+</li>
+<li>运行任何被推迟的函数
+</li>
+<li>若回溯到达Go程栈的顶端，程序就会终止
+</li>
+</ol>
+
+<p>
+不过可以用内建的 <b>recover</b> 函数来重新或来取回Go程的控制权限并使其恢复正常执行
+</p>
+
+<p>
+调用 recover 将 <b>停止回溯过程，并返回传入 panic 的实参</b> 由于在回溯时只有被推迟函数中的代码在运行，因此 <b>recover 只能在被推迟的函数中才有效</b> 
+</p>
+
+<p>
+recover 的一个应用就是在 <b>服务器中终止失败的Go程而无需杀死其它正在执行的Go程</b> 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">func</span> <span style="color: #87cefa;">server</span>(workChan &lt;-<span style="color: #00ffff;">chan</span> *<span style="color: #98fb98;">Work</span>) {
+        <span style="color: #00ffff;">for</span> work := <span style="color: #00ffff;">range</span> workChan {
+                <span style="color: #00ffff;">go</span> <span style="color: #87cefa;">safelyDo</span>(work)
+        }
+}
+
+<span style="color: #00ffff;">func</span> <span style="color: #87cefa;">safelyDo</span>(work *<span style="color: #98fb98;">Work</span>) {
+        <span style="color: #00ffff;">defer</span> <span style="color: #00ffff;">func</span>() {
+                <span style="color: #00ffff;">if</span> err := <span style="color: #b0c4de;">recover</span>(); err != <span style="color: #7fffd4;">nil</span> { <span style="color: #ff4500;">//</span><span style="color: #ff4500;">err&#20250;&#34987;&#36171;&#20540;&#20026;&#20256;&#20837;panic&#30340;&#23383;&#31526;&#20018;</span>
+                        log.<span style="color: #87cefa;">Println</span>(<span style="color: #ffa07a;">"work failed:"</span>, err)
+                }
+        }()
+        <span style="color: #87cefa;">do</span>(work)
+}
+</pre>
 </div>
 
-<div id="outline-container-sec-15" class="outline-2">
-<h2 id="sec-15">一个Web服务器</h2>
+<p>
+在此例中，若 do(work) 触发了panic，其结果就会被记录， 而该Go程会被干净利落地结束，不会干扰到其它Go程。无需在推迟的闭包中做任何事情，recover 会处理好这一切。
+</p>
+
+<p>
+由于直接从被推迟函数中调用 recover 时不会返回 nil， <b>因此被推迟的代码能够调用本身使用了 panic 和 recover 的库函数而不会失败</b> 例如在 safelyDo 中，被推迟的函数可能在调用 recover 前先调用记录函数，而该记录函数应当不受panic状态的代码的影响
+</p>
+
+<p>
+通过恰当地使用恢复模式，do 函数（及其调用的任何代码）可通过调用 panic 来避免更坏的结果。可以利用这种思想来简化复杂软件中的错误处理。 让看看 regexp 包的理想化版本，它会以局部的错误类型调用 panic 来报告解析错误。以下是一个 error 类型的 Error 方法和一个 Compile 函数的定义：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">Error &#26159;&#35299;&#26512;&#38169;&#35823;&#30340;&#31867;&#22411;&#65292;&#23427;&#28385;&#36275; error &#25509;&#21475;</span>
+<span style="color: #00ffff;">type</span> <span style="color: #98fb98;">Error</span> <span style="color: #98fb98;">string</span>
+<span style="color: #00ffff;">func</span> (e <span style="color: #98fb98;">Error</span>) <span style="color: #87cefa;">Error</span>() <span style="color: #98fb98;">string</span> {
+        <span style="color: #00ffff;">return</span> <span style="color: #87cefa;">string</span>(e)
+}
+
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">error &#26159; *Regexp &#30340;&#26041;&#27861;&#65292;&#23427;&#36890;&#36807;&#29992;&#19968;&#20010; Error &#35302;&#21457;Panic&#26469;&#25253;&#21578;&#35299;&#26512;&#38169;&#35823;</span>
+<span style="color: #00ffff;">func</span> (regexp *<span style="color: #98fb98;">Regexp</span>) <span style="color: #87cefa;">error</span>(err <span style="color: #98fb98;">string</span>) {
+        <span style="color: #b0c4de;">panic</span>(<span style="color: #87cefa;">Error</span>(err))
+}
+
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">Compile &#36820;&#22238;&#35813;&#27491;&#21017;&#34920;&#36798;&#24335;&#35299;&#26512;&#21518;&#30340;&#34920;&#31034;</span>
+<span style="color: #00ffff;">func</span> <span style="color: #87cefa;">Compile</span>(str <span style="color: #98fb98;">string</span>) (regexp *<span style="color: #98fb98;">Regexp</span>, err <span style="color: #98fb98;">error</span>) {
+        regexp = <span style="color: #b0c4de;">new</span>(<span style="color: #98fb98;">Regexp</span>)
+        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">doParse will panic if there is a parse error.</span>
+        <span style="color: #00ffff;">defer</span> <span style="color: #00ffff;">func</span>() {
+                <span style="color: #00ffff;">if</span> e := <span style="color: #b0c4de;">recover</span>(); e != <span style="color: #7fffd4;">nil</span> {
+                        regexp = <span style="color: #7fffd4;">nil</span>    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#28165;&#29702;&#36820;&#22238;&#20540;&#12290;</span>
+                        err = e.(<span style="color: #98fb98;">Error</span>) <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#33509;&#23427;&#19981;&#26159;&#35299;&#26512;&#38169;&#35823;&#65292;&#23558;&#37325;&#26032;&#35302;&#21457;Panic&#12290;</span>
+                }
+        }()
+        <span style="color: #00ffff;">return</span> regexp.<span style="color: #87cefa;">doParse</span>(str), <span style="color: #7fffd4;">nil</span>
+}
+</pre>
+</div>
+
+<p>
+若 doParse 触发了Panic，恢复块会将返回值设为 nil <b>被推迟的函数能够修改已命名的返回值</b> 。在 err 的赋值过程中， 将通过断言它是否拥有局部类型 Error 来检查它。若它没有， 类型断言将会失败，此时会产生运行时错误，并继续栈的回溯，仿佛一切从未中断过一样。 该检查意味着若发生了一些像索引越界之类的意外，那么即便使用了 panic 和 recover 来处理解析错误，代码仍然会失败
+</p>
+
+<p>
+通过适当的错误处理，error 方法（由于它是个绑定到具体类型的方法， 因此即便它与内建的 error 类型名字相同也没有关系） 能让报告解析错误变得更容易，而无需手动处理回溯的解析栈： 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-go"><span style="color: #00ffff;">if</span> pos == 0 {
+        re.<span style="color: #87cefa;">error</span>(<span style="color: #ffa07a;">"'*' illegal at start of expression"</span>)
+}
+</pre>
+</div>
+
+<p>
+尽管这种模式很有用，但它 <b>应当仅在包内使用</b> <span class="underline">Parse 会将其内部的 panic 调用转为 error 值，它并不会向调用者暴露出 panic</span> 这是个值得遵守的良好规则。
+</p>
+
+<p>
+这种重新触发Panic的惯用法会在产生实际错误时改变Panic的值。 然而，不管是原始的还是新的错误都会在崩溃报告中显示，因此问题的根源仍然是可见的。 这种简单的重新触发Panic的模型已经够用了，毕竟他只是一次崩溃。 但若你只想显示原始的值，也可以多写一点代码来过滤掉不需要的问题，然后用原始值再次触发Panic
+</p>
+</div>
+</div>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">

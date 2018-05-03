@@ -27,17 +27,8 @@
          :recursive t
          :publishing-function org-publish-attachment
          )
-
-         ;; These are image files (images, pdf, etc)
-        ("efg-pic"
-         :base-directory "~/Documents/programming/html/klose911.github.io/src/go/effective/pic" ;; Change this to your local dir
-         :base-extension "png\\|jpg\\|gif"
-         :publishing-directory "~/Documents/programming/html/klose911.github.io/html/go/effective/pic"
-         :recursive t
-         :publishing-function org-publish-attachment
-         )
 	
-        ("efg" :components ("efg-notes" "efg-static" "efg-pic"))
+        ("efg" :components ("efg-notes" "efg-static"))
         )
       )
 
