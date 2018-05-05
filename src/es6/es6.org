@@ -1,6 +1,279 @@
-#+TITLE: ES6入门
+#+TITLE: ECMAScript 6 简明教程
 #+HTML_HEAD: <link rel="stylesheet" type="text/css" href="css/main.css" />
 #+OPTIONS: num:nil timestamp:nil
 
-+ [[file:let_const.org][let和const命令]]
-+ [[file:destruction.org][变量解构]]
+* let、const 和 block 作用域
+let 允许创建块级作用域，ES6 推荐在函数中使用 let 定义变量，而非 var：
+
+#+BEGIN_SRC js
+  var a = 2;
+  {
+    let a = 3;
+    console.log(a); // 3
+  }
+  console.log(a); // 2
+#+END_SRC
+
+同样在块级作用域有效的另一个变量声明方式是 const，它可以声明一个常量．注意：　ES6 中， const 声明的常量类似于指针 *它指向某个引用* 也就是说这个常量的属性并非一成不变的，如：
+
+#+BEGIN_SRC js
+  {
+      const ARR = [5, 6];
+      ARR.push(7);
+      console.log(ARR); // [5,6,7]
+      ARR = 10; // TypeError
+  }
+#+END_SRC
+
+有几个点需要注意：
++ let 关键词声明的变量不具备 *变量提升* 特性
++ let 和 const 声明只在最靠近的一个块中（ *花括号内* ）有效
++ 当使用常量 const 声明时，请使用 *大写变量* 如 CAPITAL _ CASING
++ const 在 *声明时必须被赋值* 
+
+* 箭头函数
+ES6 中，箭头函数就是函数的一种简写形式， *使用括号包裹参数，跟随一个 =>，紧接着是函数体* ：
+
+#+BEGIN_SRC js
+  // var getPrice = function () {
+  //     return 4.55;
+  // };
+
+  // Implementation with Arrow Function
+  var getPrice = () => 4.55;
+
+  console.log(getPrice()) // 4.55
+#+END_SRC
+
+需要注意的是，上面例子中的getPrice箭头函数采用了 *简洁函数体，它不需要 return 语句* 下面这个例子使用的是正常函数体：
+
+#+BEGIN_SRC js
+  let arr = ['apple', 'banana', 'orange'];
+
+  let breakfast = arr.map(fruit => {
+      return fruit + 's';
+  });
+
+  console.log(breakfast); // apples bananas oranges
+#+END_SRC
+
+当然，箭头函数不仅仅是让代码变得简洁， *函数中this总是绑定总是指向对象自身* 具体可以看看下面几个例子：
+
+#+BEGIN_SRC js
+  function Person() {
+      this.age = 0;
+      
+      setInterval(function growUp() {
+          // 在非严格模式下，growUp() 函数的 this 指向 window 对象
+          this.age++;
+      }, 1000);
+  }
+  var person = new Person();
+#+END_SRC
+
+所以经常需要使用一个变量来保存 this，然后在 growUp 函数中引用：
+
+#+BEGIN_SRC js
+  function Person() {
+      var self = this;
+      self.age = 0;
+      
+      setInterval(function growUp() {
+          self.age++;
+      }, 1000);
+  }
+#+END_SRC
+
+而使用箭头函数可以省却这个麻烦：
+
+#+BEGIN_SRC js
+  function Person() {
+      this.age = 0;
+
+      setInterval(() => {
+          // |this| 指向 person 对象
+          this.age++;
+      }, 1000);
+  }
+
+  var person = new Person();
+#+END_SRC
+
+* 函数参数默认值
+ES6 中允许你对函数参数设置默认值：
+
+#+BEGIN_SRC js
+  let getFinalPrice = (price, tax=0.7) => price + price * tax;
+  console.log(getFinalPrice(500)); // 850
+#+END_SRC
+
+* Spread/Rest 操作符
+Spread/Rest 操作符指的是 *...* ，具体是 Spread 还是 Rest 需要看上下文语境：
+
++ 当被用于迭代器中时，它是一个 *Spread* 操作符：
+#+BEGIN_SRC js
+  function foo(x, y, z) {
+      console.log(x, y, z);
+  }
+
+  let arr = [1, 2, 3];
+  foo(...arr); // 1 2 3
+#+END_SRC
+
++ 当被用于函数形参时，是一个 *Rest* 操作符：
+#+BEGIN_SRC js
+  function foo(...args) {
+    console.log(args);
+  }
+  foo( 1, 2, 3, 4, 5); // [1, 2, 3, 4, 5]
+#+END_SRC
+
+* 对象词法扩展
+
++ 允许 *声明在对象字面量时使用简写语法* ，来初始化属性变量和函数的定义方法
++ 允许在 *对象属性中进行计算操作* ：
+
+#+BEGIN_SRC js :results output :exports result
+  function getCar(make, model, value) {
+      return {
+          // 简写变量
+          make, // 等同于 make: make
+          model, // 等同于 model: model
+          value, // 等同于 value: value
+
+          // 属性可以使用表达式计算值
+          ['make' + make]: true,
+
+          // 忽略 `function` 关键词简写对象函数
+          depreciate() {
+              this.value -= 2500;
+          }
+      };
+  }
+
+  let car = getCar('Barret', 'Lee', 40000);
+  console.log(car)
+#+END_SRC
+
+#+RESULTS:
+: output: {
+:     make: 'Barret',
+:     model:'Lee',
+:     value: 40000,
+:     makeKia: true,
+:     depreciate: function()
+: }
+
+* 二进制和八进制的字面量
+支持二进制和八进制的字面量，通过在数字前面添加 *0o* 或者 *0O* 即可将其转换为八进制值：
+
+#+BEGIN_SRC js
+  let oValue = 0o10;
+  console.log(oValue); // 8
+   
+  let bValue = 0b10; // 二进制使用 `0b` 或者 `0B`
+  console.log(bValue); // 2
+#+END_SRC
+
+* 对象和数组解构
+解构可以 *避免在对象赋值时产生中间变量* ：
+
+#+BEGIN_SRC js :results output :exports result
+  function foo() {
+      return [1, 2, 3];
+  }
+  let arr = foo(); // [1,2,3]
+  console.log(arr);
+
+  let [a, b, c] = foo();
+  console.log(a, b, c); // 1 2 3
+
+  function bar() {
+      return {
+          x: 4,
+          y: 5,
+          z: 6
+      };
+  }
+  let {
+      x: x,
+      y: y,
+      z: z
+  } = bar();
+  console.log(x, y, z); // 4 5 6 
+#+END_SRC
+
+#+RESULTS:
+: [1, 2, 3]
+: 1 2 3
+: 4 5 6
+
+* 对象超类
+允许在对象中使用 *super* 方法：
+
+#+BEGIN_SRC js :results output :exports result
+  var parent = {
+      foo() {
+          console.log("Hello from the Parent");
+      }
+  }
+
+  var child = {
+      foo() {
+          super.foo();
+          console.log("Hello from the Child");
+      }
+  }
+
+  Object.setPrototypeOf(child, parent);
+  child.foo(); // Hello from the Parent
+  // Hello from the Child
+#+END_SRC
+
+#+RESULTS:
+: Hello from the Parent
+: Hello from the Child
+
+* 模板语法和分隔符
+ES6 中有一种十分简洁的方法组装一堆字符串和变量：
++ *${ ... }* 用来渲染一个变量
++ *`* 作为分隔符
+
+#+BEGIN_SRC js
+  let user = 'Barret';
+  console.log(`Hi ${user}!`); // Hi Barret!
+#+END_SRC
+
+#+RESULTS:
+: Hi Barret!
+
+* for...of VS for...in
++ *for...of* 用于遍历一个 *迭代器* 如数组：
+#+BEGIN_SRC js :results output :exports result
+  let nicknames = ['di', 'boo', 'punkeye'];
+  nicknames.size = 3;
+  for (let nickname of nicknames) {
+      console.log(nickname);
+  }
+#+END_SRC
+
+#+RESULTS:
+: di
+: boo
+: punkeye
+
++ *for...in* 用来遍历 *对象中的属性* ：
+#+BEGIN_SRC js :results output :exports result
+  let nicknames = ['di', 'boo', 'punkeye'];
+  nicknames.size = 3;
+  for (let nickname in nicknames) {
+      console.log(nickname);
+  }
+#+END_SRC
+
+#+RESULTS:
+: 0
+: 1
+: 2
+
+* Map 和 WeakMap
