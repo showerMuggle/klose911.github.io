@@ -27,17 +27,8 @@
          :recursive t
          :publishing-function org-publish-attachment
          )
-
-	;; picture
-        ("es6-pic"
-         :base-directory "~/Documents/programming/html/klose911.github.io/src/es6/pic"  ;; Change this to your local dir
-         :base-extension "png\\|jpg\\|gif"
-         :publishing-directory "~/Documents/programming/html/klose911.github.io/html/es6/pic"
-         :recursive t
-         :publishing-function org-publish-attachment
-         )
 	
-        ("es6" :components ("es6-notes" "es6-static" "es6-pic"))
+        ("es6" :components ("es6-notes" "es6-static"))
         )
       )
 
