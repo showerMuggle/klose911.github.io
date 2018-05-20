@@ -175,7 +175,34 @@ for the JavaScript code in this tag.
 </li>
 </ul>
 </li>
-<li><a href="#sec-2">对象</a></li>
+<li><a href="#sec-2">对象</a>
+<ul>
+<li><a href="#sec-2-1">创建</a>
+<ul>
+<li><a href="#sec-2-1-1">类加载检查</a></li>
+<li><a href="#sec-2-1-2">划分内存</a></li>
+<li><a href="#sec-2-1-3">内存归零</a></li>
+<li><a href="#sec-2-1-4">设置对象头</a></li>
+<li><a href="#sec-2-1-5">构造器</a></li>
+</ul>
+</li>
+<li><a href="#sec-2-2">内存布局</a>
+<ul>
+<li><a href="#sec-2-2-1">对象头</a></li>
+<li><a href="#sec-2-2-2">实例数据</a></li>
+<li><a href="#sec-2-2-3">对齐填充</a></li>
+</ul>
+</li>
+<li><a href="#sec-2-3">对象的访问定位</a>
+<ul>
+<li><a href="#sec-2-3-1">使用句柄</a></li>
+<li><a href="#sec-2-3-2">直接指针</a></li>
+<li><a href="#sec-2-3-3">优劣</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#sec-3">OutOfMemory异常</a></li>
 </ul>
 </div>
 </div>
@@ -412,6 +439,341 @@ Java虚拟机规范对方法区的限制非常宽松，除了和Java堆一样 <b
 
 <div id="outline-container-sec-2" class="outline-2">
 <h2 id="sec-2">对象</h2>
+<div class="outline-text-2" id="text-2">
+</div><div id="outline-container-sec-2-1" class="outline-3">
+<h3 id="sec-2-1">创建</h3>
+<div class="outline-text-3" id="text-2-1">
+<p>
+在语言层面上,创建对象(例如克隆、反序列化)通常仅仅是一个new关键字而已,而在虚拟机中,对象(文中讨论的对象限于 <b>普通</b> Java对象,不包括 <b>数组</b> 和 <b>Class</b> 对象等)的创建又是怎样一个过程呢?
+</p>
+</div>
+
+<div id="outline-container-sec-2-1-1" class="outline-4">
+<h4 id="sec-2-1-1">类加载检查</h4>
+<div class="outline-text-4" id="text-2-1-1">
+<p>
+首先检查这个指令的参数是否能在常量池中定位到一个类的符号引用，并且检查这个这个符号引用代表的类是否已被加载、解析和初始化过。如果没有，那必须先执行相应的类加载过程
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-1-2" class="outline-4">
+<h4 id="sec-2-1-2">划分内存</h4>
+<div class="outline-text-4" id="text-2-1-2">
+<p>
+虚拟机将为新生对象分配内存。对象所需内存的大小在类加载完成后便可完全确定，为对象分配空间的任务等同于把一块确定大小的内存从Java堆中划分出来
+</p>
+
+<ol class="org-ol">
+<li>假设Java堆中内存是绝对规整的,所有用过的内存都放在一边,空闲的内存放在另一边,中间放着一个指针作为分界点的指示器,那所分配内存就仅仅是把那个指针向空闲空间那边挪动一段与对象大小相等的距离,这种分配方式称为 <b>指针碰撞</b>
+</li>
+<li>如果Java堆中的内存并不是规整的,已使用的内存和空闲的内存相互交错,那就没有办法简单地进行指针碰撞了,虚拟机就必须维护一个列表,记录上哪些内存块是可用的,在分配的时候从列表中找到一块足够大的空间划分给对象实例, 并更新列表上的记录,这种分配方式称为 <b>空闲列表</b>
+</li>
+<li>Java堆是否规整由所采用的垃圾收集器是否带有压缩整理功能决定。因此在使用Serial, ParNew等带 <b>Compact</b> 过程的收集器时,系统采用的分配算法是指针碰撞, 而使用CMS这种基于 <b>Mark-Sweep</b> 算法的收集器时,通常采用空闲列表
+</li>
+</ol>
+
+<p>
+对象创建在虚拟机中是非常频繁的行为,即使是仅仅修改一个指针所指向的位置,在并发情况下也并不是线程安全的,可能出现正在给对象A分配内存,指针还没来得及修改,对象B又同时使用了原来的指针来分配内存的情况。解决这个问题有两种方案：
+</p>
+<ol class="org-ol">
+<li>对分配内存空间的动作进行同步处理：实际上虚拟机采用 <b>CAS加上失败重试</b> 的方式保证更新操作的原子性
+</li>
+<li>把内存分配的动作按照线程划分在不同的空间之中进行,即 <b>每个线程在Java堆中预先分配一小块内存</b>,称为本地线程分配缓冲 <b>TLAB</b> 。哪个线程要分配内存,就在哪个线程的TLAB上分配, <b>只有TLAB用完并分配新的TLAB时,才需要同步锁定</b> 
+</li>
+<li>虚拟机是否使用TLAB,可以通过 <span class="underline">-XX:+/-UseTLAB</span> 参数来设定
+</li>
+</ol>
+</div>
+</div>
+
+<div id="outline-container-sec-2-1-3" class="outline-4">
+<h4 id="sec-2-1-3">内存归零</h4>
+<div class="outline-text-4" id="text-2-1-3">
+<p>
+内存分配完成后，虚拟机需要将 <b>分配到的内存空间都初始化为零值</b> （不包括对象头）， 如果使用TLAB,这一工作过程也可以提前至TLAB分配时进行
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-1-4" class="outline-4">
+<h4 id="sec-2-1-4">设置对象头</h4>
+<div class="outline-text-4" id="text-2-1-4">
+<p>
+虚拟机要对对象进行必要的设置，例如这个对象是哪个类的实例、如何才能找到类的元数据信息、对象的hashcode、对象的GC分代年龄等信息。这些信息存放在对象的 <b>对象头</b> 之中。根据虚拟机当前的运行状态不同，对象头会有不同的设置方式
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-1-5" class="outline-4">
+<h4 id="sec-2-1-5">构造器</h4>
+<div class="outline-text-4" id="text-2-1-5">
+<p>
+在上面工作都完成之后，从虚拟机的视角来看，一个新的对象已经产生了，但是从Java程序的视角来看，对象创建才刚刚开始 <span class="underline">构造器方法还没有执行，所有的字段都还为零</span> ．一般来说，执行new指令之后会接着执行init方法，把对象按照程序员的意愿进行初始化，这样一个真正可用的对象才算完全产生出来
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-C++"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#30830;&#20445;&#24120;&#37327;&#27744;&#20013;&#23384;&#25918;&#30340;&#26159;&#24050;&#35299;&#37322;&#30340;&#31867; </span>
+<span style="color: #00ffff;">if</span> (!constants-&gt;tag_at(index).is_unresolved_klass()) { 
+    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#26029;&#35328;&#30830;&#20445;&#26159;klassOop&#21644;instanceKlassOop&#65288;&#36825;&#37096;&#20998;&#19979;&#19968;&#33410;&#20171;&#32461;&#65289; </span>
+    <span style="color: #98fb98;">oop</span> <span style="color: #eedd82;">entry</span> = (klassOop) *constants-&gt;obj_at_addr(index); 
+    assert(entry-&gt;is_klass(), <span style="color: #ffa07a;">"Should be resolved klass"</span>); 
+    <span style="color: #98fb98;">klassOop</span> <span style="color: #eedd82;">k_entry</span> = (<span style="color: #98fb98;">klassOop</span>) entry; 
+    assert(k_entry-&gt;klass_part()-&gt;oop_is_instance(), <span style="color: #ffa07a;">"Should be instanceKlass"</span>); 
+    <span style="color: #98fb98;">instanceKlass</span>* <span style="color: #eedd82;">ik</span> = (<span style="color: #98fb98;">instanceKlass</span>*) k_entry-&gt;klass_part(); 
+    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#30830;&#20445;&#23545;&#35937;&#25152;&#23646;&#31867;&#22411;&#24050;&#32463;&#32463;&#36807;&#21021;&#22987;&#21270;&#38454;&#27573; </span>
+    <span style="color: #00ffff;">if</span> ( ik-&gt;is_initialized() &amp;&amp; ik-&gt;can_be_fastpath_allocated() ) { 
+        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#21462;&#23545;&#35937;&#38271;&#24230; </span>
+        <span style="color: #98fb98;">size_t</span> <span style="color: #eedd82;">obj_size</span> = ik-&gt;size_helper(); 
+        <span style="color: #98fb98;">oop</span> <span style="color: #eedd82;">result</span> = <span style="color: #7fffd4;">NULL</span>; 
+        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#35760;&#24405;&#26159;&#21542;&#38656;&#35201;&#23558;&#23545;&#35937;&#25152;&#26377;&#23383;&#27573;&#32622;&#38646;&#20540; </span>
+        <span style="color: #98fb98;">bool</span> <span style="color: #eedd82;">need_zero</span> = !ZeroTLAB; 
+        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#26159;&#21542;&#22312;TLAB&#20013;&#20998;&#37197;&#23545;&#35937; </span>
+        <span style="color: #00ffff;">if</span> (UseTLAB) { 
+            result = (<span style="color: #98fb98;">oop</span>) THREAD-&gt;tlab().allocate(obj_size); 
+        } 
+        <span style="color: #00ffff;">if</span> (result == <span style="color: #7fffd4;">NULL</span>) { 
+            need_zero = <span style="color: #7fffd4;">true</span>; 
+            <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#30452;&#25509;&#22312;eden&#20013;&#20998;&#37197;&#23545;&#35937; </span>
+        <span style="color: #7fffd4;">retry</span>: 
+            <span style="color: #98fb98;">HeapWord</span>* <span style="color: #eedd82;">compare_to</span> = *<span style="color: #7fffd4;">Universe</span>::heap()-&gt;top_addr(); 
+            <span style="color: #98fb98;">HeapWord</span>* <span style="color: #eedd82;">new_top</span> = compare_to + obj_size; 
+            <span style="color: #ff4500;">// </span><span style="color: #ff4500;">cmpxchg&#26159;x86&#20013;&#30340;CAS&#25351;&#20196;&#65292;&#36825;&#37324;&#26159;&#19968;&#20010;C++&#26041;&#27861;&#65292;&#36890;&#36807;CAS&#26041;&#24335;&#20998;&#37197;&#31354;&#38388;&#65292;&#24182;&#21457;&#22833;&#36133;&#30340;&#35805;&#65292;&#36716;&#21040;retry&#20013;&#37325;&#35797;&#30452;&#33267;&#25104;&#21151;&#20998;&#37197;&#20026;&#27490; </span>
+            <span style="color: #00ffff;">if</span> (new_top &lt;= *<span style="color: #7fffd4;">Universe</span>::heap()-&gt;end_addr()) { 
+                <span style="color: #00ffff;">if</span> (<span style="color: #7fffd4;">Atomic</span>::cmpxchg_ptr(new_top, <span style="color: #7fffd4;">Universe</span>::heap()-&gt;top_addr(), compare_to) != compare_to) { 
+                    <span style="color: #00ffff;">goto</span> <span style="color: #7fffd4;">retry</span>; 
+                } 
+                result = (<span style="color: #98fb98;">oop</span>) compare_to; 
+            } 
+        } 
+        <span style="color: #00ffff;">if</span> (result != <span style="color: #7fffd4;">NULL</span>) { 
+            <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#22914;&#26524;&#38656;&#35201;&#65292;&#20026;&#23545;&#35937;&#21021;&#22987;&#21270;&#38646;&#20540; </span>
+            <span style="color: #00ffff;">if</span> (need_zero ) { 
+                <span style="color: #98fb98;">HeapWord</span>* <span style="color: #eedd82;">to_zero</span> = (<span style="color: #98fb98;">HeapWord</span>*) result + <span style="color: #00ffff;">sizeof</span>(oopDesc) / oopSize; 
+                obj_size -= <span style="color: #00ffff;">sizeof</span>(oopDesc) / oopSize; 
+                <span style="color: #00ffff;">if</span> (obj_size &gt; 0 ) { 
+                    memset(to_zero, 0, obj_size * HeapWordSize); 
+                } 
+            } 
+            <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#26681;&#25454;&#26159;&#21542;&#21551;&#29992;&#20559;&#21521;&#38145;&#65292;&#35774;&#32622;&#23545;&#35937;&#22836;&#20449;&#24687; </span>
+            <span style="color: #00ffff;">if</span> (UseBiasedLocking) { 
+                result-&gt;set_mark(ik-&gt;prototype_header()); 
+            } <span style="color: #00ffff;">else</span> { 
+                result-&gt;set_mark(<span style="color: #7fffd4;">markOopDesc</span>::prototype()); 
+            } 
+            result-&gt;set_klass_gap(0); 
+            result-&gt;set_klass(k_entry); 
+            <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#23558;&#23545;&#35937;&#24341;&#29992;&#20837;&#26632;&#65292;&#32487;&#32493;&#25191;&#34892;&#19979;&#19968;&#26465;&#25351;&#20196; </span>
+            SET_STACK_OBJECT(result, 0); 
+            UPDATE_PC_AND_TOS_AND_CONTINUE(3, 1); 
+        } 
+    } 
+}
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-2" class="outline-3">
+<h3 id="sec-2-2">内存布局</h3>
+<div class="outline-text-3" id="text-2-2">
+<p>
+在HotSpot虚拟机中,对象在内存中存储的布局可以分为3块区域:
+</p>
+<ol class="org-ol">
+<li>对象头
+</li>
+<li>实例数据
+</li>
+<li>对齐填充
+</li>
+</ol>
+</div>
+
+
+<div id="outline-container-sec-2-2-1" class="outline-4">
+<h4 id="sec-2-2-1">对象头</h4>
+<div class="outline-text-4" id="text-2-2-1">
+<p>
+HotSpot虚拟机的对象头包括两部分信息：
+</p>
+<ul class="org-ul">
+<li>存储对象自身的运行时数据：如HashCode、GC分代年龄、锁状态标志、线程持有的锁、偏向线程ID、偏向时间戳等等
+</li>
+</ul>
+
+<p>
+这部分数据的长度在32位和64位的虚拟机中分别为32个和64个Bits，官方称它为 <b>Mark Word</b>. 对象需要存储的运行时数据很多，其实已经超出了32、64位Bitmap结构所能记录的限度，但是对象头信息是与对象自身定义的数据无关的额外存储成本，考虑到虚拟机的空间效率，Mark Word被设计成一个 <b>非固定的数据结构</b> 以便在极小的空间内存储尽量多的信息，它会根据对象的状态复用自己的存储空间。例如在32位的HotSpot虚拟机中对象未被锁定的状态下，Mark Word的32个Bits空间中的25Bits用于存储对象HashCode，4Bits用于存储对象分代年龄，2Bits用于存储锁标志位，1Bit固定为0，在其他状态（轻量级锁定、重量级锁定、GC标记、可偏向）下对象的存储内容如下表所示：
+</p>
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 1:</span> HotSpot虚拟机对象头Mark Word</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="right" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">存储内容</td>
+<td class="right">标志位</td>
+<td class="left">状态</td>
+</tr>
+
+<tr>
+<td class="left">对象哈希码、对象分代年龄</td>
+<td class="right">01</td>
+<td class="left">未锁定</td>
+</tr>
+
+<tr>
+<td class="left">指向锁记录的指针</td>
+<td class="right">00</td>
+<td class="left">轻量级锁定</td>
+</tr>
+
+<tr>
+<td class="left">指向重量级锁的指针</td>
+<td class="right">10</td>
+<td class="left">膨胀（重量级锁定）</td>
+</tr>
+
+<tr>
+<td class="left">空，不需要记录信息</td>
+<td class="right">11</td>
+<td class="left">GC标记</td>
+</tr>
+
+<tr>
+<td class="left">偏向线程ID、偏向时间戳、对象分代年龄</td>
+<td class="right">01</td>
+<td class="left">可偏向</td>
+</tr>
+</tbody>
+</table>
+
+
+<ul class="org-ul">
+<li>类型指针：对象 <b>指向它的类元数据的指针</b> ，虚拟机通过这个指针来确定这个对象是哪个类的实例
+<ul class="org-ul">
+<li>并不是所有的虚拟机实现都必须在对象数据上保留类型指针，换句话说查找对象的元数据信息并不一定要经过对象本身
+</li>
+<li>如果对象是一个Java数组，那在对象头中还必须有一块用于 <b>记录数组长度</b> 的数据，因为虚拟机可以通过普通Java对象的元数据信息确定Java对象的大小，但是从数组的元数据中无法确定数组的大小
+</li>
+</ul>
+</li>
+</ul>
+
+<div class="org-src-container">
+
+<pre class="src src-C++"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">Bit-format of an object header (most significant first, big endian layout below): </span>
+<span style="color: #ff4500;">// </span>
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">32 bits: </span>
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">-------- </span>
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">hash:25 ------------&gt;| age:4 biased_lock:1 lock:2 (normal object) </span>
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">JavaThread*:23 epoch:2 age:4 biased_lock:1 lock:2 (biased object) </span>
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">size:32 ------------------------------------------&gt;| (CMS free block) </span>
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">PromotedObject*:29 ----------&gt;| promo_bits:3 -----&gt;| (CMS promoted object)</span>
+</pre>
+</div>
+</div>
+</div>
+
+
+<div id="outline-container-sec-2-2-2" class="outline-4">
+<h4 id="sec-2-2-2">实例数据</h4>
+<div class="outline-text-4" id="text-2-2-2">
+<p>
+对象真正存储的有效信息，也既是在程序代码里面所定义的各种类型的字段内容，无论是从父类继承下来的，还是在子类中定义的都需要记录起来
+</p>
+
+<p>
+这部分的存储顺序会受到 <b>虚拟机分配策略参数</b> 和 <b>字段在Java源码中定义顺序</b> 的影响．HotSpot虚拟机默认的分配策略为 <span class="underline">longs/doubles、ints、shorts/chars、bytes/booleans、oops</span> :
+</p>
+<ul class="org-ul">
+<li>相同宽度的字段总是被分配到一起
+</li>
+<li>在父类中定义的变量会出现在子类之前
+</li>
+<li>如果 <span class="underline">CompactFields</span> 参数值为true（默认为true），那子类之中较窄的变量也可能会插入到父类变量的空隙之中
+</li>
+</ul>
+</div>
+</div>
+
+
+<div id="outline-container-sec-2-2-3" class="outline-4">
+<h4 id="sec-2-2-3">对齐填充</h4>
+<div class="outline-text-4" id="text-2-2-3">
+<p>
+由于HotSpot VM的自动内存管理系统要求对象起始地址必须是8字节的整数倍，换句话说就是对象的大小必须是8字节的整数倍。对象头部分正好似8字节的倍数（1倍或者2倍），因此当对象实例数据部分没有对齐的话，就需要通过 <b>对齐填充</b> 来补全
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-3" class="outline-3">
+<h3 id="sec-2-3">对象的访问定位</h3>
+<div class="outline-text-3" id="text-2-3">
+<p>
+Java程序需要通过栈上的 <b>reference数据</b> 来操作堆上的具体对象。由于reference类型在Java虚拟机规范里面只规定了是 <b>一个指向对象的引用</b> ，并没有定义这个引用应该通过什么种方式去定位、访问到堆中的对象的具体位置，对象访问方式也是取决于虚拟机实现而定的。主流的访问方式有 <b>使用句柄</b> 和 <b>直接指针</b> 两种:
+</p>
+</div>
+
+<div id="outline-container-sec-2-3-1" class="outline-4">
+<h4 id="sec-2-3-1">使用句柄</h4>
+<div class="outline-text-4" id="text-2-3-1">
+<p>
+Java堆中将会划分出一块内存来作为句柄池，reference中存储的就是对象的句柄地址，而句柄中包含了 <b>对象实例数据</b> 与 <b>类型数据</b> 的具体各自的地址信息。如图所示：
+</p>
+
+<div class="figure">
+<p><img src="pic/handle-reference.jpg" alt="handle-reference.jpg" width="70%" /> 
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-3-2" class="outline-4">
+<h4 id="sec-2-3-2">直接指针</h4>
+<div class="outline-text-4" id="text-2-3-2">
+<p>
+reference变量中直接存储的就是对象的地址，而java堆对象一部分存储了对象实例数据，另外一部分存储了对象类型数据，如下图所示： 
+</p>
+
+
+<div class="figure">
+<p><img src="pic/pointer-reference.jpg" alt="pointer-reference.jpg" width="70%" /> 
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-3-3" class="outline-4">
+<h4 id="sec-2-3-3">优劣</h4>
+<div class="outline-text-4" id="text-2-3-3">
+<p>
+这两种对象访问方式各有优势：
+</p>
+<ul class="org-ul">
+<li>使用句柄来访问的最大好处就是:reference中存储的是稳定句柄地址，在对象被移动时只会改变句柄中的实例数据指针，而reference本身不需要被修改
+</li>
+<li>使用直接指针来访问最大的好处：速度更快，它节省了一次指针定位的时间开销，由于对象访问的在Java中非常频繁，因此这类开销积小成多也是一项非常可观的执行成本
+</li>
+</ul>
+</div>
+</div>
+</div>
+</div>
+
+
+<div id="outline-container-sec-3" class="outline-2">
+<h2 id="sec-3">OutOfMemory异常</h2>
 </div>
 </div>
 <div id="postamble" class="status">
