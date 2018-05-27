@@ -206,6 +206,13 @@ for the JavaScript code in this tag.
 <ul>
 <li><a href="#sec-3-1">堆溢出</a></li>
 <li><a href="#sec-3-2">虚拟机栈和本地方法栈溢出</a></li>
+<li><a href="#sec-3-3">方法区和运行时常量池溢出</a>
+<ul>
+<li><a href="#sec-3-3-1">常量池</a></li>
+<li><a href="#sec-3-3-2">方法区</a></li>
+</ul>
+</li>
+<li><a href="#sec-3-4">直接内存溢出</a></li>
 </ul>
 </li>
 </ul>
@@ -853,7 +860,7 @@ Java堆内存的OOM异常是实际应用中常见的内存溢出异常情况。�
 </p>
 
 <p>
-要解决这个区域的异常,一般的手段是先通过 <b>内存映像分析</b> 工具(如 <span class="underline">Eclipse Memory Analyzer</span> ) 对Dump出来的堆转储快照进行分析,重点是确认内存中的对象是否是必要的,也就是要先分清楚到底是出现了 <b>内存泄漏</b> ( <span class="underline">Memory Leak</span> ) 还是 <b>内存溢出</b> ( <span class="underline">Memory Overflow</span> ) 。 图2-5显示了使用Eclipse Memory Analyzer打开的堆转储快照文件
+要解决这个区域的异常,一般的手段是先通过 <b>内存映像分析</b> 工具(如 <span class="underline">Eclipse Memory Analyzer</span> ) 对Dump出来的堆转储快照进行分析,重点是确认内存中的对象是否是必要的,也就是要先分清楚到底是出现了 <b>内存泄漏</b> ( <span class="underline">Memory Leak</span> ) 还是 <b>内存溢出</b> ( <span class="underline">Memory Overflow</span> ) 。 下图显示了使用Eclipse Memory Analyzer打开的堆转储快照文件
 </p>
 
 
@@ -863,17 +870,332 @@ Java堆内存的OOM异常是实际应用中常见的内存溢出异常情况。�
 </div>
 
 <p>
-如果是内存泄漏，可进一步通过工具 <b>查看泄漏对象到GC Roots的引用链</b> 于是就能找到泄漏对象是通过怎样的路径与GC Roots相关联并导致垃圾收集器无法自动回收它们的。掌握了泄漏对象的类型信息，以及GC Roots引用链的信息，就可以比较准确地定位出泄漏代码的位置。
+如果是内存泄漏，可进一步通过工具 <b>查看泄漏对象到GC Roots的引用链</b> ，于是就能找到泄漏对象是通过怎样的路径与GC Roots相关联并导致垃圾收集器无法自动回收它们的。掌握了泄漏对象的类型信息，以及GC Roots引用链的信息，就可以比较准确地定位出泄漏代码的位置。
 </p>
 
 <p>
-如果不存在泄漏，换句话说就是内存中的对象确实都还必须存活着，那就应当检查虚拟机的堆参数（<sub>-Xmx</sub>_ 与 <span class="underline">-Xms</span> ），与机器物理内存对比看是否还可以调大，从代码上检查是否存在某些对象生命周期过长、持有状态时间过长的情况，尝试减少程序运行期的内存消耗
+如果不存在泄漏，换句话说就是内存中的对象确实都还必须存活着，那就应当检查虚拟机的堆参数（ <span class="underline">-Xmx</span> 与 <span class="underline">-Xms</span> ），与机器物理内存对比看是否还可以调大，从代码上检查是否存在某些对象生命周期过长、持有状态时间过长的情况，尝试减少程序运行期的内存消耗
 </p>
 </div>
 </div>
 
 <div id="outline-container-sec-3-2" class="outline-3">
 <h3 id="sec-3-2">虚拟机栈和本地方法栈溢出</h3>
+<div class="outline-text-3" id="text-3-2">
+<p>
+由于在HotSpot虚拟机中并不区分虚拟机栈和本地方法栈，因此，对于HotSpot来说，虽然 <span class="underline">-Xoss</span> 参数（设置本地方法栈大小）存在，但实际上是无效的，栈容量只有 <span class="underline">-Xss</span> 参数设定。关于虚拟机栈和本地方法栈，在Java虚拟机规范中描述了两种异常：
+</p>
+<ul class="org-ul">
+<li>如果线程请求的栈深度大于虚拟机所允许的最大深度，将抛出 <span class="underline">StackOverflowError</span> 异常
+</li>
+<li>如果虚拟机在扩展时无法申请到足够的内存空间，则抛出 <span class="underline">OutOfMemoryError</span> 异常
+</li>
+</ul>
+
+<p>
+这里把异常分成两种情况，看似更加严谨，但却存在着一些互相重叠的地方： <b>当栈空间无法继续分配时，到底是内存太小，还是已使用的栈空间太大</b> ，其本质上只是对同一件事情的两种描述而已
+</p>
+
+<p>
+将实验范围限制于单线程中的操作，尝试了下面两种方法均无法让虚拟机产生 <span class="underline">OutOfMemoryError</span> 异常，尝试的结果都是获得 <span class="underline">StackOverflowError</span> 异常，测试代码：
+</p>
+<ul class="org-ul">
+<li>使用 <span class="underline">-Xss</span> 参数减少栈内存容量。抛出 <span class="underline">StackOverflowError</span> 异常，异常出现时输出的堆栈深度相应缩小
+</li>
+<li>定义了大量的本地变量，增大此方法帧中本地变量表的长度。抛出 <span class="underline">StackOverflowError</span> 异常时输出的堆栈深度相应缩小
+</li>
+</ul>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ffa07a;">/** </span>
+<span style="color: #ffa07a;"> * VM Args: -Xss128k </span>
+<span style="color: #ffa07a;"> * </span><span style="color: #7fffd4;">@author</span><span style="color: #ffa07a;"> mk </span>
+<span style="color: #ffa07a;"> * </span>
+<span style="color: #ffa07a;"> */</span>  
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">JavaVMStackSOF</span> {  
+
+    <span style="color: #00ffff;">private</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">stackLength</span> = 1;  
+
+    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">stackLeak</span>() {  
+        stackLength++;  
+        stackLeak();  
+    }  
+
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">String</span>[] <span style="color: #eedd82;">args</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Throwable</span> {  
+        <span style="color: #98fb98;">JavaVMStackSOF</span> <span style="color: #eedd82;">oom</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">JavaVMStackSOF</span>();  
+
+        <span style="color: #00ffff;">try</span> {  
+            oom.stackLeak();  
+        } <span style="color: #00ffff;">catch</span> (<span style="color: #98fb98;">Throwable</span> <span style="color: #eedd82;">e</span>) {  
+            System.out.println(<span style="color: #ffa07a;">"stack length:"</span> + oom.stackLength);  
+            <span style="color: #00ffff;">throw</span> e;  
+        }  
+    }  
+}
+</pre>
+</div>
+
+<p>
+运行结果如下所示：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/stack-overflow.png" alt="stack-overflow.png" width="70%" /> 
+</p>
+</div>
+
+<p>
+实验结果表明：在单个线程下，无论是由于栈帧太大还是虚拟机栈容量太小，当内存无法分配的时候，虚拟机抛出的都是 <span class="underline">StackOverflowError</span> 异常
+</p>
+
+<p>
+如果测试时不限于单线程，通过不断地建立线程的方法到是可以产生内存溢出异常，但是这样产生的 <b>内存溢出异常与栈空间是否足够大并不存在任何联系</b> ，或者准确地说，在这种情况下，为每个线程的栈分配的内存越大，反而越容易产生内存溢出异常
+</p>
+
+<pre class="example">
+  操作系统分配给每个进程的内存是有限制的，譬如32位的Windows限制为2GB
+
+  虚拟机提供了参数来控制Java堆和方法区这两部分内存的最大值。剩余的内存为2GB（操作系统限制）减去Xmx（最大堆容量），再减去MaxPermSize（最大方法区容量）
+
+  程序计数器消耗内存很小，可以忽略掉
+
+  如果虚拟机进程本身耗费的内存不计算在内，剩下的内存就由虚拟机栈和本地方法栈瓜分了
+
+  每个线程分配到的栈容量越大，可以建立的线程数量自然就越少，建立线程时就越容易把剩下的内存耗尽
+</pre>
+
+<p>
+出现 <span class="underline">StackOverflowError</span> 异常时有错误堆栈可以阅读，相对来说，比较容易找到问题的所在。而且，如果使用虚拟机默认参数，栈深度在大多数情况下（因为每个方法压入栈的帧大小并不是一样的，所以只能说在大多数情况下）达到1000~2000完全没有问题，对于正常的方法调用（包括递归），这个深度应该完全够用了。但是，如果是建立过多线程导致的内存溢出，在不能减少线程数或者更换64位虚拟机的情况下，就只能通过 <b>减少最大堆和减少栈容量</b> 来换取更多的线程。如果没有这方面的处理经验，这种通过 <span class="underline">减少内存</span> 的手段来解决内存溢出的方式会比较难以想到。创建线程导致内存溢出异常代码如下所示：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ffa07a;">/** </span>
+<span style="color: #ffa07a;"> * VM Args: -Xss2M (&#36825;&#26102;&#20505;&#19981;&#22952;&#35774;&#32622;&#22823;&#20123;) </span>
+<span style="color: #ffa07a;"> * </span><span style="color: #7fffd4;">@author</span><span style="color: #ffa07a;"> mk </span>
+<span style="color: #ffa07a;"> * </span>
+<span style="color: #ffa07a;"> */</span>  
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">JavaVMStackOOM</span> {  
+
+    <span style="color: #00ffff;">private</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">dontStop</span>() {  
+        <span style="color: #00ffff;">while</span> (<span style="color: #7fffd4;">true</span>) {  
+        }  
+    }  
+
+    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">stackLeakByThread</span>() {  
+        <span style="color: #00ffff;">while</span> (<span style="color: #7fffd4;">true</span>) {  
+            <span style="color: #98fb98;">Thread</span> <span style="color: #eedd82;">thread</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">Thread</span>(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">Runnable</span>() {  
+                    <span style="color: #7fffd4;">@Override</span>  
+                    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">run</span>() {  
+                        dontStop();  
+                    }  
+                });  
+            thread.start();  
+        }  
+    }  
+
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">String</span>[] <span style="color: #eedd82;">args</span>) {  
+        <span style="color: #98fb98;">JavaVMStackOOM</span> <span style="color: #eedd82;">oom</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">JavaVMStackOOM</span>();  
+        oom.stackLeakByThread();  
+    }  
+
+}
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-3-3" class="outline-3">
+<h3 id="sec-3-3">方法区和运行时常量池溢出</h3>
+<div class="outline-text-3" id="text-3-3">
+</div><div id="outline-container-sec-3-3-1" class="outline-4">
+<h4 id="sec-3-3-1">常量池</h4>
+<div class="outline-text-4" id="text-3-3-1">
+<p>
+由于运行时常量池是方法区的一部分，因此这两个区域的溢出测试就放在一起进行。前面提到 <span class="underline">JDK 1.7</span> 开始逐步 <span class="underline">去永久代</span> 的事情，再次就以测试代码观察一下这件事对程序的实际影响
+</p>
+
+<p>
+<span class="underline">String.intern()</span> 是一个 <span class="underline">Native</span> 方法，它的作用是：如果字符串常量池中已经包含一个等于此String对象的字符串，则返回代表池中这个字符串的String对象；否则，将此String对象包含的字符串添加到常量池中，并且返回此String对象的引用。在 <span class="underline">JDK 1.6</span> 及之前的版本中，由于常量池分配在永久代内，可以通过 <span class="underline">-XX:PermSize</span> 和 <span class="underline">-XX:MaxPermSize</span> 限制方法区大小，从而间接限制其中常量池的容量，代码如下所示：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ffa07a;">/** </span>
+<span style="color: #ffa07a;"> * VM Args: -XX:PermSize=10M -XX:MaxPermSize=10M </span>
+<span style="color: #ffa07a;"> * </span><span style="color: #7fffd4;">@author</span><span style="color: #ffa07a;"> mk </span>
+<span style="color: #ffa07a;"> * </span>
+<span style="color: #ffa07a;"> */</span>  
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">RuntimeConstantPoolOOM</span> {      
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">String</span>[] <span style="color: #eedd82;">args</span>) {  
+        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#20351;&#29992; List &#20445;&#25345;&#30528;&#24120;&#37327;&#27744;&#24341;&#29992;&#65292;&#36991;&#20813; Full GC &#22238;&#25910;&#24120;&#37327;&#27744;&#34892;&#20026;  </span>
+        <span style="color: #98fb98;">List</span>&lt;<span style="color: #98fb98;">String</span>&gt; <span style="color: #eedd82;">list</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">ArrayList</span>&lt;<span style="color: #98fb98;">String</span>&gt;();  
+        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">10MB &#30340; PermSize &#22312; integer &#33539;&#22260;&#20869;&#23384;&#22312;&#20135;&#29983; OOM &#20102;  </span>
+        <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">i</span> = 0;  
+        <span style="color: #00ffff;">while</span> (<span style="color: #7fffd4;">true</span>) {  
+            list.add(String.valueOf(i++).intern());  
+        }  
+    }  
+}
+</pre>
+</div>
+
+<p>
+运行结果如下所示：
+</p>
+
+<div class="figure">
+<p><img src="pic/const-pool-overflow.png" alt="const-pool-overflow.png" width="70%" /> 
+</p>
+</div>
+
+<p>
+从运行结果中可以看到，运行时常量池溢出，在 <span class="underline">OutOfMemoryError</span> 后面跟随的提示信息是 <span class="underline">PermGen space</span> ，说明运行常量池属于方法区（HotSpot虚拟机中的永久代）的一部分
+</p>
+
+<p>
+而使用 <span class="underline">JDK 1.7</span> 运行这段程序就不会得到相同的结果，while循环将一直进行下去。关于这个字符串常量池的实现问题，还可以引申出一个更有意思的影响： <span class="underline">String.intern()</span> 返回引用的测试，代码如下所示：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">RuntimeConstantPoolOOM</span> {  
+
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">String</span>[] <span style="color: #eedd82;">args</span>) {  
+        <span style="color: #98fb98;">String</span> <span style="color: #eedd82;">str1</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">StringBuilder</span>(<span style="color: #ffa07a;">"&#35745;&#31639;&#26426;"</span>).append(<span style="color: #ffa07a;">"&#36719;&#20214;"</span>).toString();  
+        System.out.println(str1.intern() == str1);  
+
+        <span style="color: #98fb98;">String</span> <span style="color: #eedd82;">str2</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">StringBuilder</span>(<span style="color: #ffa07a;">"ja"</span>).append(<span style="color: #ffa07a;">"va"</span>).toString();  
+        System.out.println(str2.intern() == str2);  
+    }  
+}
+</pre>
+</div>
+
+<p>
+这段代码在 <span class="underline">JDK 1.6</span> 中运行，会得到两个 <b>false</b> ，而在 <span class="underline">JDK 1.7</span> 中运行，会得到一个 <b>true</b> 和 一个 <b>false</b> 。产生差异的原因是：在 <span class="underline">JDK 1.6</span> 中， <span class="underline">intern()</span> 方法会把首次遇到的字符串实例 <b>复制到永久代</b> 中，返回的也是永久代中这个字符串实例的引用，而由 <span class="underline">StringBuilder</span> 创建的字符串实例在 <span class="underline">Java堆</span> 上，所以不是同一个引用，将返回false。而 <span class="underline">JDK 1.7 intern()</span> 实现 <b>不会再复制实例</b> ，只是在常量池中记录首次出现的实例引用，因此intern()返回的引用和由StringBuilder创建的那个字符串实例是同一个。对str2比较返回false是因为 <b>java这个字符串在执行StringBuilder.toString()之前已经出现过，字符串常量池中已经有它的引用了，不符合首次出现的原则</b> ，而 <b>计算机软件这个字符是首次出现的，因此返回true</b>
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-3-3-2" class="outline-4">
+<h4 id="sec-3-3-2">方法区</h4>
+<div class="outline-text-4" id="text-3-3-2">
+<p>
+方法区用于存放Class的相关信息，如类名、访问修饰符、常量池、字段描述、方法描述等。对于这些区域的测试，基本的思路是运行时产生大量的类去填满方法区，直到溢出。虽然直接使用 <span class="underline">Java SE API</span> 也可以动态产生类（如反射时的 <span class="underline">GeneratedConstructorAccessor</span> 和 <span class="underline">动态代理</span> 等），但在本次实验中中操作起来比较麻烦。借助 <span class="underline">CGLib</span> 直接操作字节码运行时生成了大量的动态类
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ffa07a;">/** </span>
+<span style="color: #ffa07a;"> * VM Args: -XX:PermSize=10M -XX:MaxPermSize=10M </span>
+<span style="color: #ffa07a;"> * </span><span style="color: #7fffd4;">@author</span><span style="color: #ffa07a;"> mk </span>
+<span style="color: #ffa07a;"> * </span>
+<span style="color: #ffa07a;"> */</span>  
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">JavaMethodAreadOOM</span> {      
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">String</span>[] <span style="color: #eedd82;">args</span>) {  
+        <span style="color: #00ffff;">while</span> (<span style="color: #7fffd4;">true</span>) {  
+            <span style="color: #98fb98;">Enhancer</span> <span style="color: #eedd82;">enhancer</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">Enhancer</span>();  
+            enhancer.setSuperclass(OOMObject.<span style="color: #00ffff;">class</span>);  
+            enhancer.setUseCache(<span style="color: #7fffd4;">false</span>);  
+            enhancer.setCallback(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">MethodInterceptor</span>() {  
+                    <span style="color: #7fffd4;">@Override</span>  
+                    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">Object</span> <span style="color: #87cefa;">intercept</span>(<span style="color: #98fb98;">Object</span> <span style="color: #eedd82;">obj</span>, <span style="color: #98fb98;">Method</span> <span style="color: #eedd82;">method</span>,   
+                                <span style="color: #98fb98;">Object</span>[] <span style="color: #eedd82;">args</span>, <span style="color: #98fb98;">MethodProxy</span> <span style="color: #eedd82;">proxy</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Throwable</span> {  
+                        <span style="color: #00ffff;">return</span> proxy.invokeSuper(obj, args);  
+                    }  
+                });  
+            enhancer.create();  
+        }  
+    }  
+
+    <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">OOMObject</span> {
+    }  
+}
+</pre>
+</div>
+
+<p>
+运行结果如下图所示：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/perm-gen-overflow.png" alt="perm-gen-overflow.png" width="70%" /> 
+</p>
+</div>
+
+
+<pre class="example">
+    在这个例子中模拟的场景并非纯粹是一个实验，这样的应用经常会出现在实际应用中
+    
+    当前的很多主流框架，如Spring、Hibernate，在对类进行增强时，都会使用到 _CGLib_ 这类字节码技术
+    
+    增强的类越多，就需要越大的方法区来保证动态生成的Class可以加载如内存
+    
+    另外，JVM上的动态语言（例如 _Groovy_ 等）通常都会持续创建类来实现语言的动态性，随着这类语言的流行，也越来越容易遇到相似的溢出场景
+</pre>
+
+<p>
+方法区溢出也是一种场景的内存溢出异常，一个类要被垃圾收集器回收掉，判定条件是比较苛刻的。在 <b>经常动态生成大量Class的应用中，需要特别注意类的回收状况</b> 。这类场景除了上面提到的程序使用了 <span class="underline">CGLib</span> 字节码增强和动态语言之外，常见的还有：大量 <span class="underline">JSP</span> 或动态产生 <span class="underline">JSP</span> 文件的应用（JSP第一次运行需要编译为Java类）、基于 <span class="underline">OSGI</span> 的应用（即使是同一个类文件，被不同的加载器加载也会视为不同的类）等
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-3-4" class="outline-3">
+<h3 id="sec-3-4">直接内存溢出</h3>
+<div class="outline-text-3" id="text-3-4">
+<p>
+<span class="underline">DirectMemory</span> 容量可通过 <span class="underline">-XX:MaxDirectMemorySize</span> 指定，如果不指定，则默认与 Java 堆最大值（ <span class="underline">-Xmx</span> 指定）一样，下面代码绕过了 <span class="underline">DirectByteBuffer</span> 类，直接通过返回获取 <span class="underline">Unsafe</span> 实例进行内存分配（Unsafe类的 <span class="underline">getUnsafe()</span> 方法限制了只有引导类加载器才会返回实例，也就是设计者希望只有 <span class="underline">rt.jar</span> 中的类才能使用Unsafe的功能）。因为，虽然使用 <span class="underline">DirectByteBuffer</span> 分配内存也会抛出内存溢出异常，但它抛出异常时并没有真正向操作系统申请分配内存，而是通过计算得知内存无法分配，于是手动抛出异常，真正申请分配内存的方法是 <b>unsafe.allocateMemory()</b> 代码如下所示：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ffa07a;">/** </span>
+<span style="color: #ffa07a;"> * VM Args: -Xmx20M -XX:MaxDirectMemorySize=10M </span>
+<span style="color: #ffa07a;"> * </span><span style="color: #7fffd4;">@author</span><span style="color: #ffa07a;"> mk </span>
+<span style="color: #ffa07a;"> * </span>
+<span style="color: #ffa07a;"> */</span>  
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">DirectMemoryOOM</span> {      
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">_1MB</span> = 1024 * 1024;  
+
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">String</span>[] <span style="color: #eedd82;">args</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Exception</span> {  
+        <span style="color: #98fb98;">Field</span> <span style="color: #eedd82;">unsafeField</span> = Unsafe.<span style="color: #00ffff;">class</span>.getDeclaredFields()[0];  
+        unsafeField.setAccessible(<span style="color: #7fffd4;">true</span>);  
+
+        <span style="color: #98fb98;">Unsafe</span> <span style="color: #eedd82;">unsafe</span> = (<span style="color: #98fb98;">Unsafe</span>)unsafeField.get(<span style="color: #7fffd4;">null</span>);  
+
+        <span style="color: #00ffff;">while</span> (<span style="color: #7fffd4;">true</span>) {  
+            unsafe.allocateMemory(_1MB);  
+        }  
+    }  
+}
+</pre>
+</div>
+
+<p>
+运行结果如下所示：
+</p>
+
+<div class="figure">
+<p><img src="pic/direct-memory-overflow.png" alt="direct-memory-overflow.png" width="70%" /> 
+</p>
+</div>
+
+<p>
+<span class="underline">DirectMemory导致的内存溢出</span> ，一个明显的特征是在 <span class="underline">Heap Dump</span> 文件中不会看见明显的异常，如果 <b>发现OOM之后Dump文件很小，而程序中又直接或间接使用了NIO</b> ，那就可以考虑检测一下是不是这方面的原因
+</p>
+
+<p>
+<a href="gc.html">Next：垃圾回收器</a>
+</p>
+
+<p>
+<a href="jvm.html">Home：目录</a>
+</p>
+</div>
 </div>
 </div>
 </div>
