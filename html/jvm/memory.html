@@ -202,7 +202,12 @@ for the JavaScript code in this tag.
 </li>
 </ul>
 </li>
-<li><a href="#sec-3">OutOfMemory异常</a></li>
+<li><a href="#sec-3">OutOfMemory异常</a>
+<ul>
+<li><a href="#sec-3-1">堆溢出</a></li>
+<li><a href="#sec-3-2">虚拟机栈和本地方法栈溢出</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
@@ -774,6 +779,102 @@ reference变量中直接存储的就是对象的地址，而java堆对象一部�
 
 <div id="outline-container-sec-3" class="outline-2">
 <h2 id="sec-3">OutOfMemory异常</h2>
+<div class="outline-text-2" id="text-3">
+<p>
+在Java虚拟机规范的描述中,除了程序计数器外,虚拟机内存的其他几个运行时区域都有发生 <b>OutOfMemoryError</b> 异常的可能。现在将通过若干实例来验证异常发生的场景,并且会初步介绍几个与内存相关的最基本的虚拟机参数
+</p>
+
+<p>
+目的有两个:
+</p>
+<ol class="org-ol">
+<li>通过代码验证Java虚拟机规范中描述的各个运行时区域存储的内容
+</li>
+<li>根据异常的信息快速判断是哪个区域的内存溢出,知道什么样的代码可能会导致这些区域内存溢出,以及出现这些异常后该如何处理
+</li>
+</ol>
+
+<p>
+代码的开头都注释了执行时所需要设置的虚拟机启动参数(注释中 <span class="underline">VM Args</span> 后面跟着的参数),这些参数对实验的结果有直接影响,读者调试代码的时候千万不要忽略。如果使用控制台命令来执行程序,那直接跟在Java命令之后书写就可以。如果使用 EclipselDE,则可以下图在Debug/Run页签中的设置
+</p>
+
+
+<div class="figure">
+<p><img src="pic/eclipse-jvm-param.jpg" alt="eclipse-jvm-param.jpg" width="70%" /> 
+</p>
+</div>
+
+<p>
+代码都是基于Sun公司的HotSpot虚拟机运行的,对于不同公司的不同版本的虚拟机 ,参数和程序运行的结果可能会有所差别
+</p>
+</div>
+
+<div id="outline-container-sec-3-1" class="outline-3">
+<h3 id="sec-3-1">堆溢出</h3>
+<div class="outline-text-3" id="text-3-1">
+<p>
+Java堆用于存储对象实例,只要不断地创建对象,并且保证GC Roots到对象之间有可达路径来避免垃圾回收机制清除这些对象,那么在对象数量到达最大堆的容量限制后就会产生内存溢出异常
+</p>
+
+<p>
+下面代码限制Java堆的大小为20MB,不可扩展(将堆的最小值 <span class="underline">-Xms</span> 参数与最大值 <span class="underline">-Xmx</span> 参数设置为一样即可避免堆自动扩展),通过参数 <span class="underline">-XX:+HeapDumpOnOutOfMemoryError</span> 可以让虚拟机在出现内存溢出异常时Dump出当前的内存堆转储快照以便事后进行分析
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;"> * VM Args&#65306;-Xms20m -Xmx20m -XX:+HeapDumpOnOutOfMemoryError</span>
+<span style="color: #ffa07a;"> * </span><span style="color: #7fffd4;">@author</span><span style="color: #ffa07a;"> zzm</span>
+<span style="color: #ffa07a;"> */</span>
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">HeapOOM</span> {
+
+        <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">OOMObject</span> {
+        }
+
+        <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">String</span>[] <span style="color: #eedd82;">args</span>) {
+                <span style="color: #98fb98;">List</span>&lt;<span style="color: #98fb98;">OOMObject</span>&gt; <span style="color: #eedd82;">list</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">ArrayList</span>&lt;<span style="color: #98fb98;">OOMObject</span>&gt;();
+
+                <span style="color: #00ffff;">while</span> (<span style="color: #7fffd4;">true</span>) {
+                        list.add(<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">OOMObject</span>());
+                }
+        }
+}
+</pre>
+</div>
+
+<pre class="example">
+java.lang.OutOfMemoryError :Java heap space
+Dumping heap to java_pid3404.hprof.
+Heap dump file created[22045981 bytes in 0.663 secs]
+</pre>
+
+<p>
+Java堆内存的OOM异常是实际应用中常见的内存溢出异常情况。当出现Java堆内存溢出时 ,异常堆栈信息 <span class="underline">java.lang.OutOfMemoryError</span> 会跟着进一步提示 <span class="underline">Java heap space</span> 
+</p>
+
+<p>
+要解决这个区域的异常,一般的手段是先通过 <b>内存映像分析</b> 工具(如 <span class="underline">Eclipse Memory Analyzer</span> ) 对Dump出来的堆转储快照进行分析,重点是确认内存中的对象是否是必要的,也就是要先分清楚到底是出现了 <b>内存泄漏</b> ( <span class="underline">Memory Leak</span> ) 还是 <b>内存溢出</b> ( <span class="underline">Memory Overflow</span> ) 。 图2-5显示了使用Eclipse Memory Analyzer打开的堆转储快照文件
+</p>
+
+
+<div class="figure">
+<p><img src="pic/eclipse-mat.jpg" alt="eclipse-mat.jpg" width="70%" /> 
+</p>
+</div>
+
+<p>
+如果是内存泄漏，可进一步通过工具 <b>查看泄漏对象到GC Roots的引用链</b> 于是就能找到泄漏对象是通过怎样的路径与GC Roots相关联并导致垃圾收集器无法自动回收它们的。掌握了泄漏对象的类型信息，以及GC Roots引用链的信息，就可以比较准确地定位出泄漏代码的位置。
+</p>
+
+<p>
+如果不存在泄漏，换句话说就是内存中的对象确实都还必须存活着，那就应当检查虚拟机的堆参数（<sub>-Xmx</sub>_ 与 <span class="underline">-Xms</span> ），与机器物理内存对比看是否还可以调大，从代码上检查是否存在某些对象生命周期过长、持有状态时间过长的情况，尝试减少程序运行期的内存消耗
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-3-2" class="outline-3">
+<h3 id="sec-3-2">虚拟机栈和本地方法栈溢出</h3>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
