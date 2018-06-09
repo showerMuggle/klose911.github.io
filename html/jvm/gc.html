@@ -142,6 +142,315 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="jvm.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">垃圾回收器</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#sec-1">对象存活判定</a>
+<ul>
+<li><a href="#sec-1-1">引用计数算法</a></li>
+<li><a href="#sec-1-2">可达性分析算法</a>
+<ul>
+<li><a href="#sec-1-2-1">引用</a></li>
+<li><a href="#sec-1-2-2">生存还是死亡</a></li>
+</ul>
+</li>
+<li><a href="#sec-1-3">回收方法区</a></li>
+</ul>
+</li>
+<li><a href="#sec-2">垃圾回收算法</a></li>
+</ul>
+</div>
+</div>
+<p>
+上一章介绍了Java内存运行时区域的各个部分,其中 <b>程序计数器</b> 、 <b>虚拟机栈</b> 、 <b>本地方法栈</b> 3个区域随线程而生,随线程而灭。栈中的栈帧随着方法的进入和退出而有条不紊地执行着出栈和入栈操作。每一个栈帧中分配多少内存基本上是在类结构确定下来时就已知的。因此这几个区域的内存分配和回收都具备确定性,在这几个区域内就不需要过多考虑回收的问题 ,因为方法结束或者线程结束时,内存自然就跟随着回收了。而 <b>Java堆</b> 和 <b>方法区</b> 则不一样，一个接口中的多个实现类需要的内存可能不一样,一个方法中的多个分支需要的内存也可能不一样,只有在程序处于运行期间时才能知道会创建哪些对象,这部分内存的分配和回收都是动态的,垃圾收集器所关注的是这部分内存
+</p>
+
+<div id="outline-container-sec-1" class="outline-2">
+<h2 id="sec-1">对象存活判定</h2>
+<div class="outline-text-2" id="text-1">
+<p>
+在堆里面存放着Java世界中几乎所有的对象实例,垃圾收集器在对堆进行回收前,第一件事情就是要确定这些对象之中哪些还 <span class="underline">存活</span> 着 ,哪些已经 <span class="underline">死去</span> (即不可能再被任何途径使用的对象)
+</p>
+</div>
+
+<div id="outline-container-sec-1-1" class="outline-3">
+<h3 id="sec-1-1">引用计数算法</h3>
+<div class="outline-text-3" id="text-1-1">
+<p>
+为每个对象中添加一个引用计数器：
+</p>
+<ul class="org-ul">
+<li>每当有—个地方引用它时,计数器值就加1
+</li>
+<li>当引用失效时,计数器值就减1
+</li>
+<li>任何时刻计数器为0的对象就是不可能再被使用的
+</li>
+</ul>
+
+<p>
+客观地说,引用计数算法的实现简单,判定效率也很高,在大部分情况下它都是一个不错的算法,也有一些比较著名的应用案例,例如微软公司的COM技术、使用ActionScript 3, Python等都使用了引用计数算法进行内存管理。但是至少主流的Java虚拟机里面没有选用引用计数算法来管理内存,其中最主要的原因是它 <b>很难解决对象之间相互循环引用的问题</b> 
+</p>
+
+<p>
+举个简单的例子,下面代码中的 <span class="underline">testGC()</span> 方法:对象objA和objB都有字段 <span class="underline">instance</span> , 赋值令 <b>objA.instance=objB</b> 及 <b>objB.instance=objA</b> 。此外,这两个对象再无任何引用 ,实际上这两个对象已经不可能再被访问,但是它们因为互相引用着对方,导致它们的引用计数都不为0,于是引用计数算法无法通知GC收集器回收它们
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;"> * testGC()&#26041;&#27861;&#25191;&#34892;&#21518;&#65292;objA&#21644;objB&#20250;&#19981;&#20250;&#34987;GC&#21602;&#65311; </span>
+<span style="color: #ffa07a;"> * </span><span style="color: #7fffd4;">@author</span><span style="color: #ffa07a;"> zzm</span>
+<span style="color: #ffa07a;"> */</span>
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">ReferenceCountingGC</span> {
+
+        <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">Object</span> <span style="color: #eedd82;">instance</span> = <span style="color: #7fffd4;">null</span>;
+
+        <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">_1MB</span> = 1024 * 1024;
+
+        <span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">         * &#36825;&#20010;&#25104;&#21592;&#23646;&#24615;&#30340;&#21807;&#19968;&#24847;&#20041;&#23601;&#26159;&#21344;&#28857;&#20869;&#23384;&#65292;&#20197;&#20415;&#22312;&#33021;&#22312;GC&#26085;&#24535;&#20013;&#30475;&#28165;&#26970;&#26159;&#21542;&#26377;&#22238;&#25910;&#36807;</span>
+<span style="color: #ffa07a;">         */</span>
+        <span style="color: #00ffff;">private</span> <span style="color: #98fb98;">byte</span>[] <span style="color: #eedd82;">bigSize</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">byte</span>[2 * _1MB];
+
+        <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">testGC</span>() {
+                <span style="color: #98fb98;">ReferenceCountingGC</span> <span style="color: #eedd82;">objA</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">ReferenceCountingGC</span>();
+                <span style="color: #98fb98;">ReferenceCountingGC</span> <span style="color: #eedd82;">objB</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">ReferenceCountingGC</span>();
+                objA.instance = objB;
+                objB.instance = objA;
+
+                objA = <span style="color: #7fffd4;">null</span>;
+                objB = <span style="color: #7fffd4;">null</span>;
+
+                <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#20551;&#35774;&#22312;&#36825;&#34892;&#21457;&#29983;GC&#65292;objA&#21644;objB&#26159;&#21542;&#33021;&#34987;&#22238;&#25910;&#65311;</span>
+                System.gc();
+        }
+}
+</pre>
+</div>
+
+<pre class="example">
+[Fu11 GC(System)[Tenured:0 K-&gt;210K(10240K),0.0149142 secs]4603K-&gt;21OK(19456K),[Perm:2999K-&gt; 2999K(2124 8K )] ,0.0150007 secs] [Times :user=0.01 sys=0.00 ,real=0.02 secs ]                                                                                                                                                                                                                                                                                         
+Heap                                                                                                                                                                                                                                                                                                                                                                                                                                                               
+def new generation total 9216K,used 82K[0x00000000055e0000 ,0x0000000005feO000 ,0x0000000005feOO00 )                                                                                                                                                                                                                                                                                                                                                               
+Eden space 8192K ,llused[0x00000000055e0000 ,0x00000000055f4850 ,0x0000000005de0000 )                                                                                                                                                                                                                                                                                                                                                                              
+from space 1024K, Olusedf0x0000000005de0000 ,0x0000000005de0000 ,0x0000000005ee0000 )                                                                                                                                                                                                                                                                                                                                                                              
+to space 1024K ,0lused[0x0000000005ee0000 ,0x0000000005ee0000 ,0x0000000005fe0000 )                                                                                                                                                                                                                                                                                                                                                                                
+tenured generation total 1024OK,used 21OK[0x0000000005feO000 ,0x00000000069e0000 ,0x00000000069e0000 ) the space 10240K ,2lused[0x0000000005fe0000 ,0x0000000006014al8 ,0x0000000006014cO0 ,0x00000000069e0000 ) compacting perm gen total 21248K,used 3016K[0x00000000069e0000 ,0x0000000007ea0000 ,0x00000000ObdeO000 ) the space 21248K ,14lused[0x00000000069e0000 ,0x0000000006cd2398 ,0x0000000006cd2400 ,0x0000000007ea0000 ) Mo shared spaces configured.  
+</pre>
+
+
+<p>
+从运行结果中可以清楚看到，GC日志中包含 <span class="underline">4603K-&gt;210K</span> ,意味着虚拟机并没有因为这两个对象互相引用就不回收它们,这也从侧面说明虚拟机并不是通过引用计数算法来判断对象是否存活的
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-1-2" class="outline-3">
+<h3 id="sec-1-2">可达性分析算法</h3>
+<div class="outline-text-3" id="text-1-2">
+<p>
+在主流的商用程序语言的主流实现中, 都是称通过可达性分析来判定对象是否存活的。这个算法的基本思路就是通过一系列的称为 <span class="underline">GC Roots</span> 的对象作为起始点,从这些节点开始向下搜索,搜索所走过的路径称为引用链,当一个对象到GC Roots没有任何引用链相连时,则证明此对象是不可用的。如下图所示,对象 <span class="underline">object 5</span> 、 <span class="underline">object 6</span> 、 <span class="underline">object 7</span> 虽然互相有矣联,但是它们到GC Roots是不可达的 ,所以它们将会被判定为是 <b>可回收的对象</b> 
+</p>
+
+
+<div class="figure">
+<p><img src="pic/gc-root.png" alt="gc-root.png" width="70%" /> 
+</p>
+</div>
+
+
+<p>
+在Java语言中可作为 <b>GC Roots</b> 的对象包括下面几种:
+</p>
+<ul class="org-ul">
+<li>虚拟机栈(栈帧中的本地变量表)中引用的对象
+</li>
+<li>方法区中类静态属性引用的对象
+</li>
+<li>方法区中常量引用的对象
+</li>
+<li>本地方法栈中JNI(native方法)引用的对象
+</li>
+</ul>
+</div>
+
+
+<div id="outline-container-sec-1-2-1" class="outline-4">
+<h4 id="sec-1-2-1">引用</h4>
+<div class="outline-text-4" id="text-1-2-1">
+<p>
+无论是通过引用计数算法判断对象的引用数量，还是通过可达性分析算法判断对象的引用链是否可达，判定对象是否存活都与 <b>引用</b> <span class="underline">reference</span> 有关。在JDK1.2之后，Java对引用的概念进行了扩充：
+</p>
+<ul class="org-ul">
+<li><b>强引用</b> ：在程序代码之中普遍存在的，类似 <span class="underline">Object object = new Object()</span> 这类的引用， <b>只要强引用还存在，垃圾收集器永远不会回收掉被引用的对象</b>
+</li>
+<li><b>软引用</b> ：描述一些还在用但并非必需的对象。对于软引用关联着的对象，在 <b>系统将要发生内存溢出异常之前，将会把这些对象列进回收范围之中进行第二次回收</b> ，如果这次回收完成还没有足够的内存，才会抛出内存溢出异常。在JDK1.2之后提供了 <span class="underline">SoftReference</span> 类来实现软引用
+</li>
+<li><b>弱引用</b> ：描述非必需对象的，但是它的强度比软引用要更弱一些， <b>被弱引用关联的对象只能生存到下一次垃圾收集发生之前。当垃圾收集器工作时，无论当前内存是否足够，都会回收掉只被弱引用关联的对象</b> 。在JDK1.2之后提供了 <span class="underline">WeakReference</span> 类来实现弱引用
+</li>
+<li><b>虚引用</b> ：　也称为 <span class="underline">幻影引用</span> ，它是最弱的一种引用关系。一个对象是否有虚引用的存在，完全不会对其生存时间构成影响，也无法通过虚引用来取得一个对象实例。 <b>为一个对象设置虚引用关联的唯一目的就是能在这个对象被收集器回收时收到一个系统通知</b> 。在JDK1.2之后提供了 <span class="underline">PhantomReference</span> 类来实现虚引用。
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-1-2-2" class="outline-4">
+<h4 id="sec-1-2-2">生存还是死亡</h4>
+<div class="outline-text-4" id="text-1-2-2">
+<p>
+即使在可达性分析算法中不可达的对象, 也并非是 <span class="underline">非死不可</span> 的, 这时候它们暂时处于 <span class="underline">缓刑</span> 阶段, 要真正宣告一个对象死亡, 至少要经历两次标记过程: 
+</p>
+<ul class="org-ul">
+<li>如果对象在进行可达性分析后发现没有与GC Roots相连接的引用链,那它将会被 <b>第一次标记并且进行一次筛选</b> , 筛选的条件是 <b>此对象是否有必要执行finalize()方法</b> 
+<ul class="org-ul">
+<li>当对象没有覆盖finalize()方法,或者finalize()方法已经被虚拟机调用过,虚拟机将这两种情况都视为 <span class="underline">没有必要执行</span>
+</li>
+<li>如果这个对象被判定为有必要执行finalize()方法,那么这个对象将会放置在一个叫做 <b>F-Queue</b> 的队列之中
+<ul class="org-ul">
+<li>稍后由一个由虚拟机自动建立的、低优先级的 <b>Finalizer线程</b> 去执行它。所谓的 <span class="underline">执行</span> 是指虚拟机会触发这个方法,但并不承诺会等待它运行结束,这样做的原因是： <b>如果一个对象在finalize()方法中执行缓慢,或者发生了死循环将很可能会导致F-Queue队列中其他对象永久处于等待,甚至导致整个内存回收系统崩溃</b>
+</li>
+<li>finalize()方法是对象逃脱死亡命运的最后一次机会,稍后GC将对 <b>F-Queue中的对象进行第二次小规模的标记</b>
+<ul class="org-ul">
+<li>如果对象要在finalize()中成功拯救自己: 只要重新与引用链上的任何一个对象建立关联即可,譬如把自己(this关键字)赋值给某个类变量或者对象的成员变量, 那在第二次标记时它将被移除出 <span class="underline">即将回收</span> 的集合
+</li>
+<li>如果对象这时候还没有逃脱,那基本上它就真的被回收了
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+<p>
+下面代码中可以看到一个对象的finalize()被执行,但是它仍然可以存活：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;"> * &#27492;&#20195;&#30721;&#28436;&#31034;&#20102;&#20004;&#28857;&#65306; </span>
+<span style="color: #ffa07a;"> * 1.&#23545;&#35937;&#21487;&#20197;&#22312;&#34987;GC&#26102;&#33258;&#25105;&#25327;&#25937;&#12290; </span>
+<span style="color: #ffa07a;"> * 2.&#36825;&#31181;&#33258;&#25937;&#30340;&#26426;&#20250;&#21482;&#26377;&#19968;&#27425;&#65292;&#22240;&#20026;&#19968;&#20010;&#23545;&#35937;&#30340;finalize()&#26041;&#27861;&#26368;&#22810;&#21482;&#20250;&#34987;&#31995;&#32479;&#33258;&#21160;&#35843;&#29992;&#19968;&#27425;</span>
+<span style="color: #ffa07a;"> * </span><span style="color: #7fffd4;">@author</span><span style="color: #ffa07a;"> zzm</span>
+<span style="color: #ffa07a;"> */</span>
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">FinalizeEscapeGC</span> {
+
+        <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">FinalizeEscapeGC</span> <span style="color: #eedd82;">SAVE_HOOK</span> = <span style="color: #7fffd4;">null</span>;
+
+        <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">isAlive</span>() {
+                System.out.println(<span style="color: #ffa07a;">"yes, i am still alive :)"</span>);
+        }
+
+        <span style="color: #7fffd4;">@Override</span>
+        <span style="color: #00ffff;">protected</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">finalize</span>() <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Throwable</span> {
+                <span style="color: #00ffff;">super</span>.finalize();
+                System.out.println(<span style="color: #ffa07a;">"finalize mehtod executed!"</span>);
+                <span style="color: #7fffd4;">FinalizeEscapeGC</span>.SAVE_HOOK = <span style="color: #00ffff;">this</span>;
+        }
+
+        <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">String</span>[] <span style="color: #eedd82;">args</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Throwable</span> {
+                SAVE_HOOK = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">FinalizeEscapeGC</span>();
+
+                <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#23545;&#35937;&#31532;&#19968;&#27425;&#25104;&#21151;&#25327;&#25937;&#33258;&#24049;</span>
+                SAVE_HOOK = <span style="color: #7fffd4;">null</span>;
+                System.gc();
+                <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#22240;&#20026;Finalizer&#26041;&#27861;&#20248;&#20808;&#32423;&#24456;&#20302;&#65292;&#26242;&#20572;0.5&#31186;&#65292;&#20197;&#31561;&#24453;&#23427;</span>
+                Thread.sleep(500);
+                <span style="color: #00ffff;">if</span> (SAVE_HOOK != <span style="color: #7fffd4;">null</span>) {
+                        SAVE_HOOK.isAlive();
+                } <span style="color: #00ffff;">else</span> {
+                        System.out.println(<span style="color: #ffa07a;">"no, i am dead :("</span>);
+                }
+
+                <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#19979;&#38754;&#36825;&#27573;&#20195;&#30721;&#19982;&#19978;&#38754;&#30340;&#23436;&#20840;&#30456;&#21516;&#65292;&#20294;&#26159;&#36825;&#27425;&#33258;&#25937;&#21364;&#22833;&#36133;&#20102;</span>
+                SAVE_HOOK = <span style="color: #7fffd4;">null</span>;
+                System.gc();
+                <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#22240;&#20026;Finalizer&#26041;&#27861;&#20248;&#20808;&#32423;&#24456;&#20302;&#65292;&#26242;&#20572;0.5&#31186;&#65292;&#20197;&#31561;&#24453;&#23427;</span>
+                Thread.sleep(500);
+                <span style="color: #00ffff;">if</span> (SAVE_HOOK != <span style="color: #7fffd4;">null</span>) {
+                        SAVE_HOOK.isAlive();
+                } <span style="color: #00ffff;">else</span> {
+                        System.out.println(<span style="color: #ffa07a;">"no, i am dead :("</span>);
+                }
+        }
+}
+</pre>
+</div>
+
+<pre class="example">
+finalize mehtod executed ! 
+yes,i am still alive : )
+no,i am dead : (
+</pre>
+
+<ul class="org-ul">
+<li>SAVE<sub>HOOK对象的finalize</sub>()方法确实被GC收集器触发过,并且在被收集前成功逃脱了
+</li>
+<li>代码中有两段完全一样的代码片段,执行结果却是一次逃脱成功,一次失败,这是因为 <b>任何一个对象的finalize()方法都只会被系统自动调用一次</b> , 如果对象面临下一次回收,它的finalize()方法不会被再次执行,因此第二段代码的自救行动失败了
+</li>
+</ul>
+
+<pre class="example">
+建议大家尽量避免使用finalize方法,因为它不是C/C++中的析构函数,而是Java刚诞生时为了使C/C++程序员更容易接受它所做出的一个妥协
+
+它的运行代价高昂,不确定性大,无法保证各个对象的调用顺序
+
+finalize()能做的所有工作,使用try-finally或者其他方式都可以做得更好，更及时
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-1-3" class="outline-3">
+<h3 id="sec-1-3">回收方法区</h3>
+<div class="outline-text-3" id="text-1-3">
+<p>
+很多人认为方法区(以前的永久代)是没有垃圾收集的,Java虚拟机规范中确实说过可以不要求虚拟机在方法区实现垃圾收集,而且在方法区中进行垃圾收集的 <span class="underline">性价比</span> 一般比较低。在堆中尤其是在新生代中,常规应用进行一次垃圾收集一般可以回收70%〜95%的空间,而永久代的垃圾收集效率远低于此
+</p>
+
+<p>
+永久代的垃圾收集主要回收两部分内容:
+</p>
+<ul class="org-ul">
+<li>废弃常量
+</li>
+<li>无用的类
+</li>
+</ul>
+
+<p>
+回收废弃常量与回收Java堆中的对象非常类似。以常量池中字面量的回收为例,假如一个字符串 <span class="underline">abc</span> 已经进入了常量池中,但是当前系统没有任何一个String对象是叫做 <span class="underline">abc</span> 的，换句话说就是没有任何String对象引用常量池中的 <span class="underline">abc</span> 常量, 也没有其他地方引用了这个字面量,如果这时发生内存回收,而且必要的话,这个 <span class="underline">abc</span> 常量就会被系统清理出常量池。常量池中的其他类(接口)、方法、字段的符号引用也与此类似
+</p>
+
+<p>
+判定一个常量是否是 <span class="underline">废弃常量</span> 比较简单,而要判定一个类是否是 <span class="underline">无用的类</span> 的条件则相对苛刻许多。类需要同时满足下面3个条件才能算是 <span class="underline">无用的类</span> :
+</p>
+<ol class="org-ol">
+<li>该类所有的实例都已经被回收,也就是Java堆中不存在该类的任何实例
+</li>
+<li>加载该类的ClassLoader已经被回收
+</li>
+<li>该类对应的java.lang.Class对象没有在任何地方被引用,无法在任何地方通过反射访问该类的方法
+</li>
+</ol>
+
+<p>
+虚拟机可以对满足上述3个条件的无用类进行回收,这里说的仅仅是 <b>可以</b> ,而并不是和对象一样,不使用了就必然会回收。是否对类进行回收,HotSpot虚拟机提供了 <span class="underline">-XX:noclassgc</span> 参数进行控制 ,还可以使用 <span class="underline">-verbose:class</span> 以及 <span class="underline">-XX:+TraceClassLoading</span> 、 <span class="underline">-XX:+TraceClassUnLoading</span> 查看类加载和卸载信息,其中 <span class="underline">-verbose:class</span> 和 <span class="underline">-XX:+TraceClassLoading</span> 可以在 <b>Product</b> 版的虚拟机中使用, <span class="underline">-XX:+TraceClassUnLoading</span> 参数需要 <b>FastDebug</b> 版的虚拟机支持
+</p>
+
+<pre class="example">
+  在大量使用反射、动态代理、CGLib等ByteCode框架、动态生成JSP以及OSGi这类频繁自定义ClassLoader的场景都需要虚拟机具备类卸载的功能,以保证永久代不会溢出
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2" class="outline-2">
+<h2 id="sec-2">垃圾回收算法</h2>
+</div>
 </div>
 <div id="postamble" class="status">
 
