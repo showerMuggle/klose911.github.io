@@ -158,7 +158,36 @@ for the JavaScript code in this tag.
 <li><a href="#sec-1-3">回收方法区</a></li>
 </ul>
 </li>
-<li><a href="#sec-2">垃圾回收算法</a></li>
+<li><a href="#sec-2">垃圾回收算法</a>
+<ul>
+<li><a href="#sec-2-1">标记-清除算法</a></li>
+<li><a href="#sec-2-2">复制算法</a>
+<ul>
+<li><a href="#sec-2-2-1">改进的复制算法</a></li>
+</ul>
+</li>
+<li><a href="#sec-2-3">标记-整理算法</a></li>
+<li><a href="#sec-2-4">分代收集</a></li>
+</ul>
+</li>
+<li><a href="#sec-3">垃圾收集器</a>
+<ul>
+<li><a href="#sec-3-1">Serial</a></li>
+<li><a href="#sec-3-2">ParNew收集器</a></li>
+<li><a href="#sec-3-3">Parallel Scavenge 收集器</a></li>
+<li><a href="#sec-3-4">Serial Old收集器</a></li>
+<li><a href="#sec-3-5">Parallel Old收集器</a></li>
+<li><a href="#sec-3-6">CMS收集器</a>
+<ul>
+<li><a href="#sec-3-6-1">优点</a></li>
+<li><a href="#sec-3-6-2">缺点</a></li>
+</ul>
+</li>
+<li><a href="#sec-3-7">G1收集器</a></li>
+<li><a href="#sec-3-8">GC日志</a></li>
+<li><a href="#sec-3-9">GC参数</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
@@ -450,6 +479,398 @@ finalize()能做的所有工作,使用try-finally或者其他方式都可以做�
 
 <div id="outline-container-sec-2" class="outline-2">
 <h2 id="sec-2">垃圾回收算法</h2>
+<div class="outline-text-2" id="text-2">
+</div><div id="outline-container-sec-2-1" class="outline-3">
+<h3 id="sec-2-1">标记-清除算法</h3>
+<div class="outline-text-3" id="text-2-1">
+<p>
+<b>标记—清除</b> 算法是最基础的收集算法，它分为 <b>标记</b> 和 <b>清除</b> 两个阶段：首先标记出所需回收的对象，在标记完成后统一回收掉所有被标记的对象，它的标记过程其实就是前面的根搜索算法中判定垃圾对象的标记过程。标记—清除算法的执行情况如下图所示：
+</p>
+
+<ul class="org-ul">
+<li>回收前状态：
+
+<div class="figure">
+<p><img src="pic/mark.png" alt="mark.png" width="70%" />
+</p>
+</div>
+</li>
+
+<li>回收后状态：
+
+<div class="figure">
+<p><img src="pic/swept.png" alt="swept.png" width="70%" />
+</p>
+</div>
+</li>
+</ul>
+
+
+<p>
+该算法有如下缺点：
+</p>
+<ol class="org-ol">
+<li>标记和清除过程的 <b>效率都不高</b> 
+</li>
+<li>标记清除后会 <b>产生大量不连续的内存碎片</b> ，空间碎片太多可能会导致，当程序在以后的运行过程中需要分配较大对象时无法找到足够的连续内存而不得不触发另一次垃圾收集动作
+</li>
+</ol>
+</div>
+</div>
+
+<div id="outline-container-sec-2-2" class="outline-3">
+<h3 id="sec-2-2">复制算法</h3>
+<div class="outline-text-3" id="text-2-2">
+<p>
+<b>复制算法</b> 是针对 <span class="underline">标记—清除</span> 算法的缺点，在其基础上进行改进而得到的，它将可用内存按容量分为大小相等的两块，每次只使用其中的一块，当这一块的内存用完了，就将还存活着的对象复制到另外一块内存上面，然后再把已使用过的内存空间一次清理掉
+</p>
+
+<ul class="org-ul">
+<li>回收前状态：
+
+<div class="figure">
+<p><img src="pic/before-copy.png" alt="before-copy.png" width="70%" />
+</p>
+</div>
+</li>
+
+<li>回收后状态：
+
+<div class="figure">
+<p><img src="pic/after-copy.png" alt="after-copy.png" width="70%" />
+</p>
+</div>
+
+
+<div class="figure">
+<p><img src="pic/gc-copy.png" alt="gc-copy.png" width="70%" />
+</p>
+</div>
+</li>
+</ul>
+
+<p>
+优点：
+</p>
+<ol class="org-ol">
+<li>每次 <span class="underline">只对一块内存</span> 进行回收， <b>运行高效</b> 
+</li>
+<li>只需 <span class="underline">移动栈顶指针</span> ，按顺序分配内存即可， <b>实现简单</b> 
+</li>
+<li>内存回收时 <b>不用考虑内存碎片</b> 的出现
+</li>
+</ol>
+
+<p>
+缺点：
+</p>
+<ul class="org-ul">
+<li>可一次性分配的最大内存缩小了一半
+</li>
+</ul>
+</div>
+
+<div id="outline-container-sec-2-2-1" class="outline-4">
+<h4 id="sec-2-2-1">改进的复制算法</h4>
+<div class="outline-text-4" id="text-2-2-1">
+<p>
+根据新生代的特点，98%的对象朝生夕死，并不需要按照1:1的比例来划分内存空间，而是将内存划分为 <b>一块较大的Eden空间和两块较小的Survivor空间，每次使用Eden和其中一块Survivor</b> 。当回收时，将Eden和Survivor中还存活的对象一次性地复制到另外一块Survivor空间，最后清理掉Eden和刚才用过的Survivor空间，清理完成后，刚刚被清理的Eden和另一块在回收时放入存活对象的Survivor空间作为使用内存，刚被清理的Survivor作为保留空间，以便后面用来回收之用。
+</p>
+
+<p>
+这种改进的收集算法也有一个问题，就是在回收时那块空的Survivor空间能否放得下Eden和使用的Survivor空间中还存活的对象， <b>如果Survivor空间不够存放上一次新生代收集下来的存活对象</b> ，此时就需要向老年代 <span class="underline">借</span> 内存，那些剩余未放下的对象就通过分配担保机制进入老年代
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-3" class="outline-3">
+<h3 id="sec-2-3">标记-整理算法</h3>
+<div class="outline-text-3" id="text-2-3">
+<p>
+复制算法如果 <b>在对象存活率较高时，就需要进行较多次的复制操作</b> ，效率也会变低。而对于老年代中的对象，一般存活率都较高，因此需要选用其他收集算法： <b>标记-整理</b> 算法。标记过程仍然与 <span class="underline">标记-清除</span> 算法中一样，但是在标记完成后并不直接对可回收对象进行清理，而是 <b>让所有存活的对象都向一端移动，然后直接清理掉端边界以外的内存</b> 。算法示意图如下：
+</p>
+
+<ul class="org-ul">
+<li>回收前状态：
+
+<div class="figure">
+<p><img src="pic/before-compact.png" alt="before-compact.png" width="70%" />
+</p>
+</div>
+</li>
+
+<li>回收后状态：
+
+<div class="figure">
+<p><img src="pic/after-compact.png" alt="after-compact.png" width="70%" />
+</p>
+</div>
+
+
+<div class="figure">
+<p><img src="pic/gc-mark-compact.png" alt="gc-mark-compact.png" width="70%" />
+</p>
+</div>
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-2-4" class="outline-3">
+<h3 id="sec-2-4">分代收集</h3>
+<div class="outline-text-3" id="text-2-4">
+<p>
+当前商业虚拟机的垃圾收集 都采用 <b>分代收集</b> ，它根据对象的存活周期的不同将内存划分为几块，一般是把Java堆分为 <b>新生代</b> 和 <b>老年代</b> 。在新生代中，每次垃圾收集时都会发现有大量对象死去，只有少量存活，因此可选用 <span class="underline">复制算法</span> 来完成收集，而老年代中因为对象存活率高、没有额外空间对它进行分配担保，就必须使用 <span class="underline">标记—清除</span> 算法或 <span class="underline">标记—整理</span> 算法来进行回收
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-3" class="outline-2">
+<h2 id="sec-3">垃圾收集器</h2>
+<div class="outline-text-2" id="text-3">
+<p>
+垃圾收集器是垃圾收集算法的具体实现。Java规范对垃圾收集器的实现没有做任何规定，因此不同的虚拟机提供的垃圾收集器可能有很大差异。HotSpot虚拟机1.7版本使用了多种收集器。如下图：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/jvm-gc.jpg" alt="jvm-gc.jpg" width="70%" />
+</p>
+</div>
+
+<p>
+共有7种作用不不同分代的收集器，其中
+</p>
+<ul class="org-ul">
+<li>新生代：
+<ul class="org-ul">
+<li>Serial
+</li>
+<li>ParNew
+</li>
+<li>Parallel Scavenge
+</li>
+<li>G1
+</li>
+</ul>
+</li>
+<li>老年代：
+<ul class="org-ul">
+<li>CMS
+</li>
+<li>Serial Old（MSC）
+</li>
+<li>Parallel Old
+</li>
+<li>G1
+</li>
+</ul>
+</li>
+</ul>
+
+<p>
+相互连线表示收集器可以搭配使用
+</p>
+</div>
+
+<div id="outline-container-sec-3-1" class="outline-3">
+<h3 id="sec-3-1">Serial</h3>
+<div class="outline-text-3" id="text-3-1">
+<p>
+<b>Serial</b> 收集器是最基本、发展历史最为悠久的收集器。在曾经的JDK1.3之前是新生代收集的唯一选择。
+</p>
+
+<p>
+这个收集器是一个单线程的收集器， <span class="underline">只会使用一个CPU或一条收集线程</span> ，在它进行垃圾收集的时，必须暂停其他所有的工作线程，直到它收集结束。这个过程是由虚拟机后台发起并自动完成的，对用户不可见的情况下把用户正常的工作线程全部停掉，这对许多应用是无法接受的。下图展示了运行过程：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/serial-gc.jpg" alt="serial-gc.jpg" width="70%" />
+</p>
+</div>
+
+<p>
+虽然Serial有着 <span class="underline">Stop The World</span> 无法消除的影响，但是它仍旧是虚拟机运行在Client模式下的默认新生代收集器。在单CPU环境来说，Serial由于没有线程交互的开销，专心做垃圾收集，因而具有最高的收集效率。在用户的桌面应用中，分配给虚拟机的内存一般不会很大，收集一两百M的新生代所用的停顿时间完全可以控制在一百ms之内。所以Serial收集器对于运行在Client模式下的虚拟机来说是一个很好地选择
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-3-2" class="outline-3">
+<h3 id="sec-3-2">ParNew收集器</h3>
+<div class="outline-text-3" id="text-3-2">
+<p>
+<b>ParNew</b> 收集器其实就是 <b>Serial收集器的多线程版本</b> ，除了使用多条线程进行垃圾收集之外，其他行为和Serial收集器一样。ParNew是许多运行在Server模式下的虚拟机中首选的新生代收集器，其中有一个与性能无关的重要原因，除了Serial收集器外，目前只有ParNew能与老年代的CMS收集器配合使用
+</p>
+
+<p>
+ParNew是一种 <b>并行</b> 的收集器。在垃圾回收中：
+</p>
+<ul class="org-ul">
+<li>并行： <b>多条垃圾收集线程并行工作，用户线程处于等待状态</b>
+</li>
+<li>并发： 用户线程与垃圾收集线程同时执行
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-3-3" class="outline-3">
+<h3 id="sec-3-3">Parallel Scavenge 收集器</h3>
+<div class="outline-text-3" id="text-3-3">
+<p>
+<b>Parallel Scavenge</b> 收集器使用的是复制算法，也是一个并行的多线程收集器
+</p>
+
+<p>
+和ParNew相似，但是Parallel Scavenge的关注点不同，其他收集器的关注点是尽可能地缩短垃圾收集时用户线程的停顿时间，而Parallel Scavenge收集器的目标则是达到一个可控制的 <b>吞吐量</b> 
+</p>
+
+<pre class="example">
+  吞吐量 = 运行用户代码时间 / (运行用户代码时间 + 垃圾收集时间)
+</pre>
+</div>
+</div>
+
+<div id="outline-container-sec-3-4" class="outline-3">
+<h3 id="sec-3-4">Serial Old收集器</h3>
+<div class="outline-text-3" id="text-3-4">
+<p>
+<b>Serial Old</b> 收集器是新生代Serial收集器的老年代版本，同样是一个单线程收集器，使用 <span class="underline">标记-整理</span> 算法，Serial Old的主要意义也是在于给Client模式下的虚拟机使用
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-3-5" class="outline-3">
+<h3 id="sec-3-5">Parallel Old收集器</h3>
+<div class="outline-text-3" id="text-3-5">
+<p>
+<b>Parallel Old</b> 是新生代收集器 <span class="underline">Prarllel Scavenge</span> 的老年代版本，使用多线程和 <span class="underline">标记-整理</span> 算法。运行流程如下：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/para-old-gc.png" alt="para-old-gc.png" width="70%" />
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-3-6" class="outline-3">
+<h3 id="sec-3-6">CMS收集器</h3>
+<div class="outline-text-3" id="text-3-6">
+<p>
+<b>CMS</b> ( <span class="underline">Concurrent Mark Sweep</span> )收集器是一种以获取最短回收停顿时间为目标的收集器。主要用于互联网或B/S系统的服务端，这类应用尤其重视服务的响应速度
+</p>
+
+<p>
+CMS是基于 <span class="underline">标记-清除</span> 算法的，运作过程更加复杂一些，分为4个步骤：
+</p>
+<ol class="org-ol">
+<li>初始标记：标记GC Roots直接关联的对象
+</li>
+<li>并发标记：可达性分析算法
+</li>
+<li>重新标记：并发变动修改
+</li>
+<li>并发清除
+</li>
+</ol>
+
+<p>
+其中初始标记、重新标记这两个步骤任然需要停顿其他用户线程。初始标记仅仅只是标记出GC ROOTS能直接关联到的对象，速度很快，并发标记阶段是进行GC ROOTS根搜索算法阶段，会判定对象是否存活。而重新标记阶段则是为了修正并发标记期间，因用户程序继续运行而导致标记产生变动的那一部分对象的标记记录，这个阶段的停顿时间会比初始标记阶段稍长，但比并发标记阶段要短。由于整个过程中耗时最长的并发标记和并发清除过程中，收集器线程都可以与用户线程一起工作，所以整体来说， <b>CMS收集器的内存回收过程是与用户线程一起并发执行的</b> 。执行过程如下图
+</p>
+
+
+<div class="figure">
+<p><img src="pic/cms-gc.png" alt="cms-gc.png" width="70%" />
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-3-6-1" class="outline-4">
+<h4 id="sec-3-6-1">优点</h4>
+<div class="outline-text-4" id="text-3-6-1">
+<ul class="org-ul">
+<li>并发收集
+</li>
+<li>低停顿
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-3-6-2" class="outline-4">
+<h4 id="sec-3-6-2">缺点</h4>
+<div class="outline-text-4" id="text-3-6-2">
+<ul class="org-ul">
+<li>对CPU资源非常敏感，虽然不至于导致用户线程停顿，但是会降低吞吐率
+</li>
+<li>无法清理 <span class="underline">浮动垃圾</span> ，由于CMS并发清理阶段用户线程还在运行着，伴随程序运行自然就还会有新的垃圾不断出现，这一部分垃圾出现在标记过程之后，CMS无法在当次收集中处理掉它们，只好留待下一次的GC
+</li>
+<li>会产生 <b>大量空间碎片</b> ，因为CMS是基于 <span class="underline">标记-清除</span> 算法，这种算法的最大缺点就是会产生大量空间碎片，CMS提供了一个 <span class="underline">-XX:+UseCMSCompaceAtFullCollection</span> 的开关参数（默认开启），用于在CMS收集器顶不住要进行Full GC时开启内存碎片的合并整理过程
+</li>
+</ul>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-3-7" class="outline-3">
+<h3 id="sec-3-7">G1收集器</h3>
+<div class="outline-text-3" id="text-3-7">
+<p>
+<b>G1</b> 收集器是最新的一款收集器，是一种面向服务端应用的垃圾收集器，有如下特点：
+</p>
+<ol class="org-ol">
+<li><b>并行与并发</b> ：G1能充分利用多CPU、多核环境下的硬件优势，使用多个CPU（CPU或者CPU核心）来缩短Stop-The-World停顿的时间
+</li>
+<li><b>分代收集</b> ：分代概念在G1中依然得以保留。虽然G1可以不需其他收集器配合就能独立管理整个GC堆，但它能够采用不同的方式去处理新创建的对象和已经存活了一段时间、熬过多次GC的旧对象以获取更好的收集效果
+</li>
+<li><b>空间整合</b> ：与CMS的 <span class="underline">标记-清理</span> 算法不同，G1从整体看来是基于 <span class="underline">标记-整理</span> 算法实现的收集器，从局部（两个Region之间）上看是基于 <span class="underline">复制</span> 算法实现，无论如何，这两种算法都意味着G1运作期间不会产生内存空间碎片，收集后能提供规整的可用内存
+</li>
+<li><b>可预测的停顿时间</b> 
+</li>
+</ol>
+
+<p>
+使用G1收集器时，Java堆的内存布局与就与其他收集器有很大差别，它将整个Java堆划分为多个大小相等的独立区域 <span class="underline">Region</span> ，虽然还保留有新生代和老年代的概念，但新生代和老年代不再是物理隔离的了，它们都是一部分Region的集合
+</p>
+
+<p>
+G1的收集过程分为以下几个步骤：
+</p>
+<ol class="org-ol">
+<li>初始标记
+</li>
+<li>并发标记
+</li>
+<li>最终标记
+</li>
+<li>筛选回收
+</li>
+</ol>
+
+<p>
+前几个步骤和CMS有很多相似之处。运行示意图如下：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/g1-gc.png" alt="g1-gc.png" width="70%" />
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-3-8" class="outline-3">
+<h3 id="sec-3-8">GC日志</h3>
+</div>
+
+<div id="outline-container-sec-3-9" class="outline-3">
+<h3 id="sec-3-9">GC参数</h3>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
