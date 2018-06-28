@@ -231,4 +231,110 @@
     #+END_SRC
     
 ** HSDIS
+   HSDIS是一个Sun官方推荐的 *HotSpot虚拟机JIT编译代码的反汇编插件* ，它包含在HotSpot虚拟机的源码之中，但没有提供编译后的程序。在Project Kenai的网站也可以下载到单独的源码。它的作用是让HotSpot的 _-XX：+PrintAssembly_ 指令调用它来把动态生成的本地代码还原为汇编代码输出，同时还生成了大量非常有价值的注释，这样就可以通过输出的代码来分析问题。可以根据自己的操作系统和CPU类型从Project Kenai的网站上下载编译好的插件，直接放到JDK_HOME/jre/bin/client和JDK_HOME/jre/bin/server目录中即可
+   
++ 如果使用的是 _Debug_ 或者 _FastDebug_ 版的HotSpot，那可以直接通过 _-XX：+PrintAssembly_ 指令使用插件
++ 如果使用的是 _Product_ 版的HotSpot，那还要额外加入一个 _-XX：+UnlockDiagnosticVMOptions_ 参数
+  
+#+BEGIN_SRC java
+  public class Bar { 
+          int a = 1;
+          static int b = 2;
+      
+          public int sum(int c){
+                  return a+b+c;
+          }
+      
+          public static void main(String[] args) {
+                  new Bar().sum(3);
+          }
+  }
+#+END_SRC
 
+使用javac编译：
+
+#+BEGIN_SRC sh
+  [root@AY131228205040795d8cZ my]# java -XX:+UnlockDiagnosticVMOptions -XX:+PrintAssembly -Xcomp -XX:CompileCommand=dontinline,*Bar.sum -XX:CompileCommand=compileonly,*Bar.sum Bar
+#+END_SRC
+
++ 参数 _-Xcomp_ 是让虚拟机以编译模式执行代码，这样代码可以不需要执行足够次数来预热就能出发JIT编译
++ 两个 _-XX:CompileCommand_ 的意思是让编译器不要内联sum()并且只编译sum()
++ _-XX:+PrintAssembly_ 就是输出反汇编内容
+  
+如果一切顺利的话，那么屏幕上会出现类似下边的代码：
+#+BEGIN_SRC asm
+  Java HotSpot(TM) 64-Bit Server VM warning: PrintAssembly is enabled; turning on DebugNonSafepoints to gain additional output
+  CompilerOracle: dontinline *Bar.sum
+  CompilerOracle: compileonly *Bar.sum
+  Loaded disassembler from hsdis-amd64.so
+  Decoding compiled method 0x00007f89c905fdd0:
+  Code:
+  [Disassembling for mach='i386:x86-64']
+  [Entry Point]
+  [Constants]
+    # {method} 'sum' '(I)I' in 'Bar'
+    # this:     rsi:rsi   = 'Bar'
+    # parm0:    rdx       = int
+    #           [sp+0x20]  (sp of caller)
+    0x00007f89c905ff20: mov    0x8(%rsi),%r10d
+    0x00007f89c905ff24: cmp    %r10,%rax
+    0x00007f89c905ff27: jne    0x00007f89c9037620  ;   {runtime_call}
+    0x00007f89c905ff2d: xchg   %ax,%ax
+  [Verified Entry Point]
+    0x00007f89c905ff30: push   %rbp
+    0x00007f89c905ff31: sub    $0x10,%rsp
+    0x00007f89c905ff35: nop                       ;*synchronization entry
+                                                  ; - Bar::sum@-1 (line 7)
+    0x00007f89c905ff36: mov    $0xfb0818c8,%r10   ;   {oop('Bar')}
+    0x00007f89c905ff40: mov    0x260(%r10),%r10d
+    0x00007f89c905ff47: add    0xc(%rsi),%r10d
+    0x00007f89c905ff4b: mov    %edx,%eax
+    0x00007f89c905ff4d: add    %r10d,%eax         ;*iadd
+                                                  ; - Bar::sum@9 (line 7)
+    0x00007f89c905ff50: add    $0x10,%rsp
+    0x00007f89c905ff54: pop    %rbp
+    0x00007f89c905ff55: test   %eax,0xbe130a5(%rip)        # 0x00007f89d4e73000
+                                                  ;   {poll_return}
+    0x00007f89c905ff5b: retq   
+    0x00007f89c905ff5c: hlt    
+    0x00007f89c905ff5d: hlt    
+    0x00007f89c905ff5e: hlt    
+    0x00007f89c905ff5f: hlt    
+  [Exception Handler]
+  [Stub Code]
+    0x00007f89c905ff60: jmpq   0x00007f89c905cfa0  ;   {no_reloc}
+  [Deopt Handler Code]
+    0x00007f89c905ff65: callq  0x00007f89c905ff6a
+    0x00007f89c905ff6a: subq   $0x5,(%rsp)
+    0x00007f89c905ff6f: jmpq   0x00007f89c90387c0  ;   {runtime_call}
+    0x00007f89c905ff74: add    %al,(%rax)
+    0x00007f89c905ff76: add    %al,(%rax)
+#+END_SRC
+
+一些命令的解释：
+1. push %rbp    ：保存上一栈帧基址
+2. sub   $0x10,%rsp      ：给新帧分配空间
+3. mov  $0xfb0818,%r10      ：取方法区的指针
+4. mov  0x260(%r10),%r10d      ：取类变量b，这里是访问方法区中的数据
+5. add   0xc(%rsi),%r10d      ：这里将实例变量a和上一句取得的b相加，放入r10d中
+6. mov  %edx,%eax      ：在上边“parm0：rdx=int”，说明c在rdx中，这里rdx应与edx一致，将c放入eax中
+7. add   %r10d, %eax      ：将r10d中a与b的和加上eax中的c，结果放入eax中，计算a+b+c完成
+8. add   $0x10,%rsp      ：对应上文的rsp，这里是撤销栈帧
+9. pop   %rbp      ：对应上文的push，这里是恢复上一栈帧
+10. test  %eax, 2xbe130a5(%rip)      ：轮询方法返回处的Safepoint
+11. retq  方法返回
+    
+* 可视化工具
+  
+** JConsole
+   启动JConsole后，将自动搜索本机运行的jvm进程，不需要jps命令来查询指定。双击其中一个jvm进程即可开始监控，也可使用  _远程进程_ 来连接远程服务器
+   
+** VisualVM
+   VisualVM是到目前为止随JDK发布的功能最强大的运行监视和故障处理工具
+   
+   [[file:optimize.org][Next：调优案例]]
+   
+   [[file:gc.org][Previous：垃圾回收器]]
+   
+   [[file:jvm.org][Home：目录]]
+   

@@ -183,6 +183,12 @@ for the JavaScript code in this tag.
 <li><a href="#sec-1-7">HSDIS</a></li>
 </ul>
 </li>
+<li><a href="#sec-2">可视化工具</a>
+<ul>
+<li><a href="#sec-2-1">JConsole</a></li>
+<li><a href="#sec-2-2">VisualVM</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
@@ -769,6 +775,170 @@ JDK1.5中，java.lang.Thread类新增了一个 <span class="underline">getAllSta
 
 <div id="outline-container-sec-1-7" class="outline-3">
 <h3 id="sec-1-7">HSDIS</h3>
+<div class="outline-text-3" id="text-1-7">
+<p>
+HSDIS是一个Sun官方推荐的 <b>HotSpot虚拟机JIT编译代码的反汇编插件</b> ，它包含在HotSpot虚拟机的源码之中，但没有提供编译后的程序。在Project Kenai的网站也可以下载到单独的源码。它的作用是让HotSpot的 <span class="underline">-XX：+PrintAssembly</span> 指令调用它来把动态生成的本地代码还原为汇编代码输出，同时还生成了大量非常有价值的注释，这样就可以通过输出的代码来分析问题。可以根据自己的操作系统和CPU类型从Project Kenai的网站上下载编译好的插件，直接放到JDK<sub>HOME</sub>/jre/bin/client和JDK<sub>HOME</sub>/jre/bin/server目录中即可
+</p>
+
+<ul class="org-ul">
+<li>如果使用的是 <span class="underline">Debug</span> 或者 <span class="underline">FastDebug</span> 版的HotSpot，那可以直接通过 <span class="underline">-XX：+PrintAssembly</span> 指令使用插件
+</li>
+<li>如果使用的是 <span class="underline">Product</span> 版的HotSpot，那还要额外加入一个 <span class="underline">-XX：+UnlockDiagnosticVMOptions</span> 参数
+</li>
+</ul>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">Bar</span> { 
+    <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">a</span> = 1;
+    <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">b</span> = 2;
+
+    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">int</span> <span style="color: #87cefa;">sum</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">c</span>){
+        <span style="color: #00ffff;">return</span> a+b+c;
+    }
+
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">String</span>[] <span style="color: #eedd82;">args</span>) {
+        <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">Bar</span>().sum(3);
+    }
+}
+</pre>
+</div>
+
+<p>
+使用javac编译：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">[root@AY131228205040795d8cZ my]# java -XX:+UnlockDiagnosticVMOptions -XX:+PrintAssembly -Xcomp -XX:<span style="color: #eedd82;">CompileCommand</span>=dontinline,*Bar.sum -XX:<span style="color: #eedd82;">CompileCommand</span>=compileonly,*Bar.sum Bar
+</pre>
+</div>
+
+<ul class="org-ul">
+<li>参数 <span class="underline">-Xcomp</span> 是让虚拟机以编译模式执行代码，这样代码可以不需要执行足够次数来预热就能出发JIT编译
+</li>
+<li>两个 <span class="underline">-XX:CompileCommand</span> 的意思是让编译器不要内联sum()并且只编译sum()
+</li>
+<li><span class="underline">-XX:+PrintAssembly</span> 就是输出反汇编内容
+</li>
+</ul>
+
+<p>
+如果一切顺利的话，那么屏幕上会出现类似下边的代码：
+</p>
+<div class="org-src-container">
+
+<pre class="src src-asm"><span style="color: #87cefa;">Java</span> <span style="color: #00ffff;">HotSpot</span>(TM) 64-Bit Server VM warning: PrintAssembly is enabled<span style="color: #ff4500;">; </span><span style="color: #ff4500;">turning on DebugNonSafepoints to gain additional output</span>
+<span style="color: #87cefa;">CompilerOracle</span>: <span style="color: #00ffff;">dontinline</span> *Bar.sum
+<span style="color: #87cefa;">CompilerOracle</span>: <span style="color: #00ffff;">compileonly</span> *Bar.sum
+<span style="color: #87cefa;">Loaded</span> <span style="color: #00ffff;">disassembler</span> from hsdis-amd64.so
+<span style="color: #87cefa;">Decoding</span> <span style="color: #00ffff;">compiled</span> method 0x00007f89c905fdd0:
+<span style="color: #87cefa;">Code</span>:
+[Disassembling for mach='i386:x86-64']
+[Entry Point]
+[Constants]
+  # {method} 'sum' '(I)I' in 'Bar'
+  # this:     rsi:rsi   = 'Bar'
+  # parm0:    rdx       = int
+  #           [sp+0x20]  (sp of caller)
+  <span style="color: #00ffff;">0x00007f89c905ff20</span>: mov    0x8(<span style="color: #eedd82;">%rsi</span>),<span style="color: #eedd82;">%r10d</span>
+  <span style="color: #00ffff;">0x00007f89c905ff24</span>: cmp    <span style="color: #eedd82;">%r10</span>,<span style="color: #eedd82;">%rax</span>
+  <span style="color: #00ffff;">0x00007f89c905ff27</span>: jne    0x00007f89c9037620  <span style="color: #ff4500;">;   </span><span style="color: #ff4500;">{runtime_call}</span>
+  <span style="color: #00ffff;">0x00007f89c905ff2d</span>: xchg   <span style="color: #eedd82;">%ax</span>,<span style="color: #eedd82;">%ax</span>
+[Verified Entry Point]
+  <span style="color: #00ffff;">0x00007f89c905ff30</span>: push   <span style="color: #eedd82;">%rbp</span>
+  <span style="color: #00ffff;">0x00007f89c905ff31</span>: sub    $0x10,<span style="color: #eedd82;">%rsp</span>
+  <span style="color: #00ffff;">0x00007f89c905ff35</span>: nop                       <span style="color: #ff4500;">;</span><span style="color: #ff4500;">*synchronization entry</span>
+                                                <span style="color: #ff4500;">; </span><span style="color: #ff4500;">- Bar::sum@-1 (line 7)</span>
+  <span style="color: #00ffff;">0x00007f89c905ff36</span>: mov    $0xfb0818c8,<span style="color: #eedd82;">%r10</span>   <span style="color: #ff4500;">;   </span><span style="color: #ff4500;">{oop('Bar')}</span>
+  <span style="color: #00ffff;">0x00007f89c905ff40</span>: mov    0x260(<span style="color: #eedd82;">%r10</span>),<span style="color: #eedd82;">%r10d</span>
+  <span style="color: #00ffff;">0x00007f89c905ff47</span>: add    0xc(<span style="color: #eedd82;">%rsi</span>),<span style="color: #eedd82;">%r10d</span>
+  <span style="color: #00ffff;">0x00007f89c905ff4b</span>: mov    <span style="color: #eedd82;">%edx</span>,<span style="color: #eedd82;">%eax</span>
+  <span style="color: #00ffff;">0x00007f89c905ff4d</span>: add    <span style="color: #eedd82;">%r10d</span>,<span style="color: #eedd82;">%eax</span>         <span style="color: #ff4500;">;</span><span style="color: #ff4500;">*iadd</span>
+                                                <span style="color: #ff4500;">; </span><span style="color: #ff4500;">- Bar::sum@9 (line 7)</span>
+  <span style="color: #00ffff;">0x00007f89c905ff50</span>: add    $0x10,<span style="color: #eedd82;">%rsp</span>
+  <span style="color: #00ffff;">0x00007f89c905ff54</span>: pop    <span style="color: #eedd82;">%rbp</span>
+  <span style="color: #00ffff;">0x00007f89c905ff55</span>: test   <span style="color: #eedd82;">%eax</span>,0xbe130a5(<span style="color: #eedd82;">%rip</span>)        # 0x00007f89d4e73000
+                                                <span style="color: #ff4500;">;   </span><span style="color: #ff4500;">{poll_return}</span>
+  <span style="color: #00ffff;">0x00007f89c905ff5b</span>: retq   
+  <span style="color: #00ffff;">0x00007f89c905ff5c</span>: hlt    
+  <span style="color: #00ffff;">0x00007f89c905ff5d</span>: hlt    
+  <span style="color: #00ffff;">0x00007f89c905ff5e</span>: hlt    
+  <span style="color: #00ffff;">0x00007f89c905ff5f</span>: hlt    
+[Exception Handler]
+[Stub Code]
+  <span style="color: #00ffff;">0x00007f89c905ff60</span>: jmpq   0x00007f89c905cfa0  <span style="color: #ff4500;">;   </span><span style="color: #ff4500;">{no_reloc}</span>
+[Deopt Handler Code]
+  <span style="color: #00ffff;">0x00007f89c905ff65</span>: callq  0x00007f89c905ff6a
+  <span style="color: #00ffff;">0x00007f89c905ff6a</span>: subq   $0x5,(<span style="color: #eedd82;">%rsp</span>)
+  <span style="color: #00ffff;">0x00007f89c905ff6f</span>: jmpq   0x00007f89c90387c0  <span style="color: #ff4500;">;   </span><span style="color: #ff4500;">{runtime_call}</span>
+  <span style="color: #00ffff;">0x00007f89c905ff74</span>: add    <span style="color: #eedd82;">%al</span>,(<span style="color: #eedd82;">%rax</span>)
+  <span style="color: #00ffff;">0x00007f89c905ff76</span>: add    <span style="color: #eedd82;">%al</span>,(<span style="color: #eedd82;">%rax</span>)
+</pre>
+</div>
+
+<p>
+一些命令的解释：
+</p>
+<ol class="org-ol">
+<li>push %rbp    ：保存上一栈帧基址
+</li>
+<li>sub   $0x10,%rsp      ：给新帧分配空间
+</li>
+<li>mov  $0xfb0818,%r10      ：取方法区的指针
+</li>
+<li>mov  0x260(%r10),%r10d      ：取类变量b，这里是访问方法区中的数据
+</li>
+<li>add   0xc(%rsi),%r10d      ：这里将实例变量a和上一句取得的b相加，放入r10d中
+</li>
+<li>mov  %edx,%eax      ：在上边“parm0：rdx=int”，说明c在rdx中，这里rdx应与edx一致，将c放入eax中
+</li>
+<li>add   %r10d, %eax      ：将r10d中a与b的和加上eax中的c，结果放入eax中，计算a+b+c完成
+</li>
+<li>add   $0x10,%rsp      ：对应上文的rsp，这里是撤销栈帧
+</li>
+<li>pop   %rbp      ：对应上文的push，这里是恢复上一栈帧
+</li>
+<li>test  %eax, 2xbe130a5(%rip)      ：轮询方法返回处的Safepoint
+</li>
+<li>retq  方法返回
+</li>
+</ol>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2" class="outline-2">
+<h2 id="sec-2">可视化工具</h2>
+<div class="outline-text-2" id="text-2">
+</div><div id="outline-container-sec-2-1" class="outline-3">
+<h3 id="sec-2-1">JConsole</h3>
+<div class="outline-text-3" id="text-2-1">
+<p>
+启动JConsole后，将自动搜索本机运行的jvm进程，不需要jps命令来查询指定。双击其中一个jvm进程即可开始监控，也可使用  <span class="underline">远程进程</span> 来连接远程服务器
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-2" class="outline-3">
+<h3 id="sec-2-2">VisualVM</h3>
+<div class="outline-text-3" id="text-2-2">
+<p>
+VisualVM是到目前为止随JDK发布的功能最强大的运行监视和故障处理工具
+</p>
+
+<p>
+<a href="optimize.html">Next：调优案例</a>
+</p>
+
+<p>
+<a href="gc.html">Previous：垃圾回收器</a>
+</p>
+
+<p>
+<a href="jvm.html">Home：目录</a>
+</p>
+</div>
 </div>
 </div>
 </div>
