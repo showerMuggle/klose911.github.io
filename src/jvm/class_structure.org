@@ -2,4 +2,285 @@
 #+HTML_HEAD: <link rel="stylesheet" type="text/css" href="css/main.css" />
 #+HTML_LINK_UP: optimize.html   
 #+HTML_LINK_HOME: jvm.html
-#+OPTIONS: num:nil timestamp:nil
+#+OPTIONS: num:nil timestamp:nil ^:nil
+
+* 无关性的基石
+  实现语言无关性的基础仍然是虚拟机和字节码存储格式。Java虚拟机不和包括Java在内的任何语言绑定，它只与 *Class文件* 这种特定的二进制文件格式所关联，Class文件中包含了Java虚拟机指令集和符号表以及若干其他辅助信息。基于安全方面的考虑，Java虚拟机规范要求在Class文件中使用许多强制性的语法和结构化约束，但任一门功能性语言都可以表示为一个能被Java虚拟机所接受的有效的Class文件。作为一个通用的、机器无关的执行平台， 任何其他语言的实现者都可以将Java虚拟机作为语言的产品交付媒介。例如 ，使用Java编译器可以把Java代码编译为存储字节码的Class文件，使用JRuby等其他语言的编译器同样可以把程序代码编译成Class文件，虚拟机并不关心Class的来源是何种语言，如图所示：
+  
+  #+ATTR_HTML: image :width 70% 
+  [[file:pic/javav.jpg]] 
+  
+  Java语言中的各种变量、关键字和运算符号的语义最终都是由多条字节码命令组合而成的，因此字节码命令所能提供的语义描述能力肯定会比Java语言本身更加强大。因此有一些Java语言本身无法有效支持的语言特性不代表字节码本身无法有效支持，这也为其他语言实现一些有别于Java的语言特性提供了基础
+  
+* Class类文件
+  关于Class文件结构的讲解中，将以《Java虚拟机规范(第2版)》(1999年发布，对应于JDK1.4时代的Java虚拟机)中的定义为主线，这部分内容虽然古老，但它所包含的指令、属性是Class文件中最重要和最基础的。同时，也会以后续JDK1.5〜JDK1.7中添加的内容为支线进行较为简略的、介绍性的讲解
+  
+  注意： _任何一个Class文件都对应着唯一一个类或接口的定义信息_  ，但反过来说， *类或接口并不一定都得定义在文件里* (譬如类或接口也可以通过类加载器直接生成)。只是通俗地将任意一个有效的类或接口所应当满足的格式称为 _Class文件格式_ ，实际上它并不一定以磁盘文件的形式存在
+  
+  Class文件是 *一组以8位字节为基础单位的二进制流，各个数据项目严格按照顺序紧凑地排列在Class文件之中，中间没有添加任何分隔符* ，这使得整个Class文件中存储的内容几乎全部是程序运行的必要数据，没有空隙存在。 _当遇到需要占用8位字节以上空间的数据项时，则会按照高位在前的方式分割成若干个8位字节进行存储_ 
+  
+  根据Java虚拟机规范的规定，Class文件格式采用一种 _类似于C语言结构体的伪结构_ 来存储数据，这种伪结构中只有两种数据类型: *无符号数* 和 *表* ，后面的解析都要以这两种数据类型为基础：
++ 无符号数：基本的数据类型，以u1、u2、u4、u8来分别代表1个字节、2个字节、4个字节和8个字节的无符号数，无符号数可以用来描述 
+  + *数字* 
+  + *索引引用* 
+  + *数量值* 
+  + *UTF-8编码构成字符串值* 
++ 表： *由多个无符号数或者其他表作为数据项构成的复合数据类型* ，所有表都习惯性地以 *_info_* 结尾。表用于描述 *有层次关系的复合结构的数据* 
+  
+整个Class文件本质上就是一张表，它由下表所示的数据项构成：
+
+#+CAPTION: Class文件结构
+#+ATTR_HTML: :border 1 :rules all :frame boader
+| 类型           | 名称                |                    数量 |
+| u4             | magic               |                       1 |
+| u2             | minor_version       |                       1 |
+| u2             | major_version       |                       1 |
+| u2             | constant_pool_count |                       1 |
+| cp_info        | constant_pool       | constant_pool_count - 1 |
+| u2             | access_flags        |                       1 |
+| u2             | this_class          |                       1 |
+| u2             | super_class         |                       1 |
+| u2             | interfaces_count    |                       1 |
+| u2             | interfaces          |        interfaces_count |
+| u2             | fields_count        |                       1 |
+| field_info     | fields              |            fields_count |
+| u2             | methods_count       |                       1 |
+| method_info    | methods             |           methods_count |
+| u2             | attributes_count    |                       1 |
+| attribute_info | attributes          |        attributes_count |
+
+无论是无符号数还是表，当需要描述同一类型但数量不定的多个数据时，经常会使用一个前置的容量计数器加若干个连续的数据项的形式，这时称 _这一系列连续的某一类型的数据为某一类型的集合_ 
+
+需要再重复强调， *Class的结构不像XML等描述语言，它没有任何分隔符号* ，所以在表6-1中的数据项，无论是顺序还是数量，甚至于数据存储的字节序这样的细节，都是被严格限定的，哪个字节代表什么含义，长度是多少，先后顺序如何，都不允许改变
+
+** 魔数与Class文件的版本
+   每个Class文件的头4个字节称为 *魔数* (Magic Number)，它的唯一作用是确定这个文件是否为一个能被虚拟机接受的Class文件。很多文件存储标准中都使用魔数来进行身份识别，譬如图片格式，如gif者jpeg等在文件头中都存有魔数。使用魔数而不是扩展名来进行识别主要是基于安全方面的考虑，因为文件扩展名可以随意地改动。文件格式的制定者可以自由地选择魔数值，只要这个魔数值还没有被广泛采用过同时又不会引起混淆即可。Class文件的魔数的值为: _OxCAFEBABE_ :-) 
+   
+   紧接着魔数的4个字节存储的是 *Class文件的版本号* :
++ 第5和第6个字节是 _次版本号_ (Minor Version)
++ 第7和第8个字节是 _主版本号_ (Major Version)
+  
+Java的版本号是从45开始的，JDK1.1之后的每个JDK大版本发布主版本号向上加1(JDK1.0〜1.1使用了45.0〜45.3的版本号)，高版本的JDK能向下兼容以前版本的Class文件，但不能运行以后版本的Class文件， *即使文件格式并未发生任何变化，虚拟机也必须拒绝执行超过其版本号的Class文件*
+
+例如，JDK1.1能支持版本号为45.0〜45.65535的Class文件，无法执行版本号为46.0以上的Class文件，而JDK1.2则能支持45.0〜46.65535的Class文件。现在最新的JDK版本为1.7，可生成的Class文件主版本号最大值为51.0
+
+#+BEGIN_SRC java
+  package org.fenixsoft.clazz;
+
+  public class TestClass {
+
+          private int m;
+
+          public int inc() {
+                  return m + 1;
+          }
+  }
+#+END_SRC
+
+图6-2显示的是使用十六进制编辑器WinHex打开这个Class文件的结果，可以清楚地看见开头4个字节的十六进制表示是 _OxCAFEBABE_ ，代表次版本号的第5个和第6个字节值为 _0x0000_ ，而主版本号的值为 _0x0032_ ，也即是十进制的50，该版本号说明这个文件是可以被JDK1.6或以上版本虚拟机执行的Class文件
+
+#+ATTR_HTML: image :width 70% 
+[[file:pic/class-version.jpg]] 
+
+下表列出了从JDK1.1到JDK1.7，主流JDK版本编译器输出的默认和可支持的Class文件版本号：
+
+#+ATTR_HTML: image :width 70% 
+[[file:pic/version-table.jpg]] 
+
+这种顺序称为 _Big-Endian_ ，具体是指最高位字节在地址最低位、最低位字节在地址最高位的顺序来存储数据，它是SPARC、PowerPC等处理器的默认多字节存储顺序，而x86等处理器则是使用了相反的 _Little-Endian_ 顺序来存储数据
+
+** 常量池
+   紧接着主版本号的就是 *常量池* ，常量池可以理解为class文件的资源仓库，它是class文件结构中与其它项目关联最多的数据类型，也是占用class文件空间最大的数据项目之一，也是class文件中第一个出现的表类型数据项目
+   
+   由于常量池中常量的数量不是固定的，所以常量池入口需要放置一项u2类型的数据，代表常量池中的容量计数。不过，这里需要注意的是， *这个容器计数是从1开始的而不是从0开始* ，也就是说， _常量池中常量的个数是这个容器计数-1_ 。将0空出来的目的是 *满足后面某些指向常量池的索引值的数据在特定情况下需要表达 _不引用任何一个常量池项目_ 的含义* 。class文件中只有常量池的容量计数是从1开始的，对于其它集合类型，比如接口索引集合、字段表集合、方法表集合等的容量计数都是从0开始的
+   
+   常量池中主要存放两大类常量： 
++ *字面量* ：比较接近Java语言的常量概念
+  + 文本字符串
+  + 声明为final的常量 等
++ *符号引用* 则属于编译原理方面的概念，它包括三方面的内容：
+  + 类和接口的全限定名
+  + 字段的名称和描述符
+  + 方法的名称和描述符
+    
+Java代码在进行javac编译的时候并不像C和C++那样有 _链接_ 这一步，而是在虚拟机 *加载class文件* 的时候进行 _动态链接_ 。也就是说， _在class文件中不会保存各个方法、字段的最终内存布局信息_ ，因此这些字段、方法的符号引用不经过运行期转换的话无法得到真正的内存入口地址，虚拟机也就无法使用。当虚拟机运行时， *需要从常量池获得对应的符号引用，再在类创建时或运行时解析、翻译到具体的内存地址中* 
+
+常量池中的每一项都是一个表，在JDK1.7之前有11中结构不同的表结构，在JDK1.7中为了更好的支持动态语言调用，又增加了3种：
++ CONSTANT_MethodHandle_info
++ CONSTANT_MethodType_info
++ CONSTANT_InvokeDynamic_info
+  
+这14个表的开始第一个字节是一个 _u1类型的tag_ ，用来 *标识是哪一种常量类型* 。这14种常量类型所代表的含义如下：
+#+CAPTION: 常量池的项目类型
+#+ATTR_HTML: :border 1 :rules all :frame boader
+| 类型                          | 标志 | 含义                     |
+| CONSTANT_Utf8_info            |    1 | UTF-8编码的字符串  |
+| CONSTANT_Integer_info         |    3 | 整型字面量          |
+| CONSTANT_Float_info           |    4 | 浮点型字面量       |
+| CONSTANT_Long_info            |    5 | 长整形字面量       |
+| CONSTANT_Double_info          |    6 | 双精度浮点型字面量 |
+| CONSTANT_Class_info           |    7 | 类或接口的符号引用 |
+| CONSTANT_String_info          |    8 | 字符串类型字面量 |
+| CONSTANT_Fieldref_info        |    9 | 字段的符号引用    |
+| CONSTANT_Methodref_info       |   10 | 类中方法的符号引用 |
+| CONSTANT_InterfaceMethod_info |   11 | 接口中方法的符号引用 |
+| CONSTANT_NameAndType_info     |   12 | 字段或方法的部分符号引用 |
+| CONSTANT_MethodHandle_info    |   15 | 表示方法句柄       |
+| CONSTANT_MethodType_info      |   16 | 标识方法类型       |
+| CONSTANT_InvokeDynamic_info   |   18 | 表示一个动态方法调用点   |
+
+例子中的常量池结构：
+#+ATTR_HTML: image :width 70% 
+[[file:pic/constant-pool.jpg]]
+
+之所以说常量池是最烦琐的数据，是因为这14种常量类型各自均有自己的结构。回头看看常量池的第一项常量，它的标志位(偏移地址:0x0000000A)是0x07，查表6-3的标志列发现这个常量属于CONSTANT_Class_info类型，此类型的常量代表一个类或者接口的符号引用
+
+*** CONSTANT_Class_info
+    
+    #+CAPTION: CONSTANT_Class_info型常量的结构
+    #+ATTR_HTML: :border 1 :rules all :frame boader
+    | 类型 | 名称       | 数量 |
+    | u1   | tag        |    1 |
+    | u2   | name_index |    1 |
+    
++ tag是标志位，它用于区分常量类型
++ name_index是一个索引值，它指向常量池中一个CONSTANT_Utf8_info类型常量，此常量代表了这个类(或者接口)的全限定名，这里name_index值(偏移地址:0x0000000B)为 _0x0002_ ，也即是指向了常量池中的第二项常量。继续从图6-3中查找第二项常量，它的标志位(地址:0x0000000D)是 _0x01_ ，查表6-3可知确实是一个CONSTANT_Utf8_info类型的常量
+  
+*** CONSTANT_Utf8_info
+    #+CAPTION: CONSTANT_Utf8_info型常量的结构
+    #+ATTR_HTML: :border 1 :rules all :frame boader
+    | 类型 | 名称   |   数量 |
+    | u1   | tag    |      1 |
+    | u2   | length |      1 |
+    | u1   | bytes  | length |
+    
++ length值: 这个UTF-8编码的字符串长度是多少字节
++ byte: 长度为length字节的连续数据是一个使用 _UTF-8缩略编码_ 表示的字符串。UTF-8缩略编码与普通UTF-8编码的区别是:
+  + 从 _\u0001_ 到 _\u007f_ 之间的字符(相当于1〜127的ASCII码)的缩略编码使用 *一个字节* 表示
+  + 从 _\u0080_ 到 _\u07ff_ 之间的所有字符的缩略编码用 *两个字节* 表示
+  + 从 _\u0800_ 到 _\uffff_ 之间的所有字符的缩略编码就按照普通UTF-8编码规则使用 *三个字节* 表示
+    
+由于Class文件中方法、字段等都需要引用 _CONSTANT_Utf8_info_ 型常量来描述名称，所以CONSTANT_Utf8_info型常量的最大长度也就是Java中方法、字段名的最大长度。而这里的最大长度就是length的最大值，既u2类型能表达的最大值65535。所以Java程序中 _如果定义了超过64KB英文字符的变量或方法名，将会无法编译_ 
+
+这个字符串的length值(偏移地址:0x0000000E)为 _0x001D_ ，也就是长29字节，往后29字节正好命在1〜127的ASCII码范围以内，内容为 _org/fenixsofl/clazz/TestClass_ ，换算结果如下图选中的部分所示：
+
+#+ATTR_HTML: image :width 70% 
+[[file:pic/constant-pool-utf8.jpg]]
+
+到此为止，分析了TestClass.class常量池中21个常量中的两个，其余的19个常量都可以通过类似的方法计算出来。为了避免计算过程占用过多的版面，后续的19个常量的计算过程可以借助计算机来帮我们完成。在JDK的bin目录中，Oracle公司已经为我们准备好一个专门用于分析Class文件字节码的工具: _javap_ ，下面中列出了使用javap工具的 _-verbose_ 参数输出的TestClass.class文件字节码内容(此清单中省略了常量池以外的信息)
+
+#+BEGIN_SRC sh
+  klose@gentoo ~/tmp/org/fenixsoft/clazz $ javap -verbose TestClass.class  
+  Classfile /home/klose/tmp/org/fenixsoft/clazz/TestClass.class
+    Last modified 2018-7-7; size 295 bytes
+    MD5 checksum 81f2ab948a7a3068839b61a8f91f634b
+    Compiled from "TestClass.java"
+  public class org.fenixsoft.clazz.TestClass
+    minor version: 0
+    major version: 52
+    flags: ACC_PUBLIC, ACC_SUPER
+  Constant pool:
+     #1 = Methodref          #4.#15         // java/lang/Object."<init>":()V
+     #2 = Fieldref           #3.#16         // org/fenixsoft/clazz/TestClass.m:I
+     #3 = Class              #17            // org/fenixsoft/clazz/TestClass
+     #4 = Class              #18            // java/lang/Object
+     #5 = Utf8               m
+     #6 = Utf8               I
+     #7 = Utf8               <init>
+     #8 = Utf8               ()V
+     #9 = Utf8               Code
+    #10 = Utf8               LineNumberTable
+    #11 = Utf8               inc
+    #12 = Utf8               ()I
+    #13 = Utf8               SourceFile
+    #14 = Utf8               TestClass.java
+    #15 = NameAndType        #7:#8          // "<init>":()V
+    #16 = NameAndType        #5:#6          // m:I
+    #17 = Utf8               org/fenixsoft/clazz/TestClass
+    #18 = Utf8               java/lang/Object
+
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+注意：因为测试使用的是jdk1.8，实际结果和作者描述有出入
+#+END_EXAMPLE
+某些自动生成的常量没有在Java代码里面直接出现过，但它们会被后面即将讲到的字段表(field_info)、方法表(method_info)、属性表(attribute_info)引用到，它们会用来描述一些不方便使用 _固定字节_ 进行表达的内容。譬如描述方法的返回值是什么?有几个参数?每个参数的类型是什么? 因为Java中的 _类_ 是无穷无尽的， *无法通过简单的无符号字节来描述一个方法用到了什么类，因此在描述方法的这些信息时，需要引用常量表中的符号引用进行表达* 
+
+*** 常量池总结
+    #+CAPTION: 常量池14种常量类型的结构
+    #+ATTR_HTML: :border 1 :rules all :frame boader
+    | 常量                          | 项目                     | 类型 | 含义                                                                                                         |
+    | CONSTANT_Utf8_info            | tag                        | u1   | 1                                                                                                              |
+    |                               | length                     | u2   | UTF-8编码的字符串的长度                                                                               |
+    |                               | bytes                      | u1   | 长度为length的UTF-8编码的字符串                                                                      |
+    | CONSTANT_Integer_info         | tag                        | u1   | 3                                                                                                              |
+    |                               | bytes                      | u4   | 按照高位在前的int值                                                                                    |
+    | CONSTANT_Float_info           | tag                        | u1   | 4                                                                                                              |
+    |                               | bytes                      | u4   | 按照高位在前的float值                                                                                  |
+    | CONSTANT_Long_info            | tag                        | u1   | 5                                                                                                              |
+    |                               | bytes                      | u8   | 按照高位在前的long值                                                                                   |
+    | CONSTANT_Double_info          | tag                        | u1   | 6                                                                                                              |
+    |                               | bytes                      | u8   | 按照高位在前的double值                                                                                 |
+    | CONSTANT_Class_info           | tag                        | u1   | 7                                                                                                              |
+    |                               | index                      | u2   | 指向全限定名常量项的索引                                                                           |
+    | CONSTANT_String_info          | Tag                        | u1   | 8                                                                                                              |
+    |                               | index                      | u2   | 指向字符串字面量的索引                                                                              |
+    | CONSTANT_Fieldref_info        | tag                        | u1   | 9                                                                                                              |
+    |                               | index                      | u2   | 指向声明字段的类或接口描述符CONSTANT_Class_info的索引项                                      |
+    |                               | index                      | u2   | 指向字段描述符CONSTANT_NameAndType_info的索引项                                                     |
+    | CONSTANT_Methodref_info       | tag                        | u1   | 10                                                                                                             |
+    |                               | index                      | u2   | 指向声明方法的类描述符CONSTANT_Class_info的索引项                                               |
+    |                               | index                      | u2   | 指向名称及类描述符CONSTANT_NameAndType_info的索引项                                               |
+    | CONSTANT_InterfaceMethod_info | tag                        | u1   | 11                                                                                                             |
+    |                               | index                      | u2   | 指向声明方法的接口描述符COSNTANT_Class_info的索引项                                            |
+    |                               | index                      | u2   | 指向名称及类描述符CONSTANT_NameAndType_info的索引项                                               |
+    | CONSTANT_NameAndType_info     | tag                        | u1   | 12                                                                                                             |
+    |                               | index                      | u2   | 指向该字段或方法名称常量池的索引                                                               |
+    |                               | index                      | u2   | 指向该字段或方法描述符常量池的索引                                                            |
+    | CONSTANT_MethodHandle_info    | tag                        | u1   | 15                                                                                                             |
+    |                               | reference_kind             | u2   | 值必须在1-9之间，决定了方法句柄的类型，方法句柄累心的值表示方法句柄的字节码行为 |
+    |                               | reference_index            | u2   | 值必须是对常量池的有效索引                                                                        |
+    | CONSTANT_MethodType_info      | tag                        | u1   | 16                                                                                                             |
+    |                               | descriptor_index           | u2   | 值必须是对常量池的有效索引，常量池在改索引处的项必须是CONSTANT_Utf8_info结构，表示方法的描述符 |
+    | CONSTANT_InvokeDynamic_info   | tag                        | u1   | 18                                                                                                             |
+    |                               | bootstrap_method_attrindex | u2   | 值必须是对当前Class文件中引导方法表的bootstrap_methods[]数组的有效索引                  |
+    |                               | name_and_type_index        | u2   | 值必须是对当前常量池的有效索引，常量池在该索引处的项必须是COSTANT_NameAndType_info结构，表示方法名和方法描述符 |
+    
+** 访问标志
+   常量池结束后紧接着的两个字节代表访问标志，用来标识一些类或接口的访问信息，包括：
++ 这个Class是类还是接口
++ 是否定义为public
++ 是否定义为abstract
++ 如果是类的话，是否被声明为final等
+  
+具体的标志位以及含义如下表：
+
+#+CAPTION: 访问标志
+#+ATTR_HTML: :border 1 :rules all :frame boader
+| 标志名称       | 标志值 | 含义                                                                                  |
+| ACC_PUBLIC     | 0x0001 | 是否是public                                                                         |
+| ACC_FINAL      | 0x0010 | 是否被声明为final，只有类可以设置                                         |
+| ACC_SUPER      | 0x0020 | 是否允许使用invokespecial字节码指令的新语义，JDK1.0.2之后编译出来的类的这个标志默认为真 |
+| ACC_INTERFACE  | 0x0200 | 标识是一个接口                                                                   |
+| ACC_ABSTRACT   | 0x0400 | 是否是abstract，对于接口和抽象类来说为真，其他类都为假           |
+| ACC_SYNITHETIC | 0x1000 | 标识这个类并非由用户代码产生                                              |
+| ACC_ANNOTATION | 0x2000 | 标识这是一个注解                                                                |
+| ACC_ENUM       | 0x4000 | 标识这是一个枚举类                                                             |
+
+access_flags中一共有16个标志位可以使用，当前只定义了其中8个，没有使用到的标志位要求为0
+#+BEGIN_EXAMPLE
+例子中的TestClass是一个普通Java类，不是接口、枚举或者注解，被public关键字修饰但没有被声明为final和abstract，并且它使用了JDK1.2之后的编译器进行编译
+
+因此它的ACC_PUBLIC、ACC_SUPER标志应当为真
+
+而ACC_FINAL、ACC_INTERFACE、ACC_ABSTRACT、ACC_SYNTHETIC、ACC_ANNOTATION、ACC_ENUM这6个标志应S为假
+
+因此它的access_flags的值为: 0x0001 | 0x0020 = 0x0021 
+#+END_EXAMPLE
+
+下图可以看出：access_flags标志(偏移地址:0x000000EF)的确为 _0x0021_ 
+
+#+ATTR_HTML: image :width 70% 
+[[file:pic/access-flags.jpg]]
+
+** 类索引、父类索引与接口索引集合

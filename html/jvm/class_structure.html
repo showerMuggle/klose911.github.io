@@ -134,6 +134,48 @@ for the JavaScript code in this tag.
  }
 /*]]>*///-->
 </script>
+<script type="text/javascript" src="http://orgmode.org/mathjax/MathJax.js"></script>
+<script type="text/javascript">
+<!--/*--><![CDATA[/*><!--*/
+    MathJax.Hub.Config({
+        // Only one of the two following lines, depending on user settings
+        // First allows browser-native MathML display, second forces HTML/CSS
+        //  config: ["MMLorHTML.js"], jax: ["input/TeX"],
+            jax: ["input/TeX", "output/HTML-CSS"],
+        extensions: ["tex2jax.js","TeX/AMSmath.js","TeX/AMSsymbols.js",
+                     "TeX/noUndefined.js"],
+        tex2jax: {
+            inlineMath: [ ["\\(","\\)"] ],
+            displayMath: [ ['$$','$$'], ["\\[","\\]"], ["\\begin{displaymath}","\\end{displaymath}"] ],
+            skipTags: ["script","noscript","style","textarea","pre","code"],
+            ignoreClass: "tex2jax_ignore",
+            processEscapes: false,
+            processEnvironments: true,
+            preview: "TeX"
+        },
+        showProcessingMessages: true,
+        displayAlign: "center",
+        displayIndent: "2em",
+
+        "HTML-CSS": {
+             scale: 100,
+             availableFonts: ["STIX","TeX"],
+             preferredFont: "TeX",
+             webFont: "TeX",
+             imageFont: "TeX",
+             showMathMenu: true,
+        },
+        MMLorHTML: {
+             prefer: {
+                 MSIE:    "MML",
+                 Firefox: "MML",
+                 Opera:   "HTML",
+                 other:   "HTML"
+             }
+        }
+    });
+/*]]>*///-->
+</script>
 </head>
 <body>
 <div id="org-div-home-and-up">
@@ -142,6 +184,996 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="jvm.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">类文件结构</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#sec-1">无关性的基石</a></li>
+<li><a href="#sec-2">Class类文件</a>
+<ul>
+<li><a href="#sec-2-1">魔数与Class文件的版本</a></li>
+<li><a href="#sec-2-2">常量池</a>
+<ul>
+<li><a href="#sec-2-2-1">CONSTANT_Class_info</a></li>
+<li><a href="#sec-2-2-2">CONSTANT_Utf8_info</a></li>
+<li><a href="#sec-2-2-3">常量池总结</a></li>
+</ul>
+</li>
+<li><a href="#sec-2-3">访问标志</a></li>
+<li><a href="#sec-2-4">类索引、父类索引与接口索引集合</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-1" class="outline-2">
+<h2 id="sec-1">无关性的基石</h2>
+<div class="outline-text-2" id="text-1">
+<p>
+实现语言无关性的基础仍然是虚拟机和字节码存储格式。Java虚拟机不和包括Java在内的任何语言绑定，它只与 <b>Class文件</b> 这种特定的二进制文件格式所关联，Class文件中包含了Java虚拟机指令集和符号表以及若干其他辅助信息。基于安全方面的考虑，Java虚拟机规范要求在Class文件中使用许多强制性的语法和结构化约束，但任一门功能性语言都可以表示为一个能被Java虚拟机所接受的有效的Class文件。作为一个通用的、机器无关的执行平台， 任何其他语言的实现者都可以将Java虚拟机作为语言的产品交付媒介。例如 ，使用Java编译器可以把Java代码编译为存储字节码的Class文件，使用JRuby等其他语言的编译器同样可以把程序代码编译成Class文件，虚拟机并不关心Class的来源是何种语言，如图所示：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/javav.jpg" alt="javav.jpg" width="70%" /> 
+</p>
+</div>
+
+<p>
+Java语言中的各种变量、关键字和运算符号的语义最终都是由多条字节码命令组合而成的，因此字节码命令所能提供的语义描述能力肯定会比Java语言本身更加强大。因此有一些Java语言本身无法有效支持的语言特性不代表字节码本身无法有效支持，这也为其他语言实现一些有别于Java的语言特性提供了基础
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2" class="outline-2">
+<h2 id="sec-2">Class类文件</h2>
+<div class="outline-text-2" id="text-2">
+<p>
+关于Class文件结构的讲解中，将以《Java虚拟机规范(第2版)》(1999年发布，对应于JDK1.4时代的Java虚拟机)中的定义为主线，这部分内容虽然古老，但它所包含的指令、属性是Class文件中最重要和最基础的。同时，也会以后续JDK1.5〜JDK1.7中添加的内容为支线进行较为简略的、介绍性的讲解
+</p>
+
+<p>
+注意： <span class="underline">任何一个Class文件都对应着唯一一个类或接口的定义信息</span>  ，但反过来说， <b>类或接口并不一定都得定义在文件里</b> (譬如类或接口也可以通过类加载器直接生成)。只是通俗地将任意一个有效的类或接口所应当满足的格式称为 <span class="underline">Class文件格式</span> ，实际上它并不一定以磁盘文件的形式存在
+</p>
+
+<p>
+Class文件是 <b>一组以8位字节为基础单位的二进制流，各个数据项目严格按照顺序紧凑地排列在Class文件之中，中间没有添加任何分隔符</b> ，这使得整个Class文件中存储的内容几乎全部是程序运行的必要数据，没有空隙存在。 <span class="underline">当遇到需要占用8位字节以上空间的数据项时，则会按照高位在前的方式分割成若干个8位字节进行存储</span> 
+</p>
+
+<p>
+根据Java虚拟机规范的规定，Class文件格式采用一种 <span class="underline">类似于C语言结构体的伪结构</span> 来存储数据，这种伪结构中只有两种数据类型: <b>无符号数</b> 和 <b>表</b> ，后面的解析都要以这两种数据类型为基础：
+</p>
+<ul class="org-ul">
+<li>无符号数：基本的数据类型，以u1、u2、u4、u8来分别代表1个字节、2个字节、4个字节和8个字节的无符号数，无符号数可以用来描述 
+<ul class="org-ul">
+<li><b>数字</b> 
+</li>
+<li><b>索引引用</b> 
+</li>
+<li><b>数量值</b> 
+</li>
+<li><b>UTF-8编码构成字符串值</b> 
+</li>
+</ul>
+</li>
+<li>表： <b>由多个无符号数或者其他表作为数据项构成的复合数据类型</b> ，所有表都习惯性地以 <b><span class="underline">info</span></b> 结尾。表用于描述 <b>有层次关系的复合结构的数据</b> 
+</li>
+</ul>
+
+<p>
+整个Class文件本质上就是一张表，它由下表所示的数据项构成：
+</p>
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 1:</span> Class文件结构</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="right" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">类型</td>
+<td class="left">名称</td>
+<td class="right">数量</td>
+</tr>
+
+<tr>
+<td class="left">u4</td>
+<td class="left">magic</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">u2</td>
+<td class="left">minor_version</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">u2</td>
+<td class="left">major_version</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">u2</td>
+<td class="left">constant_pool_count</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">cp_info</td>
+<td class="left">constant_pool</td>
+<td class="right">constant_pool_count - 1</td>
+</tr>
+
+<tr>
+<td class="left">u2</td>
+<td class="left">access_flags</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">u2</td>
+<td class="left">this_class</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">u2</td>
+<td class="left">super_class</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">u2</td>
+<td class="left">interfaces_count</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">u2</td>
+<td class="left">interfaces</td>
+<td class="right">interfaces_count</td>
+</tr>
+
+<tr>
+<td class="left">u2</td>
+<td class="left">fields_count</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">field_info</td>
+<td class="left">fields</td>
+<td class="right">fields_count</td>
+</tr>
+
+<tr>
+<td class="left">u2</td>
+<td class="left">methods_count</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">method_info</td>
+<td class="left">methods</td>
+<td class="right">methods_count</td>
+</tr>
+
+<tr>
+<td class="left">u2</td>
+<td class="left">attributes_count</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">attribute_info</td>
+<td class="left">attributes</td>
+<td class="right">attributes_count</td>
+</tr>
+</tbody>
+</table>
+
+<p>
+无论是无符号数还是表，当需要描述同一类型但数量不定的多个数据时，经常会使用一个前置的容量计数器加若干个连续的数据项的形式，这时称 <span class="underline">这一系列连续的某一类型的数据为某一类型的集合</span> 
+</p>
+
+<p>
+需要再重复强调， <b>Class的结构不像XML等描述语言，它没有任何分隔符号</b> ，所以在表6-1中的数据项，无论是顺序还是数量，甚至于数据存储的字节序这样的细节，都是被严格限定的，哪个字节代表什么含义，长度是多少，先后顺序如何，都不允许改变
+</p>
+</div>
+
+<div id="outline-container-sec-2-1" class="outline-3">
+<h3 id="sec-2-1">魔数与Class文件的版本</h3>
+<div class="outline-text-3" id="text-2-1">
+<p>
+每个Class文件的头4个字节称为 <b>魔数</b> (Magic Number)，它的唯一作用是确定这个文件是否为一个能被虚拟机接受的Class文件。很多文件存储标准中都使用魔数来进行身份识别，譬如图片格式，如gif者jpeg等在文件头中都存有魔数。使用魔数而不是扩展名来进行识别主要是基于安全方面的考虑，因为文件扩展名可以随意地改动。文件格式的制定者可以自由地选择魔数值，只要这个魔数值还没有被广泛采用过同时又不会引起混淆即可。Class文件的魔数的值为: <span class="underline">OxCAFEBABE</span> :-) 
+</p>
+
+<p>
+紧接着魔数的4个字节存储的是 <b>Class文件的版本号</b> :
+</p>
+<ul class="org-ul">
+<li>第5和第6个字节是 <span class="underline">次版本号</span> (Minor Version)
+</li>
+<li>第7和第8个字节是 <span class="underline">主版本号</span> (Major Version)
+</li>
+</ul>
+
+<p>
+Java的版本号是从45开始的，JDK1.1之后的每个JDK大版本发布主版本号向上加1(JDK1.0〜1.1使用了45.0〜45.3的版本号)，高版本的JDK能向下兼容以前版本的Class文件，但不能运行以后版本的Class文件， <b>即使文件格式并未发生任何变化，虚拟机也必须拒绝执行超过其版本号的Class文件</b>
+</p>
+
+<p>
+例如，JDK1.1能支持版本号为45.0〜45.65535的Class文件，无法执行版本号为46.0以上的Class文件，而JDK1.2则能支持45.0〜46.65535的Class文件。现在最新的JDK版本为1.7，可生成的Class文件主版本号最大值为51.0
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">package</span> org.fenixsoft.<span style="color: #7fffd4;">clazz</span>;
+
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">TestClass</span> {
+
+    <span style="color: #00ffff;">private</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">m</span>;
+
+    <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">int</span> <span style="color: #87cefa;">inc</span>() {
+        <span style="color: #00ffff;">return</span> m + 1;
+    }
+}
+</pre>
+</div>
+
+<p>
+图6-2显示的是使用十六进制编辑器WinHex打开这个Class文件的结果，可以清楚地看见开头4个字节的十六进制表示是 <span class="underline">OxCAFEBABE</span> ，代表次版本号的第5个和第6个字节值为 <span class="underline">0x0000</span> ，而主版本号的值为 <span class="underline">0x0032</span> ，也即是十进制的50，该版本号说明这个文件是可以被JDK1.6或以上版本虚拟机执行的Class文件
+</p>
+
+
+<div class="figure">
+<p><img src="pic/class-version.jpg" alt="class-version.jpg" width="70%" /> 
+</p>
+</div>
+
+<p>
+下表列出了从JDK1.1到JDK1.7，主流JDK版本编译器输出的默认和可支持的Class文件版本号：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/version-table.jpg" alt="version-table.jpg" width="70%" /> 
+</p>
+</div>
+
+<p>
+这种顺序称为 <span class="underline">Big-Endian</span> ，具体是指最高位字节在地址最低位、最低位字节在地址最高位的顺序来存储数据，它是SPARC、PowerPC等处理器的默认多字节存储顺序，而x86等处理器则是使用了相反的 <span class="underline">Little-Endian</span> 顺序来存储数据
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-2" class="outline-3">
+<h3 id="sec-2-2">常量池</h3>
+<div class="outline-text-3" id="text-2-2">
+<p>
+紧接着主版本号的就是 <b>常量池</b> ，常量池可以理解为class文件的资源仓库，它是class文件结构中与其它项目关联最多的数据类型，也是占用class文件空间最大的数据项目之一，也是class文件中第一个出现的表类型数据项目
+</p>
+
+<p>
+由于常量池中常量的数量不是固定的，所以常量池入口需要放置一项u2类型的数据，代表常量池中的容量计数。不过，这里需要注意的是， <b>这个容器计数是从1开始的而不是从0开始</b> ，也就是说， <span class="underline">常量池中常量的个数是这个容器计数-1</span> 。将0空出来的目的是 <b>满足后面某些指向常量池的索引值的数据在特定情况下需要表达 <span class="underline">不引用任何一个常量池项目</span> 的含义</b> 。class文件中只有常量池的容量计数是从1开始的，对于其它集合类型，比如接口索引集合、字段表集合、方法表集合等的容量计数都是从0开始的
+</p>
+
+<p>
+常量池中主要存放两大类常量： 
+</p>
+<ul class="org-ul">
+<li><b>字面量</b> ：比较接近Java语言的常量概念
+<ul class="org-ul">
+<li>文本字符串
+</li>
+<li>声明为final的常量 等
+</li>
+</ul>
+</li>
+<li><b>符号引用</b> 则属于编译原理方面的概念，它包括三方面的内容：
+<ul class="org-ul">
+<li>类和接口的全限定名
+</li>
+<li>字段的名称和描述符
+</li>
+<li>方法的名称和描述符
+</li>
+</ul>
+</li>
+</ul>
+
+<p>
+Java代码在进行javac编译的时候并不像C和C++那样有 <span class="underline">链接</span> 这一步，而是在虚拟机 <b>加载class文件</b> 的时候进行 <span class="underline">动态链接</span> 。也就是说， <span class="underline">在class文件中不会保存各个方法、字段的最终内存布局信息</span> ，因此这些字段、方法的符号引用不经过运行期转换的话无法得到真正的内存入口地址，虚拟机也就无法使用。当虚拟机运行时， <b>需要从常量池获得对应的符号引用，再在类创建时或运行时解析、翻译到具体的内存地址中</b> 
+</p>
+
+<p>
+常量池中的每一项都是一个表，在JDK1.7之前有11中结构不同的表结构，在JDK1.7中为了更好的支持动态语言调用，又增加了3种：
+</p>
+<ul class="org-ul">
+<li>CONSTANT_MethodHandle_info
+</li>
+<li>CONSTANT_MethodType_info
+</li>
+<li>CONSTANT_InvokeDynamic_info
+</li>
+</ul>
+
+<p>
+这14个表的开始第一个字节是一个 <span class="underline">u1类型的tag</span> ，用来 <b>标识是哪一种常量类型</b> 。这14种常量类型所代表的含义如下：
+</p>
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 2:</span> 常量池的项目类型</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="right" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">类型</td>
+<td class="right">标志</td>
+<td class="left">含义</td>
+</tr>
+
+<tr>
+<td class="left">CONSTANT_Utf8_info</td>
+<td class="right">1</td>
+<td class="left">UTF-8编码的字符串</td>
+</tr>
+
+<tr>
+<td class="left">CONSTANT_Integer_info</td>
+<td class="right">3</td>
+<td class="left">整型字面量</td>
+</tr>
+
+<tr>
+<td class="left">CONSTANT_Float_info</td>
+<td class="right">4</td>
+<td class="left">浮点型字面量</td>
+</tr>
+
+<tr>
+<td class="left">CONSTANT_Long_info</td>
+<td class="right">5</td>
+<td class="left">长整形字面量</td>
+</tr>
+
+<tr>
+<td class="left">CONSTANT_Double_info</td>
+<td class="right">6</td>
+<td class="left">双精度浮点型字面量</td>
+</tr>
+
+<tr>
+<td class="left">CONSTANT_Class_info</td>
+<td class="right">7</td>
+<td class="left">类或接口的符号引用</td>
+</tr>
+
+<tr>
+<td class="left">CONSTANT_String_info</td>
+<td class="right">8</td>
+<td class="left">字符串类型字面量</td>
+</tr>
+
+<tr>
+<td class="left">CONSTANT_Fieldref_info</td>
+<td class="right">9</td>
+<td class="left">字段的符号引用</td>
+</tr>
+
+<tr>
+<td class="left">CONSTANT_Methodref_info</td>
+<td class="right">10</td>
+<td class="left">类中方法的符号引用</td>
+</tr>
+
+<tr>
+<td class="left">CONSTANT_InterfaceMethod_info</td>
+<td class="right">11</td>
+<td class="left">接口中方法的符号引用</td>
+</tr>
+
+<tr>
+<td class="left">CONSTANT_NameAndType_info</td>
+<td class="right">12</td>
+<td class="left">字段或方法的部分符号引用</td>
+</tr>
+
+<tr>
+<td class="left">CONSTANT_MethodHandle_info</td>
+<td class="right">15</td>
+<td class="left">表示方法句柄</td>
+</tr>
+
+<tr>
+<td class="left">CONSTANT_MethodType_info</td>
+<td class="right">16</td>
+<td class="left">标识方法类型</td>
+</tr>
+
+<tr>
+<td class="left">CONSTANT_InvokeDynamic_info</td>
+<td class="right">18</td>
+<td class="left">表示一个动态方法调用点</td>
+</tr>
+</tbody>
+</table>
+
+<p>
+例子中的常量池结构：
+</p>
+
+<div class="figure">
+<p><img src="pic/constant-pool.jpg" alt="constant-pool.jpg" width="70%" />
+</p>
+</div>
+
+<p>
+之所以说常量池是最烦琐的数据，是因为这14种常量类型各自均有自己的结构。回头看看常量池的第一项常量，它的标志位(偏移地址:0x0000000A)是0x07，查表6-3的标志列发现这个常量属于CONSTANT_Class_info类型，此类型的常量代表一个类或者接口的符号引用
+</p>
+</div>
+
+<div id="outline-container-sec-2-2-1" class="outline-4">
+<h4 id="sec-2-2-1">CONSTANT_Class_info</h4>
+<div class="outline-text-4" id="text-2-2-1">
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 3:</span> CONSTANT_Class_info型常量的结构</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="right" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">类型</td>
+<td class="left">名称</td>
+<td class="right">数量</td>
+</tr>
+
+<tr>
+<td class="left">u1</td>
+<td class="left">tag</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">u2</td>
+<td class="left">name_index</td>
+<td class="right">1</td>
+</tr>
+</tbody>
+</table>
+
+<ul class="org-ul">
+<li>tag是标志位，它用于区分常量类型
+</li>
+<li>name_index是一个索引值，它指向常量池中一个CONSTANT_Utf8_info类型常量，此常量代表了这个类(或者接口)的全限定名，这里name_index值(偏移地址:0x0000000B)为 <span class="underline">0x0002</span> ，也即是指向了常量池中的第二项常量。继续从图6-3中查找第二项常量，它的标志位(地址:0x0000000D)是 <span class="underline">0x01</span> ，查表6-3可知确实是一个CONSTANT_Utf8_info类型的常量
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-2-2-2" class="outline-4">
+<h4 id="sec-2-2-2">CONSTANT_Utf8_info</h4>
+<div class="outline-text-4" id="text-2-2-2">
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 4:</span> CONSTANT_Utf8_info型常量的结构</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="right" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">类型</td>
+<td class="left">名称</td>
+<td class="right">数量</td>
+</tr>
+
+<tr>
+<td class="left">u1</td>
+<td class="left">tag</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">u2</td>
+<td class="left">length</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">u1</td>
+<td class="left">bytes</td>
+<td class="right">length</td>
+</tr>
+</tbody>
+</table>
+
+<ul class="org-ul">
+<li>length值: 这个UTF-8编码的字符串长度是多少字节
+</li>
+<li>byte: 长度为length字节的连续数据是一个使用 <span class="underline">UTF-8缩略编码</span> 表示的字符串。UTF-8缩略编码与普通UTF-8编码的区别是:
+<ul class="org-ul">
+<li>从 <span class="underline">\u0001</span> 到 <span class="underline">\u007f</span> 之间的字符(相当于1〜127的ASCII码)的缩略编码使用 <b>一个字节</b> 表示
+</li>
+<li>从 <span class="underline">\u0080</span> 到 <span class="underline">\u07ff</span> 之间的所有字符的缩略编码用 <b>两个字节</b> 表示
+</li>
+<li>从 <span class="underline">\u0800</span> 到 <span class="underline">\uffff</span> 之间的所有字符的缩略编码就按照普通UTF-8编码规则使用 <b>三个字节</b> 表示
+</li>
+</ul>
+</li>
+</ul>
+
+<p>
+由于Class文件中方法、字段等都需要引用 <span class="underline">CONSTANT_Utf8_info</span> 型常量来描述名称，所以CONSTANT_Utf8_info型常量的最大长度也就是Java中方法、字段名的最大长度。而这里的最大长度就是length的最大值，既u2类型能表达的最大值65535。所以Java程序中 <span class="underline">如果定义了超过64KB英文字符的变量或方法名，将会无法编译</span> 
+</p>
+
+<p>
+这个字符串的length值(偏移地址:0x0000000E)为 <span class="underline">0x001D</span> ，也就是长29字节，往后29字节正好命在1〜127的ASCII码范围以内，内容为 <span class="underline">org/fenixsofl/clazz/TestClass</span> ，换算结果如下图选中的部分所示：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/constant-pool-utf8.jpg" alt="constant-pool-utf8.jpg" width="70%" />
+</p>
+</div>
+
+<p>
+到此为止，分析了TestClass.class常量池中21个常量中的两个，其余的19个常量都可以通过类似的方法计算出来。为了避免计算过程占用过多的版面，后续的19个常量的计算过程可以借助计算机来帮我们完成。在JDK的bin目录中，Oracle公司已经为我们准备好一个专门用于分析Class文件字节码的工具: <span class="underline">javap</span> ，下面中列出了使用javap工具的 <span class="underline">-verbose</span> 参数输出的TestClass.class文件字节码内容(此清单中省略了常量池以外的信息)
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">klose@gentoo ~/tmp/org/fenixsoft/clazz $ javap -verbose TestClass.class  
+Classfile /home/klose/tmp/org/fenixsoft/clazz/TestClass.class
+  Last modified 2018-7-7; size 295 bytes
+  MD5 checksum 81f2ab948a7a3068839b61a8f91f634b
+  Compiled from <span style="color: #ffa07a;">"TestClass.java"</span>
+public class org.fenixsoft.clazz.TestClass
+  minor version: 0
+  major version: 52
+  flags: ACC_PUBLIC, ACC_SUPER
+Constant pool:
+   <span style="color: #ff4500;">#</span><span style="color: #ff4500;">1 = Methodref          #4.#15         // java/lang/Object."&lt;init&gt;":()V</span>
+   <span style="color: #ff4500;">#</span><span style="color: #ff4500;">2 = Fieldref           #3.#16         // org/fenixsoft/clazz/TestClass.m:I</span>
+   <span style="color: #ff4500;">#</span><span style="color: #ff4500;">3 = Class              #17            // org/fenixsoft/clazz/TestClass</span>
+   <span style="color: #ff4500;">#</span><span style="color: #ff4500;">4 = Class              #18            // java/lang/Object</span>
+   <span style="color: #ff4500;">#</span><span style="color: #ff4500;">5 = Utf8               m</span>
+   <span style="color: #ff4500;">#</span><span style="color: #ff4500;">6 = Utf8               I</span>
+   <span style="color: #ff4500;">#</span><span style="color: #ff4500;">7 = Utf8               &lt;init&gt;</span>
+   <span style="color: #ff4500;">#</span><span style="color: #ff4500;">8 = Utf8               ()V</span>
+   <span style="color: #ff4500;">#</span><span style="color: #ff4500;">9 = Utf8               Code</span>
+  <span style="color: #ff4500;">#</span><span style="color: #ff4500;">10 = Utf8               LineNumberTable</span>
+  <span style="color: #ff4500;">#</span><span style="color: #ff4500;">11 = Utf8               inc</span>
+  <span style="color: #ff4500;">#</span><span style="color: #ff4500;">12 = Utf8               ()I</span>
+  <span style="color: #ff4500;">#</span><span style="color: #ff4500;">13 = Utf8               SourceFile</span>
+  <span style="color: #ff4500;">#</span><span style="color: #ff4500;">14 = Utf8               TestClass.java</span>
+  <span style="color: #ff4500;">#</span><span style="color: #ff4500;">15 = NameAndType        #7:#8          // "&lt;init&gt;":()V</span>
+  <span style="color: #ff4500;">#</span><span style="color: #ff4500;">16 = NameAndType        #5:#6          // m:I</span>
+  <span style="color: #ff4500;">#</span><span style="color: #ff4500;">17 = Utf8               org/fenixsoft/clazz/TestClass</span>
+  <span style="color: #ff4500;">#</span><span style="color: #ff4500;">18 = Utf8               java/lang/Object</span>
+</pre>
+</div>
+
+<pre class="example">
+注意：因为测试使用的是jdk1.8，实际结果和作者描述有出入
+</pre>
+<p>
+某些自动生成的常量没有在Java代码里面直接出现过，但它们会被后面即将讲到的字段表(field_info)、方法表(method_info)、属性表(attribute_info)引用到，它们会用来描述一些不方便使用 <span class="underline">固定字节</span> 进行表达的内容。譬如描述方法的返回值是什么?有几个参数?每个参数的类型是什么? 因为Java中的 <span class="underline">类</span> 是无穷无尽的， <b>无法通过简单的无符号字节来描述一个方法用到了什么类，因此在描述方法的这些信息时，需要引用常量表中的符号引用进行表达</b> 
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-2-3" class="outline-4">
+<h4 id="sec-2-2-3">常量池总结</h4>
+<div class="outline-text-4" id="text-2-2-3">
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 5:</span> 常量池14种常量类型的结构</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">常量</td>
+<td class="left">项目</td>
+<td class="left">类型</td>
+<td class="left">含义</td>
+</tr>
+
+<tr>
+<td class="left">CONSTANT_Utf8_info</td>
+<td class="left">tag</td>
+<td class="left">u1</td>
+<td class="left">1</td>
+</tr>
+
+<tr>
+<td class="left">&#xa0;</td>
+<td class="left">length</td>
+<td class="left">u2</td>
+<td class="left">UTF-8编码的字符串的长度</td>
+</tr>
+
+<tr>
+<td class="left">&#xa0;</td>
+<td class="left">bytes</td>
+<td class="left">u1</td>
+<td class="left">长度为length的UTF-8编码的字符串</td>
+</tr>
+
+<tr>
+<td class="left">CONSTANT_Integer_info</td>
+<td class="left">tag</td>
+<td class="left">u1</td>
+<td class="left">3</td>
+</tr>
+
+<tr>
+<td class="left">&#xa0;</td>
+<td class="left">bytes</td>
+<td class="left">u4</td>
+<td class="left">按照高位在前的int值</td>
+</tr>
+
+<tr>
+<td class="left">CONSTANT_Float_info</td>
+<td class="left">tag</td>
+<td class="left">u1</td>
+<td class="left">4</td>
+</tr>
+
+<tr>
+<td class="left">&#xa0;</td>
+<td class="left">bytes</td>
+<td class="left">u4</td>
+<td class="left">按照高位在前的float值</td>
+</tr>
+
+<tr>
+<td class="left">CONSTANT_Long_info</td>
+<td class="left">tag</td>
+<td class="left">u1</td>
+<td class="left">5</td>
+</tr>
+
+<tr>
+<td class="left">&#xa0;</td>
+<td class="left">bytes</td>
+<td class="left">u8</td>
+<td class="left">按照高位在前的long值</td>
+</tr>
+
+<tr>
+<td class="left">CONSTANT_Double_info</td>
+<td class="left">tag</td>
+<td class="left">u1</td>
+<td class="left">6</td>
+</tr>
+
+<tr>
+<td class="left">&#xa0;</td>
+<td class="left">bytes</td>
+<td class="left">u8</td>
+<td class="left">按照高位在前的double值</td>
+</tr>
+
+<tr>
+<td class="left">CONSTANT_Class_info</td>
+<td class="left">tag</td>
+<td class="left">u1</td>
+<td class="left">7</td>
+</tr>
+
+<tr>
+<td class="left">&#xa0;</td>
+<td class="left">index</td>
+<td class="left">u2</td>
+<td class="left">指向全限定名常量项的索引</td>
+</tr>
+
+<tr>
+<td class="left">CONSTANT_String_info</td>
+<td class="left">Tag</td>
+<td class="left">u1</td>
+<td class="left">8</td>
+</tr>
+
+<tr>
+<td class="left">&#xa0;</td>
+<td class="left">index</td>
+<td class="left">u2</td>
+<td class="left">指向字符串字面量的索引</td>
+</tr>
+
+<tr>
+<td class="left">CONSTANT_Fieldref_info</td>
+<td class="left">tag</td>
+<td class="left">u1</td>
+<td class="left">9</td>
+</tr>
+
+<tr>
+<td class="left">&#xa0;</td>
+<td class="left">index</td>
+<td class="left">u2</td>
+<td class="left">指向声明字段的类或接口描述符CONSTANT_Class_info的索引项</td>
+</tr>
+
+<tr>
+<td class="left">&#xa0;</td>
+<td class="left">index</td>
+<td class="left">u2</td>
+<td class="left">指向字段描述符CONSTANT_NameAndType_info的索引项</td>
+</tr>
+
+<tr>
+<td class="left">CONSTANT_Methodref_info</td>
+<td class="left">tag</td>
+<td class="left">u1</td>
+<td class="left">10</td>
+</tr>
+
+<tr>
+<td class="left">&#xa0;</td>
+<td class="left">index</td>
+<td class="left">u2</td>
+<td class="left">指向声明方法的类描述符CONSTANT_Class_info的索引项</td>
+</tr>
+
+<tr>
+<td class="left">&#xa0;</td>
+<td class="left">index</td>
+<td class="left">u2</td>
+<td class="left">指向名称及类描述符CONSTANT_NameAndType_info的索引项</td>
+</tr>
+
+<tr>
+<td class="left">CONSTANT_InterfaceMethod_info</td>
+<td class="left">tag</td>
+<td class="left">u1</td>
+<td class="left">11</td>
+</tr>
+
+<tr>
+<td class="left">&#xa0;</td>
+<td class="left">index</td>
+<td class="left">u2</td>
+<td class="left">指向声明方法的接口描述符COSNTANT_Class_info的索引项</td>
+</tr>
+
+<tr>
+<td class="left">&#xa0;</td>
+<td class="left">index</td>
+<td class="left">u2</td>
+<td class="left">指向名称及类描述符CONSTANT_NameAndType_info的索引项</td>
+</tr>
+
+<tr>
+<td class="left">CONSTANT_NameAndType_info</td>
+<td class="left">tag</td>
+<td class="left">u1</td>
+<td class="left">12</td>
+</tr>
+
+<tr>
+<td class="left">&#xa0;</td>
+<td class="left">index</td>
+<td class="left">u2</td>
+<td class="left">指向该字段或方法名称常量池的索引</td>
+</tr>
+
+<tr>
+<td class="left">&#xa0;</td>
+<td class="left">index</td>
+<td class="left">u2</td>
+<td class="left">指向该字段或方法描述符常量池的索引</td>
+</tr>
+
+<tr>
+<td class="left">CONSTANT_MethodHandle_info</td>
+<td class="left">tag</td>
+<td class="left">u1</td>
+<td class="left">15</td>
+</tr>
+
+<tr>
+<td class="left">&#xa0;</td>
+<td class="left">reference_kind</td>
+<td class="left">u2</td>
+<td class="left">值必须在1-9之间，决定了方法句柄的类型，方法句柄累心的值表示方法句柄的字节码行为</td>
+</tr>
+
+<tr>
+<td class="left">&#xa0;</td>
+<td class="left">reference_index</td>
+<td class="left">u2</td>
+<td class="left">值必须是对常量池的有效索引</td>
+</tr>
+
+<tr>
+<td class="left">CONSTANT_MethodType_info</td>
+<td class="left">tag</td>
+<td class="left">u1</td>
+<td class="left">16</td>
+</tr>
+
+<tr>
+<td class="left">&#xa0;</td>
+<td class="left">descriptor_index</td>
+<td class="left">u2</td>
+<td class="left">值必须是对常量池的有效索引，常量池在改索引处的项必须是CONSTANT_Utf8_info结构，表示方法的描述符</td>
+</tr>
+
+<tr>
+<td class="left">CONSTANT_InvokeDynamic_info</td>
+<td class="left">tag</td>
+<td class="left">u1</td>
+<td class="left">18</td>
+</tr>
+
+<tr>
+<td class="left">&#xa0;</td>
+<td class="left">bootstrap_method_attrindex</td>
+<td class="left">u2</td>
+<td class="left">值必须是对当前Class文件中引导方法表的bootstrap_methods[]数组的有效索引</td>
+</tr>
+
+<tr>
+<td class="left">&#xa0;</td>
+<td class="left">name_and_type_index</td>
+<td class="left">u2</td>
+<td class="left">值必须是对当前常量池的有效索引，常量池在该索引处的项必须是COSTANT_NameAndType_info结构，表示方法名和方法描述符</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-3" class="outline-3">
+<h3 id="sec-2-3">访问标志</h3>
+<div class="outline-text-3" id="text-2-3">
+<p>
+常量池结束后紧接着的两个字节代表访问标志，用来标识一些类或接口的访问信息，包括：
+</p>
+<ul class="org-ul">
+<li>这个Class是类还是接口
+</li>
+<li>是否定义为public
+</li>
+<li>是否定义为abstract
+</li>
+<li>如果是类的话，是否被声明为final等
+</li>
+</ul>
+
+<p>
+具体的标志位以及含义如下表：
+</p>
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 6:</span> 访问标志</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="right" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">标志名称</td>
+<td class="right">标志值</td>
+<td class="left">含义</td>
+</tr>
+
+<tr>
+<td class="left">ACC_PUBLIC</td>
+<td class="right">0x0001</td>
+<td class="left">是否是public</td>
+</tr>
+
+<tr>
+<td class="left">ACC_FINAL</td>
+<td class="right">0x0010</td>
+<td class="left">是否被声明为final，只有类可以设置</td>
+</tr>
+
+<tr>
+<td class="left">ACC_SUPER</td>
+<td class="right">0x0020</td>
+<td class="left">是否允许使用invokespecial字节码指令的新语义，JDK1.0.2之后编译出来的类的这个标志默认为真</td>
+</tr>
+
+<tr>
+<td class="left">ACC_INTERFACE</td>
+<td class="right">0x0200</td>
+<td class="left">标识是一个接口</td>
+</tr>
+
+<tr>
+<td class="left">ACC_ABSTRACT</td>
+<td class="right">0x0400</td>
+<td class="left">是否是abstract，对于接口和抽象类来说为真，其他类都为假</td>
+</tr>
+
+<tr>
+<td class="left">ACC_SYNITHETIC</td>
+<td class="right">0x1000</td>
+<td class="left">标识这个类并非由用户代码产生</td>
+</tr>
+
+<tr>
+<td class="left">ACC_ANNOTATION</td>
+<td class="right">0x2000</td>
+<td class="left">标识这是一个注解</td>
+</tr>
+
+<tr>
+<td class="left">ACC_ENUM</td>
+<td class="right">0x4000</td>
+<td class="left">标识这是一个枚举类</td>
+</tr>
+</tbody>
+</table>
+
+<p>
+access_flags中一共有16个标志位可以使用，当前只定义了其中8个，没有使用到的标志位要求为0
+</p>
+<pre class="example">
+例子中的TestClass是一个普通Java类，不是接口、枚举或者注解，被public关键字修饰但没有被声明为final和abstract，并且它使用了JDK1.2之后的编译器进行编译
+
+因此它的ACC_PUBLIC、ACC_SUPER标志应当为真
+
+而ACC_FINAL、ACC_INTERFACE、ACC_ABSTRACT、ACC_SYNTHETIC、ACC_ANNOTATION、ACC_ENUM这6个标志应S为假
+
+因此它的access_flags的值为: 0x0001 | 0x0020 = 0x0021
+</pre>
+
+<p>
+下图可以看出：access_flags标志(偏移地址:0x000000EF)的确为 <span class="underline">0x0021</span> 
+</p>
+
+
+<div class="figure">
+<p><img src="pic/access-flags.jpg" alt="access-flags.jpg" width="70%" />
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-4" class="outline-3">
+<h3 id="sec-2-4">类索引、父类索引与接口索引集合</h3>
+</div>
+</div>
 </div>
 <div id="postamble" class="status">
 
