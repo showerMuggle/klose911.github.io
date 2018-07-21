@@ -201,6 +201,21 @@ for the JavaScript code in this tag.
 </li>
 <li><a href="#sec-2-3">访问标志</a></li>
 <li><a href="#sec-2-4">类索引、父类索引与接口索引集合</a></li>
+<li><a href="#sec-2-5">字段表集合</a>
+<ul>
+<li><a href="#sec-2-5-1">access_flags</a></li>
+<li><a href="#sec-2-5-2">name_index</a></li>
+<li><a href="#sec-2-5-3">descriptor_index</a></li>
+<li><a href="#sec-2-5-4">attributes</a></li>
+<li><a href="#sec-2-5-5">实例</a></li>
+</ul>
+</li>
+<li><a href="#sec-2-6">方法表集合</a>
+<ul>
+<li><a href="#sec-2-6-1">实例</a></li>
+</ul>
+</li>
+<li><a href="#sec-2-7">属性表集合</a></li>
 </ul>
 </li>
 </ul>
@@ -1172,6 +1187,529 @@ access_flags中一共有16个标志位可以使用，当前只定义了其中8�
 
 <div id="outline-container-sec-2-4" class="outline-3">
 <h3 id="sec-2-4">类索引、父类索引与接口索引集合</h3>
+<div class="outline-text-3" id="text-2-4">
+<p>
+在访问标志 <span class="underline">access_flags</span> 后接下来就是类索引（ <span class="underline">this_class</span> ）和父类索引（ <span class="underline">super_class</span> ），这两个数据都是 <b>u2</b> 类型的，而接下来的接口索引集合是一个 <b>u2类型的集合</b> ，class文件由这三个数据项来 <b>确定类的继承关系</b> 。由于Java中是单继承，所以 <span class="underline">父类索引只有一个</span> ；但Java类可以实现多个接口，所以 <span class="underline">接口索引是一个集合</span> 
+</p>
+
+<ul class="org-ul">
+<li>类索引：确定这个类的全限定名，这个全限定名就是说一个类的 <span class="underline">类名包含所有的包名</span> ，然后使用 <b>/</b> 代替 <b>.</b> 。比如Object的全限定名是java.lang.Object
+</li>
+<li>父类索引：确定这个类的父类的全限定名，除了Object之外，所有的类都有父类，所以 <b>除了Object之外所有类的父类索引都不为0</b> 
+</li>
+<li>接口索引：集合存储了implements语句后面按照从 <span class="underline">左到右</span> 的顺序的接口
+</li>
+</ul>
+
+<p>
+类索引和父类索引都是一个索引，这个索引指向常量池中的 <b>CONSTANT_Class_info</b> 类型的常量。然后再CONSTANT_Class_info常量中的索引就可以找到常量池中类型为 <b>CONSTANT_Utf8_info</b> 的常量，而这个常量保存着类的全限定名：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/this-class-index.jpg" alt="this-class-index.jpg" width="70%" />
+</p>
+</div>
+
+<p>
+从偏移地址 <span class="underline">0x000000F1</span> 开始的3个U2类型的值分别为 <span class="underline">0x0001</span> 、 <span class="underline">0x0003</span> 、 <span class="underline">0x0000</span> ，也就是类索引为1，父类索引为3，接口索引集合大小为0，查询前面中javap命令计算出来的常量池，找出对应的类和父类的常量：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/this-class-constant-pool.jpg" alt="this-class-constant-pool.jpg" width="70%" />
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-5" class="outline-3">
+<h3 id="sec-2-5">字段表集合</h3>
+<div class="outline-text-3" id="text-2-5">
+<p>
+字段表用来 <b>描述接口或类中声明的变量</b> 。字段包括类级变量和实例级变量，但不包括方法内变量：
+</p>
+<ul class="org-ul">
+<li>类级变量就是 <span class="underline">静态变量</span> ，这个变量不属于这个类的任何实例，可以不用定义类实例就可以使用
+</li>
+<li>实例级变量不是静态变量，是和类实例相关联的，需要定义类实例才能使用
+</li>
+</ul>
+
+<p>
+声明一个变量需要信息：
+</p>
+<ul class="org-ul">
+<li>字段的作用域： <b>public</b> 、 <b>private</b> 和 <b>protected</b> 修饰符
+</li>
+<li>实例变量还是类变量： <b>static</b> 修饰符
+</li>
+<li>可变性： <b>final</b> 修饰符
+</li>
+<li>并发可见性： <b>volatile</b> 修饰符
+</li>
+<li>是否可被序列化： <b>transient</b> 修饰符
+</li>
+<li>字段的数据类型：
+<ul class="org-ul">
+<li>基本类型
+</li>
+<li>对象
+</li>
+<li>数组
+</li>
+</ul>
+</li>
+<li>字段名称
+</li>
+</ul>
+
+<p>
+包含的信息有点多，不过不需要的可以不写。这些信息中，各个修饰符可以用布尔值表示。而字段叫什么名字、字段被定义为什么类型数据都是无法固定的，只能用常量池中的常量来表示。下面是字段表的格式：
+</p>
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 7:</span> 字段表结构</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="right" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">类型</td>
+<td class="left">名称</td>
+<td class="right">数量</td>
+</tr>
+
+<tr>
+<td class="left">u2</td>
+<td class="left">access_flags</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">u2</td>
+<td class="left">name_index</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">u2</td>
+<td class="left">descriptor_index</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">u2</td>
+<td class="left">attributes_count</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">attribute_info</td>
+<td class="left">attributes</td>
+<td class="right">attributes_count</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<div id="outline-container-sec-2-5-1" class="outline-4">
+<h4 id="sec-2-5-1">access_flags</h4>
+<div class="outline-text-4" id="text-2-5-1">
+<p>
+和类中的access_flags类似，对于字段来说可以设置的标志位及含义如下：
+</p>
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 8:</span> 字段访问标志</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="right" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">标志名称</td>
+<td class="right">标志值</td>
+<td class="left">含义</td>
+</tr>
+
+<tr>
+<td class="left">ACC_PUBLIC</td>
+<td class="right">0x0001</td>
+<td class="left">字段是否是public</td>
+</tr>
+
+<tr>
+<td class="left">ACC_PRIVATE</td>
+<td class="right">0x0002</td>
+<td class="left">字段是否是private</td>
+</tr>
+
+<tr>
+<td class="left">ACC_PROTECTED</td>
+<td class="right">0x0004</td>
+<td class="left">字段是否是protected</td>
+</tr>
+
+<tr>
+<td class="left">ACC_STATIC</td>
+<td class="right">0x0008</td>
+<td class="left">字段是否是static</td>
+</tr>
+
+<tr>
+<td class="left">ACC_FINAL</td>
+<td class="right">0x0010</td>
+<td class="left">字段是否是final</td>
+</tr>
+
+<tr>
+<td class="left">ACC_VOLATILE</td>
+<td class="right">0x0040</td>
+<td class="left">字段是否是volatile</td>
+</tr>
+
+<tr>
+<td class="left">ACC_TRANSIENT</td>
+<td class="right">0x0080</td>
+<td class="left">字段是否是transient</td>
+</tr>
+
+<tr>
+<td class="left">ACC_SYNTHETIC</td>
+<td class="right">0x1000</td>
+<td class="left">字段是否是由编译器自动产生的</td>
+</tr>
+
+<tr>
+<td class="left">ACC_ENUM</td>
+<td class="right">0x4000</td>
+<td class="left">字段是否是enum</td>
+</tr>
+</tbody>
+</table>
+
+<p>
+Java语言本身的规则决定：
+</p>
+<ol class="org-ol">
+<li><span class="underline">ACC_PUBLIC_、 _ACC_PRIVATE</span> 和 <span class="underline">ACC_PROTECTED</span> 只能选择一个
+</li>
+<li><span class="underline">ACC_FINAL</span> 和 <span class="underline">ACC_VOLATILE</span> 不能同时选择
+</li>
+<li>接口中的字段必须有 <span class="underline">ACC_PUBLIC</span> 、 <span class="underline">ACC_STATIC</span> 和 <span class="underline">ACC_FINAL</span> 标志
+</li>
+</ol>
+</div>
+</div>
+
+<div id="outline-container-sec-2-5-2" class="outline-4">
+<h4 id="sec-2-5-2">name_index</h4>
+<div class="outline-text-4" id="text-2-5-2">
+<p>
+字段名的常量池索引，注意：这是简单名而不是全限定名
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-5-3" class="outline-4">
+<h4 id="sec-2-5-3">descriptor_index</h4>
+<div class="outline-text-4" id="text-2-5-3">
+<p>
+字段描述符的常量池索引
+</p>
+
+<p>
+描述符是用来描述字段的数据类型、方法的参数列表(包括数量、类型以及顺序)和返回值：
+</p>
+<ul class="org-ul">
+<li>基本数据类型以及代表无返回值的void类型都用一个大写字符来表示
+</li>
+<li>对象类型则用字符L加对象的全限定名来表示
+</li>
+</ul>
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 9:</span> 描述符标识字符含义</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">标识字符</td>
+<td class="left">含义</td>
+</tr>
+
+<tr>
+<td class="left">B</td>
+<td class="left">byte</td>
+</tr>
+
+<tr>
+<td class="left">C</td>
+<td class="left">char</td>
+</tr>
+
+<tr>
+<td class="left">D</td>
+<td class="left">double</td>
+</tr>
+
+<tr>
+<td class="left">F</td>
+<td class="left">float</td>
+</tr>
+
+<tr>
+<td class="left">I</td>
+<td class="left">int</td>
+</tr>
+
+<tr>
+<td class="left">J</td>
+<td class="left">long</td>
+</tr>
+
+<tr>
+<td class="left">S</td>
+<td class="left">short</td>
+</tr>
+
+<tr>
+<td class="left">Z</td>
+<td class="left">boolean</td>
+</tr>
+
+<tr>
+<td class="left">V</td>
+<td class="left">void</td>
+</tr>
+
+<tr>
+<td class="left">L</td>
+<td class="left">对象类型，如Ljava/lang/Object</td>
+</tr>
+</tbody>
+</table>
+
+<ul class="org-ul">
+<li>数组类型：每一个维度将使用一个前置的 <span class="underline">[</span> 字符来描述：
+<ul class="org-ul">
+<li>java.lang.String[][]: <span class="underline">[[Ljava/lang/String</span>
+</li>
+<li>double[]: <span class="underline">[D</span>
+</li>
+</ul>
+</li>
+<li>方法的描述符相对来说要复杂一些，因为一个方法除了返回值类型，还有参数类型，而且参数的个数还不确定。按照先参数列表，后返回值的顺序描述，参数列表按照参数的严格顺序放在一组小括号 <span class="underline">()</span> 内：
+<ul class="org-ul">
+<li>void inc()： <span class="underline">()V</span> 
+</li>
+<li>java.lang.String toString()： <span class="underline">()Ljava/lang/String</span>
+</li>
+<li>int indexOf(char[], int, int, char[], int, int, int)： <span class="underline">([CII[CIII)I</span>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-2-5-4" class="outline-4">
+<h4 id="sec-2-5-4">attributes</h4>
+<div class="outline-text-4" id="text-2-5-4">
+<p>
+属性信息，下面会介绍
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-5-5" class="outline-4">
+<h4 id="sec-2-5-5">实例</h4>
+<div class="outline-text-4" id="text-2-5-5">
+
+<div class="figure">
+<p><img src="pic/fields-info.jpg" alt="fields-info.jpg" width="70%" />
+</p>
+</div>
+
+<ul class="org-ul">
+<li>字段表集合中 <b>不会列出从超类或者父接口中继承而来的字段</b> ，但有可能列出原本Java代码之中不存在的字段，譬如在 <span class="underline">内部类中为了保持对外部类的访问性，会自动添加指向外部类实例的字段</span>
+</li>
+<li>字段是 <b>无法重载</b> 的，两个字段的数据类型、修饰符不管是否相同，都必须使用不一样的名称，但是对于 <b>字节码来讲，如果两个字段的描述符不一致，那字段重名就是合法的</b>
+</li>
+</ul>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-6" class="outline-3">
+<h3 id="sec-2-6">方法表集合</h3>
+<div class="outline-text-3" id="text-2-6">
+<p>
+class文件存储格式中对方法的描述和对字段的描述几乎相同，方法表的结构也和字段表相同，这里就不再列出。不过，方法表的访问标志和字段的不同，列出如下：
+</p>
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 10:</span> 方法访问标志</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="right" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">标识名称</td>
+<td class="right">标志值</td>
+<td class="left">含义</td>
+</tr>
+
+<tr>
+<td class="left">ACC_PUBLIC</td>
+<td class="right">0x0001</td>
+<td class="left">方法是否是public</td>
+</tr>
+
+<tr>
+<td class="left">ACC_PRIVATE</td>
+<td class="right">0x0002</td>
+<td class="left">方法是否是private</td>
+</tr>
+
+<tr>
+<td class="left">ACC_PROTECTED</td>
+<td class="right">0x0004</td>
+<td class="left">方法是否是protected</td>
+</tr>
+
+<tr>
+<td class="left">ACC_STATIC</td>
+<td class="right">0x0008</td>
+<td class="left">方法是否是static</td>
+</tr>
+
+<tr>
+<td class="left">ACC_FINAL</td>
+<td class="right">0x0010</td>
+<td class="left">方法是否是final</td>
+</tr>
+
+<tr>
+<td class="left">ACC_SYNCHRONIZED</td>
+<td class="right">0x0020</td>
+<td class="left">方法是否是synchronized</td>
+</tr>
+
+<tr>
+<td class="left">ACC_BRIDGE</td>
+<td class="right">0x0040</td>
+<td class="left">方法是否是由编译器产生的桥接方法</td>
+</tr>
+
+<tr>
+<td class="left">ACC_VARARGS</td>
+<td class="right">0x0080</td>
+<td class="left">方法是否接受不定参数</td>
+</tr>
+
+<tr>
+<td class="left">ACC_NATIVE</td>
+<td class="right">0x0100</td>
+<td class="left">方法是否是native</td>
+</tr>
+
+<tr>
+<td class="left">ACC_ABSTRACT</td>
+<td class="right">0x0400</td>
+<td class="left">方法是否是abstract</td>
+</tr>
+
+<tr>
+<td class="left">ACC_STRICTFP</td>
+<td class="right">0x0800</td>
+<td class="left">方法是否是strictfp</td>
+</tr>
+
+<tr>
+<td class="left">ACC_SYNTHETIC</td>
+<td class="right">0x1000</td>
+<td class="left">方法是否是由编译器自动产生的</td>
+</tr>
+</tbody>
+</table>
+
+<p>
+方法里的Java代码，经过编译器编译成字节码指令后，存放在方法属性表集合中一个名为 <b>Code</b> 的属性里面，属性表作为Class文件格式中最具扩展性的一种数据项目
+</p>
+</div>
+
+<div id="outline-container-sec-2-6-1" class="outline-4">
+<h4 id="sec-2-6-1">实例</h4>
+<div class="outline-text-4" id="text-2-6-1">
+
+<div class="figure">
+<p><img src="pic/methods-info.jpg" alt="methods-info.jpg" width="70%" />
+</p>
+</div>
+
+<p>
+方法表集合入口地址为: <span class="underline">0x00000101</span> :
+</p>
+<ul class="org-ul">
+<li>第一个u2类型的数据(即是计数器容量)的值为 <span class="underline">0x0002</span> 代表集合中有两个方法: 
+<ul class="org-ul">
+<li>编译器添加的实例构造器&lt;init&gt;
+<ul class="org-ul">
+<li>访问标志值为 <span class="underline">0x001</span> ，也就是只有 <span class="underline">ACC_PUBLIC</span> 标志为真
+</li>
+<li>名称索引值为 <span class="underline">0x0007</span> ，常量池得方法名为 <span class="underline">&lt;init&gt;</span>
+</li>
+<li>描述符索引值为0x0008，对应常量为 <span class="underline">()V</span>
+</li>
+<li>属性表计数器attributes_count的值为 <span class="underline">0x0001</span> 就表示此方法的属性表集合有一项属性
+</li>
+<li>属性名称索引为 <span class="underline">0x0009</span> ，对应常量为 <span class="underline">Code</span> ，说明此属性是方法的字节码描述
+</li>
+</ul>
+</li>
+<li>源码中的方法inc()
+</li>
+</ul>
+</li>
+</ul>
+
+<p>
+与字段表集合相对应的，如果父类方法在子类中没有被 <b>重写</b> ，方法表集合中就不会出现来自父类的方法信息。但同样的，有可能会出现由编译器自动添加的方法，最典型的便是类构造器 <span class="underline">&lt;clinit&gt;</span> 方法和实例构造器 <span class="underline">&lt;init&gt;</span> 方法
+</p>
+
+<p>
+要 <b>重载</b> 一个方法，除了要与原方法具有相同的简单名称之外，还要求必须拥有一个 <b>与原方法不同的特征签名</b> ，特征签名就是一个方法中 <span class="underline">各个参数在常量池中的字段符号引用的集合</span> ，也就是因为 <b>返回值不会包含在特征签名中</b> ，因此Java无法仅仅依靠返回值的不同来对一个已有方法进行重载的。但是在Class文件格式中，特征签名的范围更大一些，只要描述符不是完全一致的两个方法也可以共存。也就是说， <b>如果两个方法有相同的名称和特征签名，但返回值不同，那么也是可以合法共存于同一个Class文件中的</b> 
+</p>
+
+<p>
+Java代码的方法特征签名只包括了方法名称、参数顺序及参数类型,而字节码的特征签名还包括 <b>方法返回值以及受查异常表</b>
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-7" class="outline-3">
+<h3 id="sec-2-7">属性表集合</h3>
 </div>
 </div>
 </div>
