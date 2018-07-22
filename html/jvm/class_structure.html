@@ -226,6 +226,8 @@ for the JavaScript code in this tag.
 <li><a href="#sec-2-7-2">Exception 属性</a></li>
 <li><a href="#sec-2-7-3">LineNumberTable属性</a></li>
 <li><a href="#sec-2-7-4">LocalVariableTable属性</a></li>
+<li><a href="#sec-2-7-5">SourceFile属性</a></li>
+<li><a href="#sec-2-7-6">ConstantValue属性</a></li>
 </ul>
 </li>
 </ul>
@@ -2389,6 +2391,90 @@ Code属性是Class文件中最重要的一个属性，如果把一个Java程序�
 
 <div id="outline-container-sec-2-7-4" class="outline-4">
 <h4 id="sec-2-7-4">LocalVariableTable属性</h4>
+<div class="outline-text-4" id="text-2-7-4">
+<p>
+<span class="underline">LocalVariableTable</span> 属性用于描述 <b>栈帧中局部变量表中的变量与Java源码中定义的变量之间的关系</b> ，它也不是运行时必需的属性，但默认会生成到Class文件之中，可以在Javac中分别使用 <span class="underline">-g:none</span> 或 <span class="underline">-g:vars</span> 选项来取消或要求生成这项信息
+</p>
+
+<pre class="example">
+如果没有生成这项属性，最大的影响就是当其他人引用这个方法时，所有的参数名称都将会丢失
+
+IDE将会使用诸如arg0、arg1之类的占位符代替原有的参数名，这对程序运行没有影响，但是会对代码编写带来较大不便，而且在调试期间无法根据参数名称从上下文中获得参数值
+</pre>
+
+<p>
+LocalVariableTable属性的结构：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/local-variable-table.jpg" alt="local-variable-table.jpg" width="70%" />
+</p>
+</div>
+
+<p>
+其中local_variable_info项目代表了一个栈帧中与源码中局部变量的关联：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/local-variable-info.jpg" alt="local-variable-info.jpg" width="70%" />
+</p>
+</div>
+
+
+<ul class="org-ul">
+<li>start_pc: 局部变量的生命周期开始的 <b>字节码偏移量</b> 
+</li>
+<li>length: 局部变量 <b>作用范围覆盖的长度</b> ，与start_pc结合起来就是这个局部变量在字节码之中的作用域范围
+</li>
+<li>name_index: 指向常量池中CONSTANT_Utf8_info型常量的索引，代表局部变量的 <b>名称</b> 
+</li>
+<li>descriptor_index: 指向常量池中CONSTANT_Utf8_info型常量的索引，代表局部变量的 <b>描述符</b> 
+</li>
+<li>index: 局部变量在 <b>栈帧局部变量表中Slot的位置</b> 
+<ul class="org-ul">
+<li>当这个变量数据类型是64位类型时(double和long)，它占用的Slot为index和index+1两个
+</li>
+</ul>
+</li>
+</ul>
+
+<pre class="example">
+  在JDK1.5引入泛型之后，LocalVariableTable属性增加了一个“姐妹属性”:LocalVariableTypeTable
+
+  这个新增的属性结构与LocalVariableTable非常相似，仅仅是把记录的字段描述符的descriptor_index替换成了字段的特征签名(Signature)
+
+  对于非泛型类型来说，描述符和特征签名能描述的信息是基本一致的，但是泛型引入之后，由于描述符中泛型的参数化类型被擦除掉，描述符就不能准确地描述泛型类型了，因此出现了LocalVariableTypeTable
+</pre>
+</div>
+</div>
+
+<div id="outline-container-sec-2-7-5" class="outline-4">
+<h4 id="sec-2-7-5">SourceFile属性</h4>
+<div class="outline-text-4" id="text-2-7-5">
+<p>
+<span class="underline">SourceFile</span> 属性用于 <b>记录生成这个Class文件的源码文件名称</b> 。这个属性也是可选的，可以分别使用Javac的 <span class="underline">-g:none</span> 或 <span class="underline">-g:source</span> 选项来关闭或要求生成这项信息。在Java中，对于大多数的类来说，类名和文件名是一致的，但是有一些特殊情况(如 <span class="underline">内部类</span> )例外 
+</p>
+
+<pre class="example">
+  如果不生成这项属性，当拋出异常时，堆栈中将不会显示出错代码所属的文件名
+</pre>
+
+
+<div class="figure">
+<p><img src="pic/source-file.jpg" alt="source-file.jpg" width="70%" />
+</p>
+</div>
+
+<p>
+sourcefile_index数据项是指向常量池中CONSTANT_Utf8_info型常量的索引，常量值是源码文件的文件名
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-7-6" class="outline-4">
+<h4 id="sec-2-7-6">ConstantValue属性</h4>
 </div>
 </div>
 </div>
