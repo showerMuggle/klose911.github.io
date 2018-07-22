@@ -228,6 +228,9 @@ for the JavaScript code in this tag.
 <li><a href="#sec-2-7-4">LocalVariableTable属性</a></li>
 <li><a href="#sec-2-7-5">SourceFile属性</a></li>
 <li><a href="#sec-2-7-6">ConstantValue属性</a></li>
+<li><a href="#sec-2-7-7">InnerClasses属性</a></li>
+<li><a href="#sec-2-7-8">Deprecated及Synthetic属性</a></li>
+<li><a href="#sec-2-7-9">StackMapTable属性</a></li>
 </ul>
 </li>
 </ul>
@@ -2475,6 +2478,164 @@ sourcefile_index数据项是指向常量池中CONSTANT_Utf8_info型常量的索�
 
 <div id="outline-container-sec-2-7-6" class="outline-4">
 <h4 id="sec-2-7-6">ConstantValue属性</h4>
+<div class="outline-text-4" id="text-2-7-6">
+<p>
+<span class="underline">ConstantValue</span> 属性的作用是 <b>通知虚拟机自动为静态变量赋值</b> 。只有被 <b>static</b> 关键字修饰的变量(类变量)才可以使用这项属性。类似 <span class="underline">int x = 123</span> 和 <span class="underline">static int x =123</span> 这样的变量定义在Java程序中是非常常见的事情，但虚拟机对这两种变量賦值的方式和时刻都有所不同：
+</p>
+<ul class="org-ul">
+<li>对于非static类型的变量(也就是实例变量)的賦值是在实例构造器 <span class="underline">&lt;init&gt;</span> 方法中进行的
+</li>
+<li>而对于类变量，则有两种方式可以选择:
+<ul class="org-ul">
+<li>在类构造器 <span class="underline">&lt;clinit&gt;</span> 方法中
+</li>
+<li>使用ConstantValue属性
+</li>
+</ul>
+</li>
+</ul>
+
+<p>
+目前Sun Javac编译器的选择是: 
+</p>
+<ul class="org-ul">
+<li>如果同时使用 <b>final</b> 和 <b>static</b> 来修饰一个变量(这里称 <span class="underline">常量</span> 更贴切)，并且这个变量的数据类型是 <span class="underline">基本类型</span> 或者 <span class="underline">java.lang.String</span> 的话，就生成 <span class="underline">ConstantValue</span> 属性来进行初始化
+</li>
+<li>如果这个变量没有被final修饰，或者并非基本类型及字符串，则将会选择在 <span class="underline">&lt;clinit&gt;</span> 方法中进行初始化
+</li>
+</ul>
+
+<pre class="example">
+  虽然有final关键字才更符合ConstantValue的语义，但虚拟机规范中并没有强制要求字段必须设置了ACC_FINAL标志
+
+  只要求了有ConstantValue属性的字段必须设置ACC_STATIC标志而已，对final关键字的要求是Javac编译器自己加入的限制
+
+  对ConstantValue的属性值只能限于基本类型和String，不过此属性的属性值只是一个常量池的索引号
+
+  由于Class文件格式的常量类型中只有与基本属性和字符串相对应的字面量，所以就算ConstantValue属性想支持别的类型也无能为力
+</pre>
+
+<p>
+ConstantValue属性的结构见下图：
+</p>
+
+<div class="figure">
+<p><img src="pic/constant-value.jpg" alt="constant-value.jpg" width="70%" />
+</p>
+</div>
+
+<p>
+ConstantValue属性是一个定长属性：
+</p>
+<ul class="org-ul">
+<li>attribute_length: 值必须固定为2
+</li>
+<li>constantvalue_index: 代表了常量池中一个字面量常量的引用，根据字段类型的不同，字面量可以是：
+<ul class="org-ul">
+<li>CONSTANT_Long_info
+</li>
+<li>CONSTANT_Float_info
+</li>
+<li>CONSTANT_Double_info
+</li>
+<li>CONSTANT_Integer_info
+</li>
+<li>CONSTANT_Sring_info
+</li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-2-7-7" class="outline-4">
+<h4 id="sec-2-7-7">InnerClasses属性</h4>
+<div class="outline-text-4" id="text-2-7-7">
+<p>
+<span class="underline">InnerClasses</span> 属性用于记录 <b>内部类与宿主类之间的关联</b> 。如果一个类中定义了内部类，那编译器将会为它以及它所包含的内部类生成InnerClasses属性。该属性的结构见下图：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/inner-class.jpg" alt="inner-class.jpg" width="70%" />
+</p>
+</div>
+
+<ul class="org-ul">
+<li>number_of_classes: 记录多少个内部类信息
+</li>
+<li>inner_classes_info: 描述一个内部类
+</li>
+</ul>
+
+
+<div class="figure">
+<p><img src="pic/inner-class-info.jpg" alt="inner-class-info.jpg" width="70%" />
+</p>
+</div>
+
+<ul class="org-ul">
+<li>inner_class_info_index: 指向常量池中CONSTANT_Class_info型常量的素引，代表了内部类的符号引用
+</li>
+<li>outer_class_info_index: 指向常量池中CONSTANT_Class_info型常量的素引，代表了宿主类的符号引用
+</li>
+<li>inner_name_index: 指向常量池中CONSTANT_Utf8_info型常量的索引，代表这个内部类的名称
+<ul class="org-ul">
+<li>如果是匿名内部类，那么这项值为0
+</li>
+</ul>
+</li>
+<li>inner_class_access_flags: 内部类的访问标志，类似于类的access_flags，它的取值范围见下表：
+</li>
+</ul>
+
+
+<div class="figure">
+<p><img src="pic/inner-class-access-flags.jpg" alt="inner-class-access-flags.jpg" width="70%" />
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-7-8" class="outline-4">
+<h4 id="sec-2-7-8">Deprecated及Synthetic属性</h4>
+<div class="outline-text-4" id="text-2-7-8">
+<p>
+<span class="underline">Deprecated</span> 和 <span class="underline">Synthetic</span> 两个属性都属于 <b>标志类型的布尔属性</b> ，只存在有和没有的区别，没有属性值的概念：
+</p>
+<ul class="org-ul">
+<li>Deprecated: 表示某个类、字段或者方法，已经被程序作者定为不再推荐使用，它可以通过在代码中使用 <span class="underline">@deprecated</span> 注释进行设置
+</li>
+<li>Synthetic: 代表此字段或者方法并不是由Java源码直接产生的，而是由编译器自行添加的
+</li>
+</ul>
+
+<pre class="example">
+  在JDK1.5之后，标识一个类、字段或者方法是编译器自动产生的，也可以设置它们访问标志中的ACC_SYNTHETIC标志位，其中最典型的例子就是Bridge Method
+
+  所有由非用户代码产生的类、方法及字段都应当至少设置Synthetic属性和ACC_SYNTHETIC标志位中的一项
+
+  唯一的例外是实例构造器 &lt;init&gt; 方法和类构造器 &lt;clinit&gt; 方法
+</pre>
+
+<p>
+Deprecated和Synthetic属性的结构非常简单：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/deprecated-synthetic.jpg" alt="deprecated-synthetic.jpg" width="70%" />
+</p>
+</div>
+
+<p>
+其中attribute_length数据项的值必须为 <span class="underline">0x00000000</span> ,因为没有任何属性值需要设置
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-7-9" class="outline-4">
+<h4 id="sec-2-7-9">StackMapTable属性</h4>
 </div>
 </div>
 </div>

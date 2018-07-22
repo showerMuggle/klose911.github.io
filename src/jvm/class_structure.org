@@ -695,4 +695,78 @@ _SourceFile_ 属性用于 *记录生成这个Class文件的源码文件名称* �
 sourcefile_index数据项是指向常量池中CONSTANT_Utf8_info型常量的索引，常量值是源码文件的文件名
 
 *** ConstantValue属性
+_ConstantValue_ 属性的作用是 *通知虚拟机自动为静态变量赋值* 。只有被 *static* 关键字修饰的变量(类变量)才可以使用这项属性。类似 _int x = 123_ 和 _static int x =123_ 这样的变量定义在Java程序中是非常常见的事情，但虚拟机对这两种变量賦值的方式和时刻都有所不同：
++ 对于非static类型的变量(也就是实例变量)的賦值是在实例构造器 _<init>_ 方法中进行的
++ 而对于类变量，则有两种方式可以选择:
+  + 在类构造器 _<clinit>_ 方法中
+  + 使用ConstantValue属性
 
+目前Sun Javac编译器的选择是: 
++ 如果同时使用 *final* 和 *static* 来修饰一个变量(这里称 _常量_ 更贴切)，并且这个变量的数据类型是 _基本类型_ 或者 _java.lang.String_ 的话，就生成 _ConstantValue_ 属性来进行初始化
++ 如果这个变量没有被final修饰，或者并非基本类型及字符串，则将会选择在 _<clinit>_ 方法中进行初始化
+
+#+BEGIN_EXAMPLE
+  虽然有final关键字才更符合ConstantValue的语义，但虚拟机规范中并没有强制要求字段必须设置了ACC_FINAL标志
+
+  只要求了有ConstantValue属性的字段必须设置ACC_STATIC标志而已，对final关键字的要求是Javac编译器自己加入的限制
+
+  对ConstantValue的属性值只能限于基本类型和String，不过此属性的属性值只是一个常量池的索引号
+
+  由于Class文件格式的常量类型中只有与基本属性和字符串相对应的字面量，所以就算ConstantValue属性想支持别的类型也无能为力
+#+END_EXAMPLE
+
+ConstantValue属性的结构见下图：
+#+ATTR_HTML: image :width 70% 
+[[file:pic/constant-value.jpg]]
+
+ConstantValue属性是一个定长属性：
++ attribute_length: 值必须固定为2
++ constantvalue_index: 代表了常量池中一个字面量常量的引用，根据字段类型的不同，字面量可以是：
+  + CONSTANT_Long_info
+  + CONSTANT_Float_info
+  + CONSTANT_Double_info
+  + CONSTANT_Integer_info
+  + CONSTANT_Sring_info
+
+*** InnerClasses属性
+_InnerClasses_ 属性用于记录 *内部类与宿主类之间的关联* 。如果一个类中定义了内部类，那编译器将会为它以及它所包含的内部类生成InnerClasses属性。该属性的结构见下图：
+
+#+ATTR_HTML: image :width 70% 
+[[file:pic/inner-class.jpg]]
+
++ number_of_classes: 记录多少个内部类信息
++ inner_classes_info: 描述一个内部类
+
+#+ATTR_HTML: image :width 70% 
+[[file:pic/inner-class-info.jpg]]
+
++ inner_class_info_index: 指向常量池中CONSTANT_Class_info型常量的素引，代表了内部类的符号引用
++ outer_class_info_index: 指向常量池中CONSTANT_Class_info型常量的素引，代表了宿主类的符号引用
++ inner_name_index: 指向常量池中CONSTANT_Utf8_info型常量的索引，代表这个内部类的名称
+  + 如果是匿名内部类，那么这项值为0
++ inner_class_access_flags: 内部类的访问标志，类似于类的access_flags，它的取值范围见下表：
+
+#+ATTR_HTML: image :width 70% 
+[[file:pic/inner-class-access-flags.jpg]]
+
+*** Deprecated及Synthetic属性
+_Deprecated_ 和 _Synthetic_ 两个属性都属于 *标志类型的布尔属性* ，只存在有和没有的区别，没有属性值的概念：
++ Deprecated: 表示某个类、字段或者方法，已经被程序作者定为不再推荐使用，它可以通过在代码中使用 _@deprecated_ 注释进行设置
++ Synthetic: 代表此字段或者方法并不是由Java源码直接产生的，而是由编译器自行添加的
+
+#+BEGIN_EXAMPLE
+  在JDK1.5之后，标识一个类、字段或者方法是编译器自动产生的，也可以设置它们访问标志中的ACC_SYNTHETIC标志位，其中最典型的例子就是Bridge Method
+
+  所有由非用户代码产生的类、方法及字段都应当至少设置Synthetic属性和ACC_SYNTHETIC标志位中的一项
+
+  唯一的例外是实例构造器 <init> 方法和类构造器 <clinit> 方法
+#+END_EXAMPLE
+
+Deprecated和Synthetic属性的结构非常简单：
+
+#+ATTR_HTML: image :width 70% 
+[[file:pic/deprecated-synthetic.jpg]]
+
+其中attribute_length数据项的值必须为 _0x00000000_ ,因为没有任何属性值需要设置
+
+*** StackMapTable属性
