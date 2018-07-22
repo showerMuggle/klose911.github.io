@@ -215,7 +215,19 @@ for the JavaScript code in this tag.
 <li><a href="#sec-2-6-1">实例</a></li>
 </ul>
 </li>
-<li><a href="#sec-2-7">属性表集合</a></li>
+<li><a href="#sec-2-7">属性表集合</a>
+<ul>
+<li><a href="#sec-2-7-1">Code 属性</a>
+<ul>
+<li><a href="#sec-2-7-1-1">Code属性实例</a></li>
+<li><a href="#sec-2-7-1-2">异常处理表集合</a></li>
+</ul>
+</li>
+<li><a href="#sec-2-7-2">Exception 属性</a></li>
+<li><a href="#sec-2-7-3">LineNumberTable属性</a></li>
+<li><a href="#sec-2-7-4">LocalVariableTable属性</a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -1710,6 +1722,674 @@ Java代码的方法特征签名只包括了方法名称、参数顺序及参数�
 
 <div id="outline-container-sec-2-7" class="outline-3">
 <h3 id="sec-2-7">属性表集合</h3>
+<div class="outline-text-3" id="text-2-7">
+<p>
+属性表(attribute_info)在前面的讲解之中已经出现过数次，在Class文件、字段表、方法表都可以携带自己的属性表集合，以用于描述某些场景专有的信息
+</p>
+
+<p>
+与Class文件中其他的数据项目要求严格的顺序、长度和内容不同，属性表集合的限制稍微宽松了一些， <b>不再要求各个属性表具有严格顺序</b> ，并且只要不与已有属性名重复，任何人实现的编译器都可以向属性表中写入自己定义的属性信息， <span class="underline">Java虚拟机运行时会忽略掉它不认识的属性</span> 。为了能正确解析Class文件，《Java虚拟机规范(第2版)》中预定义了9项虚拟机实现应当能识别的属性，而在最新的《Java虚拟机规范(Java SE7)》版中，预定义属性已经增加到21项，具体内容见表6-13。后面将对其中一些属性中的关键常用的部分进行讲解
+</p>
+
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 11:</span> 虚拟机中预定义的属性</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">属性名称</td>
+<td class="left">使用位置</td>
+<td class="left">含义</td>
+</tr>
+
+<tr>
+<td class="left">code</td>
+<td class="left">方法表</td>
+<td class="left">Java代码编译成的字节码指令</td>
+</tr>
+
+<tr>
+<td class="left">constantvalue</td>
+<td class="left">字段表</td>
+<td class="left">final关键字定义的常量池</td>
+</tr>
+
+<tr>
+<td class="left">deprecated</td>
+<td class="left">类，方法，字段表</td>
+<td class="left">被声明为deprecated的方法和字段</td>
+</tr>
+
+<tr>
+<td class="left">exceptions</td>
+<td class="left">方法表</td>
+<td class="left">方法抛出的异常</td>
+</tr>
+
+<tr>
+<td class="left">enclosingmethod</td>
+<td class="left">类文件</td>
+<td class="left">仅当一个类为局部类或者匿名类是才能拥有这个属性，这个属性用于标识这个类所在的外围方法</td>
+</tr>
+
+<tr>
+<td class="left">innerclass</td>
+<td class="left">类文件</td>
+<td class="left">内部类列表</td>
+</tr>
+
+<tr>
+<td class="left">linenumbertable</td>
+<td class="left">code属性</td>
+<td class="left">Java源码的行号与字节码指令的对应关系</td>
+</tr>
+
+<tr>
+<td class="left">localvariabletable</td>
+<td class="left">code属性</td>
+<td class="left">方法的局部变量描述</td>
+</tr>
+
+<tr>
+<td class="left">stackmaptable</td>
+<td class="left">code属性</td>
+<td class="left">JDK1.6中新增的属性，供新的类型检查检验器检查和处理目标方法的局部变量和操作数有所需要的类是否匹配</td>
+</tr>
+
+<tr>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+<td class="left">&#xa0;</td>
+</tr>
+
+<tr>
+<td class="left">signature</td>
+<td class="left">类，方法表，字段表</td>
+<td class="left">用于支持泛型情况下的方法签名</td>
+</tr>
+
+<tr>
+<td class="left">sourcefile</td>
+<td class="left">类文件</td>
+<td class="left">记录源文件名称</td>
+</tr>
+
+<tr>
+<td class="left">sourcedebugextension</td>
+<td class="left">类文件</td>
+<td class="left">用于存储额外的调试信息</td>
+</tr>
+
+<tr>
+<td class="left">synthetic</td>
+<td class="left">类，方法表，字段表</td>
+<td class="left">标志方法或字段为编译器自动生成的</td>
+</tr>
+
+<tr>
+<td class="left">localvariabletypetable</td>
+<td class="left">类</td>
+<td class="left">使用特征签名代替描述符，是为了引入泛型语法之后能描述泛型参数化类型而添加</td>
+</tr>
+
+<tr>
+<td class="left">runtimevisibleannotations</td>
+<td class="left">类，方法表，字段表</td>
+<td class="left">为动态注解提供支持</td>
+</tr>
+
+<tr>
+<td class="left">runtimeinvisibleannotations</td>
+<td class="left">表，方法表，字段表</td>
+<td class="left">用于指明哪些注解是运行时不可见的</td>
+</tr>
+
+<tr>
+<td class="left">runtimevisibleparameterannotation</td>
+<td class="left">方法表</td>
+<td class="left">作用与RuntimeVisibleAnnotations属性类似，只不过作用对象为方法</td>
+</tr>
+
+<tr>
+<td class="left">runtimeinvisibleparameterannotation</td>
+<td class="left">方法表</td>
+<td class="left">作用与RuntimeInvisibleAnnotations属性类似，作用对象哪个为方法参数</td>
+</tr>
+
+<tr>
+<td class="left">annotationdefault</td>
+<td class="left">方法表</td>
+<td class="left">用于记录注解类元素的默认值</td>
+</tr>
+
+<tr>
+<td class="left">bootstrapmethods</td>
+<td class="left">类文件</td>
+<td class="left">用于保存invokeddynamic指令引用的引导方式限定符</td>
+</tr>
+</tbody>
+</table>
+
+<p>
+对于每个属性，它的名称需要从常量池中引用一个 CONSTANT_utf8_info 类型的常量类表示，而属性值的结构则是完全自定义的，只需要通过一个u4的长度属性区说明属性值所占用的位数即可
+</p>
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 12:</span> 属性表定义的结构</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="right" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">类型</td>
+<td class="left">名称</td>
+<td class="right">数量</td>
+</tr>
+
+<tr>
+<td class="left">u2</td>
+<td class="left">attribute_name_index</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">u2</td>
+<td class="left">attribute_length</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">u1</td>
+<td class="left">info</td>
+<td class="right">attribute_length</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<div id="outline-container-sec-2-7-1" class="outline-4">
+<h4 id="sec-2-7-1">Code 属性</h4>
+<div class="outline-text-4" id="text-2-7-1">
+<p>
+Java程序方法体中的代码经过javac编译器处理后，最终变为字节码指令存储在 <b>Code属性</b> 内。Code属性出现在 <span class="underline">方法表的属性集合</span> 之中，但并非所有的方法表都必须存在这个属性，譬如接口或者抽象类中的方法就不存在Code属性，如果方法表有Code属性存在，那么它的结构将如下表所示：
+</p>
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 13:</span> Code属性表的结构</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="right" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">类型</td>
+<td class="left">名称</td>
+<td class="right">数量</td>
+</tr>
+
+<tr>
+<td class="left">u2</td>
+<td class="left">attribute_name_index</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">u4</td>
+<td class="left">attribute_length</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">u2</td>
+<td class="left">max_stack</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">u2</td>
+<td class="left">max_locals</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">u4</td>
+<td class="left">code_length</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">u1</td>
+<td class="left">code</td>
+<td class="right">code_length</td>
+</tr>
+
+<tr>
+<td class="left">u2</td>
+<td class="left">exception_table_length</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">exception_info</td>
+<td class="left">exception_table</td>
+<td class="right">exception_length</td>
+</tr>
+
+<tr>
+<td class="left">u2</td>
+<td class="left">attributes_count</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">attribute_info</td>
+<td class="left">attributes</td>
+<td class="right">attributes_count</td>
+</tr>
+</tbody>
+</table>
+
+<ul class="org-ul">
+<li><b>attribute_name_index</b> : 指向CONSTANT_Utf8_info型常量的索引，常量值固定为 <span class="underline">Code</span> ，它代表了该属性的属性名称
+</li>
+<li><b>attribute_length</b> : 指示了属性值的长度，由于属性名称索引与属性长度一共为6字节，所以属性值的长度固定为 <span class="underline">整个属性表长度减去6个字节</span> 
+</li>
+<li><b>max_stack</b> : 操作数栈( <span class="underline">Operand Stacks</span> )深度的最大值。在方法执行的任意时刻，操作数栈都不会超过这个深度。虚拟机运行的时候需要根据这个值来分配栈帧中的操作栈深度
+</li>
+<li><b>max_locals</b> :  <span class="underline">局部变量表所需的存储空间</span> 。这里的单位是 <span class="underline">Slot</span> ，Slot是虚拟机为局部变量分配内存所使用的最小单位
+<ul class="org-ul">
+<li>对于byte、char、float、int、short、boolean和return address等长度不超过32位的数据类型，每个局部变量占用1个Slot
+</li>
+<li>double和long这两种64位的数据类型则需要两个Slot来存放
+</li>
+<li>需要使用局部变量表来存放：
+<ul class="org-ul">
+<li>方法参数：包含实例方法中的隐藏参数this
+</li>
+<li>显式异常处理器的参数：try-catch语句中catch块所定义的异常
+</li>
+<li>方法体中定义的局部变量
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+<pre class="example">
+并不是在方法中用到了參少个局部变量，就把这些局部变量所占Slot之和作为max_locals的值
+
+原因是局部变量表中的Slot可以重用，当代码执行超出一个局部变量的作用域时，这个局部变量所占的Slot可以被其他局部变量所使用
+
+Javac编译器会根据变量的作用域来分配Slot给各个变量使用，然后计算出max_locals的大小
+</pre>
+
+<ul class="org-ul">
+<li><b>code_length</b> : 字节码长度
+<pre class="example">
+    虽然它是一个u4类型的长度值，理论上最大值可以达到2^32-1，但是虚拟机规范中明确限制了一个方法不允许超过65535条字节码指令，即它实际只使用了u2的长度
+  
+    如果超过这个限制，Javac编译器也会拒绝编译
+  
+    一般来讲，编写Java代码时只要不是刻意去编写一个超长的方法来为难编译器，是不太可能超过这个最大值的限制
+  
+    但是某些特殊情况，例如在编译一个很复杂的JSP文件时，某些JSP编译器会把JSP内容和页面输出的信息归并于一个方法之中，就可能因为方法生成字节码超长的原因而导致编译失败
+</pre>
+</li>
+
+<li><b>code</b> : 存储字节码指令的一系列字节流。也叫 <span class="underline">字节码指令</span> ，那么每个指令就是一个u1类型的单字节，当虚拟机读取到code中的一个字节码时，就可以对应找出这个字节码代表的是什么指令，并且可以知道这条指令后面是否需要跟随参数，以及参数应当如何理解
+</li>
+</ul>
+<pre class="example">
+  一个u1数据类型的取值范围为0x00〜OxFF，对应十进制的0〜255，也就是一共可以表达256条指令
+
+  目前，Java虚拟机规范已经定义了其中约200条编码值对应的指令
+</pre>
+</div>
+
+
+<div id="outline-container-sec-2-7-1-1" class="outline-5">
+<h5 id="sec-2-7-1-1">Code属性实例</h5>
+<div class="outline-text-5" id="text-2-7-1-1">
+<p>
+Code属性是Class文件中最重要的一个属性，如果把一个Java程序中的信息分为：
+</p>
+<ul class="org-ul">
+<li><b>代码</b> ：方法体里面的Java代码
+</li>
+<li><b>元数据</b> ：包括类、字段、方法定义及其他信息
+</li>
+</ul>
+
+<p>
+在整个Class文件中，Code属性用于描述 <span class="underline">代码</span> ，所有的其他数据项目都用于描述 <span class="underline">元数据</span> 。上一节分析过的实例构造器 <span class="underline">&lt;init&gt;</span> 方法的Code属性如下图所示：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/code-attribute.jpg" alt="code-attribute.jpg" width="70%" />
+</p>
+</div>
+
+<p>
+它的操作数栈的最大深度和本地变量表的容量都为 <span class="underline">0x0001</span> ，字节码区域所占空间的长度为 <span class="underline">0x0005</span> 。虚拟机读取到字节码区域的长度后，按照顺序依次读入紧随的5个字节，并根据字节码指令表翻译出所对应的字节码指令。翻译 <span class="underline">2AB7000AB1</span> 的过程为:
+</p>
+<ol class="org-ol">
+<li>读入 <span class="underline">2A</span> ，查表得0x2A对应的指令为 <b>aload_0</b> ，这个指令的含义是 <span class="underline">将第0个Slot中为reference类型的本地变量推送到操作数栈顶</span>
+</li>
+<li>读入 <span class="underline">B7</span> ，查表得0xB7对应的指令为 <b>invokespecial</b> ，这条指令的作用是 <span class="underline">以栈顶的reference类型的数据所指向的对象作为方法接收者</span> ，调用此对象的实例构造器方法、private方法或者它的父类的方法
+<ul class="org-ul">
+<li>这个方法有一个u2类型的参数说明具体调用哪一个方法，它指向常量池中的一个CONSTANT_Methodref_info类型常量，即此方法的方法符号引用
+</li>
+</ul>
+</li>
+<li>读入 <span class="underline">000A</span> ，这是 <span class="underline">invokespecial</span> 的参数，查常量池得0x000A对应的常量为实例构造器 <span class="underline">&lt;init&gt;</span> 方法的符号引用
+</li>
+<li>读入 <span class="underline">B1</span> ，查表得0xB1对应的指令为 <span class="underline">return</span> ，含义是返回此方法，并且返回值为 <span class="underline">void</span> 。这条指令执行后，当前方法结束
+</li>
+</ol>
+
+<p>
+再次使用javap命令把此Class文件中的另外一个方法的字节码指令也计算出来，结果如下图所示：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/javap-sample.jpg" alt="javap-sample.jpg" width="70%" />
+</p>
+</div>
+
+<pre class="example">
+  没有任何参数，没有定义任何局部变量，但是 Locals 和 Args_size 值为1：
+
+  在任何实例方法里面，都可以通过 this 关键字访问到此方法所属的对象
+
+  实现却非常简单，仅仅是通过Javac编译器编译的时候把对this关键字的访问转变为对一个普通方法参数的访问，然后在虚拟机调用实例方法时自动传入此参数而已
+
+  因此在实例方法的局部变量表中至少会存在一个指向当前对象实例的局部变量，局部变量表中也会预留出第一个Slot位来存放对象实例的引用，方法参数值从1开始计算
+
+  这个处理只对实例方法有效，如果把inc()方法声明为static，那Args_size就不会等于1而是等于0了
+</pre>
+
+<p>
+在字节码指令之后的是这个方法的 <b>显式异常处理表集合</b> ，异常表对于Code属性来说并不是 <span class="underline">必须存在的</span> 
+</p>
+</div>
+</div>
+
+
+<div id="outline-container-sec-2-7-1-2" class="outline-5">
+<h5 id="sec-2-7-1-2">异常处理表集合</h5>
+<div class="outline-text-5" id="text-2-7-1-2">
+<p>
+异常表的格式如下表所示：
+</p>
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 14:</span> 异常处理表集合</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="right" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">类型</td>
+<td class="left">名称</td>
+<td class="right">数量</td>
+</tr>
+
+<tr>
+<td class="left">u2</td>
+<td class="left">start_pc</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">u2</td>
+<td class="left">end_pc</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">u2</td>
+<td class="left">handler_pc</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">u2</td>
+<td class="left">catch_type</td>
+<td class="right">1</td>
+</tr>
+</tbody>
+</table>
+
+<p>
+它包含4个字段：如果当字节码在第 <span class="underline">start_pc</span> 行到第 <span class="underline">end_pc</span> 行之间(不含第end_pc行)出现了类型为 <span class="underline">catch_type</span> 或者其子类的异常(catch_type为指向一个CONSTANT_Class_info型常量的索引)，则转到第 <span class="underline">handler_pc</span> 行继续处理。当catch_type的值为0时，代表 <b>任意异常情况都需要转向到handler_pc处进行处理</b> 
+</p>
+
+<p>
+异常表实际上是Java代码的一部分，编译器使用 <b>异常表而不是简单的跳转命令</b> 来实现Java异常及finally处理机制
+</p>
+
+<p>
+下面代码主要演示了在字节码层面中try-catch-finally是如何实现的：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/javap-try-catch.jpg" alt="javap-try-catch.jpg" width="70%" />
+</p>
+</div>
+
+<p>
+编译器为这段Java源码生成了3条异常表记录，对应3条可能出现的代码执行路径。从Java代码的语义上讲,这3条执行路径分别为:
+</p>
+<ol class="org-ol">
+<li>如果try语句块中出现属于Exception或其子类的异常,则转到catch语句块处理
+</li>
+<li>如果try语句块中出现不属于Exception或其子类的异常,则转到finally语句块处理
+</li>
+<li>如果catch语句块中出现任何异常,则转到finally语句块处理
+</li>
+</ol>
+
+<pre class="example">
+  如果没有出现异常,返回值是1
+
+  如果出现了Exception异常,返回值是2
+
+  如果出现了Exception以外的异常,方法非正常退出,没有返回值
+</pre>
+
+<ul class="org-ul">
+<li>字节码中第0〜4行所做的操作就是将整数1赋值给变量x，并且将此时x的值复制一份副本到最后一个本地变量表的Slot中 
+</li>
+</ul>
+<pre class="example">
+  这个Slot里面的值在ireturn指令执行前将会被重新读到操作栈顶,作为方法返回值使用
+
+  为了讲解方便,给这个Slot起了个名字: returnValue
+</pre>
+<ul class="org-ul">
+<li>如果这时没有出现异常
+<ul class="org-ul">
+<li>则会继续走到第5〜9行，将变量x赋值为3，然后将之前保存在 <span class="underline">returnValue</span> 中的整数1读入到操作栈顶
+</li>
+<li>最后ireturn指令会以int形式返回操作栈顶中的值，方法结束
+</li>
+</ul>
+</li>
+<li>如果出现了异常
+<ul class="org-ul">
+<li>PC寄存器指针转到第10行，第10〜20行所做的事情是将2赋值给变量x，然后将变量x此时的值赋给 <span class="underline">returnValue</span> ，最后再将变量x的值改为3
+</li>
+<li>方法返回前同样将 <span class="underline">returnValue</span> 中保留的整数2读到了操作栈顶
+</li>
+<li>从第21行开始的代码，作用是变量x的值賦为3，并将栈顶的异常拋出，方法结束
+</li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-7-2" class="outline-4">
+<h4 id="sec-2-7-2">Exception 属性</h4>
+<div class="outline-text-4" id="text-2-7-2">
+<p>
+<span class="underline">Exceptions属性</span> 是在方法表中与Code属性平级的一项属性，不要与前面刚刚讲解完的异常表产生混淆。Exceptions属性的作用是 <b>列举出方法中可能拋出的受查异常</b> (Checked Excepitons)，也就是方法描述时在throws关键字后面列举的异常：
+</p>
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 15:</span> 异常属性结构</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="right" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">类型</td>
+<td class="left">名称</td>
+<td class="right">数量</td>
+</tr>
+
+<tr>
+<td class="left">u2</td>
+<td class="left">attribute_name_index</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">u2</td>
+<td class="left">attribute_length</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">u2</td>
+<td class="left">attribute_of_exception</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">u2</td>
+<td class="left">exception_index_table</td>
+<td class="right">number_of_exceptions</td>
+</tr>
+</tbody>
+</table>
+
+<ul class="org-ul">
+<li><b>number_of_exceptions</b> :方法可能拋出的受查异常数量
+</li>
+<li><b>exception_index_table</b> : 是一个指向常量池中CONSTANT_Class_info型常量的索引，代表了该受查异常的类型
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-2-7-3" class="outline-4">
+<h4 id="sec-2-7-3">LineNumberTable属性</h4>
+<div class="outline-text-4" id="text-2-7-3">
+<p>
+<span class="underline">LineNumberTable</span> 属性用于描述 <b>Java源码行号与字节码行号(字节码的偏移量)之间的对应关系</b> 。它并不是运行时必需的属性，但默认会生成到Class文件之中，可以在Javac中分别使用 <span class="underline">-g:none</span> 或 <span class="underline">-g:lines</span> 选项来取消或要求生成这项信息
+</p>
+
+<pre class="example">
+  如果选择不生成LineNumberTable属性，对程序运行产生的最主要的影响就是当拋出异常时，堆栈中将不会显示出错的行号
+
+  并且在调试程序的时候，也无法按照源码行来设置断点
+</pre>
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 16:</span> LineNumberTable属性结构</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+
+<col  class="right" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">类型</td>
+<td class="left">名称</td>
+<td class="right">数量</td>
+</tr>
+
+<tr>
+<td class="left">u2</td>
+<td class="left">attribute_name_index</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">u4</td>
+<td class="left">attribute_length</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">u2</td>
+<td class="left">line_number_table_length</td>
+<td class="right">1</td>
+</tr>
+
+<tr>
+<td class="left">line_number_info</td>
+<td class="left">line_number_table</td>
+<td class="right">line_number_table_length</td>
+</tr>
+</tbody>
+</table>
+
+<ul class="org-ul">
+<li>line_number_table是一个数量为line_number_table_length，类型为line_number_info的集合
+<ul class="org-ul">
+<li>line_number_info表：
+<ul class="org-ul">
+<li>start_pc: 字节码行号
+</li>
+<li>line_number: Java源代码行号
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-2-7-4" class="outline-4">
+<h4 id="sec-2-7-4">LocalVariableTable属性</h4>
+</div>
 </div>
 </div>
 </div>
