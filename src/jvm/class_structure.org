@@ -770,3 +770,84 @@ Deprecated和Synthetic属性的结构非常简单：
 其中attribute_length数据项的值必须为 _0x00000000_ ,因为没有任何属性值需要设置
 
 *** StackMapTable属性
+_StackMapTable_ 属性在JDK1.6发布后增加到了Class文件规范中，它是一个复杂的变长属性，位于 _Code属性的属性表中_ 。这个属性会在 *虚拟机类加载的字节码验证阶段被新类型检查验证器* 使用，目的在于 *代替以前比较消耗性能的基于数据流分析的类型推导验证器* 
+
+#+BEGIN_EXAMPLE
+  新的验证器在同样能保证Class文件合法性的前提下，省略了在运行期通过数据流分析去确认字节码的行为逻辑合法性的步骤，而是在编译阶段将一系列的验证类型直接记录在Class文件之中，通过检查这些验证类型代替了类型推导过程，从而大幅提升了字节码验证的性能
+
+  这个验证器在JDK1.6中首次提供，并在JDK1.7中强制代替原本基于类型推断的字节码验证器
+
+  关于这个验证器的工作原理，《Java虚拟机规范(Java SE7版)》花费了整整120页的篇幅来讲解描述，并且分析证明新验证方法的严谨性
+#+END_EXAMPLE
+
+StackMapTable属性中包含零至多个 _栈映射帧_ (Stack Map Frames)，每个栈映射帧都显式或隐式地代表了一个字节码偏移量，用于表示 *该执行到该字节码时局部变量表和操作数栈的验证类型* 。类型检查验证器会通过检查目标方法的局部变量和操作数栈所需要的类型来确定一段字节码指令是否符合逻辑约束。StackMapTable属性的结构见下表：
+
+#+ATTR_HTML: image :width 70% 
+[[file:pic/stack-map-table.jpg]]
+
+#+BEGIN_EXAMPLE
+  《Java虚拟机规范(Java SE7版)》明确规定：
+
+  在版本号大于或等于50.0的Class文件中，如果方法的Code属性没有包含StackMapTable属性，那就意味着他带有一个隐含的StackMapTable属性
+
+  这个StackMapTable属性的作用等同于number_of_entries为0的StackMapTable属性
+
+  一个方法最多只能有一个StackMapTable属性，否则会抛出ClassFormatError异常
+#+END_EXAMPLE
+
+*** Signature属性
+_Signature_ 属性在JDK1.5发布后增加到了Class文件规范之中，它是一个可选的定长属性，可以出现于类、属性表和方法表结构的属性表中。在JDK1.5中大幅增强了Java语言的语法，在此之后，任何类、接口、初始化方法或成员的泛型签名如果包含了 _类型变量_ (Type Variables)或 _参数化类型_ (Parameterized Types)，则Signature属性会为它 *记录泛型签名信息* 。之所以要专门使用这样一个属性去记录泛型类型，是因为Java语言的泛型采用的是 _擦除法实现的伪泛型_ ，在字节码(Code属性)中，泛型信息编译(类型变量、参数化类型)之后都通通被擦除掉
+#+BEGIN_EXAMPLE
+  使用擦除法的好处是实现简单:
+  1. 主要修改Javac编译器，虚拟机内部只做了很少的改动
+  2. 非常容易实现Backport
+  3. 运行期也能够节省些类型所占的内存空间
+
+  坏处是运行期就无法像C#等有真泛型支持的语言那样，将泛型类型与用户定义的普通类型同等对待，例如运行期做反射时无法获得到泛型信息
+#+END_EXAMPLE
+
+Signature属性就是为了弥补 *运行期做反射时无法获得到泛型信息* 这个缺陷而增设的，Signature属性的结构见下表：
+
+#+ATTR_HTML: image :width 70% 
+[[file:pic/signature-attribute.jpg]]
+
+
++ _signature_index_ : 值必须是一个对常量池的有效索引。常量池在该索引处的项必须是CONSTANT_Utf8_info结构，表示 *类签名、方法类型签名或字段类型签名* 
+  + 如果当前的Signature属性是 _类文件_ 的属性，则这个结构表示 _类签名_ 
+  + 如果当前的Signature属性是 _方法表_ 的属性，则这个结构表示 _方法类型签名_ 
+  + 如果当前Signature属性是 _字段表_ 的属性，则这个结构表示 _字段类型签名_
+
+*** BootstrapMethods属性
+_BootstrapMethods_ 属性在JDK1.7发布后增加到了Class文件规范之中，它是一个复杂的变长属性，位于 _类文件的属性表_ 中。这个属性用于保存 _invokedynamic_ 指令引用的引导方法限定符
+#+BEGIN_EXAMPLE
+  《Java虚拟机规范(JavaSE7版)》规定：
+
+  如果某个类文件结构的常量池中曾经出现过CONSTANT_InvokeDymmic_info类型的常量，那么这个类文件的属性表中必须存在一个明确的BootstrapMethods属性
+
+  即使CONSTANT_InvokeDymmic_info类型的常量在常量池中出现过多次，类文件的属表中最多也只能有一个BootstrapMethods属性
+#+END_EXAMPLE
+BootstrapMethods属性与JSR-292中InvokeDymmic指令和java.lang.Invoke包关系非常密切。BootstrapMethods属性的结构见下表：
+
+#+ATTR_HTML: image :width 70% 
+[[file:pic/boot-strap-methods.jpg]]
+
+其中引用到的bootstrap_method结构：
+
+#+ATTR_HTML: image :width 70% 
+[[file:pic/bootstrap-method.jpg]]
+
++ num_bootstrap_methods: bootstrap_methods[]数组中的引导方法限定符的数量
++ bootstrap_methods[] : 数组的每个成员包含了一指向常量池CONSTANT_MethodHandle结构的索引值，它代表了一个引导方法，还包含了这个引导方法静态参数的序列(可能为空)
+  + bootstrap_method_ref: 是一个对常量池的有效索引。常量池在该索引处的值必须是一个CONSTANT_MethodHandle_info结构
+  + num_bootstrap_arguments: bootstrap_arguments[]数组成员数量
+  + bootstrap_arguments[]: 数组的每个成员必须是一个对常量池的有效索引。在常量池的索引处必须是下列结构之一:
+    + CONSTANT_String_info
+    + CONSTANT_Integer_info
+    + CONSTANT_Long_info
+    + CONSTANT_Float_info
+    + CONSTANT_Double_info
+    + CONSTANT_Class_info
+    + CONSTANT_MethodHandle_info
+    + CONSTANT_MethodType_info
+
+* 字节码指令
