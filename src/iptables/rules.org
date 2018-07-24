@@ -4,5 +4,305 @@
 #+HTML_LINK_HOME: iptables.html
 #+OPTIONS: num:nil timestamp:nil
 
+在内核看来，规则就是决定如何处理一个包的语句
 
 * 基础
+  如果一个包符合所有的条件（就是符合matche语句），就运行target或jump指令。书写规则的语法格式是：
+  
+  #+BEGIN_EXAMPLE
+  iptables [-t table] command [match] [target/jump]
+  #+END_EXAMPLE
+  
++ _table_ ：指定表名
+  + 一般情况下没有必要指定使用的表，iptables默认使用 *filter* 表来执行所有的命令
+  + 没有必要非得在这里指定表名，当然 _把表名在开始处已经是约定俗成的标准_
++ _command_ : 告诉程序该做什么
+  + 插入一个规则
+  + 在链的末尾增加一个规则
+  + 删除一个规则
++ _match_ : 细致地描述了包的某个特点，以使这个包区别于其它所有的包
+  + _来源IP地址_
+  + _网络接口_
+  + _端口_
+  + _协议类型_ 或者其他什么
++ _target_ : 数据包的目标所在。 *若数据包符合所有的match，内核就用target来处理它* ，或者说把包发往 target 
+  + 让内核把包发送到当前表中的其他链（可能是自己建立的）
+  + 丢弃这个包而没有什么处理
+  + 向发送者返回某个特殊的应答
+    
+注意： _target_ 指令必须在最后。为了易读，一般用这种语法。大部分规则都是按这种语法写的
+
+* Tables
+  选项 _-t_ 用来指定使用哪个表，它可以是下面介绍的表中的任何一个，默认的是 *filter* 表
+  
+** nat 
+   *网络地址转换* ，即 _Network Address Translation_ ，缩写为 *NAT* 。做过NAT操作的数据包的地址就被改变了，当然这种改变是根据定义的规则进行的 
+   
+   *属于一个流的包只会经过这个表一次。如果第一个包被允许做NAT或Masqueraded，那么余下的包都会自动地被做相同的操作* 。也就是说，余下的包不会再通过这个表，一个一个的被NAT，而是自动地完成。这就是为什么 _不应该在这个表中做任何过滤的主要原因_ 。
+   
++ _PREROUTING_ 链：在包刚刚到达防火墙时改变它的目的地址，如果需要的话
++ _OUTPUT_ 链：改变本地产生的包的目的地址
++ _POSTROUTING_ 链：包就要离开防火墙之前改变其源地址
+  
+** mangle
+   *改变不同的包及包头的内容* ：
++ _TTL_
++ _TOS_
++ _MARK_ 
+  
+#+BEGIN_EXAMPLE
+  MARK并没有真正地改动数据包，它只是在内核空间为包设了一个标记
+
+  防火墙内的其他的规则或程序可以使用这种标记对包进行过滤或高级路由
+#+END_EXAMPLE
+
+这个表有五个内建的链： 
++ _PREROUTING_ : 包进入防火墙之后、路由判断之前改变包
++ _POSTROUTING_ : 在所有路由判断之后
++ _OUTPUT_ : 在确定包的目的之前更改数据包
++ _INPUT_ : 在包被路由到本地之后，但在用户空间的程序看到它之前改变包
++ _FORWARD_ : 在最初的路由判断之后、最后一次更改包的目的之前mangle包
+  
+#+BEGIN_EXAMPLE
+  mangle表不能做任何NAT，它只是改变数据包的 TTL，TOS或MARK，而不是其源目地址
+#+END_EXAMPLE
+
+** filter 
+   *专门过滤包* 的，可以毫无问题地对包进行 
++ _DROP_
++ _LOG_
++ _ACCEPT_
++ _REJECT_  
+  
+内建三个链：
++ _FORWARD_  :  过滤所有不是本地产生的并且目的地不是本地（所谓本地就是防火墙了）的包
++ _INPUT_ : 针对那些目的地是本地的包
++ _OUTPUT_ : 过滤所有本地生成的包的
+  
+* Commands
+  _command_ 指定iptables对 *提交的规则要做什么样的操作* 
+  
+** 命令
+*** append
+    #+BEGIN_EXAMPLE
+    -A, --append
+    #+END_EXAMPLE
+    
+    在所选择的链末添加规则。当源地址或目的地址是以名字而不是ip地址的形式出现时，若这些名字可以被解析为多个地址，则这条规则会和所有可用的地址结合
+    
+    #+BEGIN_SRC sh
+   iptables -A INPUT ...     
+    #+END_SRC
+    
+    
+*** delete
+    #+BEGIN_EXAMPLE
+    -D, --delete
+    #+END_EXAMPLE
+    
+    从所选链中删除规则。有两种方法指定要删除的规则：
+1. 把规则完完整整地写出来
+2. 指定规则在所选链中的序号：每条链的规则都各自从1被编号
+   
+#+BEGIN_SRC sh
+  iptables -D INPUT --dport 80 -j DROP
+
+  iptables -D INPUT 1
+#+END_SRC
+
+*** replace
+    #+BEGIN_EXAMPLE
+    -R, --replace
+    #+END_EXAMPLE
+    
+    在所选中的链里指定的行上（每条链的规则都各自从1被编号）替换规则
+    
+    主要的用处是 _试验不同的规则_ 。当源地址或目的地址是以名字而不是ip地址的形式出现时，若这些名字可以被解析为多个地址，则 *这条command会失败* 
+    
+    #+BEGIN_SRC sh
+  iptables -R INPUT 1 -s 192.168.0.1 -j DROP
+    #+END_SRC
+    
+*** insert
+    
+    #+BEGIN_EXAMPLE
+    -I, --insert
+    #+END_EXAMPLE
+    
+    根据给出的规则序号向所选链中插入规则。 *如果序号为1， 规则会被插入链的头部* ， 默认序号就是1 
+    
+    #+BEGIN_SRC sh
+  iptables -I INPUT 1 --dport 80 -j ACCEPT
+    #+END_SRC
+    
+*** list
+    #+BEGIN_EXAMPLE
+    -L, --list
+    #+END_EXAMPLE
+    
+    显示所选链的所有规则：
++ 如果没有指定链，则显示指定表中的所有链
++ 如果什么都没有指定，就显示默认表所有的链
+  
+精确输出受其它参数影响，如 _-n_ 和 _-v_ 等参数
+
+#+BEGIN_SRC sh
+  iptables -L INPUT
+#+END_SRC
+
+*** flush
+    #+BEGIN_EXAMPLE
+    -F, --flush
+    #+END_EXAMPLE
+    
+    清空所选的链：
++ 如果没有指定链，则清空指定表中的所有 链
++ 如果什么都没有指定，就清空默认表所有的链
+  
+也可以一条一条地删，但用这个command会快些
+
+#+BEGIN_SRC sh
+  iptables -F INPUT
+#+END_SRC
+
+*** zero
+    #+BEGIN_EXAMPLE
+    -Z, --zero
+    #+END_EXAMPLE
+    
+    把指定链（如未指定，则认为是所有链）的所有计数器归零
+    
+    #+BEGIN_SRC sh
+  iptables -Z INPUT
+    #+END_SRC
+    
+*** new-chain
+    #+BEGIN_EXAMPLE
+    -N, --new-chain
+    #+END_EXAMPLE
+    
+    根据用户指定的名字建立新的链
+    
+    #+BEGIN_SRC sh
+  iptables -N allowed
+    #+END_SRC
+    
+    注意：所用的名字不能和已有的链、target同名
+    
+*** delete-chain
+    #+BEGIN_EXAMPLE
+    -X, --delete-chain
+    #+END_EXAMPLE
+    
+    删除指定的用户自定义链：
++ 如果没有给出参数，这条命令将会 *删除默认表所有非内建的链* 
+  
+#+BEGIN_SRC sh
+  iptables -X allowed
+#+END_SRC
+
+注意： *这个链必须没有被引用* ，如果被引用，在删除之前你必须删除或者替换与之有关的规则
+
+*** policy
+    #+BEGIN_EXAMPLE
+    -P, --policy
+    #+END_EXAMPLE
+    
+    为链设置默认的target（可用的是DROP 和ACCEPT），这个target称作策略
+    #+BEGIN_SRC sh
+  iptables -P INPUT DROP
+    #+END_SRC
+    
++ 所有不符合规则的包都被强制使用这个策略
++ 只有内建的链才可以使用规则
++ 但内建的链和用户自定义链都不能被作为策略使用，也就是说不能象这样使用： 
+  
+#+BEGIN_SRC sh
+  iptables -P INPUT allowed（或者是内建的链）
+#+END_SRC
+
+*** rename-chain
+    #+BEGIN_EXAMPLE
+    -E, --rename-chain
+    #+END_EXAMPLE
+    
+    对自定义的链进行重命名，原来的名字在前，新名字在后
+    
+    #+BEGIN_SRC sh
+  iptables -E allowed disallowed
+    #+END_SRC
+    
+    把 _allowed_ 改为 _disallowed_ 。这仅仅是改变链的名字，对整个表的结构、工作没有任何影响
+    
+** 选项
+   
+*** verbose
+    #+BEGIN_EXAMPLE
+    -v, --verbose
+    #+END_EXAMPLE
+    
+    这个选项使输出详细化，常与 _--list_ 连用: 
++ _--list_ 连用时：输出中包括
+  + 网络接口的地址
+  + 规则的选项
+  + TOS掩码
+  + 字节和包计数器: 
+      + 计数器是以K、M、G（这里用的是10的幂而不是2的幂哦）为单位的
++ 和 _--append_ 、 _--insert_ 、 _--delete_  或 _--replace_ 连用，iptables会输出详细的信息告诉规则是如何被解释的、是否正确地插入等等
+  
+*** exact
+    #+BEGIN_EXAMPLE
+    -X --exact
+    #+END_EXAMPLE
+    
+    使 _--list_ 输出中的计数器显示准确的数值，而不用K、M、G等估值
+    
+    注意：此选项只能和--list连用
+    
+*** numeric
+    #+BEGIN_EXAMPLE
+    -n, --numeric
+    #+END_EXAMPLE
+    
+    使输出中的IP地址和端口以数值的形式显示，而不是默认的名字：
++ 主机名
++ 网络名
++ 程序名等
+  
+注意：此选项也只能和 _--list_ 连用
+
+*** line-numbers
+    #+BEGIN_EXAMPLE
+    --line-numbers
+    #+END_EXAMPLE
+    
+    显示出每条规则在相应链中的序号。这样可以知道序号了，这对插入新规则很有用
+    
+    注意：此选项也只能和 _--list_ 连用
+    
+*** set-counters
+    #+BEGIN_EXAMPLE
+    -c, --set-counters
+    #+END_EXAMPLE
+    
+    在创建或更改规则时设置计数器
+    
+    #+BEGIN_SRC sh
+  --set-counters 20 4000
+    #+END_SRC
+    
+    让内核把包计数器设为20，把字节计数器设为4000
+    
+    可以搭配的命令：
++ _--insert_ 
++ _--append_
++ _--replace_
+  
+*** modprobe
+    #+BEGIN_EXAMPLE
+    --modprobe
+    #+END_EXAMPLE
+    
+    告诉iptables探测并装载要使用的模块。万一modprobe命令不在搜索路径中，就要用到了。有了这个选项， 在装载模块时，即使有一个需要用到的模块没装载上，iptables也知道要去搜索
+    
+* Matches

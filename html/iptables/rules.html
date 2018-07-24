@@ -147,13 +147,646 @@ for the JavaScript code in this tag.
 <div id="text-table-of-contents">
 <ul>
 <li><a href="#sec-1">基础</a></li>
+<li><a href="#sec-2">Tables</a>
+<ul>
+<li><a href="#sec-2-1">nat</a></li>
+<li><a href="#sec-2-2">mangle</a></li>
+<li><a href="#sec-2-3">filter</a></li>
+</ul>
+</li>
+<li><a href="#sec-3">Commands</a>
+<ul>
+<li><a href="#sec-3-1">命令</a>
+<ul>
+<li><a href="#sec-3-1-1">append</a></li>
+<li><a href="#sec-3-1-2">delete</a></li>
+<li><a href="#sec-3-1-3">replace</a></li>
+<li><a href="#sec-3-1-4">insert</a></li>
+<li><a href="#sec-3-1-5">list</a></li>
+<li><a href="#sec-3-1-6">flush</a></li>
+<li><a href="#sec-3-1-7">zero</a></li>
+<li><a href="#sec-3-1-8">new-chain</a></li>
+<li><a href="#sec-3-1-9">delete-chain</a></li>
+<li><a href="#sec-3-1-10">policy</a></li>
+<li><a href="#sec-3-1-11">rename-chain</a></li>
+</ul>
+</li>
+<li><a href="#sec-3-2">选项</a>
+<ul>
+<li><a href="#sec-3-2-1">verbose</a></li>
+<li><a href="#sec-3-2-2">exact</a></li>
+<li><a href="#sec-3-2-3">numeric</a></li>
+<li><a href="#sec-3-2-4">line-numbers</a></li>
+<li><a href="#sec-3-2-5">set-counters</a></li>
+<li><a href="#sec-3-2-6">modprobe</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#sec-4">Matches</a></li>
+</ul>
+</div>
+</div>
+<p>
+在内核看来，规则就是决定如何处理一个包的语句
+</p>
+
+<div id="outline-container-sec-1" class="outline-2">
+<h2 id="sec-1">基础</h2>
+<div class="outline-text-2" id="text-1">
+<p>
+如果一个包符合所有的条件（就是符合matche语句），就运行target或jump指令。书写规则的语法格式是：
+</p>
+
+<pre class="example">
+iptables [-t table] command [match] [target/jump]
+</pre>
+
+<ul class="org-ul">
+<li><span class="underline">table</span> ：指定表名
+<ul class="org-ul">
+<li>一般情况下没有必要指定使用的表，iptables默认使用 <b>filter</b> 表来执行所有的命令
+</li>
+<li>没有必要非得在这里指定表名，当然 <span class="underline">把表名在开始处已经是约定俗成的标准</span>
+</li>
+</ul>
+</li>
+<li><span class="underline">command</span> : 告诉程序该做什么
+<ul class="org-ul">
+<li>插入一个规则
+</li>
+<li>在链的末尾增加一个规则
+</li>
+<li>删除一个规则
+</li>
+</ul>
+</li>
+<li><span class="underline">match</span> : 细致地描述了包的某个特点，以使这个包区别于其它所有的包
+<ul class="org-ul">
+<li><span class="underline">来源IP地址</span>
+</li>
+<li><span class="underline">网络接口</span>
+</li>
+<li><span class="underline">端口</span>
+</li>
+<li><span class="underline">协议类型</span> 或者其他什么
+</li>
+</ul>
+</li>
+<li><span class="underline">target</span> : 数据包的目标所在。 <b>若数据包符合所有的match，内核就用target来处理它</b> ，或者说把包发往 target 
+<ul class="org-ul">
+<li>让内核把包发送到当前表中的其他链（可能是自己建立的）
+</li>
+<li>丢弃这个包而没有什么处理
+</li>
+<li>向发送者返回某个特殊的应答
+</li>
+</ul>
+</li>
+</ul>
+
+<p>
+注意： <span class="underline">target</span> 指令必须在最后。为了易读，一般用这种语法。大部分规则都是按这种语法写的
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2" class="outline-2">
+<h2 id="sec-2">Tables</h2>
+<div class="outline-text-2" id="text-2">
+<p>
+选项 <span class="underline">-t</span> 用来指定使用哪个表，它可以是下面介绍的表中的任何一个，默认的是 <b>filter</b> 表
+</p>
+</div>
+
+<div id="outline-container-sec-2-1" class="outline-3">
+<h3 id="sec-2-1">nat</h3>
+<div class="outline-text-3" id="text-2-1">
+<p>
+<b>网络地址转换</b> ，即 <span class="underline">Network Address Translation</span> ，缩写为 <b>NAT</b> 。做过NAT操作的数据包的地址就被改变了，当然这种改变是根据定义的规则进行的 
+</p>
+
+<p>
+<b>属于一个流的包只会经过这个表一次。如果第一个包被允许做NAT或Masqueraded，那么余下的包都会自动地被做相同的操作</b> 。也就是说，余下的包不会再通过这个表，一个一个的被NAT，而是自动地完成。这就是为什么 <span class="underline">不应该在这个表中做任何过滤的主要原因</span> 。
+</p>
+
+<ul class="org-ul">
+<li><span class="underline">PREROUTING</span> 链：在包刚刚到达防火墙时改变它的目的地址，如果需要的话
+</li>
+<li><span class="underline">OUTPUT</span> 链：改变本地产生的包的目的地址
+</li>
+<li><span class="underline">POSTROUTING</span> 链：包就要离开防火墙之前改变其源地址
+</li>
 </ul>
 </div>
 </div>
 
+<div id="outline-container-sec-2-2" class="outline-3">
+<h3 id="sec-2-2">mangle</h3>
+<div class="outline-text-3" id="text-2-2">
+<p>
+<b>改变不同的包及包头的内容</b> ：
+</p>
+<ul class="org-ul">
+<li><span class="underline">TTL</span>
+</li>
+<li><span class="underline">TOS</span>
+</li>
+<li><span class="underline">MARK</span> 
+</li>
+</ul>
 
-<div id="outline-container-sec-1" class="outline-2">
-<h2 id="sec-1">基础</h2>
+<pre class="example">
+MARK并没有真正地改动数据包，它只是在内核空间为包设了一个标记
+
+防火墙内的其他的规则或程序可以使用这种标记对包进行过滤或高级路由
+</pre>
+
+<p>
+这个表有五个内建的链： 
+</p>
+<ul class="org-ul">
+<li><span class="underline">PREROUTING</span> : 包进入防火墙之后、路由判断之前改变包
+</li>
+<li><span class="underline">POSTROUTING</span> : 在所有路由判断之后
+</li>
+<li><span class="underline">OUTPUT</span> : 在确定包的目的之前更改数据包
+</li>
+<li><span class="underline">INPUT</span> : 在包被路由到本地之后，但在用户空间的程序看到它之前改变包
+</li>
+<li><span class="underline">FORWARD</span> : 在最初的路由判断之后、最后一次更改包的目的之前mangle包
+</li>
+</ul>
+
+<pre class="example">
+mangle表不能做任何NAT，它只是改变数据包的 TTL，TOS或MARK，而不是其源目地址
+</pre>
+</div>
+</div>
+
+<div id="outline-container-sec-2-3" class="outline-3">
+<h3 id="sec-2-3">filter</h3>
+<div class="outline-text-3" id="text-2-3">
+<p>
+<b>专门过滤包</b> 的，可以毫无问题地对包进行 
+</p>
+<ul class="org-ul">
+<li><span class="underline">DROP</span>
+</li>
+<li><span class="underline">LOG</span>
+</li>
+<li><span class="underline">ACCEPT</span>
+</li>
+<li><span class="underline">REJECT</span>  
+</li>
+</ul>
+
+<p>
+内建三个链：
+</p>
+<ul class="org-ul">
+<li><span class="underline">FORWARD</span>  :  过滤所有不是本地产生的并且目的地不是本地（所谓本地就是防火墙了）的包
+</li>
+<li><span class="underline">INPUT</span> : 针对那些目的地是本地的包
+</li>
+<li><span class="underline">OUTPUT</span> : 过滤所有本地生成的包的
+</li>
+</ul>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-3" class="outline-2">
+<h2 id="sec-3">Commands</h2>
+<div class="outline-text-2" id="text-3">
+<p>
+<span class="underline">command</span> 指定iptables对 <b>提交的规则要做什么样的操作</b> 
+</p>
+</div>
+
+<div id="outline-container-sec-3-1" class="outline-3">
+<h3 id="sec-3-1">命令</h3>
+<div class="outline-text-3" id="text-3-1">
+</div><div id="outline-container-sec-3-1-1" class="outline-4">
+<h4 id="sec-3-1-1">append</h4>
+<div class="outline-text-4" id="text-3-1-1">
+<pre class="example">
+-A, --append
+</pre>
+
+<p>
+在所选择的链末添加规则。当源地址或目的地址是以名字而不是ip地址的形式出现时，若这些名字可以被解析为多个地址，则这条规则会和所有可用的地址结合
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">iptables -A INPUT ...
+</pre>
+</div>
+</div>
+</div>
+
+
+<div id="outline-container-sec-3-1-2" class="outline-4">
+<h4 id="sec-3-1-2">delete</h4>
+<div class="outline-text-4" id="text-3-1-2">
+<pre class="example">
+-D, --delete
+</pre>
+
+<p>
+从所选链中删除规则。有两种方法指定要删除的规则：
+</p>
+<ol class="org-ol">
+<li>把规则完完整整地写出来
+</li>
+<li>指定规则在所选链中的序号：每条链的规则都各自从1被编号
+</li>
+</ol>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">iptables -D INPUT --dport 80 -j DROP
+
+iptables -D INPUT 1
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-3-1-3" class="outline-4">
+<h4 id="sec-3-1-3">replace</h4>
+<div class="outline-text-4" id="text-3-1-3">
+<pre class="example">
+-R, --replace
+</pre>
+
+<p>
+在所选中的链里指定的行上（每条链的规则都各自从1被编号）替换规则
+</p>
+
+<p>
+主要的用处是 <span class="underline">试验不同的规则</span> 。当源地址或目的地址是以名字而不是ip地址的形式出现时，若这些名字可以被解析为多个地址，则 <b>这条command会失败</b> 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">iptables -R INPUT 1 -s 192.168.0.1 -j DROP
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-3-1-4" class="outline-4">
+<h4 id="sec-3-1-4">insert</h4>
+<div class="outline-text-4" id="text-3-1-4">
+<pre class="example">
+-I, --insert
+</pre>
+
+<p>
+根据给出的规则序号向所选链中插入规则。 <b>如果序号为1， 规则会被插入链的头部</b> ， 默认序号就是1 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">iptables -I INPUT 1 --dport 80 -j ACCEPT
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-3-1-5" class="outline-4">
+<h4 id="sec-3-1-5">list</h4>
+<div class="outline-text-4" id="text-3-1-5">
+<pre class="example">
+-L, --list
+</pre>
+
+<p>
+显示所选链的所有规则：
+</p>
+<ul class="org-ul">
+<li>如果没有指定链，则显示指定表中的所有链
+</li>
+<li>如果什么都没有指定，就显示默认表所有的链
+</li>
+</ul>
+
+<p>
+精确输出受其它参数影响，如 <span class="underline">-n</span> 和 <span class="underline">-v</span> 等参数
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">iptables -L INPUT
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-3-1-6" class="outline-4">
+<h4 id="sec-3-1-6">flush</h4>
+<div class="outline-text-4" id="text-3-1-6">
+<pre class="example">
+-F, --flush
+</pre>
+
+<p>
+清空所选的链：
+</p>
+<ul class="org-ul">
+<li>如果没有指定链，则清空指定表中的所有 链
+</li>
+<li>如果什么都没有指定，就清空默认表所有的链
+</li>
+</ul>
+
+<p>
+也可以一条一条地删，但用这个command会快些
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">iptables -F INPUT
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-3-1-7" class="outline-4">
+<h4 id="sec-3-1-7">zero</h4>
+<div class="outline-text-4" id="text-3-1-7">
+<pre class="example">
+-Z, --zero
+</pre>
+
+<p>
+把指定链（如未指定，则认为是所有链）的所有计数器归零
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">iptables -Z INPUT
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-3-1-8" class="outline-4">
+<h4 id="sec-3-1-8">new-chain</h4>
+<div class="outline-text-4" id="text-3-1-8">
+<pre class="example">
+-N, --new-chain
+</pre>
+
+<p>
+根据用户指定的名字建立新的链
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">iptables -N allowed
+</pre>
+</div>
+
+<p>
+注意：所用的名字不能和已有的链、target同名
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-3-1-9" class="outline-4">
+<h4 id="sec-3-1-9">delete-chain</h4>
+<div class="outline-text-4" id="text-3-1-9">
+<pre class="example">
+-X, --delete-chain
+</pre>
+
+<p>
+删除指定的用户自定义链：
+</p>
+<ul class="org-ul">
+<li>如果没有给出参数，这条命令将会 <b>删除默认表所有非内建的链</b> 
+</li>
+</ul>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">iptables -X allowed
+</pre>
+</div>
+
+<p>
+注意： <b>这个链必须没有被引用</b> ，如果被引用，在删除之前你必须删除或者替换与之有关的规则
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-3-1-10" class="outline-4">
+<h4 id="sec-3-1-10">policy</h4>
+<div class="outline-text-4" id="text-3-1-10">
+<pre class="example">
+-P, --policy
+</pre>
+
+<p>
+为链设置默认的target（可用的是DROP 和ACCEPT），这个target称作策略
+</p>
+<div class="org-src-container">
+
+<pre class="src src-sh">iptables -P INPUT DROP
+</pre>
+</div>
+
+<ul class="org-ul">
+<li>所有不符合规则的包都被强制使用这个策略
+</li>
+<li>只有内建的链才可以使用规则
+</li>
+<li>但内建的链和用户自定义链都不能被作为策略使用，也就是说不能象这样使用： 
+</li>
+</ul>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">iptables -P INPUT allowed&#65288;&#25110;&#32773;&#26159;&#20869;&#24314;&#30340;&#38142;&#65289;
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-3-1-11" class="outline-4">
+<h4 id="sec-3-1-11">rename-chain</h4>
+<div class="outline-text-4" id="text-3-1-11">
+<pre class="example">
+-E, --rename-chain
+</pre>
+
+<p>
+对自定义的链进行重命名，原来的名字在前，新名字在后
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">iptables -E allowed disallowed
+</pre>
+</div>
+
+<p>
+把 <span class="underline">allowed</span> 改为 <span class="underline">disallowed</span> 。这仅仅是改变链的名字，对整个表的结构、工作没有任何影响
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-3-2" class="outline-3">
+<h3 id="sec-3-2">选项</h3>
+<div class="outline-text-3" id="text-3-2">
+</div><div id="outline-container-sec-3-2-1" class="outline-4">
+<h4 id="sec-3-2-1">verbose</h4>
+<div class="outline-text-4" id="text-3-2-1">
+<pre class="example">
+-v, --verbose
+</pre>
+
+<p>
+这个选项使输出详细化，常与 <span class="underline">&#x2013;list</span> 连用: 
+</p>
+<ul class="org-ul">
+<li><span class="underline">&#x2013;list</span> 连用时：输出中包括
+<ul class="org-ul">
+<li>网络接口的地址
+</li>
+<li>规则的选项
+</li>
+<li>TOS掩码
+</li>
+<li>字节和包计数器: 
+<ul class="org-ul">
+<li>计数器是以K、M、G（这里用的是10的幂而不是2的幂哦）为单位的
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>和 <span class="underline">&#x2013;append</span> 、 <span class="underline">&#x2013;insert</span> 、 <span class="underline">&#x2013;delete</span>  或 <span class="underline">&#x2013;replace</span> 连用，iptables会输出详细的信息告诉规则是如何被解释的、是否正确地插入等等
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-3-2-2" class="outline-4">
+<h4 id="sec-3-2-2">exact</h4>
+<div class="outline-text-4" id="text-3-2-2">
+<pre class="example">
+-X --exact
+</pre>
+
+<p>
+使 <span class="underline">&#x2013;list</span> 输出中的计数器显示准确的数值，而不用K、M、G等估值
+</p>
+
+<p>
+注意：此选项只能和&#x2013;list连用
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-3-2-3" class="outline-4">
+<h4 id="sec-3-2-3">numeric</h4>
+<div class="outline-text-4" id="text-3-2-3">
+<pre class="example">
+-n, --numeric
+</pre>
+
+<p>
+使输出中的IP地址和端口以数值的形式显示，而不是默认的名字：
+</p>
+<ul class="org-ul">
+<li>主机名
+</li>
+<li>网络名
+</li>
+<li>程序名等
+</li>
+</ul>
+
+<p>
+注意：此选项也只能和 <span class="underline">&#x2013;list</span> 连用
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-3-2-4" class="outline-4">
+<h4 id="sec-3-2-4">line-numbers</h4>
+<div class="outline-text-4" id="text-3-2-4">
+<pre class="example">
+--line-numbers
+</pre>
+
+<p>
+显示出每条规则在相应链中的序号。这样可以知道序号了，这对插入新规则很有用
+</p>
+
+<p>
+注意：此选项也只能和 <span class="underline">&#x2013;list</span> 连用
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-3-2-5" class="outline-4">
+<h4 id="sec-3-2-5">set-counters</h4>
+<div class="outline-text-4" id="text-3-2-5">
+<pre class="example">
+-c, --set-counters
+</pre>
+
+<p>
+在创建或更改规则时设置计数器
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">--set-counters 20 4000
+</pre>
+</div>
+
+<p>
+让内核把包计数器设为20，把字节计数器设为4000
+</p>
+
+<p>
+可以搭配的命令：
+</p>
+<ul class="org-ul">
+<li><span class="underline">&#x2013;insert</span> 
+</li>
+<li><span class="underline">&#x2013;append</span>
+</li>
+<li><span class="underline">&#x2013;replace</span>
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-3-2-6" class="outline-4">
+<h4 id="sec-3-2-6">modprobe</h4>
+<div class="outline-text-4" id="text-3-2-6">
+<pre class="example">
+--modprobe
+</pre>
+
+<p>
+告诉iptables探测并装载要使用的模块。万一modprobe命令不在搜索路径中，就要用到了。有了这个选项， 在装载模块时，即使有一个需要用到的模块没装载上，iptables也知道要去搜索
+</p>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-4" class="outline-2">
+<h2 id="sec-4">Matches</h2>
 </div>
 </div>
 <div id="postamble" class="status">
