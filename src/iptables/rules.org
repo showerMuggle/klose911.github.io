@@ -306,3 +306,623 @@
     告诉iptables探测并装载要使用的模块。万一modprobe命令不在搜索路径中，就要用到了。有了这个选项， 在装载模块时，即使有一个需要用到的模块没装载上，iptables也知道要去搜索
     
 * Matches
+  可以把匹配归为五类：
+1. *通用* 匹配 ：适用于所有的规则
+2. *TCP* 匹配 : 只能用于TCP包
+3. *UDP* 匹配 : 只能用在UDP包上了
+4. *ICMP* 匹配：针对ICMP包的
+5. *特殊* 匹配：针对
+   + 状态（ _state_ ）
+   + 所有者（ _owner_ ）
+   + 访问的频率限制（ _limit_ ）等
+     
+** 通用匹配
+   无论使用的是何种协议，也不管装入了匹配的何种扩展，通用匹配都使可用的。也就是说， 它们可以直接使用，而不需要什么前提条件
+   
+*** protocol
+    #+BEGIN_EXAMPLE
+    -p, --protocol
+    #+END_EXAMPLE
+    
+    匹配 *指定的协议* 。指定协议的形式有以下几种：
+1. 名字，不分大小写，但必须是在 _/etc/protocols_ 中定义的
+2. 可以使用它们相应的整数值。例如
+   + _ICMP_ : 1
+   + _TCP_ : 6
+   + _UDP_ : 17
+3. 缺省设置， *ALL* ，相应数值是 _0_ ，但要注意这只代表匹配TCP、UDP、ICMP，而不是/etc/protocols中定义的所有协议
+4. 可以是协议列表，以英文逗号为分隔符，如： _udp,tcp_
+5. 可以在协议前加英文的感叹号表示取反，注意 *有空格* ，如: 
+   + _--protocol ! tcp_  表示非tcp协议，也就是 _UDP和ICMP_ 。可以看出这个取反的范围只是TCP、UDP和ICMP
+     
+#+BEGIN_SRC sh
+  iptables -A INPUT -p tcp
+#+END_SRC
+
+*** source
+    #+BEGIN_EXAMPLE
+    -s, --src, --source
+    #+END_EXAMPLE
+    
+    以 *IP源地址* 匹配包。地址的形式如下：
+1. 单个地址，如 
+   + _192.168.1.1_
+   + _192.168.1.1/255.255.255.255_
+   + _192.168.1.1/32_
+2. 网络，如
+   + _192.168.0.0/24_
+   + _192.168.0.0/255.255.255.0_ 
+3. 在地址前加 _感叹号_ 表示取反，注意 _空格_ 
+   + _--source ! 192.168.0.0/24_  表示除此地址外的所有地址
+4. 缺省: *所有地址*
+   
+#+BEGIN_SRC sh
+  iptables -A INPUT -s 192.168.1.1
+#+END_SRC
+
+*** destination
+    #+BEGIN_EXAMPLE
+    -d, --dst, --destination
+    #+END_EXAMPLE
+    
+    以 *IP目的地址* 匹配包。地址的形式和 _--source_ 完全一样
+    
+    #+BEGIN_SRC sh
+  iptables -A INPUT -d 192.168.1.1
+    #+END_SRC
+    
+*** in-interface
+    #+BEGIN_EXAMPLE
+    -i, --in-interface
+    #+END_EXAMPLE
+    
+    以 *包进入本地所使用的网络接口* 来匹配包。这个匹配操作只能用于 _INPUT_ ， _FORWARD_ 和 _PREROUTING_ 这三个链，用在其他任何地方都会提示错误信息。指定接口有以下方法：
+1. 指定接口名称，如：
+   + eth0
+   + ppp0等
+2. 使用 *通配符* ，即 _加号，它代表字符数字串_ 
+   + _iptables -A INPUT -i +_ : 匹配所有的包，而不考虑使用哪个接口。这也是不指定接口的默认行为
+   + _eth+_ : 所有Ethernet接口，也就是说，匹配所有从Ethernet接口进入的包
+3. 在接口前加 _感叹号_ 表示取反，注意 _空格_，
+    + _-i ! eth0_ ：匹配来自除eth0外的所有包
+      
+#+BEGIN_SRC sh
+  iptables -A INPUT -i eth0
+#+END_SRC
+
+*** out-interface
+    #+BEGIN_EXAMPLE
+    -o, --out-interface
+    #+END_EXAMPLE
+    
+    以 *包离开本地所使用的网络接口* 来匹配包。指定接口的方法与 _--in-interface_ 完全一样
+    
+    #+BEGIN_SRC sh
+  iptables -A FORWARD -o eth0
+    #+END_SRC
+    
+*** fragment
+    #+BEGIN_EXAMPLE
+    -f, --fragment
+    #+END_EXAMPLE
+    
+    用来匹配 *一个被分片的包的第二片或及以后的部分* 。因为它们不包含源或目的地址，或ICMP类型等信息，其他规则无法匹配到它，所以才有这个匹配操作：
++ 防止碎片攻击
++ 可以加 _感叹号_ 表示取反，但注意 _位置_ 
+   + _! -f_  :  只能匹配到没有分片的包或者是被分片的包的第一个碎片，其后的片都不行
+     
+#+BEGIN_SRC sh
+  iptables -A INPUT -f
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  现在内核有完善的碎片重组功能，可以防止碎片攻击，所以不必使用取反的功能来防止碎片通过
+
+  如果使用连接跟踪，是不会看到任何碎片的，因为在它们到达任何链之前就被处理过了
+#+END_EXAMPLE
+
+** 隐含匹配
+   这种匹配操作是 *自动地或隐含地* 装载入内核的。例如使用 _--protocol tcp_ 时，不需再装入任何东西就可以匹配只有IP包才有的一些特点。现在有三种隐含的匹配针对三种不同的协 议，即 
++ TCP
++ UDP 
++ ICMP 
+  
+它们分别包括一套只适用于相应协议的判别标准
+
+*** TCP 
+    TCP matches只能匹配 *TCP包或流* 的细节，必须有 _--protocol tcp_ 作为前提条件
+    
+**** source-port
+     #+BEGIN_EXAMPLE
+     --sport, --source-port
+     #+END_EXAMPLE
+     
+     基于TCP包的 *源端口* 来匹配包，端口的指定形式如下：
+1. 不指定此项: 默认 *所有端口* 
+2. 使用 *服务名或端口号* ，但名字必须是在 _/etc/services_  中定义的，因为iptables从这个文件里查找相应的端口号。从这可以看出，使用端口号会使规则装入快一点 儿，当然，可读性就差些了
+3. 使用 *连续的端口* ，
+   + _--source-port 22:80_ : 从22到80的所有端 口，包括22和80。如果两个号的顺序反了也没关系， _--source-port 80:22_ 这和 _--source-port 22:80_ 的效果一样
+4. 省略第一个号， _默认第一个是0_  
+   + _--source-port :80_ :  从0到80的 所有端口
+5. 省略第二个号， _默认是65535_ 
+   + _--source-port 22:_ :  从22到 65535的所有端口
+6. 在端口号前加 _感叹号_ 表示取反，注意 _空格_ 
+   + _--source-port ! 22_ : 除22号之外的所有端口
+   + _--source-port ! 22:80_ :  从22到80（包括22和80）之外的所有端口
+     
+     
+#+BEGIN_SRC sh 
+  iptables -A INPUT -p tcp --sport 22
+#+END_SRC
+注意：这个匹配操作不能识别不连续的端口列表，如： _--source-port ! 22, 36, 80_ 这样的操作
+
+**** destination-port
+     #+BEGIN_EXAMPLE
+     --dport, --destination-port
+     #+END_EXAMPLE
+     
+     基于TCP包的 *目的端口* 来匹配包，端口的指定形式和 _--sport_ 完全一样
+     
+     #+BEGIN_SRC sh
+  iptables -A INPUT -p tcp --dport 22
+     #+END_SRC
+     
+**** tcp-flags
+     #+BEGIN_EXAMPLE
+     --tcp-flags
+     #+END_EXAMPLE
+     
+     匹配 *指定的TCP标记* 。有两个参数，它们都是列表，列表内部用 _逗号作分隔符，这两个列表之间用空格分开_ 
++ 第一个参数： 要 _检查的标记_  ，作用就象掩码。提供 *检查范围*  
++ 第二个参数： _在第一个列表中出现过的且必须被设为1 （即状态是打开的）标记（第一个列表中其他的标记必须置0）_ 。提供被 *设置的条件* , 就是哪些位置为设置
+  
+这个匹配操作可以识别以下标记：
++ SYN
++ ACK
++ FIN
++ RST
++ URG
++ PSH
++ ALL : 选定所有的标记
++ NONE : 未选定任何标记
+  
+#+BEGIN_SRC sh
+  iptables -p tcp --tcp-flags SYN,FIN,ACK SYN
+#+END_SRC
+匹配那些 *SYN标记被设置而FIN和ACK标记没有设置* 的包
+
+注意： 标记之间只有一个逗号而没有空格
+
+#+BEGIN_SRC sh
+  iptables --tcp-flags ALL NONE
+#+END_SRC
+
+匹配所有标记都未置1的包
+
+也可在参数前加 _感叹号_ 表示取反。例如： 
+#+BEGIN_SRC sh
+  iptables -p tcp --tcp-flags ! SYN,FIN,ACK SYN
+#+END_SRC
+匹配那些 *FIN和ACK标记被设置而SYN标记没有设置* 的包
+
+**** syn
+     #+BEGIN_EXAMPLE
+     --syn
+     
+     这个匹配或多或少算是ipchains时代的遗留物，之所以还保留它，是为了向后兼容，也是为了方便规则在iptables和ipchains间的转换
+     #+END_EXAMPLE
+     
+     *匹配那些SYN标记被设置而ACK和RST标记没有设置的包* ，这和 _iptables -p tcp --tcp-flags SYN,RST,ACK SYN_ 的作用毫无二样。主要用在 *TCP连接初始化时发出请求* 
+     
+     #+BEGIN_SRC sh
+  iptables -p tcp --syn
+     #+END_SRC
+     
+     #+BEGIN_EXAMPLE
+     如果你阻止了这样的包，也就阻止了所有由外向内的连接企图，这在一定程度上防止了一些攻击
+     
+     但外出的连接不受影响，恰恰现在有很多攻击就利用这一点
+     
+     比如有些攻击黑掉服务器之后安装会一些软件，它们能够利用已存的连接到达你的机子，而不要再新开一个端口
+     #+END_EXAMPLE
+     
+     这个匹配也可用 _感叹号_ 取反： 
++ _! --syn_ : 那些RST或ACK被置位的包，就是 *状态为已建立的连接* 的包
+  
+**** tcp-option
+     #+BEGIN_EXAMPLE
+     --tcp-option
+     #+END_EXAMPLE
+     
+     *TCP选项* 是TCP头中的特殊部分，有三个不同的 部分
++ 第一个8位组： *选项的类型*
++ 第二个8位组： *选项的长度* （这个长度是整个选项的长度，但不包含填充部分所占的字节，而且要注意不是每个TCP选项都有这一部分的）
++ 第三部分： *选项的内容* 
+  
+为了适应标准，不必执行所有的选项，但可以查看选项的类型，如果不是所支持的，那就只是看看长度然后跳过数据部分。这个操作是根据 _选项的十进制值_ 来匹配的，它也可以用 _感叹号_ 取反
+
+#+BEGIN_SRC sh
+  iptables -p tcp --tcp-option 16
+#+END_SRC
+
+*** UDP
+    UDP matches是在指定 _--protocol UDP_ 时自动装入的。UDP是一种 *无连接协议* ，所以在它打开、关闭连接以及在发送数据时没有多少标记要设置，它也不需要任何类型的确认。数据丢失了， 就丢失了（不会发送ICMP错误信息的）。这就说明UDP matches要比TCP matches少多了。 _即使UDP和ICMP是无连接协议，状态机制也可以很好的工作_ ，就象在TCP上一样
+    
+**** source-port
+     #+BEGIN_EXAMPLE
+     --sport, --source-port
+     #+END_EXAMPLE
+     
+     基于 *UDP包的源端口* 来匹配包，端口的指定形式和TCP matches中的 _--sport_ 完全一样
+     
+     #+BEGIN_SRC sh
+  iptables -A INPUT -p udp --sport 53
+     #+END_SRC
+     
+**** destination-port
+     
+     #+BEGIN_EXAMPLE
+     --dport, --destination-port
+     #+END_EXAMPLE
+     
+     基于 *UDP包的目的端口* 来匹配包，端口的指定形式和TCP matches中的 _--sport_ 完全一样
+     
+     #+BEGIN_SRC sh
+  iptables -A INPUT -p udp --dport 53
+     #+END_SRC
+*** ICMP
+    ICMP协议也是无连接协议，ICMP包更是短命鬼，比UDP的还短。ICMP协议不是IP协议的下属协议，而是它的辅助者，其主要作用是 *报告错误和连接控制* 。ICMP包的头和IP的很相似，但又有很多不同。这个协议最主要的特点是它有很多类型，以应对不同的情况。比如，想访问一个无法访问的地址，就会收到一个ICMP host unreachable信息，它的意思是主机无法到达。虽然有这么多类型，但只有一个 ICMP matche，这就足够对付它们了。这个matche是在指定 _--protocol ICMP_ 时自动 装入的。注意所有的通用匹配都可以使用，这样就可以匹配 *ICMP包的源、目地址*
+    
+**** icmp-type
+     #+BEGIN_EXAMPLE
+     --icmp-type
+     #+END_EXAMPLE
+     
+     根据 *ICMP类型* 匹配包，类型的指定可以使用 _十进制数值_ 或 _相应的名字_ ：
++ 数值：在 _RFC792_ 中有定义
++ 名字：用 _iptables --protocol icmp --help_ 查看
+  
+这个匹配也可用 _感叹号_ 取反
++ _--icmp-type ! 8_ : 匹配除类型8之外的所有ICMP包
+  
+#+BEGIN_SRC sh
+  iptables -A INPUT -p icmp --icmp-type 8
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  有些ICMP类型已经废弃不用了
+
+  还有一些可能会对无防护的主机带来危险，因为它们可能把包重定向到错误的地方
+#+END_EXAMPLE
+
+** 显示匹配
+   显式匹配必须用 _-m_ 或 _--match_ 装载，比如要使用状态匹配就必须使用 _-m state_ 
+   
+   有些匹配还需要指定协议，有些就不需要，比如连接状态就不要。这些状态是
++ NEW : 还未建立好的连接的第一个包
++ ESTABLISHED: 已建立的连接，也就是已经在内核里注册过的
++ RELATED: 已经存在的、处于已建立状态的连接生成的新连接
+  
+隐含匹配和显式匹配最大的区别就是 *一个是跟随协议匹配自动装载的，一个是显式装载的* 
+*** Limit
+    这个匹配操作必须由 _-m limit_ 明确指定才能使用：
++ 对指定的规则的日志数量加以限制，以免你被信息的洪流淹没哦。比如，你可以事先设定一个限定值，当符合条件的包的数量不超过它时，就记录；超过了，就不记录了
++ 可以控制某条规则在一段时间内的匹配次数 （也就是可以匹配的包的数量），这样就能够减少 _DoS syn flood_ 攻击的影响
+  
+imit match也可以用 _感叹号_ 取反：
+_-m limit ! --limit 5/s_ ： 表示在数量超过限定值后，所有的包都会被匹配
+
+#+BEGIN_EXAMPLE
+  limit match的工作方式就像一个单位大门口的保安，当有人要进入时，需要找他办理通行证
+
+  早上上班时，保安手里有一定数量的通行证，来一个人，就签发一个，当通行证用完后，再来人就进不去了，但他们不会等，而是到别的地方去
+
+  在iptables里，这相当于一个包不符合某条规则，就会由后面的规则来处理，如果都不符合，就由缺省的策略处理
+
+  但有个规定，每隔一段时间保安就要签发一个新的通行证。这样，后面来的人如果恰巧赶上，也就可以进去了
+
+  如果没有人来，那通行证就保留下来，以备来的人用
+
+  如果一直没人来，可用的通行证的数量就增加了，但不是无限增大的，最多也就是刚开始时保安手里有的那个数量
+
+  也就是说，刚开始时，通行证的数量是有限的，但每隔一段时间就有新的通行证可用
+#+END_EXAMPLE
+
+limit match有两个参数就对应这种情况：
++ _--limit-burst_ ：刚开始时有多少通行证可用
++ _--limit_ ：要隔多长时间才能签发一个新的通行证
+  
+这里强调的是 _签发一个新的通行证_ ，这是 *以iptables的角度* 考虑的。在自己写规则时，就要从这个角度考虑。比如，指定了 _--limit 3/minute --limit-burst 5_  : 
++ iptables的角度：开始时有5个通行证，用完之后每20秒增加一个
++ 以用户的角度看：说法就是每一分钟增加三个或者每分钟只能过三个
+  
+要是想每20分钟过一个，只能写成 _--limit 3/hour --limit-burst 5_ ，也就是说 *要把时间单位凑成整*
+**** limit 
+     #+BEGIN_EXAMPLE
+     --limit
+     #+END_EXAMPLE
+     
+     *为limit match设置最大平均匹配速率* ，也就是单位时间内limit match可以匹配几个包。它的形式是 *一个数值加一个时间单位* : 
++ /second
++ /minute
++ /hour
++ /day 
+  
+默认值是 *每小时3次* （用户角度），即 _3/hour_ ，也就是 *每20分钟一次* （iptables角度）
+
+#+BEGIN_SRC sh
+  iptables -A INPUT -m limit --limit 3/hour
+#+END_SRC
+
+**** limit-burst
+     #+BEGIN_EXAMPLE
+     --limit-burst
+     #+END_EXAMPLE
+     
+     定义的是 *limit match的峰值* ， 就是在单位时间（这个时间由上面的--limit指定）内最多可匹配几个包（--limit-burst的值要比--limit的大）。默认值是5 
+     
+     #+BEGIN_SRC sh
+  iptables -A INPUT -m limit --limit-burst 5
+     #+END_SRC
+     
+*** MAC
+    基于 *包的MAC源地址* 匹配包
+    
+    #+BEGIN_EXAMPLE
+    这个match是由-m mac装入的，而不是一些人想当然的-m mac-source，后者只是前者的选项而已
+    #+END_EXAMPLE
+    
+**** mac-source
+     #+BEGIN_EXAMPLE
+     --mac-source
+     #+END_EXAMPLE
+     
+     基于包的MAC源地址匹配包，地址格式只能是 _XX:XX:XX:XX:XX:XX_ ，当然也可以用 _感叹号_ 取反
++ _--mac- source ! 00:00:00:00:00:01_ : 除此之外的地址都可接受嘛
++ MAC addresses只用于 _Ethernet_ 类型的网络，所以这个match只能用于Ethernet接口。而且，它还只能在
+  + _PREROUTING_
+  + _FORWARD_
+  + _INPUT_ 链里使用
+    
+#+BEGIN_SRC sh
+  iptables -A INPUT -m mac --mac-source 00:00:00:00:00:01
+#+END_SRC
+
+*** Mark
+    以 *包被设置的mark* 来匹配包，这个值只能由内核更改
+    
+    #+BEGIN_EXAMPLE
+    mark比较特殊，它不是包本身的一部分，而是在包穿越计算机的过程中由内核分配的和它相关联的一个字段
+    
+    它可能被用来改变包的传输路径或过滤
+    
+    时至今日，在linux里只有一种方法能设置mark，即iptables的MARK target
+    
+    以前在ipchains里是FWMARK target。这就是为什么在高级路由里仍要参照FWMARK的原因
+    #+END_EXAMPLE
+    
+    mark字段的值是一个 *无符号的整数* ， 在32位系统上最大可以是 _4294967296_ ，就是2的32次方
+    
+**** mark
+     #+BEGIN_EXAMPLE
+     --mark value[/mask]
+     #+END_EXAMPLE
+     
+     
+     #+BEGIN_SRC sh
+  iptables -t mangle -A INPUT -m mark --mark 1
+     #+END_SRC
+     
+     以包被设置的mark值来匹配包，这个值是通过 _MARK target_ 来设置的，它是一个无符号的整数。上面的例子是没有掩码的，如果指定了掩码：
++ _--mark 1/1_ ：先把 _mark值和掩码取逻辑与_ ，然后再和包的mark值比较
+  
+#+BEGIN_EXAMPLE
+  所有通过Netfilter的包都会被分配一个相关联的mark field
+
+  但是mark值可不是在任何情况下都能使用的，它只能在分配给它值的那台机子里使用
+
+  因为它只是由内核在内存里分配的和包相关的几个字节，并不属于包本身，所以不能在本机之外的路由器上使用
+#+END_EXAMPLE
+
+*** Multiport
+    *多端口匹配* 扩展能够在一条规则里指定不连续的多个端口，如果没有这个扩展，只能按端口来写规则了
+    
+    #+BEGIN_EXAMPLE
+    不能在一条规则里同时使用标准端口匹配和多端口匹配，如--sport 1024:63353 -m multiport --dport 21,23,80
+    
+    这条规则并不能想你想象的那样工作，但也不是不能工作，iptables会使用第一个合法的条件，那么这里多端口匹配就白写了 
+    #+END_EXAMPLE
+    
+**** source-port
+     #+BEGIN_EXAMPLE
+     --source-port
+     #+END_EXAMPLE
+     
+     *源端口多端口* 匹配：
++ 最多可以指定 _15_ 个端口
++ 以 _逗号_ 分隔
++ _没有空格_
++ 必须有 *-p tcp* 或 *-p udp* 为前提条件
+  
+#+BEGIN_SRC sh
+  iptables -A INPUT -p tcp -m multiport --source-port 22,53,80,110
+#+END_SRC
+
+**** destination-port
+     #+BEGIN_EXAMPLE
+     --destination-port
+     #+END_EXAMPLE
+     
+     *目的端口多端口* 匹配，使用方法和 _源端口多端口_ 匹配一样
+     
+     #+BEGIN_SRC sh
+  iptables -A INPUT -p tcp -m multiport --destination-port 22,53,80,110
+     #+END_SRC
+     
+**** port
+     #+BEGIN_EXAMPLE
+     --port
+     #+END_EXAMPLE
+     *同端口多端口* 匹配，意思就是它匹配的是那种 *源端口和目的端口是同一个端口* 的包，比如： _端口80到端口80_ 的包。使用方法和 _源端口多端口_ 匹配一 样
+     
+     #+BEGIN_SRC sh
+  iptables -A INPUT -p tcp -m multiport --port 22,53,80,110
+     #+END_SRC
+     
+*** Owner
+    基于 *包的生成者* （ _owner_ ）的ID来匹配包，owner可以是：
++ _启动进程的用户的ID_
++ _用户所在的组的ID_
++ _进程的ID_
++ _会话的ID_ 
+  
+#+BEGIN_EXAMPLE
+  只能用在OUTPUT中
+
+  原因显而易见：几乎不可能得到发送端例程的ID的任何信息，或者在去往真正目的地的路上哪儿有路由
+
+  甚至在 OUTPUT链里，这也不是十分可靠，因为有些包根本没有owner，比如 ICMP responses，所以它们从不会被这个match抓到
+#+END_EXAMPLE
+
+**** uid-owner
+     #+BEGIN_EXAMPLE
+     --uid-owner
+     #+END_EXAMPLE
+     
+     按 *生成包的用户的ID* 来匹配外出的包。使用这个匹配可以做这样一些事：
++ 阻止除root外的用户向防火墙外建立新连接
++ 阻止除用户http外的任何人使用HTTP端口发送数据
+  
+#+BEGIN_SRC sh
+  iptables -A OUTPUT -m owner --uid-owner 500
+#+END_SRC
+
+**** gid-owner
+     #+BEGIN_EXAMPLE
+     --gid-owner
+     #+END_EXAMPLE
+     
+     按 *生成包的用户所在组的ID* 来匹配外出的包：
++ 可以只让属于network组的用户上Internet，而其他用户都不 行
++ 只允许http组的成员能从HTTP端口发送数据
+  
+#+BEGIN_SRC sh
+  iptables -A OUTPUT -m owner --gid-owner 0
+#+END_SRC
+
+**** pid-owner
+     #+BEGIN_EXAMPLE
+     --pid-owner
+     #+END_EXAMPLE
+     
+     按 *生成包的进程的ID* 来匹配外出的包：
++ 可以只允许PID为94的进程（http进程当然不能是多线程的）使用http端口
+  
+#+BEGIN_SRC sh
+  iptables -A OUTPUT -m owner --pid-owner 78
+#+END_SRC
+这个匹配使用起来有一点难度，因为要知道进程的ID号。当然，也可以写一个小小的脚本，先从ps的输出中得到PID，再添加相应的规则
+
+**** sid-owner
+     #+BEGIN_EXAMPLE
+     --sid-owner
+     #+END_EXAMPLE
+     
+     按 *生成包的会话的ID* 来匹配外出的包。 _一个进程以及它的子进程或它的多个线程都有同一个SID_ ：
++ 所有的HTTPD进程的SID和它的父进程一样（最初的 httpd进程），即使httpd是多线程的也一样
+  
+#+BEGIN_SRC sh
+  iptables -A OUTPUT -m owner --sid-owner 100
+#+END_SRC
+
+*** State
+    状态匹配扩展要有 *内核里的连接跟踪代码的协助* ，因为它是从连接跟踪机制中得到包的状态的。这样就可以了解连接所处的状态。它几乎适用于所有的协议，包括那些无状态的协议，如ICMP和UDP。针对每个连接都有一个 _缺省的超时值_ ，如果连接的时间超过了这个值，那么这个连接的记录就被会从连接跟踪的记录数据库中删除，也就是说连接就不再存在了。这个match必须有 *-m state* 作为前提才能使用
+    
+**** state
+     #+BEGIN_EXAMPLE
+     --state
+     #+END_EXAMPLE
+     
+     指定要匹配 *包的状态* ，当前有4种状态可用：
++ INVALID
++ ESTABLISHED
++ NEW
++ RELATED
+  
+#+BEGIN_SRC sh
+  iptables -A INPUT -m state --state RELATED,ESTABLISHED 
+#+END_SRC
+
+注意： NEW状态并不在试图建立新连接的TCP包里寻找SYN标 记，因此它不应该不加修改地用在只有一个防火墙或在不同的防火墙之间没有启用负载平衡的地方
+*** TOS
+    根据TOS字段匹配包，必须使用 *-m tos* 才能装 入。TOS是IP头的一部分，其含义是Type Of Service，由8个二进制位组成：
++ 3 bit： *优先权* 子字段，现在已被忽略
++ 4 bit： *TOS子字段* 
++ 1 bit： 未用位，必须置 _0_ 
+  
+#+BEGIN_EXAMPLE
+  一般用来把当前流的优先权和需要的服务（比如，最小延时、最大吞吐量 等）通知路由器
+
+  但路由器和管理员对这个值的处理相差很大，有的根本就不理会，而有的就会尽量满足要求
+#+END_EXAMPLE
+**** tos
+     #+BEGIN_EXAMPLE
+     --tos
+     #+END_EXAMPLE
+     
+     根据 *TOS字段* 匹配包。它的参数可以是：
++ _16进制数_
++ _十进制数_
++ _相应的名字_ : 用 *iptables -m tos -h* 能查到
+  
+#+BEGIN_SRC sh
+  iptables -A INPUT -p tcp -m tos --tos 0x16
+#+END_SRC
+
+这个match常被 *用来mark* 包，以便后用，还常和iproute2或高级路由功能一起使用：
++ _Minimize-Delay 16 (0x10)_  : 要求找一条路径使延时最小，一些标准服务如telnet、SSH、FTP-control 就需要这个选项
++ _Maximize-Throughput 8 (0x08)_ : 要求找一条路径能使吞吐量最大，标准服务FTP-data能用到这个
++ _Maximize-Reliability 4 (0x04)_ : 要求找一条路径能使可靠性最高，使用它的有BOOTP和TFTP
++ _Minimize-Cost 2 (0x02)_ : 要求找一条路径能使费用最低，一般情况下使用这个选项的是一些视频音频流协议，如RTSP
++ _Normal-Service 0 (0x00)_ : 一般服务，没有什么特殊要求
+  
+*** TTL
+    根据 *IP头里的TTL ( _Time To Live_ )字段* 来匹配包，此必须由 *-m ttl* 装入
+    #+BEGIN_EXAMPLE
+    TTL field是一个字节（8个二进制位），一旦经过一个处理它的路由器，它的值就减去1它的值
+    
+    当该字段的值减为0时，报文就被认为是不可转发的，数据报就被丢弃，并发送ICMP报文通知源主机，不可转发的报文被丢弃
+    
+    这也有两种情况，一是传输期间生存时间为0，使用类型为11代码是0的ICMP报文
+                             二是在数据报重组期间生存时间为0，使用类型 为11代码是1的ICMP报文
+    #+END_EXAMPLE
+    这个match只是根据TTL匹配包，而对其不做任何更改，所以在它之后可使用任何类型的match
+    
+**** ttl
+     #+BEGIN_EXAMPLE
+     --ttl
+     #+END_EXAMPLE
+     
+     根据TTL的值来匹配包，参数的形式只有一种，就是 _十进制_ 数值：
++ 它可以被用来调试你的局域网，比如解决LAN内的主机到Internet上的主机的连接问题
++ 找出 *Trojan* 可能的入口
+  
+#+BEGIN_SRC sh
+  iptables -A OUTPUT -m ttl --ttl 60
+#+END_SRC
+
+这个match的用处相对有限，但它其实是很有用的，这就看你的想象力如何了：
++ 可以用它来发现那些TTL具有错误缺省值的机子：这可能是实现TCP/IP栈功能的那个程序本身的错误，或者是配置有问题
+  
+** 非正常包的匹配
+   这个匹配没有任何参数，也不需要显式地装载：
++ 一个实验性的匹配，它不总是能正常工作的，对有些不正常的包（unclean package，就是所谓的脏包）或问题，它是视而不见的
++ 试图匹配那些好象畸形或不正常的包，比如包头错或校验和错，等等
+  
+它可能常用来：
++ DROP错误的连接
++ 检查有错的流
+  
+但要知道这样做也可能会中断合法的连接
+
+* Target/Jump
