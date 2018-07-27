@@ -2,7 +2,7 @@
 #+HTML_HEAD: <link rel="stylesheet" type="text/css" href="css/main.css" />
 #+HTML_LINK_UP: save_restore.html   
 #+HTML_LINK_HOME: iptables.html
-#+OPTIONS: num:nil timestamp:nil
+#+OPTIONS: num:nil timestamp:nil 
 
 在内核看来，规则就是决定如何处理一个包的语句
 
@@ -926,3 +926,538 @@ limit match有两个参数就对应这种情况：
 但要知道这样做也可能会中断合法的连接
 
 * Target/Jump
+  *target/jump* 决定符合条件的包到何处去，语法是
+  #+BEGIN_EXAMPLE
+  --jump target 或 -j target
+  #+END_EXAMPLE
+  Target和Jump唯一的区别：
++ jump: 目标是一个在同一个表内的链
++ target: 目标是具体的操作
+  
+下面在 _filter_ 表中建一个名为 tcp _ packets 的链：
+#+BEGIN_SRC sh
+  iptables -N tcp_packets
+#+END_SRC
+
+然后再把它作为 *jump* 的目标：
+
+#+BEGIN_SRC sh
+  iptables -A INPUT -p tcp -j tcp_packets
+#+END_SRC
+
+这样就会从 _INPUT_ 链跳入 tcp _ packets 链，开始在tcp _ packets中的旅行。如果到达了tcp _ packets链的结尾（ _未被链中的任何规则匹配_ ），则会退到INPUT链的下一条规则继续它的旅行。如果在子链中被ACCEPT了，也就相当于在父链中被ACCEPT了，那么它不会再经过父链中的其他规则。但要注意 *这个包能被其他表的链匹配* 
+
+target指定要对包做的操作，比如 _DROP_ 和 _ACCEPT_ 。不同的target有不同的结果：
++ 一些target会使包停止前景，也就是不再继续比较当前链中的其他规则或父链中的其他规则，最好的例子就是DROP和ACCEPT
++ 另外一些target在对包做完操作之后，包还会继续和其他的规则比较，如LOG，ULOG和TOS。它们会对包进行记 录、mangle，然后让包通过，以便匹配这条链中的其他规则。有了这样的target，就可以对同一个包既改变它的TTL又改变它的TOS
++ 有些target必须要有准确的参数（如TOS需要确定的数值）
++ 有些就不是必须要有准确的参数，但如果想指定也可以（如日志的前缀，伪装使用的端口，等等）
+  
+** ACCEPT
+   #+BEGIN_EXAMPLE
+   -j ACCEPT
+   #+END_EXAMPLE
+   没有任何选项和参数，使用也很简单，指定 _-j ACCEPT_ 即可：
++ 一旦包满足了指定的匹配条件，就会被ACCEPT，并且不会再去匹配当前链中的其他规则或同一个表内的其他规则
++ 但它还要通过其他表中的链，而且在那儿可能会被DROP掉
+  
+** DNAT
+   用来做 *目的网络地址转换* 的，就是重写包的目的IP地址。如果一个包被匹配了，那么和它属于同一个流的所有的包都会被自动转换，然后就可以被路由到正确的主机或网络：
++ Web服务器在LAN内部，而且没有可在Internet上使用的真实IP地址，可以使用这个让防火墙把所有到它自己HTTP端口的包转发给LAN内部真正的Web服务器
++ 目的地址也可以是一个范 围，这样的话，DNAT会为每一个流随机分配一个地址。因此，可以用这个target做某种类型地负载平 衡。
+  
+#+BEGIN_EXAMPLE
+  DANT只能用在nat表的PREROUTING和OUTPUT链中，或者是被这两条链调用的链里
+
+  包含DANT target的链不能被除此之外的其他链调用，如POSTROUTING
+#+END_EXAMPLE
+
+*** to-destination
+    #+BEGIN_EXAMPLE
+    --to-destination
+    #+END_EXAMPLE
+    
+    指定要写入IP头的地址，这也是包要被转发到的地方
+    #+BEGIN_SRC sh
+  iptables -t nat -A PREROUTING -p tcp -d 15.45.23.67 --dport 80 -j DNAT --to-destination 192.168.1.1-192.168.1.10 
+    #+END_SRC
+    
+    把所有发往地址 _15.45.23.67_ 的包都转发到一段LAN使用的私有地址中，即 _192.168.1.1到 192.168.1.10_ ：
++ 每个流都会被随机分配一个要转发到的地址，但同一个流总是使用同一个地址
++ 可以只指定一个IP地址作为参数，这样所有的包都被转发到同一台机子
++ 可以在地址后指定一个或一个范围的端口：
+  + --to-destination 192.168.1.1:80
+  + --to-destination 192.168.1.1:80-100
+    
+#+BEGIN_EXAMPLE
+只有先用--protocol指定了TCP或UDP协议，才能使用端口
+#+END_EXAMPLE
+
+*SNAT* 的语法和这个target的一样，只是目的不同罢了
+
+**** 更详细的例子
+     我想通过Internet连接发布我们的网站，但是http server在我们的内网里: 
++ 对外只有一个合法的IP，就是防火墙那个对外的IP:  $INET _ IP
++ 防火墙还有一个内网的IP: $LAN _ IP 
++ Http server的IP: $HTTP _ IP（这当然是内网的了）
+  
+为了完成我们的设想，要做的第一件事就是把下面的这个简单的规则加入到nat表的PREROUTING链中：
+
+#+BEGIN_SRC sh
+  iptables -t nat -A PREROUTING --dst $INET_IP -p tcp --dport 80 -j DNAT \ --to-destination $HTTP_IP 
+#+END_SRC
+
+现在，所有从Internet来的、到防火墙的80端口去的包都会被转发（或称做被 *DNAT* ）到在内网的HTTP服务器上。如果你Internet上试验一下，一切正常吧。再从内网里试验一下，完全不能用吧。这其实是路由的问题。把在外网上访问我们服务器的那台机子的IP地址记为 $EXT _ BOX 
+    1. 包从地址为 $EXT _BOX的机子出发，去往地址为$INET _ IP的机子
+    2. 包到达防火墙
+    3. 防火墙DNAT（也就是转发）这个包，而且包会经过很多其他的链检验及处理
+    4. 包离开防火墙向$HTTP _ IP前进
+    5. 包到达HTTP服务器，服务器就会通过防火墙给以回应，当然，这要求 *把防火墙作为 _HTTP_ 到达 $EXT _ BOX 的网关* 。一般情况下，防火墙就是HTTP服务器的缺省网关
+    6. 防火墙再对返回包做 *Un-DNAT* （就是照着DNAT的步骤反过来做一遍），这样就好像是防火墙自己回复了那个来自外网的请求包
+    7. 返回包好象没经过这么复杂的处理、没事一样回到 $EXT _ BOX 
+       
+    现在，来考虑和HTTP服务器在同一个内网（这里是指所有机子不需要经过路由器而可以直接互相访问的网络，不是那种把服务器和客户机又分在不同子网的情况）的客户访问它时会发生什么。假设客户机的IP为$LAN _ BOX，其他设置同上
+1. 包离开$LAN _ BOX，去往$INET _ IP
+2. 包到达防火墙
+3. 包被 *DNAT* ,而且还会经过其他的处理。但是包没有经过 *SNAT* 的处理，所以 *包还是使用它自己的源地址，就是$LAN _ BOX* 
+4. 包离开防火墙，到达HTTP服务器
+5. HTTP服务器试图回复这个包。它在 *路由数据库中看到包是来自同一个网络的一台机子，因此它会把回复包直接发送到请求包的源地址* （现在是回复包的目的地址），也就是$LAN _ BOX
+6. 回复包到达客户机，但它会很困惑，因为 *这个包不是来自它访问的那台机子* 。这样，它就会把这个包 *扔掉* 而去等待 _真正_ 的回复包
+   
+#+BEGIN_EXAMPLE
+  IP传输包的特点：只根据目的地的不同改变目的地址，但不因传输过程中要经过很多路由器而随着路由器改变其源地址，除非你单独进行源地址的改变
+
+  这是造成内网无法访问的根本原因
+#+END_EXAMPLE
+
+有个简单的解决办法：因为这些包都要进入防火墙，而且它们都去往需要做DNAT才能到达的那个地址，所以只要对这些包做SNAT操作即可。比如，考虑上面的例子，如果对那些进入防火墙而且是去往地址为 $HTTP _ IP、端口为80的包做 *SNAT* 操作，那么这些包就好象是从 $LAN _ IP来的了，也就是 说，这些包的源地址被改为 *$LAN _ IP* 了。这样，HTTP服务器就会把回复包发给防火墙，而防火墙会再对包做 Un-DNAT操作，并把包发送到客户机。解决问题的规则如下：
+
+#+BEGIN_SRC sh
+  iptables -t nat -A POSTROUTING -p tcp --dst $HTTP_IP --dport 80 -j SNAT \ --to-source $LAN_IP 
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  警告：刚才写的这条规则会对日志产生很大影响，这种影响应该说是很不好的。因为来自Internet包在防火墙内先后经过了DNAT和SNAT处理，才能到达HTTP服务器（上面的例子），所以HTTP服务器就认为包是防火墙发来的，而不知道真正的源头是其他的IP。这样，当它记录服务情况时，所有访问记录的源地址都是防火墙的IP而不是真正的访问源。如果想根据这些记录来了解访问情况就不可能了。因此上面提供的“简单办法”并不是一个明智的选择，但它确实可以解决“能够访问”的问题，只是没有考虑到日志而已
+
+  其他的服务也有类似的问题。比如，你在LAN内建立了SMTP服务器，那你就要设置防火墙以便能转发SMTP的数据流。这样你就创建了一个开放的SMTP中继服务器，随之而来的就是日志的问题了
+
+  这里所说的问题只是针对没有建立DMZ或类似结构的网络，并且内网的用户访问的是服务器的外网地址而言的。因为如果建立了DMZ，或者服务器和客户机又被分在不同的子网里， 那就不需要这么麻烦了。因为所有访问的源头都不在服务器所在的网里，所以就没必要做SNAT去改变包的源地址了，从而记录也就不是问题了。如果内网客户是直接访问服务器的内网地址那就更没事了
+
+  较好的解决办法是为你的LAN在内网建立一台单独的DNS服务器。这样，内网的客户使用网站名访问HTTP服务器时，DNS就可以把它解析成内网地址。客户机就可以直接去访问HTTP服务器的内网地址了， 从而避免了通过防火墙的操作，而且包的源地址也可以被HTTP服务器的日志使用，也就没有上面说的日志问题了。或者干脆建立DMZ得了，这是最好的办法，但你要有钱哦，因为用的设备多啊 
+#+END_EXAMPLE
+
+对上面的例子应该考虑再全面些，现在还有一个问题没解决， 就是 *防火墙自己要访问HTTP服务器时会发生什么* ，能正常访问吗？很可惜，现在的配置还是不行，仔细想想就明白了。这里讨论的基础都是假设机子访问的是 _HTTP服务器的外网地址，但这个外网地址其实就是防火墙对外的地址，所以当防火墙访问这个外网地址时，就是访问它自己_ 。防火墙上如果有HTTP服务，那客户机就会看到页面内容，不过这不是它想看到的（它想要的在DNAT上了），如果没有HTTP服务，客户就只能收到错误信息了。前面给出的规则之所以不起作用是因为从防火墙发出的请求包不会经过那两条链。所以要在nat表的 _OUTPUT_ 链中添加下面的规则：
+
+#+BEGIN_SRC sh
+  iptables -t nat -A OUTPUT --dst $INET_IP -p tcp --dport 80 -j DNAT \ --to-destination $HTTP_IP 
+#+END_SRC
+
+有了最后这条规则，一切都正常了：
++ *PREROUTING* 链做 *DNAT* ：和HTTP服务器不在同一个网的机子能正常访问服务了
++ *POSTROUTING* 链做 *SNAT* ：和它在一个网内的机子也可以正常访问服务了：
++ *OUTPUT* 链做 *DNAT* ：防火墙本身也能正常访问服务了
+  
+#+BEGIN_EXAMPLE
+  除此之外，在 filter表中还需要其他的规则（在FORWARD链里），以允许特定的包也能经过前面写的（在POSTROUTING链和 OUTPUT链里的）规则
+
+  在写规则时要注意：千万不要忘了，那些包在到达FORWARD链之前已经在PREROUTING链里被DNAT过了，也就是说它们的目的地址已被改写
+#+END_EXAMPLE
+
+** DROP
+   如果包符合条件，这个target就会把它丢掉，也就是说包的生命到此结束，不会再向前走一 步，效果就是包被阻塞了：
+   
+   在某些情况下，这个target会引起意外的结果，因为它不会向发送者返回任何信 息，也不会向路由器返回信息，这就可能会使连接的另一方的sockets因苦等响应
+   
+   解决这个问题的较好的办法是使用 *REJECT* target
+   #+BEGIN_EXAMPLE
+   因为它在丢弃包的同时还会向发送者返 回一个错误信息，这样另一方就能正常结束
+   
+   尤其是在阻止端口扫描工具获得更多的信息时，可以隐蔽被过滤掉的端口等等
+   
+   因为扫描工具扫描一个端口时，如果没有返回信息，一般会认为端口未打开或被防火墙等设备过滤掉了
+   #+END_EXAMPLE
+   
+   注意：如果包在子链中被DROP了，那么它在主链里也不会再继续前进，不管是在当前的表还是在其他表里。总之，包被丢弃了
+   
+** LOG
+   专门用来 *记录包的有关信息* 的。这些信息可能是非法的，那就可以用来除错。LOG会返回包的有关细节，如IP头的大部分和其他有趣的信息。这个功能是通过内核的日志工具完成的，一般是syslogd。返回的信息可用dmesg阅读，或者可以直接查看syslogd的日志文件，也可以用其他的什么程序来看
+   
+   LOG对调试规则有很大的帮助，可以看到包去了哪里、经过了什么规则的处理，什么样的规则处理什么样的包，等等。当你在生产服务器上调试一个不敢保证100%正常的规则集时，用LOG代替DROP是比较好的，因为一个小小的语法错误就可能引起严重的连接问题
+   
+   如果你想使用真正地扩展日志地话，可能会对 *ULOG* target有些兴趣，因为它可以把日志直接记录到MySQL databases或类似的数据库中
+   
+   #+BEGIN_EXAMPLE
+   如果在控制台得到的信息不是你想要的，那不是iptables或Netfilter的问题，而是 syslogd 配置文件的事，这个文件一般都是/etc/syslog.conf
+   #+END_EXAMPLE
+   
+*** log-level
+    #+BEGIN_EXAMPLE
+    --log-level
+    #+END_EXAMPLE
+    
+    告诉iptables和 syslog使用哪个记录等级。记录等级的详细信息可以查看文件syslog.conf，一般来说有以下几种，它们的级别依次是：
++ debug
++ info
++ notice
++ warning/warn
++ err/error
++ crit
++ alert
++ emerg/panic
+  
+信息级别说明了 *被记录信息所反映的问题的严重程度* 。所有信息都是通过内核的功能被记录的：
+1. 先在文件 syslog.conf里设置kern.=info /var/log/iptables
+2. 再让所有关于iptables的LOG信息使用级别info，就可以把所有的信息存入文件/var/log/iptables内
+   
+#+BEGIN_SRC sh
+  iptables -A FORWARD -p tcp -j LOG --log-level debug 
+#+END_SRC
+
+*** log-prefix
+    #+BEGIN_EXAMPLE
+    --log-prefix
+    #+END_EXAMPLE
+    
+    告诉iptables在记录的信息之前加上指定的前缀。这样和grep或其他工具一起使用时就容易追踪特定的问题，而且也方便从不同的规则输出。前缀最多能有29个英文字符，这已经是包括空白字符和其他特殊符号的总长度了 
+    
+    #+BEGIN_SRC sh
+  iptables -A INPUT -p tcp -j LOG --log-prefix "INPUT packets"
+    #+END_SRC
+    
+*** log-tcp-sequence
+    #+BEGIN_EXAMPLE
+    --log-tcp-sequence
+    #+END_EXAMPLE
+    
+    把包的TCP序列号和其他日志信息一起记录下来。 _TCP序列号_ 可以唯一标识一个包，在重组时也是用它来确定每个分组在包里的位置
+    
+    #+BEGIN_SRC sh
+  iptables -A INPUT -p tcp -j LOG --log-tcp-sequence
+    #+END_SRC
+    
+    #+BEGIN_EXAMPLE
+    这个选项可能会带来危险， 因为这些记录被未授权的用户看到的话，可能会使他们更容易地破坏系统
+    
+    任何iptables的输出信息都增加了这种危险
+    #+END_EXAMPLE
+    
+*** log-tcp-options
+    #+BEGIN_EXAMPLE
+    --log-tcp-options
+    #+END_EXAMPLE
+    
+    记录TCP包头中的字段大小不变的选项。这对一些除错是很有价值的，通过它提供的信息，可以知道哪里可能出错，或者哪里已经出了错
+    
+    #+BEGIN_SRC sh
+  iptables -A FORWARD -p tcp -j LOG --log-tcp-options
+    #+END_SRC
+    
+*** log-ip-options
+    #+BEGIN_EXAMPLE
+    --log-ip-options
+    #+END_EXAMPLE
+    
+    记录IP包头中的字段大小不变的选项。这对一些除错是很有 价值的，还可以用来跟踪特定地址的包
+    
+    #+BEGIN_SRC sh
+  iptables -A FORWARD -p tcp -j LOG --log-ip-options
+    #+END_SRC
+    
+** MARK 
+   用来设置mark值，这个值只能在 *本地* 的 _mangle_ 表里使用，不能用在其他任何地方，就更不用说路由器或另一台机子了。因为mark比较特殊，它不是包本身的一部分，而是在包穿越计算机的过程中由内核分配的和它相关联的一个字段。它可以和本地的高级路由功能联用，以使不同的包能使用不同的队列要求等等
+   
+   如果想在传输过程中也有这种功能，还是用 _TOS_ target吧
+   
+*** set-mark
+    #+BEGIN_EXAMPLE
+    --set-mark
+    #+END_EXAMPLE
+    
+    设置mark值，这个值是一个无符号的整数。比如，对一 个流或从某台机子发出的所有的包设置了mark值，就可以利用高级路由功能来对它们进行流量控制等操作
+    
+    #+BEGIN_SRC sh
+  iptables -t mangle -A PREROUTING -p tcp --dport 22 -j MARK --set-mark 2
+    #+END_SRC
+    
+** MASQUERADE
+   和 _SNAT_ target的作用是一样的，区别就是它不需要指定 *--to-source* 。MASQUERADE是被专门设计 *用于那些动态获取IP地址的连接的* ：
++ 拨号上网
++ DHCP连接 
+  
+如果有固定的IP地址，还是用SNAT target吧
+
+伪装一个连接意味着， *自动获取网络接口的IP地址* ，而不使用 *--to-source*  。当接口停用时，MASQUERADE不会记住任何连接，这在kill掉接口时是有很大好处的。如果我们使用SNAT target，连接跟踪的数据是被保留下来的，而且时间要好几天哦，这可是要占用很多连接跟踪的内存的。一般情况下，这种处理方式对于拨号上网来说是较好 的（这有利于已有那连接继续使用）
+
+#+BEGIN_EXAMPLE
+。如果我们被分配给了一个不同于前一次的IP，不管怎样已有的连接都要丢失，但或多或少地还是有一些连接记录被保留了
+#+END_EXAMPLE
+
+即使你有静态的IP，也可以使用MASQUERADE，而不用SNAT 。这不是被赞成的，因为它会带来额外的开销，而且以后还可能引起矛盾，比如它也许会影响你的脚本，使它们不能用
+
+注意：MASQUERADE和SNAT一样，只能 *用于nat表的POSTROUTING链*
+
+*** to-ports
+    #+BEGIN_EXAMPLE
+    --to-ports
+    #+END_EXAMPLE
+    
+    在指定TCP或UDP的前提下，设置外出包能使用的端口：
++ 单个端口： _--to-ports 1025_
++ 端口范围： _--to- ports 1024-3000_
++ 不是必需的
+  
+#+BEGIN_SRC sh
+  iptables -t nat -A POSTROUTING -p TCP -j MASQUERADE --to-ports 1024-31000
+#+END_SRC
+
+注意：在指定范围时要使用 _连字号_ 。这改变了SNAT中缺省的端口选择
+
+** REDIRECT 
+   *防火墙所在的机子内部转发包或流到另一个端口* 。比如，可以把所有去往端口HTTP的包REDIRECT到HTTP proxy（例如squid），当然这都 *发生在自己的主机内部* 。本地生成的包都会被映射到127.0.0.1。换句话说，这个target把要转发的包的目的地址改写为我们自己机子的IP：
++ 透明代理：LAN内的机子根本不需要知道代理的存在就可以正常上网时，这个target很有用
+  
+注意：它只能用在 *nat表的PREROUTING、OUTPUT链和被它们调用的自定义链* 里
+
+*** to-ports
+    #+BEGIN_EXAMPLE
+    --to-ports
+    #+END_EXAMPLE
+    
+    在指定TCP或UDP协议的前提下，定义目的端口，方式如下：
+1. 不使用这个选项：目的端口不会被改变
+2. 指定一个端口： _--to-ports 8080_ 
+3. 指定端口范围： _--to-ports 8080-8090_ 
+   
+#+BEGIN_SRC sh
+  iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-ports 8080
+#+END_SRC
+
+** REJECT 
+   *REJECT* 和 _DROP_ 基本一样，区别在于它 *除了阻塞包之外， 还向发送者返回错误信息* 。
+   
+   注意：
++ 只能用在 *INPUT、FORWARD、OUTPUT和它们的子链里*
++ 包含 _REJECT_ 的链也只能被它们调用，否则不能发挥作用
+  
+  
+*** reject-with
+    它只有一个选项，是用来控制返回的错误信息的种类的
+    #+BEGIN_EXAMPLE
+    --reject-with
+    #+END_EXAMPLE
+    
+    告诉REJECT target应向发送者返回什么样的信息。一旦包满足了设定的条件，就要发送相应的信息，然后再象DROP一样无情地抛弃那些包。可用的信息类型有：
++ icmp-net-unreachable
++ icmp-host-unreachable
++ icmp-port-unreachable
++ icmp-proto-unreachable
++ icmp-net-prohibited
++ icmp-host-prohibited 
++ echo-reply
++ tcp-reset：告诉REJECT返回一个TCP RST包，以文雅的方式关闭TCP连接
+  
+其中缺省的是 *port-unreachable* 
+
+#+BEGIN_SRC sh
+  iptables -A FORWARD -p TCP --dport 22 -j REJECT --reject-with tcp-reset
+#+END_SRC
+
+tcp-reset主要用来 *阻塞身份识别探针* ，即113/tcp，当向被破坏的邮件主机发送邮件时， 探针常被用到，否则它不会接受你的信
+
+** RETURN 
+   它使包返回上一层，顺序是： *子链 ->父链 -> 缺省的策略* 。具体地说，就是若包在子链中遇到了RETURN，则返回父链的下一条规则继续进行条件的比较，若是在父链（或称主链，比如INPUT）中遇到了RETURN，就要被缺省的策略（一般是ACCEPT或DROP）操作了
+   
+   假设一个包进入了INPUT链，匹配了某条target为 _--jump EXAMPLE_CHAIN_ 规则，然后进入了子链 _EXAMPLE_CHAIN_ 。在子链中又匹配了某条规则，恰巧target是 _--jump RETURN_ ，那包就返回 _INPUT_ 链了。如果在INPUT链里又遇到了 _--jump RETURN_ ，那这个包就要交由 _缺省的策略_ 来处理
+   
+** SNAT
+   用来做 *源网络地址* 转换的，就是重写包的源IP地址
+   
+   有几个机子共享一个Internet连接时，就能用到它了：
+1. 先在内核里打开 _ip转发_ 功能
+2. 再写一个 _SNAT规则_ 
+   
+就可以把所有从本地网络出去的包的源地址改为Internet连接的地址了
+
+如果我们不这样做而是直接转发本地网的包的话，Internet上的机子就不知道往哪儿发送应答了，因为在 *本地网里一般使用的是专门指定的一段地址，它们是不能在Internet上使用的* 。SNAT target的作用就是让所有从本地网出发的包看起来都是从一台机子发出的，这台机子一般就是防火墙
+
+注意：
++ SNAT只能 *用在nat表的POSTROUTING链里*
++ 只要连接的第一个符合条件的包被SNAT了，那么这个连接的其他所有的包都会自动地被SNAT，这个规则还会应用于这个连接所在流的所有数据包
+  
+*** to-source
+    #+BEGIN_EXAMPLE
+    --to-source
+    #+END_EXAMPLE
+    
+    指定源地址和端口，有以下几种方式：
++ 单独的地址
++ 一段连续的地址，用 _连字符_ 分隔
+  + _194.236.50.155-194.236.50.160_ ：可以实现负载平衡。每个流会被随机分配一个IP，但对于同一个流使用的是同一个IP
++ 在指定 _-p tcp_ 或 _-p udp_ 的前提下，可以指定源端口的范围
+   + _194.236.50.155:1024-32000_ ：包的源端口就被限制在 _1024-32000_ 
+     
+#+BEGIN_SRC sh
+  iptables -t nat -A POSTROUTING -p tcp -o eth0 -j SNAT --to-source 194.236.50.155-194.236.50.160:1024-32000 
+#+END_SRC
+
+注意：
++ 如果可能，iptables总是想 *避免任何的端口变更* ，换句话说，它总是尽力使用建立连接时所用的 端口。但是如果两台机子使用相同的源端口，iptables 将会把他们的其中之一映射到另外的一个端口。如果没有指定端口范围：
+   + 所有的在512以内的源端口会被映射到512以内的另一个端口
+   + 512和1023之间的将会被映射到 1024内
+   + 其他的将会被映射到大于或对于1024的端口，也就是说是同范围映射
+   + 这种映射和目的端口无关。因此，如果客户想和防火墙外的HTTP服务器联系，它是不会被映射到FTP control所用的端口的
+     
+** TOS
+   *用来设置IP头中的 _Type of Service_ 字段* 的。这个字段长一个字节，可以控制包的路由情况。它也是iproute2及其子系统可以直接使用的字段之一。如果你有几个独立的防火墙和路由器，而且还想在他们之间利用包的头部来传递路由信息，TOS是唯 一的办法。前面说过，MARK是不能用来传递这种信息的。如果你需要为某个包或流传递路由信息，就要使用TOS字段，它也正是为这个而被开发的
+   
+   Internet上有很多路由器在这一方面并没有做好工作，因此，在发送包之前改变其TOS没有什么大用处。 最好的情况是路由器根本不理它，最坏的情况是路由器会根据TOS处理，但都是错误的。然而，如果你是在一个很大的WAN或LAN里，而且有很多路由器，TOS还是能有很好的作为的。总的来说，基于TOS的值给包以不同的路由和参数还是可能的，即使在网络里是受限制的
+   
+   #+BEGIN_EXAMPLE
+   TOS只能用来设置具体的或者说是特定的值，但不管怎么说，不要使用其他的值就是了
+   #+END_EXAMPLE
+   
+   注意：只能在 *mangle* 表内使用
+   
+*** set-tos
+    #+BEGIN_EXAMPLE
+    --set-tos
+    #+END_EXAMPLE
+    
+    设置TOS的值，值的形式可以是名字或者使相应的数值（十进制或16进制的）。一般情况下，建议使用名字而不使用数值形式，因为以后这些数值可能会有所改变， 而名字一般是固定的。TOS字段有8个二进制位，所以可能的值是0-255（十进制）或0x00-0xFF（16进制）：
++ Minimize-Delay 16 (0x10)：要求找一条路径使延时最小，一些标准服务如telnet、SSH、FTP- control 就需要这个选项
++ Maximize-Throughput 8 (0x08)：要求找一条路径能使吞吐量最大，标准服务FTP-data能用到这个
++ Maximize-Reliability 4 (0x04)：要求找一条路径能使可靠性最高，使用它的有BOOTP和TFTP
++ Minimize-Cost 2 (0x02)：要求找一条路径能使费用最低，一般情况下使用这个选项的是一些视频音频流协议，如RTSP
++ Normal-Service 0 (0x00)：一般服务，没有什么特殊要求。这个值也是大部分包的缺省值
+  
+#+BEGIN_SRC sh
+  iptables -t mangle -A PREROUTING -p TCP --dport 22 -j TOS --set-tos 0x10
+#+END_SRC
+
+** TTL
+   TTL可以 _修改IP头中Time To Live字段_ 的值。它有很大的作用，可以把所有外出包的Time To Live值 都改为一样的，比如 _64_ ，这是Linux的默认值。有些ISP不允许共享连接（可以通过TTL的值来区分是不是有多个机子使用同一个连接），如果把TTL都改为一样的值，他们就不能再根据TTL来判断了
+   
+   注意：TTL只能在 *mangle* 表内使用
+   
+*** ttl-set
+    #+BEGIN_EXAMPLE
+    --ttl-set
+    #+END_EXAMPLE
+    
+    设置TTL的值
+    #+BEGIN_SRC sh
+iptables -t mangle -A PREROUTING -i eth0 -j TTL --ttl-set 64
+    #+END_SRC
+    
+    这个值不要太大，也不要太小，大约64就很好。值越大，占用的带宽越多，这个target就可以被用来限制包能走多远，一个比较恰当的距离是刚好能到达DNS服务器
+    
+    #+BEGIN_EXAMPLE
+    值太大会影响网络，而且有点不道德，为什么这样说呢？
+    
+    如果有些路由器的配置不太正确，包的TTL又非常大，那它们就会在这些路由器之间往返很多次  
+    #+END_EXAMPLE
+    
+*** ttl-dec
+    #+BEGIN_EXAMPLE
+    --ttl-dec
+    #+END_EXAMPLE
+    
+    设定TTL要被减掉的值
+    
+    #+BEGIN_SRC sh
+  iptables -t mangle -A PREROUTING -i eth0 -j TTL --ttl-dec 3
+    #+END_SRC
+    
+    假设一个进来的包的TTL是 _53_ ，那么当它离开我们这台机子时，TTL就变为 _49_ 了。因为经过我们这台机子，TTL本身就要减1，还要被TTL target再减3，当然总共就是减去4了
+    
+    #+BEGIN_EXAMPLE
+    可以限制使用我们的服务的用户*离我们有多远
+    
+    比如，用户总是使用比较近的DNS，那我们就可以对我们的DNS服务器发出的包进行几个--ttl-dec
+    
+    当然用--set-ttl控制更方便些
+    #+END_EXAMPLE
+    
+*** ttl-inc
+    #+BEGIN_EXAMPLE
+    --ttl-inc
+    #+END_EXAMPLE
+    
+    设定TTL要被增加的值
+    
+    #+BEGIN_SRC sh
+  iptables -t mangle -A PREROUTING -i eth0 -j TTL --ttl-inc 3
+    #+END_SRC
+    假设一个进来的包的TTL是53，那么当它离开我们这台机子时，TTL应是多少呢？答案是56。
+    #+BEGIN_EXAMPLE
+    使用这个选项可以使我们的防火墙更加隐蔽，而不被trace-routes发现， 方法就是设置--ttl-inc 1
+    
+    原因应该很简单了，包每经过一个设备，TTL就要自动减1，但在我们的防火墙里这个1又被补上了
+    
+    也就是说，TTL的值没变，那么trace-routes就会认为我们的防火墙是不存在的
+    
+    Trace-routes让人又爱又恨：
+      爱它是因为在连接出问题时，它可以给我们提供极有用的信息，告诉我们哪里有毛病
+      恨它是由于它也可以被黑客或骇客用来收集目标机器的资料
+    #+END_EXAMPLE
+    
+** ULOG
+   ULOG可以 *在用户空间记录被匹配的包的信息* ：
+1. 这些信息和整个包都会通过 _netlink socket被多播_
+2. 一个或多个用户空间的进程就会接受它们
+   
+ULOG是至今iptables和Netfilter下最成熟、最完善的日志工具，它包含了很多更好的工具用于包的记录。这个target可以让我们把信息记录到MySQL或其他数据库中。这样，搜索特定的包或把记录分组就很方便了
+
+*** ulog-nlgroup
+    #+BEGIN_EXAMPLE
+    --ulog-nlgroup
+    #+END_EXAMPLE
+    
+    指定向哪个netlink组发送包
+    
+    #+BEGIN_SRC sh
+  iptables -A INPUT -p TCP --dport 22 -j ULOG --ulog-nlgroup 2
+    #+END_SRC
+    
+    一个有32个netlink组，它们被简单地编号位1-32。默认值是1
+    
+*** ulog-prefix
+    #+BEGIN_EXAMPLE
+    --ulog-prefix
+    #+END_EXAMPLE
+    
+    指定记录信息的前缀，以便于区分不同的信息。使用方法和LOG的prefix一样，只是长度可以达到32个字符
+    
+    #+BEGIN_SRC sh
+  iptables -A INPUT -p TCP --dport 22 -j ULOG --ulog-prefix "SSH connection attempt: "
+    #+END_SRC
+    
+*** ulog-cprange
+    #+BEGIN_EXAMPLE
+    --ulog-cprange
+    #+END_EXAMPLE
+    
+    指定每个包要向 _ULOG在用户空间的代理_ 发送的字节数：
++ _--ulog-cprange 100_ ： 把整个包的前100个字节拷贝到用户空间记录下来，其中包含了这个包头，还有一些包的引导数据。默认值是0，表示拷贝整个包，不管它有多大
+  
+#+BEGIN_SRC sh
+  iptables -A INPUT -p TCP --dport 22 -j ULOG --ulog-cprange 100
+#+END_SRC
+
+*** ulog-qthreshold
+    #+BEGIN_EXAMPLE
+    --ulog-qthreshold
+    #+END_EXAMPLE
+    
+    告诉ULOG在向用户空间发送数据以供记录之前，要在内核里收集的包的数量：
++ _--ulog-qthreshold 10_ ：表示先在内核里积聚10个包，再把它们发送到用户空间里，它们会被看作同一个netlink的信息，只是由好几部分组成罢了。默认值是1，这是为了向后兼容，因为以前的版本不能处理分段的信息
+  
+#+BEGIN_SRC sh
+  iptables -A INPUT -p TCP --dport 22 -j ULOG --ulog-qthreshold 10
+#+END_SRC
+
+[[file:config.org][Next：配置]]
+
+[[file:save_restore.org][Previous：规则的保存和恢复]]
+
+[[file:iptables.org][目录]]
