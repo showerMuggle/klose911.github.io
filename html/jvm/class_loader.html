@@ -134,6 +134,48 @@ for the JavaScript code in this tag.
  }
 /*]]>*///-->
 </script>
+<script type="text/javascript" src="http://orgmode.org/mathjax/MathJax.js"></script>
+<script type="text/javascript">
+<!--/*--><![CDATA[/*><!--*/
+    MathJax.Hub.Config({
+        // Only one of the two following lines, depending on user settings
+        // First allows browser-native MathML display, second forces HTML/CSS
+        //  config: ["MMLorHTML.js"], jax: ["input/TeX"],
+            jax: ["input/TeX", "output/HTML-CSS"],
+        extensions: ["tex2jax.js","TeX/AMSmath.js","TeX/AMSsymbols.js",
+                     "TeX/noUndefined.js"],
+        tex2jax: {
+            inlineMath: [ ["\\(","\\)"] ],
+            displayMath: [ ['$$','$$'], ["\\[","\\]"], ["\\begin{displaymath}","\\end{displaymath}"] ],
+            skipTags: ["script","noscript","style","textarea","pre","code"],
+            ignoreClass: "tex2jax_ignore",
+            processEscapes: false,
+            processEnvironments: true,
+            preview: "TeX"
+        },
+        showProcessingMessages: true,
+        displayAlign: "center",
+        displayIndent: "2em",
+
+        "HTML-CSS": {
+             scale: 100,
+             availableFonts: ["STIX","TeX"],
+             preferredFont: "TeX",
+             webFont: "TeX",
+             imageFont: "TeX",
+             showMathMenu: true,
+        },
+        MMLorHTML: {
+             prefer: {
+                 MSIE:    "MML",
+                 Firefox: "MML",
+                 Opera:   "HTML",
+                 other:   "HTML"
+             }
+        }
+    });
+/*]]>*///-->
+</script>
 </head>
 <body>
 <div id="org-div-home-and-up">
@@ -142,6 +184,589 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="jvm.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">类加载</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#sec-1">加载时机</a>
+<ul>
+<li><a href="#sec-1-1">被动引用</a></li>
+<li><a href="#sec-1-2">接口加载</a></li>
+</ul>
+</li>
+<li><a href="#sec-2">类加载过程</a>
+<ul>
+<li><a href="#sec-2-1">加载</a></li>
+<li><a href="#sec-2-2">验证</a>
+<ul>
+<li><a href="#sec-2-2-1">文件格式验证</a></li>
+<li><a href="#sec-2-2-2">元数据验证</a></li>
+<li><a href="#sec-2-2-3">字节码验证</a></li>
+<li><a href="#sec-2-2-4">符号引用验证</a></li>
+</ul>
+</li>
+<li><a href="#sec-2-3">准备</a></li>
+<li><a href="#sec-2-4">解析</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<p>
+<b>类加载机制</b> ：虚拟机把描述类的数据从Class文件加载到内存，并对数据进行校验、转换解析和初始化，最终形成可以被虚拟机直接使用的Java类型
+</p>
+
+<p>
+与那些在编译时需要进行连接工作的语言不同，在Java语言里面，类型的加载、连接和初始化过程都是在 <b>程序运行期间</b> 完成的，这种策略虽然会令类加载时稍微增加一些性能开销，但是会为Java应用程序提供高度的灵活性，Java里天生可以动态扩展的语言特性就是依赖 <b>运行期动态加载和动态连接</b> 这个特点实现的。例如，如果编写一个面向接口的应用程序，可以等到运行时再指定其实际的实现类;用户可以通过Java预定义的和自定义类加载器，让一个本地的应用程序可以在运行时从网络或其他地方加载一个二进制流作为程序代码的一部分，这种组装应用程序的方式目前已广泛应用于Java程序之中。从最基础的Applet、JSP到相对复杂的OSGi技术，都使用了Java语言运行期类加载的特性
+</p>
+
+
+<div id="outline-container-sec-1" class="outline-2">
+<h2 id="sec-1">加载时机</h2>
+<div class="outline-text-2" id="text-1">
+<p>
+类从被加载到虚拟机内存中开始，到卸载出内存为止，它的整个生命周期包括:
+</p>
+<ol class="org-ol">
+<li>加载 Loading
+</li>
+<li>验证 Verification
+</li>
+<li>准备 Preparation
+</li>
+<li>解析 Resolution
+</li>
+<li>初始化 Initialization
+</li>
+<li>使用 Using
+</li>
+<li>卸载 Unloading
+</li>
+</ol>
+
+<p>
+其中验证、准备、解析3个部分统称为 <b>连接</b> (Linking)，这7个阶段的发生顺序如图所示：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/class-life-cycle.jpg" alt="class-life-cycle.jpg" width="70%" /> 
+</p>
+</div>
+
+<pre class="example">
+  加载、验证、准备、初始化和卸载这5个阶段的顺序是确定的，类的加载过程必须按照这种顺序按部就班地开始
+
+  而解析阶段则不一定: 它在某些情况下可以在初始化阶段之后再开始，这是为了支持Java语言的运行时绑定(也称为动态绑定或晚期绑定)
+
+  注意，这里写的是按部就班地“开始”，而不是按部就班地“进行”或“完成”，强调这点是因为这些阶段通常都是互相交叉地混合式进行的，会在一个阶段执行的过程中调用、激活另外一个阶段
+</pre>
+
+<p>
+Java虚拟机规范中并没有进行强制约束什么时候需要开始类加载，这点可以交给虚拟机的具体实现来自由把握。但是对于初始化阶段，虚拟机规范则是严格规定了有且只有5种情况必须立即对类进行 <b>初始化</b> (而加载、验证、准备自然需要在此之前开始):
+</p>
+<ol class="org-ol">
+<li>遇到 <span class="underline">new</span> 、 <span class="underline">getstatic</span> 、 <span class="underline">putstatic</span> 或 <span class="underline">invokestatic</span> 这4条字节码指令时，如果类没有进行过初始化，则需要先触发其初始化。生成这4条指令的最常见的Java代码场景是:
+<ul class="org-ul">
+<li>使用new关键字实例化对象
+</li>
+<li>读取或设置一个类的静态字段(被final修饰、已在编译期把结果放入常量池的静态字段除外)
+</li>
+<li>调用一个类的静态方法
+</li>
+</ul>
+</li>
+<li>使用 <span class="underline">java.lang.reflect</span> 包的方法对类进行反射调用的时候，如果类没有进行过初始化，则需要先触发其初始化
+</li>
+<li>当初始化一个类的时候，如果发现其父类还没有进行过初始化，则需要先触发其父类的初始化
+</li>
+<li>当虚拟机启动时，用户需要指定一个要执行的主类( <span class="underline">包含main()方法的那个类</span> )，虚拟机会先初始化这个主类
+</li>
+<li>当使用JDK1.7的动态语言支持时，如果一个 <span class="underline">java.lang.invoke.MethodHandle</span> 实例最后的解析结果 <b>REF _ getStatic</b> 、 <b>REF _ putStatic</b> 、 <b>REF _ invokeStatic</b> 的方法句柄，并且这个方法句柄所对应的类没有进行过初始化，则需要先触发其初始化
+</li>
+</ol>
+
+<p>
+对于这5种会触发类进行初始化的场景，虚拟机规范中使用了一个很强烈的限定语: <b>有且只有</b> ，这5种场景中的行为称为对一个类进行 <span class="underline">主动引用</span> 。除此之外，所有引用类的方式都不会触发初始化，称为 <span class="underline">被动引用</span>
+</p>
+</div>
+
+<div id="outline-container-sec-1-1" class="outline-3">
+<h3 id="sec-1-1">被动引用</h3>
+<div class="outline-text-3" id="text-1-1">
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">package</span> org.fenixsoft.<span style="color: #7fffd4;">classloading</span>;
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;"> * &#34987;&#21160;&#20351;&#29992;&#31867;&#23383;&#27573;&#28436;&#31034;&#19968;&#65306;</span>
+<span style="color: #ffa07a;"> * &#36890;&#36807;&#23376;&#31867;&#24341;&#29992;&#29238;&#31867;&#30340;&#38745;&#24577;&#23383;&#27573;&#65292;&#19981;&#20250;&#23548;&#33268;&#23376;&#31867;&#21021;&#22987;&#21270;</span>
+<span style="color: #ffa07a;"> **/</span>
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">SuperClass</span> {
+
+        <span style="color: #00ffff;">static</span> {
+                System.out.println(<span style="color: #ffa07a;">"SuperClass init!"</span>);
+        }
+
+        <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">value</span> = 123;
+}
+
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">SubClass</span> <span style="color: #00ffff;">extends</span> <span style="color: #98fb98;">SuperClass</span> {
+
+        <span style="color: #00ffff;">static</span> {
+                System.out.println(<span style="color: #ffa07a;">"SubClass init!"</span>);
+        }
+}
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;"> * &#38750;&#20027;&#21160;&#20351;&#29992;&#31867;&#23383;&#27573;&#28436;&#31034;</span>
+<span style="color: #ffa07a;"> **/</span>
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">NotInitialization</span> {
+
+        <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">String</span>[] <span style="color: #eedd82;">args</span>) {
+                System.out.println(SubClass.value);
+        }
+
+}
+</pre>
+</div>
+
+<pre class="example">
+SuperClass init!
+123
+</pre>
+
+<p>
+上述代码运行之后，只会输出　_Superclass init!_ ，而不会输出 <span class="underline">Subclass init!</span> 。 <b>对于静态字段，只有直接定义这个字段的类才会被初始化，因此通过其子类来引用父类中定义的静态字段，只会触发父类的初始化而不会触发子类的初始化</b> 。至于是否要触发子类的加载和验证，在虚拟机规范中并未明确规定，这点取决于虚拟机的具体实现。对于SunHotSpot虚拟机来沒，可通过 <span class="underline">-XX:+TraceClassLoading</span> 参数观察到此操作会导致子类的加载
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">package</span> org.fenixsoft.<span style="color: #7fffd4;">classloading</span>;
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;"> * &#34987;&#21160;&#20351;&#29992;&#31867;&#23383;&#27573;&#28436;&#31034;&#20108;&#65306;</span>
+<span style="color: #ffa07a;"> * &#36890;&#36807;&#25968;&#32452;&#23450;&#20041;&#26469;&#24341;&#29992;&#31867;&#65292;&#19981;&#20250;&#35302;&#21457;&#27492;&#31867;&#30340;&#21021;&#22987;&#21270;</span>
+<span style="color: #ffa07a;"> **/</span>
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">NotInitialization</span> {
+
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">String</span>[] <span style="color: #eedd82;">args</span>) {
+        <span style="color: #98fb98;">SuperClass</span>[] <span style="color: #eedd82;">sca</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">SuperClass</span>[10];
+    }
+}
+</pre>
+</div>
+<p>
+运行之后发现没有输出 <span class="underline">Superclass init!</span> ，说明并没有触发类org.fenixsoft.classloading.SuperClass的初始化阶段。但是这段代码里面触发了另外一个名为 <b>[Lorg.fenixsoftclassloading.Superclass</b> 的类的初始化阶段，对于用户代码来说，这并不是一个合法的类名称，它是一个由 <b>虚拟机自动生成</b> 的、直接继承于 <span class="underline">java.lang.Object</span> 的子类，创建动作由字节码指令 <span class="underline">newarray</span> 触发
+</p>
+
+
+<p>
+这个类代表了一个元素类型为 <span class="underline">org.fenixsoft.classloading.SuperClass</span> 的 <b>一维数组</b> ，数组中应有的属性和方法(用户可直接使用的只有被修饰为 <b>public</b> 的 <span class="underline">length属性</span> 和 <span class="underline">clone()</span> 方法)都实现在这个类里
+</p>
+
+<pre class="example">
+Java语言中对数组的访问比C/C++相对安全是因为这个类封装了数组元素的访问方法，而C/C++直接翻译为对数组指针的移动
+
+在Java语言中，当检查到发生数组越界时会拋出java.lang.ArrayIndexOutOfBoundsException异常
+
+准确地说,越界检查不是封装在数组元素访问的类中,而是封装在数组访问的xaload、 xastore字节码指令中
+</pre>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">package</span> org.fenixsoft.<span style="color: #7fffd4;">classloading</span>;
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;"> * &#34987;&#21160;&#20351;&#29992;&#31867;&#23383;&#27573;&#28436;&#31034;&#19977;&#65306;</span>
+<span style="color: #ffa07a;"> * &#24120;&#37327;&#22312;&#32534;&#35793;&#38454;&#27573;&#20250;&#23384;&#20837;&#35843;&#29992;&#31867;&#30340;&#24120;&#37327;&#27744;&#20013;&#65292;&#26412;&#36136;&#19978;&#27809;&#26377;&#30452;&#25509;&#24341;&#29992;&#21040;&#23450;&#20041;&#24120;&#37327;&#30340;&#31867;&#65292;&#22240;&#27492;&#19981;&#20250;&#35302;&#21457;&#23450;&#20041;&#24120;&#37327;&#30340;&#31867;&#30340;&#21021;&#22987;&#21270;&#12290;</span>
+<span style="color: #ffa07a;"> **/</span>
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">ConstClass</span> {
+
+        <span style="color: #00ffff;">static</span> {
+                System.out.println(<span style="color: #ffa07a;">"ConstClass init!"</span>);
+        }
+
+        <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">String</span> <span style="color: #eedd82;">HELLOWORLD</span> = <span style="color: #ffa07a;">"hello world"</span>;
+}
+
+<span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;"> * &#38750;&#20027;&#21160;&#20351;&#29992;&#31867;&#23383;&#27573;&#28436;&#31034;</span>
+<span style="color: #ffa07a;"> **/</span>
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">NotInitialization</span> {
+
+        <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">String</span>[] <span style="color: #eedd82;">args</span>) {
+                System.out.println(<span style="color: #7fffd4;">ConstClass</span>.HELLOWORLD);
+        }
+}
+</pre>
+</div>
+<pre class="example">
+hello world
+</pre>
+
+<p>
+上述代码运行之后，也没有输出 <span class="underline">ConstClass init!</span> ，这是因为虽然在Java源码中引用了 <span class="underline">ConstClass</span> 类中的常量 <span class="underline">HELLOWORLD</span> ，但其实在编译阶段通过常量传播优化，已经将此常量的值 <span class="underline">helloworld</span> 存储到了 <span class="underline">Notlnitialization</span> 类的 <b>常量池</b> 中，以后Notlnitialization对常量ConstClass.HELLOWORLD的引用实际都被转化为Notlnitializationl对 <b>自身常量池的引用</b> 了。实际上 <b>Notlnitialization的Class文件之中并没有ConstClass类的符号引用入口</b> ，这两个类在编译成Class之后就不存在任何联系了
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-1-2" class="outline-3">
+<h3 id="sec-1-2">接口加载</h3>
+<div class="outline-text-3" id="text-1-2">
+<p>
+接口的加载过程与类加载过程稍有一些不同，针对接口需要做一些特殊说明:
+</p>
+<ul class="org-ul">
+<li>接口也有初始化过程，上面类初始化的代码都是用静态语句块 <span class="underline">static{}</span> 来输出初始化信息的，而接口中不能使用 <b>static{}</b> 语句块，但编译器仍然会为接口生成 <b>&lt;clinit&gt;()</b> 类构造器，用于 <span class="underline">初始化接口中所定义的成员变量</span> 
+</li>
+<li>当一个类在初始化时，要求其父类全部都已经初始化过了，但是 <b>一个接口在初始化时，并不要求其父接口全部都完成了初始化</b> ，只有在 <span class="underline">真正使用到父接口</span> 的时候(如引用接口中定义的常量)才会初始化
+</li>
+</ul>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2" class="outline-2">
+<h2 id="sec-2">类加载过程</h2>
+<div class="outline-text-2" id="text-2">
+</div><div id="outline-container-sec-2-1" class="outline-3">
+<h3 id="sec-2-1">加载</h3>
+<div class="outline-text-3" id="text-2-1">
+<p>
+<b>加载</b> 是 <span class="underline">类加载</span> (Class Loading)过程的一个阶段，在加载阶段，虚拟机需要完成以下3件事情:
+</p>
+<ol class="org-ol">
+<li>通过一个类的全限定名来获取定义此类的二进制字节流
+</li>
+<li>将这个字节流所代表的静态存储结构转化为方法区的运行时数据结构
+</li>
+<li>在内存中生成一个代表这个类的 <span class="underline">java.lang.Class对象</span> ，作为方法区这个类的各种数的访问入口
+</li>
+</ol>
+
+<p>
+虚拟机规范的这3点要求其实并不算具体，因此虚拟机实现与具体应用的灵活度都是相当大的。例如 <span class="underline">通过一个类的全限定名来获取定义此类的二进制字节流</span> 这条，它没有指明二进制字节流要从一个Class文件中获取，准确地说是根本没有指明要从哪里获取、怎样获取。虚拟机设计团队在加载阶段搭建了一个相当开放的、广阔的“舞台”，Java发展历程中，充满创造力的开发人员则在这个“舞台”上玩出了各种花样，许多举足轻重的Java技术都建立在这一基础之上，例如:
+</p>
+<ul class="org-ul">
+<li>从 <b>ZIP</b> 包中读取，这很常见，最终成为日后 <span class="underline">JAR</span> 、 <span class="underline">EAR</span> 、 <span class="underline">WAR</span> 格式的基础
+</li>
+<li>从网络中获取，这种场景最典型的应用就是 <span class="underline">Applet</span>
+</li>
+<li>运行时计算生成，这种场景使用得最多的就是 <b>动态代理</b> 技术，在 <span class="underline">java.lang.reflect.Proxy</span> 中，就是用了 <span class="underline">ProxyGenerator.generateProxyClass</span> 来为特定接口生成形式为 <span class="underline">*$Proxy</span> 的代理类的二进制字节流
+</li>
+<li>由其他文件生成，典型场景是 <span class="underline">JSP</span> 应用，即由JSP文件生成对应的Class类
+</li>
+<li>从数据库中读取，这种场景相对少见些，例如有些中间件服务器(如 <span class="underline">SAP Netweaver</span> )可以选择把程序安装到数据库中来完成程序代码在集群间的分发
+</li>
+<li>…… 
+</li>
+</ul>
+
+<p>
+相对于类加载过程的其他阶段，一个非数组类的加载阶段(准确地说，是加载阶段中获取类的二进制字节流的动作)是开发人员可控性最强的，因为加载阶段既可以使用 <span class="underline">系统提供的引导类加载器</span> 来完成，也可以由 <span class="underline">用户自定义的类加载器</span> 去完成，开发人员可以通过定义自己的类加载器去控制字节流的获取方式(即 <span class="underline">重写一个加载器的loadClass()方法</span> )
+</p>
+
+<p>
+对于数组类而言，情况就有所不同，数组类本身不通过类加载器创建，它是由Java虚拟机直接创建的。但数组类与类加载器仍然有很密切的关系，因为数组类的元素类型(Element Type，指的是数组去掉所有维度的类型)最终是要靠类加载器去创建，一个数组类(下面简称为C)创建过程就遵循以下规则:
+</p>
+<ul class="org-ul">
+<li>如果数组的组件类型(Component Type，指的是数组去掉一个维度的类型)是引用类型，那就 <b>递归采用本节中定义的加载过程去加载这个组件类型</b> ，数组C将在加载该组件类型的类加载器的类名称空间上被标识(这点很重要， <span class="underline">一个类必须与类加载器一起确定唯一性</span> )
+</li>
+<li>如果数组的组件类型不是引用类型(例如int[]数组)，Java虚拟机将会把数组C标记为 <b>与引导类加载器关联</b> 
+</li>
+<li><b>数组类的可见性与它的组件类型的可见性一致</b> ，如果组件类型不是引用类型，那数组类的可见性将默认为 <span class="underline">public</span> 
+</li>
+</ul>
+
+<p>
+加载阶段完成后，虚拟机外部的二进制字节流就按照虚拟机所需的格式存储在方法区之中，方法区中的数据存储格式由虚拟机实现自行定义，虚拟机规范未规定此区域的具体数据结构。然后在内存中实例化一个java.lang.Class类的对象(并没有明确规定是在Java堆中，对于HotSpot虚拟机而言， <span class="underline">Class对象比较特殊，它虽然是对象，但是存放在方法区里面</span> )，这个对象将作为程序访问方法区中的这些类型数据的外部接口
+</p>
+
+<pre class="example">
+  加载阶段与连接阶段的部分内容(如一部分字节码文件格式验证动作)是交叉进行的，加载阶段尚未完成，连接阶段可能已经开始
+
+  但这些夹在加载阶段之中进行的动作，仍然属于连接阶段的内容，这两个阶段的开始时间仍然保持着固定的先后顺序
+</pre>
+</div>
+</div>
+
+<div id="outline-container-sec-2-2" class="outline-3">
+<h3 id="sec-2-2">验证</h3>
+<div class="outline-text-3" id="text-2-2">
+<p>
+验证是连接阶段的第一步,这一阶段的目的是为了 <b>确保Class文件的字节流中包含的信息符合当前虚拟机的要求,并且不会危害虚拟机自身的安全</b> 
+</p>
+
+<pre class="example">
+Java语言本身是相对安全的语言(依然是相对于C/C++来说),使用纯粹的Java代码无法做到诸如访问数组边界以外的数据、将一个对象转型为它并未实现的类型、跳转到不存在的代码行之类的事情
+
+如果这样做了,编译器将拒绝编译。但Class文件并不—定要求用Java源码编译而来,可以使用任何途径产生,甚至包括用十六进制编辑器直接编写来产生Class文件
+
+在字节码语言层面上,上述Java代码无法做到的事情都是可以实现的, 至少语义上是可以表达出来的
+
+虚拟机如果不检查输入的字节流,对其完全信任的话,很可能会因为载入了有害的字节流而导致系统崩溃,所以验证是虚拟机对自身保护的一项重要工作
+</pre>
+
+<p>
+验证阶段是非常重要的,这个阶段是否严谨,直接决定了Java虚拟机是否能承受恶意代码的攻击,从执行性能的角度上讲,验证阶段的工作量在虚拟机的类加载子系统中又占了相当大的一部分。从整体上看,验证阶段大致上会完成下面4个阶段的检验动作:
+</p>
+<ul class="org-ul">
+<li>文件格式验证
+</li>
+<li>元数据验证
+</li>
+<li>字节码验证
+</li>
+<li>符号引用验证
+</li>
+</ul>
+</div>
+
+<div id="outline-container-sec-2-2-1" class="outline-4">
+<h4 id="sec-2-2-1">文件格式验证</h4>
+<div class="outline-text-4" id="text-2-2-1">
+<p>
+验证 <b>字节流是否符合Class文件格式的规范，并且能被当前版本的虚拟机处理</b> 。这一阶段可能包括下面这些验证点:
+</p>
+<ul class="org-ul">
+<li>是否以魔数 <span class="underline">0xCAFEBABE</span> 开头
+</li>
+<li><span class="underline">主、次版本号</span> 是否在当前虚拟机处理范围之内
+</li>
+<li>常量池的常量中是否有不被支持的常量类型(检查常量tag标志)
+</li>
+<li>指向 <span class="underline">常量的各种索引值</span> 中是否有指向不存在的常量或不符合类型的常量
+</li>
+<li>CONSTANT_Utf8_info型的常量中是否有不符合UTF8编码的数据
+</li>
+<li>Class文件中各个部分及文件本身是否有被删除的或附加的其他信息
+</li>
+<li>……
+</li>
+</ul>
+
+<p>
+实际上，第一阶段的验证点还远不止这些，上面这些只是从HotSpot虚拟机源码中摘抄的一小部分内容，该验证阶段的主要目的是保证输入的字节流能正确地解析并存储于方法区之内，格式上符合描述一个Java类型信息的要求。这阶段的验证是 <b>基于二进制字节流</b> 进行的，只有通过了这个阶段的验证后，字节流才会进入内存的方法区中进行存储，所以后面的3个验证阶段全部是 <b>基于方法区的存储结构</b> 进行的，不会再直接操作字节流
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-2-2" class="outline-4">
+<h4 id="sec-2-2-2">元数据验证</h4>
+<div class="outline-text-4" id="text-2-2-2">
+<p>
+<b>对字节码描述的信息进行语义分析，以保证其描述的信息符合Java语言规范的要求</b> ，这个阶段可能包括的验证点如下:
+</p>
+<ul class="org-ul">
+<li>这个类 <span class="underline">是否有父类</span> (除了java.lang.Object之外，所有的类都应当有父类)
+</li>
+<li>这个类的父类是否 <span class="underline">继承了不允许被继承的类</span> (被final修饰的类)
+</li>
+<li>如果这个类不是抽象类，是否 <span class="underline">实现了其父类或接口之中要求实现的所有方法</span>
+</li>
+<li><span class="underline">类中的字段、方法是否与父类产生矛盾</span> (例如覆盖了父类的final字段，或者出现不符合规则的方法重载，例如方法参数都一致，但返回值类型却不同等)
+</li>
+<li>……
+</li>
+</ul>
+
+<p>
+第二阶段的主要目的是对类的元数据信息进行语义校验，保证不存在不符合Java语言规范的元数据信息
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-2-3" class="outline-4">
+<h4 id="sec-2-2-3">字节码验证</h4>
+<div class="outline-text-4" id="text-2-2-3">
+<p>
+第三阶段是整个验证过程中最复杂的一个阶段，主要目的是 <b>通过数据流和控制流分析，确定程序语义是合法的、符合逻辑的</b> 。在第二阶段对元数据信息中的数据类型做完校验后，这个阶段将对 <b>类的方法体进行校验分析，保证被校验类的方法在运行时不会做出危害虚拟机安全的事件</b> ，例如: 
+</p>
+<ul class="org-ul">
+<li>保证任意时刻 <span class="underline">操作数栈的数据类型与指令代码序列都能配合工作</span> ，例如不会出现类似这样的情况:
+<ul class="org-ul">
+<li>在操作栈放置了一个int类型的数据，使用时却按long类型来加载入本地变量表中
+</li>
+</ul>
+</li>
+<li>保证 <span class="underline">跳转指令不会跳转到方法体以外的字节码指令上</span> 
+</li>
+<li>保证方法体中的 <span class="underline">类型转换是有效的</span> 
+<ul class="org-ul">
+<li>可以把一个子类对象赋值给父类数据类型，这是安全的，但是把父类对象赋值给子类数据类型，甚至把对象赋值给与它毫无继承关系、完全不相干的一个数据类型，则是危险和不合法的
+</li>
+</ul>
+</li>
+<li>……
+</li>
+</ul>
+
+<pre class="example">
+  如果一个类方法体的字节码没有通过字节码验证，那肯定是有问题的
+
+  但如果一个方法体通过了字节码验证，也不能说明其一定就是安全的
+
+  即使字节码验证之中进行了大量的检查，也不能保证这一点
+
+  这里涉及了离散数学中一个很著名的问题“Halting Problem”
+
+  通过程序去校验程序逻辑是无法做到绝对准确的，不能通过程序准确地检查出程序是否能在有限的时间之内结束运行
+</pre>
+
+<p>
+由于数据校验的高复杂性，虚拟机设计团队为了避免过多的时间消耗在字节码验证阶段，在JDK1.6之后的Javac编译器和Java虚拟机中进行了一项优化，给方法体的Code属性的属性表中增加了一项名为 <span class="underline">StackMapTable</span> 的属性，这项属性描述了方法体中所有的基本块(Basic Block，按照控制流拆分的代码块)开始时本地变量表和操作栈应有的状态，在字节码验证期间，就不需要根据程序推导这些状态的合法性，只需要检查StackMapTable属性中的记录是否合法即可。这样将字节码验证的类型推导转变为类型检查从而节省一些时间
+</p>
+
+<pre class="example">
+  理论上StackMapTable属性也存在错误或被篡改的可能
+
+  所以是否有可能在恶意篡改了Code属性的同时，也生成相应的StackMapTable属性来骗过虚拟机的类型校验则是虚拟机设计者值得思考的问题
+</pre>
+
+<p>
+在JDK1.6的HotSpot虚拟机中提供了 <span class="underline">-XX:-UseSplitVerifier</span> 选项来关闭这项优化，或者使用参数 <span class="underline">-XX:+FailOverTo0ldVerifier</span> 要求在类型校验失败的时候退回到旧的类型推导方式进行校验。而在JDK1.7之后，对于主版本号大于50的Class文件，使用类型检查来完成数据流分析校验则是唯一的选择，不允许再退回到类型推导的校验方式
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-2-4" class="outline-4">
+<h4 id="sec-2-2-4">符号引用验证</h4>
+<div class="outline-text-4" id="text-2-2-4">
+<p>
+最后一个阶段的校验发生在虚拟机将 <span class="underline">符号引用转化为直接引用的时候</span> ，这个转化动作将在连接的第三阶段 <b>解析</b> 阶段中发生。符号引用验证可以看做是对 <b>类自身以外(常量池中的各种符号引用)的信息进行匹配性校验</b> ，通常需要校验下列内容:
+</p>
+<ul class="org-ul">
+<li>符号引用中通过 <span class="underline">字符串描述的全限定名是否能找到对应的类</span>
+</li>
+<li>在指定类中是否 <span class="underline">存在符合方法的字段描述符以及简单名称所描述的方法和字段</span>
+</li>
+<li>符号引用中的 <span class="underline">类、字段、方法的访问性</span> (private、protected、public、default)是否可被当前类访问
+</li>
+<li>……  
+</li>
+</ul>
+
+<p>
+符号引用验证的目的是确保解析动作能正常执行，如果无法通过符号引用验证，那么将会拋出一个 <span class="underline">java.lang.IncompatibleClassChangeError</span> 异常的子类
+</p>
+<ul class="org-ul">
+<li><span class="underline">java.lang.IllegalAccessError</span>
+</li>
+<li><span class="underline">java.lang.NoSuchFieldError</span>
+</li>
+<li><span class="underline">java.lang.NoSuchMethodError</span> 
+</li>
+</ul>
+
+<p>
+对于虚拟机的类加载机制来说，验证阶段是一个非常重要的、但不是一定必要(因为对程序运行期没有影响)的阶段。如果所运行的全部代码(包括自己编写的及第三方包中的代码)都已经被反复使用和验证过，那么在实施阶段就可以考虑使用 <span class="underline">-Xverify:none</span> 参数来关闭大部分的类验证措施，以缩短虚拟机类加载的时间
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-3" class="outline-3">
+<h3 id="sec-2-3">准备</h3>
+<div class="outline-text-3" id="text-2-3">
+<p>
+<b>准备</b> 阶段是正式 <b>为类变量分配内存并设置类变量初始值</b> 的阶段，这些变量所使用的内存都将在 <span class="underline">方法区</span> 中进行分配。这个阶段中有两个容易产生混淆的概念需要强调一下
+</p>
+<ol class="org-ol">
+<li>这时候进行内存分配的仅包括 <b>类变量</b> (被 <span class="underline">static</span> 修饰的变量)，而不包括实例变量，实例变量将会在对象实例化时随着对象一起分配在Java堆中
+</li>
+<li>这里所说的初始值通常情况下是 <b>数据类型的零值</b> ，假设一个类变量的定义为:
+</li>
+</ol>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">value</span>=123;
+</pre>
+</div>
+<p>
+那变量value在准备阶段过后的初始值为 <span class="underline">0</span> 而不是123, 因为这时候尚未开始执行任何Java方法,而把value賦值为123的 <span class="underline">putstatic</span> 指令是程序被编译运,存放于类构造器 <span class="underline">&lt;clinit&gt;()</span> 方法之中,所以把value賦值为123的动作将在 <b>初始化</b> 阶段才会执行。下表列出了Java中所有基本数据类型的零值
+</p>
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 1:</span> 基本数据类型的零值</caption>
+
+<colgroup>
+<col  class="left" />
+
+<col  class="left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="left">数据类型</td>
+<td class="left">零值</td>
+</tr>
+
+<tr>
+<td class="left">int</td>
+<td class="left">0</td>
+</tr>
+
+<tr>
+<td class="left">long</td>
+<td class="left">0L</td>
+</tr>
+
+<tr>
+<td class="left">short</td>
+<td class="left">(short) 0</td>
+</tr>
+
+<tr>
+<td class="left">char</td>
+<td class="left">'\u0000'</td>
+</tr>
+
+<tr>
+<td class="left">byte</td>
+<td class="left">(byte) 0</td>
+</tr>
+
+<tr>
+<td class="left">boolean</td>
+<td class="left">false</td>
+</tr>
+
+<tr>
+<td class="left">float</td>
+<td class="left">0.0f</td>
+</tr>
+
+<tr>
+<td class="left">double</td>
+<td class="left">0.0d</td>
+</tr>
+
+<tr>
+<td class="left">reference</td>
+<td class="left">null</td>
+</tr>
+</tbody>
+</table>
+
+<p>
+如果类字段的字段属性表中存在 <span class="underline">ConstantValue</span> 属性，那在 <b>准备</b> 阶段变量value就会被初始化为 <span class="underline">ConstantValue属性</span> 所指定的值，假设上面类变量value的定义变为:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">final</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">value</span> = 123;
+</pre>
+</div>
+<p>
+编译时Javac将会为value生成ConstantValue属性，在准备阶段虚拟机就会根据ConstantValue的设置将value赋值为123
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-4" class="outline-3">
+<h3 id="sec-2-4">解析</h3>
+</div>
+</div>
 </div>
 <div id="postamble" class="status">
 
