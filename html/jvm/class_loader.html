@@ -217,7 +217,20 @@ for the JavaScript code in this tag.
 <li><a href="#sec-2-5">初始化</a></li>
 </ul>
 </li>
-<li><a href="#sec-3">类加载器</a></li>
+<li><a href="#sec-3">类加载器</a>
+<ul>
+<li><a href="#sec-3-1">类的唯一性</a></li>
+<li><a href="#sec-3-2">双亲委派模型</a>
+<ul>
+<li><a href="#sec-3-2-1">启动类加载器</a></li>
+<li><a href="#sec-3-2-2">扩展类加载器</a></li>
+<li><a href="#sec-3-2-3">应用程序类加载器</a></li>
+<li><a href="#sec-3-2-4">自定义类加载器</a></li>
+<li><a href="#sec-3-2-5">破坏双亲委派模型</a></li>
+</ul>
+</li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
@@ -1171,6 +1184,381 @@ Thread[Thread-0 ,5 ,main]init DeadLoopClass
 
 <div id="outline-container-sec-3" class="outline-2">
 <h2 id="sec-3">类加载器</h2>
+<div class="outline-text-2" id="text-3">
+<p>
+虚拟机设计团队把类加载阶段中的 <b>通过一个类的全限定名来获取描述此类的二进制字节流</b> 这个动作放到Java虚拟机外部去实现，以便让应用程序自己决定如何去获取所需要的类。实现这个动作的代码模块称为 <span class="underline">类加载器</span> 
+</p>
+
+<p>
+类加载器可以说是Java语言的一项创新，也是Java语言流行的重要原因之一，它最初是为了满足Java Applet的需求而开发出来的。虽然目前Java Applet技术基本上已经死掉，但类加载器却在类层次划分、OSGi、热部署、代码加密等领域大放异彩，成为了Java技术体系中一块重要的基石
+</p>
+</div>
+
+<div id="outline-container-sec-3-1" class="outline-3">
+<h3 id="sec-3-1">类的唯一性</h3>
+<div class="outline-text-3" id="text-3-1">
+<p>
+类加载器虽然只用于实现类的加载动作，但它在Java程序中起到的作用却远远不限于类加载阶段。对于任意一个类，都需要由 <b>加载它的类加载器和这个类本身</b> 一同确立其在Java虚拟机中的 <b>唯一性</b> ，每一个类加载器，都拥有一个独立的类名称空间
+</p>
+
+<pre class="example">
+   比较两个类是否“相等”，只有在这两个类是由同一个类加载器加载的前提下才有意义
+   
+   否则，即使这两个类来源于同一个Class文件，被同一个虚拟机加载，只要加载它们的类加载器不同，那这两个类就必定不相等
+</pre>
+
+<p>
+这里所指的 <span class="underline">相等</span> ，包括代表类的 <span class="underline">Class对象的equals()</span> 方法、 <span class="underline">isAssignableFrom()</span> 方法、 <span class="underline">islnstance()</span> 方法的返回结果，也包括使用 <b>instanceof</b> 关键字做对象所属
+关系判定等情况。如果没有注意到类加载器的影响，在某些情况下可能会产生具有迷惑性的结果，下面代码演示了不同的类加载器对 <b>instanceof</b> 关键字运算的结果的影响:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;"> * &#31867;&#21152;&#36733;&#22120;&#19982;instanceof&#20851;&#38190;&#23383;&#28436;&#31034;</span>
+<span style="color: #ffa07a;"> * </span>
+<span style="color: #ffa07a;"> * </span><span style="color: #7fffd4;">@author</span><span style="color: #ffa07a;"> zzm</span>
+<span style="color: #ffa07a;"> */</span>
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">ClassLoaderTest</span> {
+
+        <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">String</span>[] <span style="color: #eedd82;">args</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Exception</span> {
+
+                <span style="color: #98fb98;">ClassLoader</span> <span style="color: #eedd82;">myLoader</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">ClassLoader</span>() {
+                                <span style="color: #7fffd4;">@Override</span>
+                                <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">Class</span>&lt;?&gt; <span style="color: #87cefa;">loadClass</span>(<span style="color: #98fb98;">String</span> <span style="color: #eedd82;">name</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">ClassNotFoundException</span> {
+                                        <span style="color: #00ffff;">try</span> {
+                                                <span style="color: #98fb98;">String</span> <span style="color: #eedd82;">fileName</span> = name.substring(name.lastIndexOf(<span style="color: #ffa07a;">"."</span>) + 1) + <span style="color: #ffa07a;">".class"</span>;
+                                                <span style="color: #98fb98;">InputStream</span> <span style="color: #eedd82;">is</span> = getClass().getResourceAsStream(fileName);
+                                                <span style="color: #00ffff;">if</span> (is == <span style="color: #7fffd4;">null</span>) {
+                                                        <span style="color: #00ffff;">return</span> <span style="color: #00ffff;">super</span>.loadClass(name);
+                                                }
+                                                <span style="color: #98fb98;">byte</span>[] <span style="color: #eedd82;">b</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">byte</span>[is.available()];
+                                                is.read(b);
+                                                <span style="color: #00ffff;">return</span> defineClass(name, b, 0, b.length);
+                                        } <span style="color: #00ffff;">catch</span> (<span style="color: #98fb98;">IOException</span> <span style="color: #eedd82;">e</span>) {
+                                                <span style="color: #00ffff;">throw</span> <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">ClassNotFoundException</span>(name);
+                                        }
+                                }
+                        };
+
+                <span style="color: #98fb98;">Object</span> <span style="color: #eedd82;">obj</span> = myLoader.loadClass(<span style="color: #ffa07a;">"org.fenixsoft.classloading.ClassLoaderTest"</span>).newInstance();
+
+                System.out.println(obj.getClass());
+                System.out.println(obj <span style="color: #00ffff;">instanceof</span> <span style="color: #7fffd4;">org</span>.<span style="color: #7fffd4;">fenixsoft</span>.<span style="color: #7fffd4;">classloading</span>.ClassLoaderTest);
+        }
+}
+</pre>
+</div>
+<pre class="example">
+class org.fenixsoft.classloading.ClassLoaderTest
+false
+</pre>
+
+<p>
+这里构造了一个简单的类加载器，它可以加载与自己在同一路径下的Class文件。使用这个类加载器去加载了一个名为 <span class="underline">org.fenixsoft.classloading.ClassLoaderTest</span> 的类，并实例化了这个类的对象。两行输出结果中：
+</p>
+<ul class="org-ul">
+<li>第一句可以看出，这个对象确实是类 <span class="underline">org.fenixsoft.classloading.ClassLoaderTest</span> 实例化出来的对象
+</li>
+<li>第二句可以发现，这个对象与类 <span class="underline">org.fenixsoft.classloading.ClassLoaderTest</span> 做所属 <b>类型检查</b> 的时候却返回了 <span class="underline">false</span> ，这是因为虚拟机中存在了两个 <span class="underline">ClassLoaderTest</span> 类: 
+<ul class="org-ul">
+<li>一个是由 <b>系统应用程序类加载器</b> 加载的
+</li>
+<li>一个是由 <b>自定义的类加载器</b> 加载的
+</li>
+<li>虽然都来自同一个Class文件，但依然是两个独立的类，做对象所属类型检查时结果自然为 <span class="underline">false</span>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-3-2" class="outline-3">
+<h3 id="sec-3-2">双亲委派模型</h3>
+<div class="outline-text-3" id="text-3-2">
+<p>
+从Java虚拟机的角度来讲，只存在两种不同的类加载器:
+</p>
+<ol class="org-ol">
+<li><b>启动类加载器</b> ( <span class="underline">Bootstrap ClassLoader</span> )，这个类加载器使用 <span class="underline">C++</span> 语言实现，是虚拟机自身的一部分
+</li>
+<li>所有其他的类加载器，这些类加载器都由 <span class="underline">Java</span> 语言实现，独立于虚拟机外部，并且全都继承自抽象类 <span class="underline">java.lang.ClassLoader</span> 
+</li>
+</ol>
+
+<p>
+从Java开发人员的角度来看，类加载器还可以划分得更细致一些，绝大部分Java程序都会使用到以下3种系统提供的类加载器
+</p>
+</div>
+
+<div id="outline-container-sec-3-2-1" class="outline-4">
+<h4 id="sec-3-2-1">启动类加载器</h4>
+<div class="outline-text-4" id="text-3-2-1">
+<p>
+<span class="underline">Bootstrap ClassLoader</span> 这个类将器负责将存放在 <span class="underline">&lt;JAVA_HOME&gt;\lib</span> 目录中的，或者被 <span class="underline">-Xbootclasspath</span> 参数所指定的路径中的，并且是虚拟机识别的(仅按照文件名识别，如rt.jar，名字不符合的类库即使放在lib目录中也不会被加载)类库加载到虚拟机内存中
+</p>
+
+<p>
+启动类加载器无法被Java程序直接引用，用户在编写自定义类加载器时，如果需要 <b>把加载请求委派给引导类加载器，那直接使用 <span class="underline">null</span> 代替</b> 即可
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #ffa07a;">/**</span>
+<span style="color: #ffa07a;">   Returns the class loader for the class. Some implementations will use null</span>
+<span style="color: #ffa07a;">   to represent the bootstrap class loader. The method will return null in such</span>
+<span style="color: #ffa07a;">   implemenatation if this class was loaded by the bootstrap class loader. </span>
+<span style="color: #ffa07a;">**/</span>
+<span style="color: #00ffff;">public</span> <span style="color: #98fb98;">classLoader</span> <span style="color: #87cefa;">getClassLoader</span>(){
+    <span style="color: #98fb98;">ClassLoader</span> <span style="color: #eedd82;">cl</span> = getClassLoader0();
+    <span style="color: #00ffff;">if</span>(cl==<span style="color: #7fffd4;">null</span>)
+        <span style="color: #00ffff;">return</span> <span style="color: #7fffd4;">null</span>;
+    <span style="color: #98fb98;">SecurityManager</span> <span style="color: #eedd82;">sm</span> = <span style="color: #7fffd4;">System</span>.GetSecurityManager();
+    <span style="color: #00ffff;">if</span>(sm != <span style="color: #7fffd4;">null</span>){
+        <span style="color: #98fb98;">ClassLoader</span> <span style="color: #eedd82;">ccl</span> = ClassLoader.getCallerClassLoader();
+        <span style="color: #00ffff;">if</span>(ccl != <span style="color: #7fffd4;">null</span> &amp;&amp; ccl != cl &amp;&amp; cl.isAncestor(ccl)){
+            sm.checkPermission(<span style="color: #7fffd4;">SecurityConstants</span>.GET_CLASSLOADER_PERMISSION);
+        }
+    }
+    <span style="color: #00ffff;">return</span> cl;
+}
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-3-2-2" class="outline-4">
+<h4 id="sec-3-2-2">扩展类加载器</h4>
+<div class="outline-text-4" id="text-3-2-2">
+<p>
+<span class="underline">Extension ClassLoader</span> 这个加载器由 <span class="underline">sun.misc.Launcher$ExtClassLoader</span> 实现，它负责加载 <span class="underline">&lt;JAVE_HOME&gt;\lib\ext</span> 对目录中的，或者被 <span class="underline">java.ext.dirs</span> 系统变量所指定的路径中的所有类库,开发者可以直接使用扩展类加载器
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-3-2-3" class="outline-4">
+<h4 id="sec-3-2-3">应用程序类加载器</h4>
+<div class="outline-text-4" id="text-3-2-3">
+<p>
+<span class="underline">Application ClassLoader</span> 类加载器由 <span class="underline">sun.misc.Launcher$AppClassLoader</span> 实现。由于这个类加载器是 <span class="underline">ClassLoader</span> 中的 <span class="underline">getSystemClassLoader()</span> 方法的返回值，所以一般也称它为 <b>系统类加载器</b> 。它负责加载用户类路径 <span class="underline">ClassPath</span> 上所指定的类库，开发者可以直接使用这个类加载器，如果应用程序中没有自定义过自己的类加载器，一般情况下这个就是程序中默认的类加载器
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-3-2-4" class="outline-4">
+<h4 id="sec-3-2-4">自定义类加载器</h4>
+<div class="outline-text-4" id="text-3-2-4">
+<p>
+应用程序都是由以上这3种类加载器互相配合进行加载的，如果有必要，还可以加入自己定义的类加载器。这些类加载器之间的关系一般如图所示：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/class-loader-relationship.jpg" alt="class-loader-relationship.jpg" width="70%" /> 
+</p>
+</div>
+
+<p>
+类加载器之间的这种层次关系，称为类加载器的 <b>双亲委派模型</b> ( <span class="underline">Parents Delegation Model</span> )。双亲委派模型要求除了顶层的启动类加载器外，其余的类加载器都应当有自己的父类加载器。这里类加载器之间的父子关系一般不会以 <span class="underline">继承</span> 的关系来实现，而是都使用 <b>组合</b> 关系来复用父加载器的代码
+</p>
+
+<pre class="example">
+    类加载器的双亲委派模型在JDK1.2期间被引入并被广泛应用于之后几乎所有的Java程序中
+    
+    但它并不是一个强制性的约束模型，而是Java设计者推荐给开发者的一种类加载器实现方式
+</pre>
+
+
+<p>
+双亲委派模型的工作过程是：如果一个类加载器收到了类加载的请求
+</p>
+<ul class="org-ul">
+<li>不会自己去尝试加载这个类，而是把这个请求委派给父加载器去完成
+<ul class="org-ul">
+<li>每一个层次的类加载器都是如此，因此所有的加载请求最终都应该传送到顶层的启动类加载器中
+</li>
+</ul>
+</li>
+<li>只有当父加载器反馈自己无法完成这个加载请求（它的搜索范围中没有找到所需的类）时，子加载器才会尝试自己去加载
+</li>
+</ul>
+
+<p>
+好处就是 <b>Java类随着它的类加载器一起具备了一种带有优先级的层次关系</b> 。例如类 <span class="underline">java.lang.Object</span> ，它存放在 <span class="underline">rt.jar</span> 之中，无论哪一个类加载器要加载这个类，最终都是委派给处于模型最顶端的启动类加载器进行加载，因此Object类在程序的各种类加载器环境中都是同一个类。相反，如果没有使用双亲委派模型，由各个类加载器自行去加载的话，如果用户自己编写了一个称为java.lang.Object的类，并放在程序的ClassPath中，那系统中将会出现多个不同的Object类，Java类型体系中最基础的行为也就无法保证，应用程序也将会变得一片混乱
+</p>
+
+<pre class="example">
+  如果有兴趣的话，可以尝试去编写一个与rt.jar类库中已有类重名的Java类，将会发现可以正常编译，但永远无法被加载运行
+</pre>
+
+<p>
+双亲委派模型对于保证Java程序的稳定运作很重要，但它的实现却非常简单，实现双亲委派的代码都集中在 <span class="underline">java.lang.ClassLoader</span> 的 <span class="underline">loadClass()</span> 方法之中，如下面代码所示:
+</p>
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">protected</span> <span style="color: #00ffff;">synchronized</span> <span style="color: #98fb98;">Class</span>&lt;?&gt; <span style="color: #87cefa;">loadClass</span>(<span style="color: #98fb98;">String</span> <span style="color: #eedd82;">name</span>, <span style="color: #98fb98;">boolean</span> <span style="color: #eedd82;">resolve</span>)
+    <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">ClassNotFoundException</span> {
+    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">First, check if the class has already been loaded</span>
+    <span style="color: #98fb98;">Class</span>&lt;?&gt; <span style="color: #eedd82;">c</span> = findLoadedClass(name);
+
+    <span style="color: #00ffff;">if</span> (c == <span style="color: #7fffd4;">null</span>) {
+        <span style="color: #00ffff;">try</span> {
+            <span style="color: #00ffff;">if</span> (parent != <span style="color: #7fffd4;">null</span>) {
+                c = parent.loadClass(name, <span style="color: #7fffd4;">false</span>);
+            } <span style="color: #00ffff;">else</span> {
+                c = findBootstrapClassOrNull(name);
+            }
+        } <span style="color: #00ffff;">catch</span> (<span style="color: #98fb98;">ClassNotFoundException</span> <span style="color: #eedd82;">e</span>) {
+            <span style="color: #ff4500;">// </span><span style="color: #ff4500;">ClassNotFoundException thrown if class not found</span>
+            <span style="color: #ff4500;">// </span><span style="color: #ff4500;">from the non-null parent class loader</span>
+        }
+
+        <span style="color: #00ffff;">if</span> (c == <span style="color: #7fffd4;">null</span>) {
+            <span style="color: #ff4500;">// </span><span style="color: #ff4500;">If still not found, then invoke findClass in order</span>
+            <span style="color: #ff4500;">// </span><span style="color: #ff4500;">to find the class.</span>
+            c = findClass(name);
+        }
+
+
+    }
+
+    <span style="color: #00ffff;">if</span> (resolve) {
+        resolveClass(c);
+    }
+
+    <span style="color: #00ffff;">return</span> c;
+
+                }
+</pre>
+</div>
+
+<ol class="org-ol">
+<li>先检查是否已经被加载过
+</li>
+<li>若没有加载则调用父加载器的 <span class="underline">loadClass()</span> 方法
+</li>
+<li>若父加载器为空则默认使用启动类加载器作为父加载器
+</li>
+<li>如果父类加载失败，拋出 <span class="underline">ClassNotFoundException</span> 异常后
+</li>
+<li>调用自己的 <span class="underline">findClass()</span> 方法进行加载
+</li>
+</ol>
+
+<pre class="example">
+  这里只限于Hot Spot，像MRP、Maxife等虚拟机，整个虚拟机本身都是由Java编写的，自然BootstrapClassLoader也是由Java语言而不是C++实现的
+
+  除了Hot Spot以外的其他两个高能虚拟机JRockit和J9都有一个代表Bootstrap ClassLoader的Java类存在
+
+  但是关键方法的实现仍然是使用JNI回调到C(注意不是C++)的实现上，这个Bootstrap ClassLoader的实例也无法被用户获取到
+</pre>
+
+<p>
+即使自定义了自己的类加载器，强行用 <span class="underline">defineClass()</span> 方法去加载以 <span class="underline">java.lang</span> 开头的类也不会成功。如果尝试这样做的话，将会收到一个由虚拟机自己拋出的 <span class="underline">java.lang.SecurityException: Prohibited package name: java.lang</span> 异常
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-3-2-5" class="outline-4">
+<h4 id="sec-3-2-5">破坏双亲委派模型</h4>
+<div class="outline-text-4" id="text-3-2-5">
+<p>
+双亲委派模型并不是一个 <b>强制性的约束模型</b> ，而是Java设计者推荐给开发者的类加载器实现方式。在Java的世界中大部分的类加载器都遵循这个模型，但也有例外，到目前为止，双亲委派模型主要出现过3较大规模的 <span class="underline">被破坏</span> 情况：
+</p>
+
+<p>
+第一次发生在双亲委派模型出现之前，即JDK1.2发布之前。由于双亲委派模型在JDK1.2之后才被引入，而类加载器和抽象类 <span class="underline">java.lang.ClassLoader</span> 则在JDK1.0时代就已经存在，面对已经存在的用户自定义类加载器的实现代码，Java设计者引入双亲委派模型时不得不做出一些妥协。为了向前兼容，JDK1.2之后的 <span class="underline">java.lang.ClassLoader</span> 添加了一个新的 <span class="underline">protected</span> 方法 <span class="underline">findClass()</span> （用户自定义加载类逻辑），在此之前，用户去继承java.lang.ClassLoader的唯一目的就是为了重写loadClass()方法（实现双亲委派模型），因为虚拟机在进行类加载的时候会调用加载器的私有方法 <span class="underline">loadClassInternal()</span> 这个方法的唯一逻辑就是去调用自己的 <span class="underline">loadClass()</span> 
+</p>
+
+<pre class="example">
+JDK1.2之后已不提倡用户再去覆盖loadClass()方法，而应当把自己的类加载逻辑写到findClass()方法中
+
+在loadClass()方法的逻辑里如果父类加载失败，则会调用自己的findClass()方法来完成加载，这样就可以保证新写出来的类加载器是符合双亲委派规则的
+</pre>
+
+<p>
+第二次是由这个模型自身的缺陷所导致的，双亲委派很好地解决了各个类加载器的基础类的统一问题(越基础的类由越上层的加载器进行加载)，基础类之所以称为 <span class="underline">基础</span> ，是因为它们总是作为被用户代码调用的API，但世事往往没有绝对的完美，如果基础类又要调用回用户的代码，那该怎么办?
+</p>
+
+<p>
+这并非是不可能的事情，一个典型的例子便是 <span class="underline">JNDI</span> 服务，JNDI现在已经是Java的标准服务，它的代码由启动类加载器去加载(在JDK1.3时放进去的rt.jar)，但JNDI的目的就是对资源进行集中管理和查找，它需要调用由独立厂商实现并部署在应用程序的ClassPath下的JNDI接口提供者( <span class="underline">SH，ServiceProviderInterface</span> )的代码，但启动类加载器不可能 <b>认识</b> 这些代码
+</p>
+
+<p>
+为了解决这个问题，Java设计团队只好引入了一个不太优雅的设计: <b>线程上下文类加载器</b> ( <span class="underline">ThreadContext ClassLoader</span> )。这个类加载器可以通过 <span class="underline">java.lang.Thread</span> 类的 <span class="underline">setContextClassLoaser()</span> 方法进行设置，如果创建线程时还未设置，它将会从父线程中继承一个，如果在应用程序的全局范围内都没有设置过的话，那这个类加载器默认就是应用程序类加载器
+</p>
+
+<pre class="example">
+JNDI服务使用这个线程上下文类加载器去加载所需要的SPI代码，也就是父类加载器请求子类加载器去完成类加载的动作
+
+这种行为实际上就是打通了双亲委派模型的层次结构来逆向使用类加载器，实际上已经违背了双亲委派模型的一般性原则，但这也是无可奈何的事情
+
+Java中所有涉及SPI的加载动作基本上都采用这种方式，例如 JNDI 、 JDBC 、 JCE 、 JAXB 和 JBI 等
+</pre>
+
+<p>
+第三次是由于用户对程序 <b>动态性</b> 的追求而导致的: <span class="underline">代码热替换</span> (Hot Swap)、 <span class="underline">模块热部署</span> (Hot Deployment)等。对于一些生产系统来说，关机重启一次可能就要被列为生产事故，这种情况下热部署就对软件开发者，尤其是企业级软件开发者具有很大的吸引力
+</p>
+
+<pre class="example">
+Sun公司所提出的JSR-294、JSR-277规范在与JCP组织的模块化规范之争中落败给JSR-291(即OSGi R4.2)
+
+虽然Sun不甘失去Java模块化的主导权,独立在发展Jigsaw项目,但目前OSGi已经成为了业界“事实上”的Java模块化标准
+
+而OSGi实现模块化热部署的关键则是它自定义的类加载器机制的实现
+
+每一个程序模块(OSGi中称为Bundle)都有一个自己的类加载器,当需要更换一个Bundle时,就把Bundle连同类加载器一起换掉以实现代码的热替换
+</pre>
+
+<p>
+在OSGi环境下，类加载器不再是双亲委派模型中的 <span class="underline">树状</span> 结构，而是进一步发展为更加复杂的 <b>网状</b> 结构，当收到类加载请求时，OSGi将按照下面的顺序进行类搜索:
+</p>
+<ol class="org-ol">
+<li>将以java.*开头的类委派给父类加载器加载
+</li>
+<li>将委派列表名单内的类委派给父类加载器加载
+</li>
+<li>将Import列表中的类委派给Export这个类的Bundle的类加载器加载
+</li>
+<li>查找当前Bundle的ClassPath，使用自己的类加载器加载
+</li>
+<li>查找类是否在自己的FragmentBundle中，如果在，则委派给FragmentBundle的类加载器加载
+</li>
+<li>查找DynamicImport列表的Bundle，委派给对应Bundle的类加载器加载
+</li>
+<li>类查找失败
+</li>
+</ol>
+
+<p>
+查找顺序中只有开头两点仍然符合双亲委派规则，其余的类查找都是在平级的类加载器中进行的
+</p>
+
+<pre class="example">
+“被破坏”这个词来形容上述不符合双亲委派模型原则的行为，但这里“被破坏”并不带有贬义的感情色彩
+
+只要有足够意义和理由，突破已有的原则就可认为是一种创新
+
+正如OSGi中的类加载器并不符合传统的双亲委派的类加载器，并且业界对其为了实现热部署而带来的额外的高复杂度还存在不少争议
+
+但在Java程序员中基本有一个共识:OSGi中对类加载器的使用是很值得学习的，弄懂了OSGi的实现，就可以算是掌握了类加载器的精髓
+</pre>
+
+<p>
+<a href="execution_engine.html">Next：执行引擎</a>
+</p>
+
+<p>
+<a href="class_structure.html">Previous：类文件结构</a>
+</p>
+
+<p>
+<a href="jvm.html">Home：目录</a>
+</p>
+</div>
+</div>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
