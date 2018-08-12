@@ -206,9 +206,18 @@ for the JavaScript code in this tag.
 </ul>
 </li>
 <li><a href="#sec-2-3">准备</a></li>
-<li><a href="#sec-2-4">解析</a></li>
+<li><a href="#sec-2-4">解析</a>
+<ul>
+<li><a href="#sec-2-4-1">类或接口的解析</a></li>
+<li><a href="#sec-2-4-2">字段解析</a></li>
+<li><a href="#sec-2-4-3">类方法解析</a></li>
+<li><a href="#sec-2-4-4">接口方法解析</a></li>
 </ul>
 </li>
+<li><a href="#sec-2-5">初始化</a></li>
+</ul>
+</li>
+<li><a href="#sec-3">类加载器</a></li>
 </ul>
 </div>
 </div>
@@ -765,7 +774,403 @@ Java语言本身是相对安全的语言(依然是相对于C/C++来说),使用�
 
 <div id="outline-container-sec-2-4" class="outline-3">
 <h3 id="sec-2-4">解析</h3>
+<div class="outline-text-3" id="text-2-4">
+<p>
+<b>解析</b> 阶段是虚拟机 <b>将常量池内的符号引用替换为直接引用</b> 的过程，符号引用在前一章讲解Class文件格式的时候已经出现过多次，在Class文件中它以CONSTANT_Class_info、CONSTANT_Fieldref_info、CONSTANT_Methodref_info等类型的常量出现
+</p>
+<ul class="org-ul">
+<li><b>符号引用</b> :以一组符号来描述所引用的目标，符号可以是 <span class="underline">任何形式的字面量</span> ，只要使用时能无歧义地定位到目标即可
+<ul class="org-ul">
+<li><b>虚拟机实现的内存布局无关</b>
+</li>
+<li>引用的目标并 <b>不一定已经加载到内存</b> 中
+</li>
+<li>各种虛拟机实现的内存布局可以各不相同，但是它们能接受的符号引用必须都是一致的，因为符号引用的字面量形式明确定义在Java虚拟机规范的Class文件格式中
+</li>
+</ul>
+</li>
+<li><b>直接引用</b> :可以是 <span class="underline">直接指向目标的指针</span> 、 <span class="underline">相对偏移量</span> 或是一个能 <span class="underline">间接定位到目标的句柄</span> 
+<ul class="org-ul">
+<li><b>和虚拟机实现的内存布局相关</b>
+</li>
+<li>同一个符号引用在不同虚拟机实例上翻译出来的直接引用一般不会相同
+</li>
+<li>如果有了直接引用，那 <b>引用的目标必定已经在内存中存在</b> 
+</li>
+</ul>
+</li>
+</ul>
+
+<p>
+虚拟机规范之中并未规定解析阶段发生的具体时间，只要求了在执行 <span class="underline">anewarray</span> 、 <span class="underline">checkcast</span> 、 <span class="underline">getfield</span> 、 <span class="underline">getstatic</span> 、 <span class="underline">instanceof</span> 、 <span class="underline">invokedynamic</span> 、 <span class="underline">invokeinterface</span> 、 <span class="underline">invokespecial</span> 、 <span class="underline">invokestatic</span> 、 <span class="underline">invokevirtual</span> 、 <span class="underline">ldc</span> 、 <span class="underline">ldc_w</span> 、 <span class="underline">multianewarray</span> 、 <span class="underline">new</span> 、 <span class="underline">putfield</span> 和 <span class="underline">putstatic</span> 这16个用于操作符号引用的字节码指令之前，先对它们所使用的符号引用进行解析。所以虚拟机实现可以根据需要来判断到底是在类被加载器加载时就对常量池中的符号引用进行解析，还是等到一个符号引用将要被使用前才去解析它
+</p>
+
+
+<p>
+对同一个符号引用进行多次解析请求是很常见的事情，除 <span class="underline">invokedynamic</span> 指令以外，虚拟机实现可以对第一次解析的结果进行 <b>缓存</b> (在运行时常量池中记录直接引用，并把常量标识为已解析状态)从而避免解析动作重复进行。无论是否真正执行了多次解析动作，虚拟机需要保证的是在同一个实体中：
+</p>
+<ul class="org-ul">
+<li>如果一个符号引用之前已经被成功解析过，那么后续的引用解析请求就应当一直成功
+</li>
+<li>如果第一次解析失败了，那么其他指令对这个符号的解析请求也应该收到相同的异常
+</li>
+</ul>
+
+<pre class="example">
+  当碰到某个前面已经由invokedynamic指令触发过解析的符号引用时，并不意味着这个解析结果对于其他也invokedynamic指令也同样生效
+
+  因为invokedynamic指令的目的本来就是用于动态语言支持(目前仅使用Java语言不会生成这条字节码指令)
+
+  它所对应的引用称为“动态调用&gt;点限定符”，这里“动态”的含义就是必须等到程序实际运行到这条指令的时候，解析动作才能进行
+
+  相对的，其余可触发解析的指令都是“静态”的，可以在刚刚完成加载阶段，还没有开始执行代码时就进行解析
+</pre>
+
+
+<p>
+解析动作主要针对7类符号引用进行: 
+</p>
+<ul class="org-ul">
+<li>类或接口:CONSTANT_Class_info
+</li>
+<li>字段:CONSTANT_Fieldref_info
+</li>
+<li>类方法:CONSTANT_Methodref_info
+</li>
+<li>接口方法:CONSTANT_InterfaceMethodref_info
+</li>
+<li>方法类型:CONSTANT_MethodType_info
+</li>
+<li>方法句柄:CONSTANT_MethodHandle_info
+</li>
+<li>调用点限定符:CONSTANT_invokeDynamic_info
+</li>
+</ul>
+
+<pre class="example">
+  最后3种，与JDK1.7新增的动态语言支持息息相关
+
+  由于Java语言是一门静态类型的语言，因此在没有介绍invokedynamic指令的语义之前，没有办法将它们和现在的Java语言对应上
+</pre>
 </div>
+
+<div id="outline-container-sec-2-4-1" class="outline-4">
+<h4 id="sec-2-4-1">类或接口的解析</h4>
+<div class="outline-text-4" id="text-2-4-1">
+<p>
+假设当前代码所处的类为 <span class="underline">D</span> ，如果要把一个从未解析过的符号引用 <span class="underline">N</span> 解析为一个类或接口 <span class="underline">C</span> 的直接引用，那虚拟机完成整个解析的过程需要以下3个步骤:
+</p>
+<ol class="org-ol">
+<li>如果 C <b>不是一个数组</b> 类型，那虚拟机将会把代表N的 <span class="underline">全限定名</span> 传递给 <span class="underline">D的类加载器</span> 去加载这个类C
+<ul class="org-ul">
+<li>在加载过程中，由于 <span class="underline">元数据验证</span> 、 <span class="underline">字节码验证</span> 的需要，又可能触发其他相关类的加载动作，例如加载这个类的父类或实现的接口
+</li>
+<li>一旦这个加载过程出现了任何异常，解析过程就宣告失败
+</li>
+</ul>
+</li>
+<li>如果C是一个 <b>数组</b> 类型，并且数组的 <b>元素类型为对象</b> ，也就是N的描述符会是类似 <span class="underline">[Ljava/lang/Integer</span> 的形式
+<ul class="org-ul">
+<li>按照第1点的规则加载数组元素类型。如果N的描述符如前面所假设的形式，需要加载的元素类型就是 <span class="underline">java.lang.Integer</span>
+</li>
+<li>虚拟机生成一个代表此数组维度和元素的数组对象
+</li>
+</ul>
+</li>
+<li>如果上面的步骤没有出现任何异常，那么C在虚拟机中实际上已经成为一个有效的类或接口了，但在解析完成之前还要进行符号引用验证，确认 <b>D是否具备对C的访问权限</b> 
+<ul class="org-ul">
+<li>如果发现不具备访问权限，将拋出 <span class="underline">java.lang.IllegalAccessError</span> 异常
+</li>
+</ul>
+</li>
+</ol>
+</div>
+</div>
+
+<div id="outline-container-sec-2-4-2" class="outline-4">
+<h4 id="sec-2-4-2">字段解析</h4>
+<div class="outline-text-4" id="text-2-4-2">
+<p>
+要解析一个未被解析过的字段符号引用，首先将会对 <span class="underline">字段表内class_index</span> 项中索引的 CONSTANT_Class_info 符号引用进行解析，也就是 <b>字段所属的类或接口的符号引用</b> 
+</p>
+<ul class="org-ul">
+<li>如果在解析这个类或接口符号引用的过程中出现了任何异常，都会导致字段符号引用解析的失败
+</li>
+<li>如果解析成功完成，那将这个字段所属的类或接口用C表示，虚拟机规范要求按照如下步骤对C进行后续字段的搜索:
+<ol class="org-ol">
+<li>如果 <b>C本身就包含了简单名称和字段描述符都与目标相匹配的字段</b> ，则返回这个字段的直接引用，查找结束
+</li>
+<li>如果在C中实现了接口，将会按照 <span class="underline">继承关系从下往上递归搜索各个接口和它的父接口</span> ，如果 <b>接口中包含了简单名称和字段描述符都与目标相匹配的字段</b> ，则返回这个字段的直接引用，查找结束
+</li>
+<li>如果C不是 <span class="underline">java.lang.Object</span> 的话，将会按照 <span class="underline">继承关系从下往上递归搜索其父类</span> ，如果在 <b>父类中包含了简单名称和字段描述符都与目标相匹配的字段</b> ，则返回这个字段的直接引用，查找结束
+</li>
+<li>查找失败，拋出 <span class="underline">java.lang.NoSuchFieldError</span> 异常。
+</li>
+</ol>
+</li>
+<li>如果查找过程成功返回了引用，将会对这个 <span class="underline">字段进行权限验证</span> ，如果发现不具备对字段的访问权限，将拋出 <span class="underline">java.lang.IllegalAccessError</span> 异常。
+</li>
+</ul>
+
+<p>
+在实际应用中，虚拟机的编译器实现可能会比上述规范要求得更加严格一些，如果有一个同名字段同时出现在C的接口和父类中，或者同时在自己或父类的多个接口中出现，那编译器将可能拒绝编译
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">package</span> org.fenixsoft.<span style="color: #7fffd4;">classloading</span>;
+
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">FieldResolution</span> {
+        <span style="color: #00ffff;">interface</span> <span style="color: #98fb98;">Interface0</span> {
+                <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">A</span> = 0;
+        }
+
+        <span style="color: #00ffff;">interface</span> <span style="color: #98fb98;">Interface1</span> <span style="color: #00ffff;">extends</span> <span style="color: #98fb98;">Interface0</span> {
+                <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">A</span> = 1;
+        }
+
+        <span style="color: #00ffff;">interface</span> <span style="color: #98fb98;">Interface2</span> {
+                <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">A</span> = 2;
+        }
+
+        <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">Parent</span> <span style="color: #00ffff;">implements</span> <span style="color: #98fb98;">Interface1</span> {
+                <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">A</span> = 3;
+        }
+
+        <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">Sub</span> <span style="color: #00ffff;">extends</span> <span style="color: #98fb98;">Parent</span> <span style="color: #00ffff;">implements</span> <span style="color: #98fb98;">Interface2</span> {
+                <span style="color: #ff4500;">//</span><span style="color: #ff4500;">public static int A = 4;</span>
+        }
+
+        <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">String</span>[] <span style="color: #eedd82;">args</span>) {
+                System.out.println(<span style="color: #7fffd4;">Sub</span>.A);
+        }
+}
+</pre>
+</div>
+<pre class="example">
+FieldResolution.java:23: error: reference to A is ambiguous
+              System.out.println(Sub.A);                                      ^
+both variable A in Parent and variable A in Interface2 match
+1 error
+</pre>
+
+<p>
+注释了Sub类中的 <span class="underline">public static int A =4;</span> ，接口与父类同时存在字段A，那编译器将提示 <b>The field Sub.A is ambiguous</b> ，并且拒绝编译这段代码
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2-4-3" class="outline-4">
+<h4 id="sec-2-4-3">类方法解析</h4>
+<div class="outline-text-4" id="text-2-4-3">
+<p>
+类方法解析的第一个步骤与字段解析一样
+</p>
+<ul class="org-ul">
+<li>先解析出 <span class="underline">类方法表的class_index</span> 项中索引的方法 <b>所属的类或接口的符号引用</b> 。如果解析成功，依然用C表示这个类，接下来虚拟机将会按照如下步骤进行后续的类方法搜索
+<ol class="org-ol">
+<li>类方法和接口方法符号引用的常量类型定义是分开的，如果在 <b>类方法表中发现class_index中索引的C是个接口</b> ，那就直接拋出 <span class="underline">java.lang.IncompatibleClassChangeError</span> 异常
+</li>
+<li>如果通过了第1步，在类C中查找是否 <b>有简单名称和描述符都与目标相匹配的方法</b> ，如果有则返回这个方法的直接引用，查找结束
+</li>
+<li>在类C的 <b>父类中递归查找是否有简单名称和描述符都与目标相匹配的方法</b> ，如果有则返回这个方法的直接引用，查找结束
+</li>
+<li>在类C实现的 <b>接口列表及它们的父接口之中递归查找是否有简单名称和描述符都与目标相匹配的方法</b> ，如果存在匹配的方法，说明类C是一个 <b>抽象类</b> ，这时查找结束，拋出 <span class="underline">Java.lang.AbstractMethodError</span> 异常
+</li>
+<li>宣告方法查找失败，拋出 <span class="underline">java.lang.NoSuchMethodError</span> 
+</li>
+</ol>
+</li>
+<li>如果查找过程成功返回了直接引用，将会对这个方法进行 <span class="underline">权限验证</span> ，如果发现不具备对此方法的访问权限，将拋出 <span class="underline">java.lang.IllegalAccessError</span> 异常
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-2-4-4" class="outline-4">
+<h4 id="sec-2-4-4">接口方法解析</h4>
+<div class="outline-text-4" id="text-2-4-4">
+<p>
+接口方法也需要
+</p>
+
+<ul class="org-ul">
+<li>先解析出 <span class="underline">接口方法表的class_index</span> 项中索引的方法所属的 <b>类或接口的符号引用</b> ，如果解析成功，依然用C表示这个接口，接下来虚拟机将会按照如下步骤进行后续的接口方法搜索
+<ol class="org-ol">
+<li>与类方法解析不同，如果在接口方法表中发现class_index中的索引 <b>C是个类而不是接口</b> ，那就直接拋出 <span class="underline">java.lang.IncompatibleClassChangeError</span> 异常
+</li>
+<li>在接口 <b>C中查找是否有简单名称和描述符都与目标相匹配的方法</b> ，如果有则返回这个方法的直接引用，查找结束
+</li>
+<li>在接口C的 <b>父接口中递归查找</b> ，直到 <b>java.lang.Object</b> 类(查找范围会包括Object类)为止，看是否有 <b>简单名称和描述符都与目标相匹配的方法</b> ，如果有则返回这个方法的直接引用，查找结束
+</li>
+<li>宣告方法查找失败，拋出 <span class="underline">java.lang.NoSuchMethodError</span> 异常
+</li>
+</ol>
+</li>
+</ul>
+
+<p>
+由于接口中的所有方法默认都是public的，所以 <b>不存在访问权限</b> 的问题，因此接口方法的符号解析应当不会拋出java.langIllegalAccessError异常
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-5" class="outline-3">
+<h3 id="sec-2-5">初始化</h3>
+<div class="outline-text-3" id="text-2-5">
+<p>
+类 <b>初始化</b> 阶段是类加载过程的最后一步，前面的类加载过程中，除了在加载阶段用户应用程序可以通过自定义类加载器参与之外，其余动作完全由虚拟机主导和控制。到了初始化阶段，才 <b>真正开始执行类中定义的Java程序代码(或者说是字节码)</b> 
+</p>
+
+<p>
+在准备阶段，变量已经赋过一次系统要求的初始值，而在初始化阶段，则根据程序员通过程序制定的主观计划去 <b>初始化类变量和其他资源</b> ，或者可以从另外一个角度来表达:初始化阶段是执行类构造器 <span class="underline">&lt;clinit&gt;()</span> 方法的过程
+</p>
+
+<ul class="org-ul">
+<li><span class="underline">&lt;clinit&gt;()</span> 方法是由 <b>编译器自动收集类中的所有类变量的賦值动作和静态语句块(static{}块)中的语句合并产生的</b> 
+</li>
+<li>编译器 <b>收集的顺序是由语句在源文件中出现的顺序所决定的</b>
+</li>
+<li><b>静态语句块中只能访问到定义在静态语句块之前的变量</b> 
+<ul class="org-ul">
+<li><b>定义在它之后的变量，在前面的静态语句块可以賦值，但是不能访问</b>  
+</li>
+</ul>
+</li>
+</ul>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">Test</span> {
+        <span style="color: #00ffff;">static</span> {
+                i = 0;  <span style="color: #ff4500;">//  </span><span style="color: #ff4500;">&#32473;&#21464;&#37327;&#22797;&#21046;&#21487;&#20197;&#27491;&#24120;&#32534;&#35793;&#36890;&#36807;</span>
+                System.out.print(i);  <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#36825;&#21477;&#32534;&#35793;&#22120;&#20250;&#25552;&#31034;&#8220;&#38750;&#27861;&#21521;&#21069;&#24341;&#29992;&#8221;  </span>
+        }
+        <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">i</span> = 1;
+
+        <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">String</span>[] <span style="color: #eedd82;">args</span>) {
+                System.out.print(i);
+        }
+
+}
+</pre>
+</div>
+
+<pre class="example">
+Test.java:4: error: illegal forward reference
+System.out.print(i);  // 这句编译器会提示“非法向前引用” 
+                 ^
+</pre>
+
+<p>
+<span class="underline">&lt;clinit&gt;()</span> 方法与类的构造函数(或者说实例构造器 <span class="underline">&lt;init&gt;()</span> 方法)不同，它 <b>不需要显式地调用父类构造器</b> ， <b>虚拟机会保证在子类的&lt;cinit&gt;()方法执行之前，父类的&lt;clinit&gt;()方法已经执行完毕</b> 。因此在虚拟机中第一个被执行的&lt;clinit&gt;()方法的类肯定是 <span class="underline">java.lang.Object</span> 
+</p>
+
+<p>
+由于父类的&lt;clinit&gt;()方法先执行，也就意味着 <b>父类中定义的静态语句块要优先于子类的变量赋值操作</b> 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java"> <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">Parent</span> {
+        <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">A</span> = 1;
+        <span style="color: #00ffff;">static</span> {
+                A = 2;
+        }
+}
+
+<span style="color: #00ffff;">static</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">Sub</span> <span style="color: #00ffff;">extends</span> <span style="color: #98fb98;">Parent</span> {
+        <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">B</span> = A;
+}
+
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">String</span>[] <span style="color: #eedd82;">args</span>) {
+        System.out.println(<span style="color: #7fffd4;">Sub</span>.B);
+}
+</pre>
+</div>
+
+<pre class="example">
+2
+</pre>
+
+<p>
+&lt;clinit&gt;()方法对于类或接口来说并 <b>不是必需</b> 的，如果一个类中没有静态语句块，也没有对变量的赋值操作，那么编译器可以不为这个类生成&lt;clinit&gt;()方法
+</p>
+
+<p>
+接口中不能使用静态语句块，但仍然有变量初始化的赋值操作，因此 <b>接口与类一样都会生成 <span class="underline">&lt;clinit&gt;()</span> 方法</b> 。但接口与类不同的是
+</p>
+<ul class="org-ul">
+<li>执行接口的&lt;clinit&gt;()方法 <b>不需要先执行父接口的 <span class="underline">&lt;clinit&gt;()</span> 方法</b> 。只有当父接口中定义的变量使用时，父接口才会初始化
+</li>
+<li><b>接口的实现类在初始化时也一样不会执行接口的 <span class="underline">&lt;clinit&gt;()</span> 方法</b> 
+</li>
+</ul>
+
+<p>
+虚拟机会 <b>保证一个类的 <span class="underline">&lt;clinit&gt;()</span> 方法在多线程环境中被正确地加锁、同步</b> 
+</p>
+<ul class="org-ul">
+<li>如果 <span class="underline">多个线程</span> 同时去初始化一个类，那么只会有一个线程去执行这个类的 <span class="underline">&lt;clinit&gt;()</span> 方法，其他线程都需要 <b>阻塞等待</b> ，直到活动线程执行&lt;clinit&gt;()方法完毕
+</li>
+</ul>
+
+<p>
+如果在一个类的 <span class="underline">&lt;clinit&gt;()</span> 方法中有耗时很长的操作，就可能造成 <b>多个进程阻塞</b> ，在实际应用中这种阻塞往往是很隐蔽的
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">static</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">DeadLoopClass</span> {
+        <span style="color: #00ffff;">static</span> {
+                <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#22914;&#26524;&#19981;&#21152;&#19978;&#36825;&#20010;if&#35821;&#21477;&#65292;&#32534;&#35793;&#22120;&#23558;&#25552;&#31034;&#8220;Initializer does not complete normally&#8221;&#24182;&#25298;&#32477;&#32534;&#35793;</span>
+                <span style="color: #00ffff;">if</span> (<span style="color: #7fffd4;">true</span>) {
+                        System.out.println(Thread.currentThread() + <span style="color: #ffa07a;">"init DeadLoopClass"</span>);
+                        <span style="color: #00ffff;">while</span> (<span style="color: #7fffd4;">true</span>) {
+                        }
+                }
+        }
+}
+
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">String</span>[] <span style="color: #eedd82;">args</span>) {
+        <span style="color: #98fb98;">Runnable</span> <span style="color: #eedd82;">script</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">Runnable</span>() {
+                        <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">run</span>() {
+                                System.out.println(Thread.currentThread() + <span style="color: #ffa07a;">"start"</span>);
+                                <span style="color: #98fb98;">DeadLoopClass</span> <span style="color: #eedd82;">dlc</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">DeadLoopClass</span>();
+                                System.out.println(Thread.currentThread() + <span style="color: #ffa07a;">" run over"</span>);
+                        }
+                };
+
+        <span style="color: #98fb98;">Thread</span> <span style="color: #eedd82;">thread1</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">Thread</span>(script);
+        <span style="color: #98fb98;">Thread</span> <span style="color: #eedd82;">thread2</span> = <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">Thread</span>(script);
+        thread1.start();
+        thread2.start();
+}
+</pre>
+</div>
+
+<pre class="example">
+Thread[Thread-0 ,5 ,main]start 
+Thread[Thread-1 ,5 ,main]start 
+Thread[Thread-0 ,5 ,main]init DeadLoopClass
+</pre>
+
+<p>
+即一条线程在死循环以模拟长时间操作，另外一条线程在阻塞等待
+</p>
+
+<pre class="example">
+  其他线程虽然会被阻塞,但如果执行&lt;clinit&gt;()方法的那条线程退出&lt;clinit&gt;()方法后,其他线程唤醒之后不会再次进入&lt;clinit&gt;()方法
+
+  因为同一个类加载器下,一个类型只会初始化一次
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-3" class="outline-2">
+<h2 id="sec-3">类加载器</h2>
 </div>
 </div>
 <div id="postamble" class="status">
