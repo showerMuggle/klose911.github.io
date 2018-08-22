@@ -797,7 +797,7 @@ JDK1.7实现了JSR-292，新加入的 _java.lang.invoke_ 包就是JSR-292的一�
 
   要使用Java语言来演示invokedynamic指令只能用一些变通的办法
 
-  John Rose编写了一个把程序的字节码转换为使用 _invokedynamic_ 的简单工具 _INDY_ 来完成这件事情
+  John Rose编写了一个把程序的字节码转换为使用 invokedynamic 的简单工具 INDY 来完成这件事情
 
   要使用这个工具来产生最终要的字节码，因此这个示例代码中的方法名称不能随意改动，更不能把几个方法合并到一起写，因为它们是要被INDY工具读取的
 #+END_EXAMPLE
@@ -856,34 +856,36 @@ invokedynamic指令与前面4条 invoke* 指令的最大差别就是 *它的分�
 
   class Test {
 
-          class GrandFather {
-                  void thinking() {
-                          System.out.println("i am grandfather");
-                  }
-          }
+	  class GrandFather {
+		  void thinking() {
+			  System.out.println("i am grandfather");
+		  }
+	  }
 
-          class Father extends GrandFather {
-                  void thinking() {
-                          System.out.println("i am father");
-                  }
-          }
+	  class Father extends GrandFather {
+		  void thinking() {
+			  System.out.println("i am father");
+		  }
+	  }
 
-          class Son extends Father {
-                  void thinking() {
-                          try {
-                                  MethodType mt = MethodType.methodType(void.class);
-                                  MethodHandle mh = lookup().findSpecial(GrandFather.class, 
-                                                                         "thinking", mt, getClass());
-                                  mh.invoke(this);
-                          } catch (Throwable e) {
-                          }
-                  }
-          }
+	  class Son extends Father {
+		  void thinking() {
+			  try {
+				  MethodType mt = MethodType.methodType(void.class);
+				  MethodHandle mh = lookup().findVirtual(GrandFather.class, "thinking", mt).bindTo(new GrandFather());
+				  mh.invokeExact();
+			  } catch (Throwable e) {
+			  }
+		  }
+	  }
 
-          public static void main(String[] args) {
-                  (new Test().new Son()).thinking();
-          }
+	  public static void main(String[] args) {
+		  (new Test().new Son()).thinking();
+	  }
   }
 #+END_SRC
 
-: i am a father
+: i am a grandfather
+
+
+* 执行引擎
