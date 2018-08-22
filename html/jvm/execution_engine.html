@@ -166,6 +166,13 @@ for the JavaScript code in this tag.
 <li><a href="#sec-2-2-4">动态分派的实现</a></li>
 </ul>
 </li>
+<li><a href="#sec-2-3">动态类型语言支持</a>
+<ul>
+<li><a href="#sec-2-3-1">java.lang.invoke包</a></li>
+<li><a href="#sec-2-3-2">invokedynamic指令</a></li>
+<li><a href="#sec-2-3-3">掌控方法分派规则</a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -1154,7 +1161,7 @@ JDK 1.7中新增的invokedymmic指令也成为了最复杂的一条方法调用�
 <h4 id="sec-2-2-4">动态分派的实现</h4>
 <div class="outline-text-4" id="text-2-2-4">
 <p>
-由于动态分派是非常频繁的动作，而且动态分派的方法版本选择过程需要运行时在类的方法元数据中搜索合适的目标方法，因此在虚拟机的实际实现中基于性能的考虑，大部分实现都不会真正地进行如此频繁的搜索。面对这种情况，最常用的 <span class="underline">稳定优化</span> 手段就是为 <b>类在方法区中建立一个虚方法表</b> (Vritual Method Table，也称为vtable，与此对应的，在invokeinterface执行时也会用到接口方法表 Inteface Method Table，简称itable)，使用 <b>虚方法表索引</b> 来代替元数据查找以提高性能。虚方法表结构示例，如图所示：
+由于动态分派是非常频繁的动作，而且动态分派的方法版本选择过程需要运行时在类的方法元数据中搜索合适的目标方法，因此在虚拟机的实际实现中基于性能的考虑，大部分实现都不会真正地进行如此频繁的搜索。面对这种情况，最常用的 <span class="underline">稳定优化</span> 手段就是为 <b>类在方法区中建立一个虚方法表</b> ( <span class="underline">Vritual Method Table</span> ，也称为 <span class="underline">vtable</span> ，与此对应的，在 <span class="underline">invokeinterface</span> 执行时也会用到接口方法表 <span class="underline">Inteface Method Table</span> ，简称 <span class="underline">itable</span> )，使用 <b>虚方法表索引</b> 来代替元数据查找以提高性能。虚方法表结构示例，如图所示：
 </p>
 
 
@@ -1162,6 +1169,374 @@ JDK 1.7中新增的invokedymmic指令也成为了最复杂的一条方法调用�
 <p><img src="pic/virtual-method-table.jpg" alt="virtual-method-table.jpg" width="70%" /> 
 </p>
 </div>
+
+<p>
+虚方法表中存放着 <span class="underline">各个方法的实际入口地址</span> 。如果某个方法在子类中没有被重写，那子类的虚方法表里面的地址入口和父类相同方法的地址入口是一致的，都指向父类的实现入口。如果子类中重写了这个方法，子类方法表中的地址将会替换为指向子类实现版本的入口地址
+</p>
+<ul class="org-ul">
+<li>Son重写了来自Father的全部方法，因此Son的方法表没有指向Father类型数据的箭头
+</li>
+<li>但是Son和Father都没有重写来自Object的方法，所以它们的方法表中所有从Object继承来的方法都指向了Object的数据类型
+</li>
+</ul>
+
+<p>
+为了程序实现上的方便，具有相同签名的方法，在父类、子类的虚方法表中都应当具有一样的索引序号，这样当类型变换时，仅需要变更查找的方法表，就可以从不同的虚方法表中按索引转换出所需的入口地址
+</p>
+
+<p>
+方法表一般在类加载的连接阶段进行初始化，准备了类的变量初始值后，虚拟机会把该类的方法表也初始化完毕
+</p>
+
+<pre class="example">
+  虚拟机除了使用方法表之外,在条件允许的情况下,还会使用内联缓存( Inline Cache )和基于“类型继承关系分析” ( Class Hierarchy Analysis,CHA ) 技术的守护内联( Guarded Mining ) 两种非稳定的“激进优化”手段来获得更高的性能
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-2-3" class="outline-3">
+<h3 id="sec-2-3">动态类型语言支持</h3>
+<div class="outline-text-3" id="text-2-3">
+<p>
+Java虚拟机毫无疑问是Java语言的运行平台，但它的使命并不仅限于此，早在1997年出版的《Java虚拟机规范》中就规划了这样一个愿景:“在未来，我们会对Java虚拟机进行适当的扩展，以便更好地支持其他语言运行于Java虚拟机之上”。而目前确实已经有许多 <b>动态类型</b> 语言运行于Java虚拟机之上了，如 <span class="underline">Clojure</span> 、 <span class="underline">Groovy</span> 、 <span class="underline">Jython</span> 和 <span class="underline">JRuby</span> 等，能够在同一个虚拟机上可以达到静态类型语言的严谨性与动态类型语言的灵活性，这是一件很美妙的事情
+</p>
+
+<p>
+但遗憾的是， <b>Java虚拟机层面对动态类型语言的支持一直都有所欠缺</b> ，主要表现在 <b>方法调用</b> 方面: JDK1.7以前的字节码指令集中，4条方法调用指令( <span class="underline">invokevirtual</span> 、 <span class="underline">invokespecial</span> 、 <span class="underline">invokestatic</span> 、 <span class="underline">invokeinterface</span> )的第一个参数都是 <b>被调用的方法的符号引用</b> (CONSTANT_Methodref_info或者CONSTANT_InterfaceMethodref_info常量)， <b>方法的符号引用在编译时产生，而动态类型语言只有在运行时才能确定接收者类型</b> 。这样，在Java虚拟机上实现的动态类型语言就不得不使用其他方式( <span class="underline">如编译时留个占位符类型，运行时动态生成字节码实现具体类型到占位符类型的适配</span> )来实现，这样势必让动态类型语言实现的复杂度增加，也可能带来额外的性能或者内存开销
+</p>
+
+<p>
+尽管可以利用一些办法(如CallSiteCaching)让这些开销尽量变小，但这种底层问题终归是应当在虚拟机层次上去解决才最合适，因此在Java虚拟机层面上提供动态类型的直接支持就成为了Java平台的发展趋势之一，这就是JDK1.7(JSR-292)中 <span class="underline">invokedynamic</span> 指令以及 <span class="underline">java.lang.invoke</span> 包出现的技术背景
+</p>
+</div>
+
+<div id="outline-container-sec-2-3-1" class="outline-4">
+<h4 id="sec-2-3-1">java.lang.invoke包</h4>
+<div class="outline-text-4" id="text-2-3-1">
+<p>
+JDK1.7实现了JSR-292，新加入的 <span class="underline">java.lang.invoke</span> 包就是JSR-292的一个重要组成部分，这个包的主要目的是在之前单纯依靠符号引用来确定调用的目标方法这种方式以外，提供一种新的 <b>动态确定目标方法的机制</b> ，称为 <span class="underline">MethodHandle</span> 。不妨把 <span class="underline">MethodHandle</span> 与C/C++中的 <span class="underline">FunctionPointer</span> ，或者C#里面的 <span class="underline">Delegate</span> 类比一下。如果要实现一个带谓词的排序函数，在C/C++中常用的做法是把谓词定义为函数，用函数指针把谓词传递到排序方法，如下:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-C"><span style="color: #98fb98;">void</span> <span style="color: #87cefa;">sort</span>(<span style="color: #98fb98;">int</span> <span style="color: #eedd82;">list</span>[], <span style="color: #00ffff;">const</span> <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">size</span>, <span style="color: #98fb98;">int</span>(*<span style="color: #87cefa;">compare</span>)(<span style="color: #98fb98;">int</span>,<span style="color: #98fb98;">int</span>));
+</pre>
+</div>
+
+<p>
+但Java语言做不到这一点，即没有办法单独地把一个函数作为参数进行传递。普遍的做法是设计一个带有 <span class="underline">compare()</span> 方法的 <span class="underline">Comparator</span> 接口，以实现了这个接口的对象作为参数，例如Collections.sort()就是这样定义的:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #98fb98;">void</span> <span style="color: #87cefa;">sort</span> (<span style="color: #98fb98;">List</span> <span style="color: #eedd82;">list</span>, <span style="color: #98fb98;">Comparator</span> <span style="color: #eedd82;">c</span>);
+</pre>
+</div>
+
+<p>
+不过，在拥有 <span class="underline">MethodHandle</span> 之后，Java语言也可以拥有类似于函数指针或者委托的方法别名的工具了。下面代码演示了 <span class="underline">MethodHandle</span> 的基本用途，无论 <span class="underline">obj</span> 是何种类型(临时定义的 <span class="underline">ClassA</span> 或是实现 <span class="underline">PrintStream</span> 接口的实现类 <span class="underline">System.out</span> )，都可以正确地调用到 <span class="underline">println()</span> 方法
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">import</span> <span style="color: #7fffd4;">java</span>.<span style="color: #7fffd4;">lang</span>.<span style="color: #7fffd4;">invoke</span>.<span style="color: #98fb98;">MethodHandle</span>;
+<span style="color: #00ffff;">import</span> <span style="color: #7fffd4;">java</span>.<span style="color: #7fffd4;">lang</span>.<span style="color: #7fffd4;">invoke</span>.<span style="color: #98fb98;">MethodHandles</span>;
+<span style="color: #00ffff;">import</span> <span style="color: #7fffd4;">java</span>.<span style="color: #7fffd4;">lang</span>.<span style="color: #7fffd4;">invoke</span>.<span style="color: #98fb98;">MethodType</span>;
+
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">MethodHandleTest</span> {
+
+    <span style="color: #00ffff;">static</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">ClassA</span> {
+        <span style="color: #00ffff;">public</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">println</span>(<span style="color: #98fb98;">String</span> <span style="color: #eedd82;">s</span>) {
+            System.out.println(s);
+        }
+    }
+
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">String</span>[] <span style="color: #eedd82;">args</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Throwable</span> {
+        <span style="color: #98fb98;">Object</span> <span style="color: #eedd82;">obj</span> = System.currentTimeMillis() % 2 == 0 ? System.out : <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">ClassA</span>();
+        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#26080;&#35770;obj&#26368;&#32456;&#26159;&#21738;&#20010;&#23454;&#29616;&#31867;&#65292;&#19979;&#38754;&#36825;&#21477;&#37117;&#33021;&#27491;&#30830;&#35843;&#29992;&#21040;println&#26041;&#27861;&#12290;</span>
+        getPrintlnMH(obj).invokeExact(<span style="color: #ffa07a;">"icyfenix"</span>);
+    }
+
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">MethodHandle</span> <span style="color: #87cefa;">getPrintlnMH</span>(<span style="color: #98fb98;">Object</span> <span style="color: #eedd82;">receiver</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Throwable</span> {
+        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">MethodType&#65306;&#20195;&#34920;&#8220;&#26041;&#27861;&#31867;&#22411;&#8221;</span>
+        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#21253;&#21547;&#20102;&#26041;&#27861;&#30340;&#36820;&#22238;&#20540;&#65288;methodType()&#30340;&#31532;&#19968;&#20010;&#21442;&#25968;&#65289;</span>
+        <span style="color: #ff4500;">//             </span><span style="color: #ff4500;">&#21644;&#20855;&#20307;&#21442;&#25968;&#65288;methodType()&#31532;&#20108;&#20010;&#21450;&#20197;&#21518;&#30340;&#21442;&#25968;&#65289;&#12290;</span>
+        <span style="color: #98fb98;">MethodType</span> <span style="color: #eedd82;">mt</span> = MethodType.methodType(<span style="color: #98fb98;">void</span>.<span style="color: #00ffff;">class</span>, String.<span style="color: #00ffff;">class</span>);
+        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">lookup()&#26041;&#27861;&#26469;&#33258;&#20110;MethodHandles.lookup</span>
+        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#36825;&#21477;&#30340;&#20316;&#29992;&#26159;&#22312;&#25351;&#23450;&#31867;&#20013;&#26597;&#25214;&#31526;&#21512;&#32473;&#23450;&#30340;&#26041;&#27861;&#21517;&#31216;&#12289;&#26041;&#27861;&#31867;&#22411;&#65292;&#24182;&#19988;&#31526;&#21512;&#35843;&#29992;&#26435;&#38480;&#30340;&#26041;&#27861;&#21477;&#26564;&#12290;</span>
+        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#22240;&#20026;&#36825;&#37324;&#35843;&#29992;&#30340;&#26159;&#19968;&#20010;&#34394;&#26041;&#27861;&#65292;&#25353;&#29031;Java&#35821;&#35328;&#30340;&#35268;&#21017;&#65292;</span>
+        <span style="color: #ff4500;">//     </span><span style="color: #ff4500;">&#26041;&#27861;&#31532;&#19968;&#20010;&#21442;&#25968;&#26159;&#38544;&#24335;&#30340;&#65292;&#20195;&#34920;&#35813;&#26041;&#27861;&#30340;&#25509;&#25910;&#32773;&#65292;&#20063;&#21363;&#26159;this&#25351;&#21521;&#30340;&#23545;&#35937;&#65292;</span>
+        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#36825;&#20010;&#21442;&#25968;&#20197;&#21069;&#26159;&#25918;&#22312;&#21442;&#25968;&#21015;&#34920;&#20013;&#36827;&#34892;&#20256;&#36882;&#65292;&#29616;&#22312;&#25552;&#20379;&#20102;bindTo()&#26041;&#27861;&#26469;&#23436;&#25104;&#36825;&#20214;&#20107;&#24773;&#12290;</span>
+        <span style="color: #00ffff;">return</span> MethodHandles.lookup().findVirtual(receiver.getClass(), <span style="color: #ffa07a;">"println"</span>, mt).bindTo(receiver);
+    }
+}
+</pre>
+</div>
+<p>
+实际上方法 <span class="underline">getPrintlnMH()</span> 中模拟了 <b>invokevirtual</b> 指令的执行过程，只不过它的分派逻辑并非固化在Class文件的字节码上，而是通过一个具体方法来实现。而这个方法本身的返回值( <b>MethodHandle</b> 对象)，可以视为对最终调用方法的一个 <span class="underline">引用</span> 。以此为基础，有了MethodHandle就可以写出类似于下面这样的函数声明:  
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #98fb98;">void</span> <span style="color: #87cefa;">sort</span> (<span style="color: #98fb98;">List</span> <span style="color: #eedd82;">list</span>, <span style="color: #98fb98;">MethodHandle</span> <span style="color: #eedd82;">compare</span>);
+</pre>
+</div>
+
+<p>
+使用 <span class="underline">MethodHandle</span> 并没有什么困难，不过看完它的用法之后，相同的事情，用反射不是早就可以实现了吗?
+</p>
+
+<p>
+确实，仅站在Java语言的角度来看， <span class="underline">MethodHandle</span> 的使用方法和效果与 <span class="underline">Reflection</span> 有众多相似之处，不过，它们还是有以下这些区别:
+</p>
+<ul class="org-ul">
+<li>Reflection是在 <b>模拟Java代码层次的方法调用</b> ，而MethodHandle是在 <b>模拟字节码层次的方法调用</b> 。在 <b>MethodHandles.lookup</b> 中的3个方法: <span class="underline">findStatic()</span> 、 <span class="underline">findVirtual()</span> 、 <span class="underline">findSpecial()</span> 正是为了对应于 <span class="underline">invokestatic</span> 、 <span class="underline">invokevirtual</span> 、 <span class="underline">invokeinterface</span> 和 <span class="underline">invokespecial</span> 这几条字节码指令的 <b>执行权限校验行为</b> ，而这些底层细节在使用ReflectionAPI时是不需要关心的
+</li>
+<li>Reflection中的 <span class="underline">java.lang.reflect.Method</span> 对象远比MethodHandle机制中的 <span class="underline">java.lang.invoke.MethodHandle</span> 对象所包含的信息多
+<ul class="org-ul">
+<li><span class="underline">java.lang.reflect.Method</span> : 是 <b>方法在Java一端的全面映像</b> ，包含了 <span class="underline">方法的签名</span> 、 <span class="underline">描述符</span> 以及 <span class="underline">方法属性表中各种属性的Java端表示方式</span> ，还包含 <span class="underline">执行权限等的运行期信息</span>
+</li>
+<li><span class="underline">java.lang.invoke.MethodHandle</span> : 仅仅包含与 <span class="underline">执行该方法相关的信息</span> 
+</li>
+</ul>
+</li>
+<li>由于MethodHandle是对 <b>字节码的方法指令调用的模拟</b> ，所以理论上 <span class="underline">虚拟机在这方面做的各种优化</span> (如方法内联)，在MethodHandle上也应当可以采用类似思路去支持(但目前实现还不完善)。而通过反射去调用方法则不行
+</li>
+<li>最关键的一点还在于去掉前面讨论施加的前提 <span class="underline">仅站在Java语言的角度来看</span> : 
+<ul class="org-ul">
+<li>Reflection API的设计目标是 <b>只为Java语言服务</b> 的
+</li>
+<li>而MethodHandle则设计成可 <b>服务于所有Java虚拟机之上的语言</b> ，其中也包括Java语言
+</li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-sec-2-3-2" class="outline-4">
+<h4 id="sec-2-3-2">invokedynamic指令</h4>
+<div class="outline-text-4" id="text-2-3-2">
+<p>
+上面使用 <span class="underline">MethodHandle</span> 的示例代码反编译后也不会看见 <b>invokedynamic</b> 的身影，它的应用之处在哪里呢?
+</p>
+
+<p>
+在某种程度上， <span class="underline">invokedynamic</span> 指令与 <span class="underline">MethodHandle</span> 机制的作用是一样的，都是为了解决原有4条 <span class="underline">invoke</span> 指令方法分派规则固化在虚拟机之中的问题，把如何查找目标方法的决定权从虚拟机转嫁到具体用户代码之中，让用户(包含其他语言的设计者)有更高的自由度。而且，它们两者的思路也是可类比的，可以把它们想象成为了达成同一个目的：
+</p>
+<ul class="org-ul">
+<li>MethodHandle: 采用上层Java代码和API来实现
+</li>
+<li>invokedynamic: 用字节码和Class中其他属性、常量来完成
+</li>
+</ul>
+
+<p>
+每一处含有invokedynamic指令的位置都称做 <span class="underline">动态调用点</span> (Dynamic Call Site)，这条指令的第一个参数不再是代表方法符号引用的CONSTANT_Methodref_info常量，而变为JDK1.7新加入的 <b>CONSTANT_InvokeDynamic_info</b> 常量，从这个新常量中可以得到3项信息:
+</p>
+<ul class="org-ul">
+<li><span class="underline">BootstrapMethod</span>  : 引导方法，存放在新增的 <span class="underline">BootstrapMethods</span> 属性中
+<ul class="org-ul">
+<li>引导方法是有固定的参数，并且返回是 <span class="underline">java.langinvoke.CallSite</span> 对象，这个代表真正要执行的目标方法调用
+</li>
+</ul>
+</li>
+<li><span class="underline">MethodType</span> : 方法类型
+</li>
+<li>名称
+</li>
+</ul>
+
+<p>
+根据CONSTANT_InvokeDynamic_info常量中提供的信息，虚拟机可以找到并且执行引导方法，从而获得一个CallSite对象，最终调用要执行的目标方法
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">import</span> <span style="color: #00ffff;">static</span> <span style="color: #7fffd4;">java</span>.<span style="color: #7fffd4;">lang</span>.<span style="color: #7fffd4;">invoke</span>.MethodHandles.<span style="color: #98fb98;">lookup</span>;
+
+<span style="color: #00ffff;">import</span> <span style="color: #7fffd4;">java</span>.<span style="color: #7fffd4;">lang</span>.<span style="color: #7fffd4;">invoke</span>.<span style="color: #98fb98;">CallSite</span>;
+<span style="color: #00ffff;">import</span> <span style="color: #7fffd4;">java</span>.<span style="color: #7fffd4;">lang</span>.<span style="color: #7fffd4;">invoke</span>.<span style="color: #98fb98;">ConstantCallSite</span>;
+<span style="color: #00ffff;">import</span> <span style="color: #7fffd4;">java</span>.<span style="color: #7fffd4;">lang</span>.<span style="color: #7fffd4;">invoke</span>.<span style="color: #98fb98;">MethodHandle</span>;
+<span style="color: #00ffff;">import</span> <span style="color: #7fffd4;">java</span>.<span style="color: #7fffd4;">lang</span>.<span style="color: #7fffd4;">invoke</span>.<span style="color: #98fb98;">MethodHandles</span>;
+<span style="color: #00ffff;">import</span> <span style="color: #7fffd4;">java</span>.<span style="color: #7fffd4;">lang</span>.<span style="color: #7fffd4;">invoke</span>.<span style="color: #98fb98;">MethodType</span>;
+
+<span style="color: #00ffff;">public</span> <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">InvokeDynamicTest</span> {
+
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">String</span>[] <span style="color: #eedd82;">args</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Throwable</span> {
+        INDY_BootstrapMethod().invokeExact(<span style="color: #ffa07a;">"icyfenix"</span>);
+    }
+
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">testMethod</span>(<span style="color: #98fb98;">String</span> <span style="color: #eedd82;">s</span>) {
+        System.out.println(<span style="color: #ffa07a;">"hello String:"</span> + s);
+    }
+
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">CallSite</span> <span style="color: #87cefa;">BootstrapMethod</span>(<span style="color: #7fffd4;">MethodHandles</span>.<span style="color: #98fb98;">Lookup</span> <span style="color: #eedd82;">lookup</span>, <span style="color: #98fb98;">String</span> <span style="color: #eedd82;">name</span>, <span style="color: #98fb98;">MethodType</span> <span style="color: #eedd82;">mt</span>) <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Throwable</span> {
+        <span style="color: #00ffff;">return</span> <span style="color: #00ffff;">new</span> <span style="color: #98fb98;">ConstantCallSite</span>(lookup.findStatic(InvokeDynamicTest.<span style="color: #00ffff;">class</span>, name, mt));
+    }
+
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">MethodType</span> <span style="color: #87cefa;">MT_BootstrapMethod</span>() {
+        <span style="color: #00ffff;">return</span> MethodType.fromMethodDescriptorString(
+            <span style="color: #ffa07a;">"(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/invoke/MethodType;)Ljava/lang/invoke/CallSite;"</span>,
+            <span style="color: #7fffd4;">null</span>);
+    }
+
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">MethodHandle</span> <span style="color: #87cefa;">MH_BootstrapMethod</span>() <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Throwable</span> {
+        <span style="color: #00ffff;">return</span> lookup().findStatic(InvokeDynamicTest.<span style="color: #00ffff;">class</span>,
+                       <span style="color: #ffa07a;">"BootstrapMethod"</span>,
+                       <span style="color: #98fb98;">MT_BootstrapMethod</span>());
+    }
+
+    <span style="color: #00ffff;">private</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">MethodHandle</span> <span style="color: #87cefa;">INDY_BootstrapMethod</span>() <span style="color: #00ffff;">throws</span> <span style="color: #98fb98;">Throwable</span> {
+        <span style="color: #98fb98;">CallSite</span> <span style="color: #eedd82;">cs</span> = (<span style="color: #98fb98;">CallSite</span>) MH_BootstrapMethod().invokeWithArguments(lookup(),
+                                          <span style="color: #ffa07a;">"testMethod"</span>,
+                                          MethodType.fromMethodDescriptorString(
+                                              <span style="color: #ffa07a;">"(Ljava/lang/String;)V"</span>, <span style="color: #7fffd4;">null</span>));
+        <span style="color: #00ffff;">return</span> cs.dynamicInvoker();
+    }
+}
+</pre>
+</div>
+
+<p>
+这段代码与前面 <span class="underline">MethodHandleTest</span> 的作用基本上是一样的
+</p>
+<pre class="example">
+由于 invokedynamic 指令所面向的使用者并非Java语言，而是其他Java虚拟机之上的动态语言
+
+因此仅依靠Java语言的编译器Javac没有办法生成带有invokedynamic指令的字节码
+
+曾经有一个java.dyn.InvokeDymmic的语法糖可以实现，但后来被取消了
+
+要使用Java语言来演示invokedynamic指令只能用一些变通的办法
+
+John Rose编写了一个把程序的字节码转换为使用 _invokedynamic_ 的简单工具 _INDY_ 来完成这件事情
+
+要使用这个工具来产生最终要的字节码，因此这个示例代码中的方法名称不能随意改动，更不能把几个方法合并到一起写，因为它们是要被INDY工具读取的
+</pre>
+
+<p>
+把上面代码编译、再使用 <span class="underline">INDY</span> 转换后重新生成的字节码：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/invoke-dynamic-indy.jpg" alt="invoke-dynamic-indy.jpg" width="70%" /> 
+</p>
+</div>
+
+<p>
+从main()方法的字节码可见，原本的方法调用指令已经替换为 <span class="underline">invokedynamic</span> ,它的参数为 <span class="underline">第123项常量</span> (第二个值为0的参数在HotSpot中用不到与invokeinterface指令那个值为0的参数一样都是占位的)
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">2 :invokedynamic#123 ,0//InvokeDynamic#0 :testMethod :(Ljava/lang/String ; )V
+</pre>
+</div>
+
+<p>
+从常量池中可见，第123项常量显示 <span class="underline">#123=InvokeDynamic#0:#121</span> 说明它是一项CONSTANT_InvokeDynamic_info类型常量
+</p>
+<ul class="org-ul">
+<li><span class="underline">#0</span> ：引导方法取 <span class="underline">BootstrapMethods</span> 属性表的第 <span class="underline">0</span> 项(示例中仅有一个引导方法，即BootstrapMethod())
+</li>
+<li><span class="underline">#121</span> ：引用第121项类型为CONSTANT_NameAndType_info的常量，从这个常量中可以获取方法名称和描述符，即后面输出的 <span class="underline">testMethod:(Ljava/lang/String;)V</span> 
+</li>
+</ul>
+
+<p>
+再看一下 <span class="underline">BootstrapMethod()</span> ，这个方法Java源码中没有，是INDY产生的，但是它的字节码很容易读懂，逻辑
+</p>
+<ol class="org-ol">
+<li>调用 <span class="underline">MethodHandles$Lookup的findStatic()</span> 方法，产生 <span class="underline">testMethod()</span> 方法的 <span class="underline">MethodHandle</span>
+</li>
+<li>用它创建一个 <span class="underline">ConstantCallSite</span> 对象
+</li>
+<li>这个对象返回给 <span class="underline">invokedynamic</span> 指令，实现对 <span class="underline">testMethod()</span> 方法的调用
+</li>
+</ol>
+</div>
+</div>
+
+<div id="outline-container-sec-2-3-3" class="outline-4">
+<h4 id="sec-2-3-3">掌控方法分派规则</h4>
+<div class="outline-text-4" id="text-2-3-3">
+<p>
+invokedynamic指令与前面4条 invoke* 指令的最大差别就是 <b>它的分派逻辑不是由虚拟机决定的，而是由程序员决定</b> 
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">class</span> <span style="color: #98fb98;">GrandFather</span> {
+    <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">thinking</span>() {
+        System.out.println(<span style="color: #ffa07a;">"i am grandfather"</span>);
+    }
+}
+
+<span style="color: #00ffff;">class</span> <span style="color: #98fb98;">Father</span> <span style="color: #00ffff;">extends</span> <span style="color: #98fb98;">GrandFather</span> {
+    <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">thinking</span>() {
+        System.out.println(<span style="color: #ffa07a;">"i am father"</span>);
+    }
+}
+
+<span style="color: #00ffff;">class</span> <span style="color: #98fb98;">Son</span> <span style="color: #00ffff;">extends</span> <span style="color: #98fb98;">Father</span> {
+    <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">thinking</span>() {
+        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#35831;&#35835;&#32773;&#22312;&#36825;&#37324;&#22635;&#20837;&#36866;&#24403;&#30340;&#20195;&#30721;&#65288;&#19981;&#33021;&#20462;&#25913;&#20854;&#20182;&#22320;&#26041;&#30340;&#20195;&#30721;&#65289;</span>
+        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#23454;&#29616;&#35843;&#29992;&#31062;&#29238;&#31867;&#30340;thinking()&#26041;&#27861;&#65292;&#25171;&#21360;"i am grandfather"</span>
+    }
+}
+</pre>
+</div>
+
+<p>
+在JDK1.7之前，使用纯粹的Java语言很难处理这个问题(直接生成字节码就很简单，如使用 <span class="underline">ASM</span> 等字节码工具)，原因是在 <span class="underline">Son</span> 类的 <span class="underline">thinking()</span> 方法中 <b>无法获取一个实际类型是 <span class="underline">GrandFather</span> 的对象引用</b> ，而 <span class="underline">invokevirtual</span> 指令的分派逻辑就是 <span class="underline">按照方法接收者的实际类型进行分配</span> ，这个逻辑是固化在虚拟机中的，程序员无法改变。在JDK1.7中，可以使用下面代码的程序来解决这个问题：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java"><span style="color: #00ffff;">import</span> <span style="color: #00ffff;">static</span> <span style="color: #7fffd4;">java</span>.<span style="color: #7fffd4;">lang</span>.<span style="color: #7fffd4;">invoke</span>.MethodHandles.<span style="color: #98fb98;">lookup</span>;
+
+<span style="color: #00ffff;">import</span> <span style="color: #7fffd4;">java</span>.<span style="color: #7fffd4;">lang</span>.<span style="color: #7fffd4;">invoke</span>.<span style="color: #98fb98;">MethodHandle</span>;
+<span style="color: #00ffff;">import</span> <span style="color: #7fffd4;">java</span>.<span style="color: #7fffd4;">lang</span>.<span style="color: #7fffd4;">invoke</span>.<span style="color: #98fb98;">MethodType</span>;
+
+<span style="color: #00ffff;">class</span> <span style="color: #98fb98;">Test</span> {
+
+    <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">GrandFather</span> {
+        <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">thinking</span>() {
+            System.out.println(<span style="color: #ffa07a;">"i am grandfather"</span>);
+        }
+    }
+
+    <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">Father</span> <span style="color: #00ffff;">extends</span> <span style="color: #98fb98;">GrandFather</span> {
+        <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">thinking</span>() {
+            System.out.println(<span style="color: #ffa07a;">"i am father"</span>);
+        }
+    }
+
+    <span style="color: #00ffff;">class</span> <span style="color: #98fb98;">Son</span> <span style="color: #00ffff;">extends</span> <span style="color: #98fb98;">Father</span> {
+        <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">thinking</span>() {
+            <span style="color: #00ffff;">try</span> {
+                <span style="color: #98fb98;">MethodType</span> <span style="color: #eedd82;">mt</span> = MethodType.methodType(<span style="color: #98fb98;">void</span>.<span style="color: #00ffff;">class</span>);
+                <span style="color: #98fb98;">MethodHandle</span> <span style="color: #eedd82;">mh</span> = lookup().findSpecial(GrandFather.<span style="color: #00ffff;">class</span>, 
+                                       <span style="color: #ffa07a;">"thinking"</span>, mt, getClass());
+                mh.invoke(<span style="color: #00ffff;">this</span>);
+            } <span style="color: #00ffff;">catch</span> (<span style="color: #98fb98;">Throwable</span> <span style="color: #eedd82;">e</span>) {
+            }
+        }
+    }
+
+    <span style="color: #00ffff;">public</span> <span style="color: #00ffff;">static</span> <span style="color: #98fb98;">void</span> <span style="color: #87cefa;">main</span>(<span style="color: #98fb98;">String</span>[] <span style="color: #eedd82;">args</span>) {
+        (<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">Test</span>().<span style="color: #00ffff;">new</span> <span style="color: #98fb98;">Son</span>()).thinking();
+    }
+}
+</pre>
+</div>
+
+<pre class="example">
+i am a father
+</pre>
 </div>
 </div>
 </div>

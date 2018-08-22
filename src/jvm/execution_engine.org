@@ -655,3 +655,235 @@
 #+END_EXAMPLE
 
 ** 动态类型语言支持
+Java虚拟机毫无疑问是Java语言的运行平台，但它的使命并不仅限于此，早在1997年出版的《Java虚拟机规范》中就规划了这样一个愿景:“在未来，我们会对Java虚拟机进行适当的扩展，以便更好地支持其他语言运行于Java虚拟机之上”。而目前确实已经有许多 *动态类型* 语言运行于Java虚拟机之上了，如 _Clojure_ 、 _Groovy_ 、 _Jython_ 和 _JRuby_ 等，能够在同一个虚拟机上可以达到静态类型语言的严谨性与动态类型语言的灵活性，这是一件很美妙的事情
+
+但遗憾的是， *Java虚拟机层面对动态类型语言的支持一直都有所欠缺* ，主要表现在 *方法调用* 方面: JDK1.7以前的字节码指令集中，4条方法调用指令( _invokevirtual_ 、 _invokespecial_ 、 _invokestatic_ 、 _invokeinterface_ )的第一个参数都是 *被调用的方法的符号引用* (CONSTANT_Methodref_info或者CONSTANT_InterfaceMethodref_info常量)， *方法的符号引用在编译时产生，而动态类型语言只有在运行时才能确定接收者类型* 。这样，在Java虚拟机上实现的动态类型语言就不得不使用其他方式( _如编译时留个占位符类型，运行时动态生成字节码实现具体类型到占位符类型的适配_ )来实现，这样势必让动态类型语言实现的复杂度增加，也可能带来额外的性能或者内存开销
+
+尽管可以利用一些办法(如CallSiteCaching)让这些开销尽量变小，但这种底层问题终归是应当在虚拟机层次上去解决才最合适，因此在Java虚拟机层面上提供动态类型的直接支持就成为了Java平台的发展趋势之一，这就是JDK1.7(JSR-292)中 _invokedynamic_ 指令以及 _java.lang.invoke_ 包出现的技术背景
+
+*** java.lang.invoke包
+JDK1.7实现了JSR-292，新加入的 _java.lang.invoke_ 包就是JSR-292的一个重要组成部分，这个包的主要目的是在之前单纯依靠符号引用来确定调用的目标方法这种方式以外，提供一种新的 *动态确定目标方法的机制* ，称为 _MethodHandle_ 。不妨把 _MethodHandle_ 与C/C++中的 _FunctionPointer_ ，或者C#里面的 _Delegate_ 类比一下。如果要实现一个带谓词的排序函数，在C/C++中常用的做法是把谓词定义为函数，用函数指针把谓词传递到排序方法，如下:
+
+#+BEGIN_SRC C
+  void sort(int list[], const int size, int(*compare)(int,int));
+#+END_SRC
+
+但Java语言做不到这一点，即没有办法单独地把一个函数作为参数进行传递。普遍的做法是设计一个带有 _compare()_ 方法的 _Comparator_ 接口，以实现了这个接口的对象作为参数，例如Collections.sort()就是这样定义的:
+
+#+BEGIN_SRC java
+  void sort (List list, Comparator c);
+#+END_SRC
+
+不过，在拥有 _MethodHandle_ 之后，Java语言也可以拥有类似于函数指针或者委托的方法别名的工具了。下面代码演示了 _MethodHandle_ 的基本用途，无论 _obj_ 是何种类型(临时定义的 _ClassA_ 或是实现 _PrintStream_ 接口的实现类 _System.out_ )，都可以正确地调用到 _println()_ 方法
+
+#+BEGIN_SRC java
+  import java.lang.invoke.MethodHandle;
+  import java.lang.invoke.MethodHandles;
+  import java.lang.invoke.MethodType;
+
+  public class MethodHandleTest {
+
+          static class ClassA {
+                  public void println(String s) {
+                          System.out.println(s);
+                  }
+          }
+
+          public static void main(String[] args) throws Throwable {
+                  Object obj = System.currentTimeMillis() % 2 == 0 ? System.out : new ClassA();
+                  // 无论obj最终是哪个实现类，下面这句都能正确调用到println方法。
+                  getPrintlnMH(obj).invokeExact("icyfenix");
+          }
+
+          private static MethodHandle getPrintlnMH(Object receiver) throws Throwable {
+                  // MethodType：代表“方法类型”
+                  // 包含了方法的返回值（methodType()的第一个参数）
+                  //             和具体参数（methodType()第二个及以后的参数）。
+                  MethodType mt = MethodType.methodType(void.class, String.class);
+                  // lookup()方法来自于MethodHandles.lookup
+                  // 这句的作用是在指定类中查找符合给定的方法名称、方法类型，并且符合调用权限的方法句柄。
+                  // 因为这里调用的是一个虚方法，按照Java语言的规则，
+                  //     方法第一个参数是隐式的，代表该方法的接收者，也即是this指向的对象，
+                  // 这个参数以前是放在参数列表中进行传递，现在提供了bindTo()方法来完成这件事情。
+                  return MethodHandles.lookup().findVirtual(receiver.getClass(), "println", mt).bindTo(receiver);
+          }
+  }
+#+END_SRC
+实际上方法 _getPrintlnMH()_ 中模拟了 *invokevirtual* 指令的执行过程，只不过它的分派逻辑并非固化在Class文件的字节码上，而是通过一个具体方法来实现。而这个方法本身的返回值( *MethodHandle* 对象)，可以视为对最终调用方法的一个 _引用_ 。以此为基础，有了MethodHandle就可以写出类似于下面这样的函数声明:  
+
+#+BEGIN_SRC java
+  void sort (List list, MethodHandle compare);
+#+END_SRC
+
+使用 _MethodHandle_ 并没有什么困难，不过看完它的用法之后，相同的事情，用反射不是早就可以实现了吗?
+
+确实，仅站在Java语言的角度来看， _MethodHandle_ 的使用方法和效果与 _Reflection_ 有众多相似之处，不过，它们还是有以下这些区别:
++ Reflection是在 *模拟Java代码层次的方法调用* ，而MethodHandle是在 *模拟字节码层次的方法调用* 。在 *MethodHandles.lookup* 中的3个方法: _findStatic()_ 、 _findVirtual()_ 、 _findSpecial()_ 正是为了对应于 _invokestatic_ 、 _invokevirtual_ 、 _invokeinterface_ 和 _invokespecial_ 这几条字节码指令的 *执行权限校验行为* ，而这些底层细节在使用ReflectionAPI时是不需要关心的
++ Reflection中的 _java.lang.reflect.Method_ 对象远比MethodHandle机制中的 _java.lang.invoke.MethodHandle_ 对象所包含的信息多
+  + _java.lang.reflect.Method_ : 是 *方法在Java一端的全面映像* ，包含了 _方法的签名_ 、 _描述符_ 以及 _方法属性表中各种属性的Java端表示方式_ ，还包含 _执行权限等的运行期信息_
+  + _java.lang.invoke.MethodHandle_ : 仅仅包含与 _执行该方法相关的信息_ 
++ 由于MethodHandle是对 *字节码的方法指令调用的模拟* ，所以理论上 _虚拟机在这方面做的各种优化_ (如方法内联)，在MethodHandle上也应当可以采用类似思路去支持(但目前实现还不完善)。而通过反射去调用方法则不行
++ 最关键的一点还在于去掉前面讨论施加的前提 _仅站在Java语言的角度来看_ : 
+  + Reflection API的设计目标是 *只为Java语言服务* 的
+  + 而MethodHandle则设计成可 *服务于所有Java虚拟机之上的语言* ，其中也包括Java语言
+
+*** invokedynamic指令
+上面使用 _MethodHandle_ 的示例代码反编译后也不会看见 *invokedynamic* 的身影，它的应用之处在哪里呢?
+
+在某种程度上， _invokedynamic_ 指令与 _MethodHandle_ 机制的作用是一样的，都是为了解决原有4条 _invoke_ 指令方法分派规则固化在虚拟机之中的问题，把如何查找目标方法的决定权从虚拟机转嫁到具体用户代码之中，让用户(包含其他语言的设计者)有更高的自由度。而且，它们两者的思路也是可类比的，可以把它们想象成为了达成同一个目的：
++ MethodHandle: 采用上层Java代码和API来实现
++ invokedynamic: 用字节码和Class中其他属性、常量来完成
+
+每一处含有invokedynamic指令的位置都称做 _动态调用点_ (Dynamic Call Site)，这条指令的第一个参数不再是代表方法符号引用的CONSTANT_Methodref_info常量，而变为JDK1.7新加入的 *CONSTANT_InvokeDynamic_info* 常量，从这个新常量中可以得到3项信息:
++ _BootstrapMethod_  : 引导方法，存放在新增的 _BootstrapMethods_ 属性中
+    + 引导方法是有固定的参数，并且返回是 _java.langinvoke.CallSite_ 对象，这个代表真正要执行的目标方法调用
++ _MethodType_ : 方法类型
++ 名称
+
+根据CONSTANT_InvokeDynamic_info常量中提供的信息，虚拟机可以找到并且执行引导方法，从而获得一个CallSite对象，最终调用要执行的目标方法
+
+#+BEGIN_SRC java
+  import static java.lang.invoke.MethodHandles.lookup;
+
+  import java.lang.invoke.CallSite;
+  import java.lang.invoke.ConstantCallSite;
+  import java.lang.invoke.MethodHandle;
+  import java.lang.invoke.MethodHandles;
+  import java.lang.invoke.MethodType;
+
+  public class InvokeDynamicTest {
+
+          public static void main(String[] args) throws Throwable {
+                  INDY_BootstrapMethod().invokeExact("icyfenix");
+          }
+
+          public static void testMethod(String s) {
+                  System.out.println("hello String:" + s);
+          }
+
+          public static CallSite BootstrapMethod(MethodHandles.Lookup lookup, String name, MethodType mt) throws Throwable {
+                  return new ConstantCallSite(lookup.findStatic(InvokeDynamicTest.class, name, mt));
+          }
+
+          private static MethodType MT_BootstrapMethod() {
+                  return MethodType.fromMethodDescriptorString(
+                          "(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/invoke/MethodType;)Ljava/lang/invoke/CallSite;",
+                          null);
+          }
+
+          private static MethodHandle MH_BootstrapMethod() throws Throwable {
+                  return lookup().findStatic(InvokeDynamicTest.class,
+                                             "BootstrapMethod",
+                                             MT_BootstrapMethod());
+          }
+
+          private static MethodHandle INDY_BootstrapMethod() throws Throwable {
+                  CallSite cs = (CallSite) MH_BootstrapMethod().invokeWithArguments(lookup(),
+                                                                                    "testMethod",
+                                                                                    MethodType.fromMethodDescriptorString(
+                                                                                            "(Ljava/lang/String;)V", null));
+                  return cs.dynamicInvoker();
+          }
+  }
+#+END_SRC
+
+这段代码与前面 _MethodHandleTest_ 的作用基本上是一样的
+#+BEGIN_EXAMPLE
+  由于 invokedynamic 指令所面向的使用者并非Java语言，而是其他Java虚拟机之上的动态语言
+
+  因此仅依靠Java语言的编译器Javac没有办法生成带有invokedynamic指令的字节码
+
+  曾经有一个java.dyn.InvokeDymmic的语法糖可以实现，但后来被取消了
+
+  要使用Java语言来演示invokedynamic指令只能用一些变通的办法
+
+  John Rose编写了一个把程序的字节码转换为使用 _invokedynamic_ 的简单工具 _INDY_ 来完成这件事情
+
+  要使用这个工具来产生最终要的字节码，因此这个示例代码中的方法名称不能随意改动，更不能把几个方法合并到一起写，因为它们是要被INDY工具读取的
+#+END_EXAMPLE
+
+把上面代码编译、再使用 _INDY_ 转换后重新生成的字节码：
+
+  #+ATTR_HTML: image :width 70% 
+  [[file:pic/invoke-dynamic-indy.jpg]] 
+
+从main()方法的字节码可见，原本的方法调用指令已经替换为 _invokedynamic_ ,它的参数为 _第123项常量_ (第二个值为0的参数在HotSpot中用不到与invokeinterface指令那个值为0的参数一样都是占位的)
+
+#+BEGIN_SRC sh
+  2 :invokedynamic#123 ,0//InvokeDynamic#0 :testMethod :(Ljava/lang/String ; )V
+#+END_SRC
+
+从常量池中可见，第123项常量显示 _#123=InvokeDynamic#0:#121_ 说明它是一项CONSTANT_InvokeDynamic_info类型常量
++ _#0_ ：引导方法取 _BootstrapMethods_ 属性表的第 _0_ 项(示例中仅有一个引导方法，即BootstrapMethod())
++ _#121_ ：引用第121项类型为CONSTANT_NameAndType_info的常量，从这个常量中可以获取方法名称和描述符，即后面输出的 _testMethod:(Ljava/lang/String;)V_ 
+
+再看一下 _BootstrapMethod()_ ，这个方法Java源码中没有，是INDY产生的，但是它的字节码很容易读懂，逻辑
+1. 调用 _MethodHandles$Lookup的findStatic()_ 方法，产生 _testMethod()_ 方法的 _MethodHandle_
+2. 用它创建一个 _ConstantCallSite_ 对象
+3. 这个对象返回给 _invokedynamic_ 指令，实现对 _testMethod()_ 方法的调用
+
+*** 掌控方法分派规则
+invokedynamic指令与前面4条 invoke* 指令的最大差别就是 *它的分派逻辑不是由虚拟机决定的，而是由程序员决定* 
+
+#+BEGIN_SRC java
+  class GrandFather {
+          void thinking() {
+                  System.out.println("i am grandfather");
+          }
+  }
+
+  class Father extends GrandFather {
+          void thinking() {
+                  System.out.println("i am father");
+          }
+  }
+
+  class Son extends Father {
+          void thinking() {
+                  // 请读者在这里填入适当的代码（不能修改其他地方的代码）
+                  // 实现调用祖父类的thinking()方法，打印"i am grandfather"
+          }
+  }
+#+END_SRC
+
+在JDK1.7之前，使用纯粹的Java语言很难处理这个问题(直接生成字节码就很简单，如使用 _ASM_ 等字节码工具)，原因是在 _Son_ 类的 _thinking()_ 方法中 *无法获取一个实际类型是 _GrandFather_ 的对象引用* ，而 _invokevirtual_ 指令的分派逻辑就是 _按照方法接收者的实际类型进行分配_ ，这个逻辑是固化在虚拟机中的，程序员无法改变。在JDK1.7中，可以使用下面代码的程序来解决这个问题：
+
+#+BEGIN_SRC java
+  import static java.lang.invoke.MethodHandles.lookup;
+
+  import java.lang.invoke.MethodHandle;
+  import java.lang.invoke.MethodType;
+
+  class Test {
+
+          class GrandFather {
+                  void thinking() {
+                          System.out.println("i am grandfather");
+                  }
+          }
+
+          class Father extends GrandFather {
+                  void thinking() {
+                          System.out.println("i am father");
+                  }
+          }
+
+          class Son extends Father {
+                  void thinking() {
+                          try {
+                                  MethodType mt = MethodType.methodType(void.class);
+                                  MethodHandle mh = lookup().findSpecial(GrandFather.class, 
+                                                                         "thinking", mt, getClass());
+                                  mh.invoke(this);
+                          } catch (Throwable e) {
+                          }
+                  }
+          }
+
+          public static void main(String[] args) {
+                  (new Test().new Son()).thinking();
+          }
+  }
+#+END_SRC
+
+: i am a father
