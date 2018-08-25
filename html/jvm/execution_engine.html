@@ -267,7 +267,17 @@ for the JavaScript code in this tag.
 </li>
 </ul>
 </li>
-<li><a href="#orgf063296">执行引擎</a></li>
+<li><a href="#orgf063296">执行引擎</a>
+<ul>
+<li><a href="#orgb5cbc40">解释执行</a></li>
+<li><a href="#orgbd8887e">基于栈的指令集</a>
+<ul>
+<li><a href="#org90dc4a7">基于栈的指令集优缺点</a></li>
+</ul>
+</li>
+<li><a href="#org901ed28">基于栈的解释器执行过程</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
@@ -798,7 +808,7 @@ sr.sayHello((<span style="color: #98fb98;">Woman</span>)man);
 </p>
 
 <pre class="example">
-  产生这种模糊结论的主要原因是字面量不需要定义，所以字面量没有显式的静态类型，它的静态类型只能通过语言上的规则去理解和推断
+      产生这种模糊结论的主要原因是字面量不需要定义，所以字面量没有显式的静态类型，它的静态类型只能通过语言上的规则去理解和推断
 </pre>
 
 <div class="org-src-container">
@@ -920,9 +930,9 @@ hello char...
 7个重载方法已经被注释得只剩一个了，可见 <b>变长参数的重载优先级是最低的</b> ，这时候字符 'a' 被当做了一个 <b>数组元素</b> 
 </p>
 <pre class="example">
-  这里使用的是char类型的变长参数，还可以选择int类型、Character类型、Object类型等的变长参数重载来演示一遍
+      这里使用的是char类型的变长参数，还可以选择int类型、Character类型、Object类型等的变长参数重载来演示一遍
 
-  但要注意的是，有一些在单个参数中能成立的自动转型，如char转型为int，在变长参数中是不成立的
+      但要注意的是，有一些在单个参数中能成立的自动转型，如char转型为int，在变长参数中是不成立的
 </pre>
 
 <p>
@@ -1222,7 +1232,7 @@ JDK 1.7中新增的invokedymmic指令也成为了最复杂的一条方法调用�
 </p>
 
 <pre class="example">
-  虚拟机除了使用方法表之外,在条件允许的情况下,还会使用内联缓存( Inline Cache )和基于“类型继承关系分析” ( Class Hierarchy Analysis,CHA ) 技术的守护内联( Guarded Mining ) 两种非稳定的“激进优化”手段来获得更高的性能
+      虚拟机除了使用方法表之外,在条件允许的情况下,还会使用内联缓存( Inline Cache )和基于“类型继承关系分析” ( Class Hierarchy Analysis,CHA ) 技术的守护内联( Guarded Mining ) 两种非稳定的“激进优化”手段来获得更高的性能
 </pre>
 </div>
 </div>
@@ -1548,9 +1558,238 @@ i am a grandfather
 </div>
 </div>
 
-
 <div id="outline-container-orgf063296" class="outline-2">
 <h2 id="orgf063296">执行引擎</h2>
+<div class="outline-text-2" id="text-orgf063296">
+<p>
+许多Java虚拟机的执行引擎在执行Java代码的时候都有 <b>解释</b> 执行(通过解释器执行)和 <b>编译</b> 执行(通过即时编译器产生本地代码执行)两种选择
+</p>
+</div>
+
+<div id="outline-container-orgb5cbc40" class="outline-3">
+<h3 id="orgb5cbc40">解释执行</h3>
+<div class="outline-text-3" id="text-orgb5cbc40">
+<p>
+Java语言经常被人们定位为 <span class="underline">解释</span> 执行的语言，在Java初生的JDK1.0时代，这种定义还算是比较准确的，但当主流的虚拟机中都包含了即时编译器后，Class文件中的代码到底会被解释执行还是编译执行，就成了只有虚拟机自己才能准确判断的事情。后来，Java也发展出了可以直接生成本地代码的编译器(如GNU Compiler for the Java)，而C/C++语言也出现了通过解释器执行的版本(如CINT)，这时候再笼统地说 <span class="underline">解释</span> 执行，对于整个Java语言来说就成了几乎是没有意义的概念，只有确定了谈论对象是某种具体的Java实现版本和执行引擎运行模式时，谈解释执行还是编译执行才会比较确切
+</p>
+
+<p>
+不论是解释还是编译，也不论是物理机还是虚拟机，对于应用程序，机器都不可能如人那样阅读、理解，然后就获得了执行能力。大部分的程序代码到物理机的目标代码或虚拟机能执行的指令集之前，都需要经过下图中的各个步骤:
+</p>
+
+
+<div class="figure">
+<p><img src="pic/compile-process.jpg" alt="compile-process.jpg" width="30%" /> 
+</p>
+</div>
+
+<ul class="org-ul">
+<li>左边那条分支，就是解释执行的过程</li>
+<li>右边那条分支，就是传统编译原理中程序代码到目标机器代码的生成过程</li>
+</ul>
+
+
+<p>
+如今，基于物理机、Java虚拟机，或者非Java的其他高级语言虚拟机(HLLVM)的语言，大多都会遵循这种基于现代经典编译原理的思路：在执行前先对程序源码进行 <span class="underline">词法分析</span> 和 <span class="underline">语法分析</span> 处理，把源码转化为 <span class="underline">抽象语法树</span> (AST)。对于一门具体语言的实现来说：
+</p>
+<ul class="org-ul">
+<li><span class="underline">词法分析</span> 、 <span class="underline">语法分析</span> 以至后面的 <span class="underline">优化器</span> 和 <span class="underline">目标代码生成器</span> 都可以选择独立于执行引擎，形成一个完整意义的 <b>编译器</b> 去实现，这类代表是C/C++语言</li>
+<li>把其中一部分步骤(如 <span class="underline">生成抽象语法树之前的步骤</span> )实现为一个半独立的编译器，这类代表是Java语言</li>
+<li>把 <span class="underline">这些步骤和执行引擎全部集中封装在一个封闭的黑匣子</span> 之中，如大多数的JavaScript执行器</li>
+</ul>
+
+<p>
+Java语言中: 
+</p>
+<ul class="org-ul">
+<li><b>Javac编译器</b> ：完成了程序代码经过 <span class="underline">词法分析</span> 、 <span class="underline">语法分析</span> 到 <span class="underline">抽象语法树</span> ,再遍历语法树生成线性的 <span class="underline">字节码指令流</span> 的过程。这一切都是Java虚拟机之外</li>
+<li><b>解释器</b> ：在虚拟机的内部,所以Java程序的编译就是半独立的实现</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-orgbd8887e" class="outline-3">
+<h3 id="orgbd8887e">基于栈的指令集</h3>
+<div class="outline-text-3" id="text-orgbd8887e">
+<p>
+Java编译器输出的指令流，基本上是一种 <span class="underline">基于栈的指令集架构</span> (ISA)，指令流中的指令大部分都是 <b>零地址指令</b> ，它们依赖 <b>操作数栈</b> 进行工作
+</p>
+<pre class="example">
+     与之相对的另外一套常用的指令集架构是基于寄存器的指令集，最典型的就是x86的二地址指令集
+
+     现在主流PC机中直接支持的指令集架构，这些指令依赖寄存器进行工作
+</pre>
+
+<p>
+使用这两种指令集计算 <span class="underline">1+1</span> 的结果，基于栈的指令集会是这样子的:
+</p>
+<div class="org-src-container">
+<pre class="src src-asm"><span style="color: #87cefa;">iconst_1</span>
+<span style="color: #87cefa;">iconst_1</span>
+<span style="color: #87cefa;">iadd</span>
+<span style="color: #87cefa;">istore_0</span>
+</pre>
+</div>
+
+<ol class="org-ol">
+<li>两条 <span class="underline">iconst_1</span> 指令连续把两个常量1 <span class="underline">压入栈</span> 后</li>
+<li><span class="underline">iadd</span> 指令把栈顶的两个值 <span class="underline">出栈</span> 、相加，然后把结果放回 <span class="underline">栈顶</span></li>
+<li><span class="underline">istore_0</span> 把栈顶的值放到 <span class="underline">局部变量表的第0个Slot</span> 中</li>
+</ol>
+
+<p>
+如果基于寄存器，那程序可能会是这个样子：
+</p>
+<div class="org-src-container">
+<pre class="src src-asm"><span style="color: #87cefa;">mov</span> <span style="color: #00ffff;">eax</span> ,1 
+<span style="color: #87cefa;">add</span> <span style="color: #00ffff;">eax</span> ,1
+</pre>
+</div>
+
+<ol class="org-ol">
+<li><span class="underline">mov</span> 指令把 <span class="underline">EAX寄存器</span> 的值设为1</li>
+<li><span class="underline">add</span> 指令再把这个值加1, 结果就保存在 <span class="underline">EAX寄存器</span> 里面</li>
+</ol>
+</div>
+
+<div id="outline-container-org90dc4a7" class="outline-4">
+<h4 id="org90dc4a7">基于栈的指令集优缺点</h4>
+<div class="outline-text-4" id="text-org90dc4a7">
+<ul class="org-ul">
+<li>优点:
+<ul class="org-ul">
+<li><b>可移植</b> ，寄存器由硬件直接提供，程序直接依赖这些硬件寄存器则不可避免地要受到硬件的约束。例如，现在32位80x86体系的处理器中提供了8个32位的寄存器，而ARM体系的CPU提供了16个32位的通用寄存器。如果使用栈架构的指令集，用户程序不会直接使用这些寄存器，就可以由虚拟机实现来自行决定把一些访问最频繁的数据(程序计数器、栈顶缓存等)放到寄存器中以获取尽量好的性能，这样实现起来也更加简单一些</li>
+<li><b>代码相对更加紧凑</b> ：字节码中每个字节就对应一条指令，而多地址指令集中还需要存放参数</li>
+<li><b>编译器实现更加简单</b> ：不需要考虑空间分配的问题，所需空间都在栈上操作</li>
+</ul></li>
+<li>缺点：
+<ul class="org-ul">
+<li><b>执行速度相对来说会稍慢一些</b> ：由于 <span class="underline">指令数量</span> 和 <span class="underline">内存访问</span> 的原因，所以导致了栈架构指令集的执行速度会相对较慢：
+<ul class="org-ul">
+<li>虽然栈架构指令集的代码非常紧凑，但是完成相同功能所需的指令数量一般会比寄存器架构多，因为出栈、入栈操作本身就产生了相当多的指令数量</li>
+<li>更重要的是，栈实现在内存之中，频繁的栈访问也就意味着频繁的内存访问，相对于处理器来说，内存始终是执行速度的瓶颈。尽管虚拟机可以采取栈顶缓存的手段，把最常用的操作映射到寄存器中避免直接内存访问，但这也只能是优化措施而不是解决本质问题的方法</li>
+</ul></li>
+</ul></li>
+</ul>
+
+<pre class="example">
+      这里说的是物理机器上的寄存器，也有基于虚拟机寄存器的实现，如Android平台的Dalvik VM
+
+      即使是基于寄存器的虚拟机，也希望把虚拟机寄存器尽量映射到物理寄存器上以获取尽可能高的性能
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org901ed28" class="outline-3">
+<h3 id="org901ed28">基于栈的解释器执行过程</h3>
+<div class="outline-text-3" id="text-org901ed28">
+<div class="org-src-container">
+<pre class="src src-java"><span style="color: #00ffff;">public</span> <span style="color: #98fb98;">int</span> <span style="color: #87cefa;">calc</span>() {
+    <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">a</span> = 100;
+    <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">b</span> = 200;
+    <span style="color: #98fb98;">int</span> <span style="color: #eedd82;">c</span> = 300;
+    <span style="color: #00ffff;">return</span> (a + b) * c;
+}
+</pre>
+</div>
+
+<p>
+使用 <span class="underline">javap</span> 命令后得如下反编译代码： 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-asm"><span style="color: #87cefa;">public</span> <span style="color: #00ffff;">int</span> calc()<span style="color: #ff4500;">;</span>
+<span style="color: #ff4500;">//</span><span style="color: #ff4500;">....</span>
+<span style="color: #87cefa;">Code</span>:
+      <span style="color: #00ffff;">stack=2</span>, locals=4, args_size=1
+         <span style="color: #00ffff;">0</span>: bipush        100
+         <span style="color: #00ffff;">2</span>: istore_1
+         <span style="color: #00ffff;">3</span>: sipush        200
+         <span style="color: #00ffff;">6</span>: istore_2
+         <span style="color: #00ffff;">7</span>: sipush        300
+        <span style="color: #00ffff;">10</span>: istore_3
+        <span style="color: #00ffff;">11</span>: iload_1
+        <span style="color: #00ffff;">12</span>: iload_2
+        <span style="color: #00ffff;">13</span>: iadd
+        <span style="color: #00ffff;">14</span>: iload_3
+        <span style="color: #00ffff;">15</span>: imul
+        <span style="color: #00ffff;">16</span>: ireturn
+<span style="color: #ff4500;">//</span><span style="color: #ff4500;">...</span>
+</pre>
+</div>
+
+<p>
+下面用图对该过程进行描述：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/stack-process-1.png" alt="stack-process-1.png" width="50%" /> 
+</p>
+</div>
+
+
+<div class="figure">
+<p><img src="pic/stack-process-2.png" alt="stack-process-2.png" width="50%" /> 
+</p>
+</div>
+
+
+<div class="figure">
+<p><img src="pic/stack-process-3.png" alt="stack-process-3.png" width="50%" /> 
+</p>
+</div>
+
+
+<div class="figure">
+<p><img src="pic/stack-process-4.png" alt="stack-process-4.png" width="50%" /> 
+</p>
+</div>
+
+
+<div class="figure">
+<p><img src="pic/stack-process-5.png" alt="stack-process-5.png" width="50%" /> 
+</p>
+</div>
+
+
+<div class="figure">
+<p><img src="pic/stack-process-6.png" alt="stack-process-6.png" width="50%" /> 
+</p>
+</div>
+
+
+<div class="figure">
+<p><img src="pic/stack-process-7.png" alt="stack-process-7.png" width="50%" /> 
+</p>
+</div>
+
+<pre class="example">
+     上面的执行过程仅仅是一种概念模型，虚拟机最终会对执行过程做一些优化来提高性能，实际的运作过程不一定完全符合概念模型的描述
+
+     更准确地说，实际情况会和上面描述的概念模型差距非常大，这种差距产生的原因是虚拟机中解析器和即时编译器都会对输入的字节码进行优化
+
+     例如在HotSpot虚拟机中,有很多以"fast_"开头的非标准字节码指令用于合并、替换输入的字节码以提升解释执行性能,而即时编译的优化手段更加花样繁多
+</pre>
+
+<p>
+从这段程序的执行中也可以看出栈结构指令集的一般运行过程,整个运算过程的中间变量都以 <b>操作数栈的出栈、入栈</b> 为 <b>信息交换</b> 途径
+</p>
+
+<p>
+<a href="jvm_example.html">Next：虚拟机实例</a>
+</p>
+
+<p>
+<a href="class_loader.html">Previous：类加载</a>
+</p>
+
+<p>
+<a href="jvm.html">Home：目录</a>
+</p>
+</div>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
