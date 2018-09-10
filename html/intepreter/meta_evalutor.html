@@ -1,0 +1,655 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>元循环求值器</title>
+<meta name="generator" content="Org mode" />
+<meta name="author" content="Wu, Shanliang" />
+<style type="text/css">
+ <!--/*--><![CDATA[/*><!--*/
+  .title  { text-align: center;
+             margin-bottom: .2em; }
+  .subtitle { text-align: center;
+              font-size: medium;
+              font-weight: bold;
+              margin-top:0; }
+  .todo   { font-family: monospace; color: red; }
+  .done   { font-family: monospace; color: green; }
+  .priority { font-family: monospace; color: orange; }
+  .tag    { background-color: #eee; font-family: monospace;
+            padding: 2px; font-size: 80%; font-weight: normal; }
+  .timestamp { color: #bebebe; }
+  .timestamp-kwd { color: #5f9ea0; }
+  .org-right  { margin-left: auto; margin-right: 0px;  text-align: right; }
+  .org-left   { margin-left: 0px;  margin-right: auto; text-align: left; }
+  .org-center { margin-left: auto; margin-right: auto; text-align: center; }
+  .underline { text-decoration: underline; }
+  #postamble p, #preamble p { font-size: 90%; margin: .2em; }
+  p.verse { margin-left: 3%; }
+  pre {
+    border: 1px solid #ccc;
+    box-shadow: 3px 3px 3px #eee;
+    padding: 8pt;
+    font-family: monospace;
+    overflow: auto;
+    margin: 1.2em;
+  }
+  pre.src {
+    position: relative;
+    overflow: visible;
+    padding-top: 1.2em;
+  }
+  pre.src:before {
+    display: none;
+    position: absolute;
+    background-color: white;
+    top: -10px;
+    right: 10px;
+    padding: 3px;
+    border: 1px solid black;
+  }
+  pre.src:hover:before { display: inline;}
+  /* Languages per Org manual */
+  pre.src-asymptote:before { content: 'Asymptote'; }
+  pre.src-awk:before { content: 'Awk'; }
+  pre.src-C:before { content: 'C'; }
+  /* pre.src-C++ doesn't work in CSS */
+  pre.src-clojure:before { content: 'Clojure'; }
+  pre.src-css:before { content: 'CSS'; }
+  pre.src-D:before { content: 'D'; }
+  pre.src-ditaa:before { content: 'ditaa'; }
+  pre.src-dot:before { content: 'Graphviz'; }
+  pre.src-calc:before { content: 'Emacs Calc'; }
+  pre.src-emacs-lisp:before { content: 'Emacs Lisp'; }
+  pre.src-fortran:before { content: 'Fortran'; }
+  pre.src-gnuplot:before { content: 'gnuplot'; }
+  pre.src-haskell:before { content: 'Haskell'; }
+  pre.src-hledger:before { content: 'hledger'; }
+  pre.src-java:before { content: 'Java'; }
+  pre.src-js:before { content: 'Javascript'; }
+  pre.src-latex:before { content: 'LaTeX'; }
+  pre.src-ledger:before { content: 'Ledger'; }
+  pre.src-lisp:before { content: 'Lisp'; }
+  pre.src-lilypond:before { content: 'Lilypond'; }
+  pre.src-lua:before { content: 'Lua'; }
+  pre.src-matlab:before { content: 'MATLAB'; }
+  pre.src-mscgen:before { content: 'Mscgen'; }
+  pre.src-ocaml:before { content: 'Objective Caml'; }
+  pre.src-octave:before { content: 'Octave'; }
+  pre.src-org:before { content: 'Org mode'; }
+  pre.src-oz:before { content: 'OZ'; }
+  pre.src-plantuml:before { content: 'Plantuml'; }
+  pre.src-processing:before { content: 'Processing.js'; }
+  pre.src-python:before { content: 'Python'; }
+  pre.src-R:before { content: 'R'; }
+  pre.src-ruby:before { content: 'Ruby'; }
+  pre.src-sass:before { content: 'Sass'; }
+  pre.src-scheme:before { content: 'Scheme'; }
+  pre.src-screen:before { content: 'Gnu Screen'; }
+  pre.src-sed:before { content: 'Sed'; }
+  pre.src-sh:before { content: 'shell'; }
+  pre.src-sql:before { content: 'SQL'; }
+  pre.src-sqlite:before { content: 'SQLite'; }
+  /* additional languages in org.el's org-babel-load-languages alist */
+  pre.src-forth:before { content: 'Forth'; }
+  pre.src-io:before { content: 'IO'; }
+  pre.src-J:before { content: 'J'; }
+  pre.src-makefile:before { content: 'Makefile'; }
+  pre.src-maxima:before { content: 'Maxima'; }
+  pre.src-perl:before { content: 'Perl'; }
+  pre.src-picolisp:before { content: 'Pico Lisp'; }
+  pre.src-scala:before { content: 'Scala'; }
+  pre.src-shell:before { content: 'Shell Script'; }
+  pre.src-ebnf2ps:before { content: 'ebfn2ps'; }
+  /* additional language identifiers per "defun org-babel-execute"
+       in ob-*.el */
+  pre.src-cpp:before  { content: 'C++'; }
+  pre.src-abc:before  { content: 'ABC'; }
+  pre.src-coq:before  { content: 'Coq'; }
+  pre.src-groovy:before  { content: 'Groovy'; }
+  /* additional language identifiers from org-babel-shell-names in
+     ob-shell.el: ob-shell is the only babel language using a lambda to put
+     the execution function name together. */
+  pre.src-bash:before  { content: 'bash'; }
+  pre.src-csh:before  { content: 'csh'; }
+  pre.src-ash:before  { content: 'ash'; }
+  pre.src-dash:before  { content: 'dash'; }
+  pre.src-ksh:before  { content: 'ksh'; }
+  pre.src-mksh:before  { content: 'mksh'; }
+  pre.src-posh:before  { content: 'posh'; }
+  /* Additional Emacs modes also supported by the LaTeX listings package */
+  pre.src-ada:before { content: 'Ada'; }
+  pre.src-asm:before { content: 'Assembler'; }
+  pre.src-caml:before { content: 'Caml'; }
+  pre.src-delphi:before { content: 'Delphi'; }
+  pre.src-html:before { content: 'HTML'; }
+  pre.src-idl:before { content: 'IDL'; }
+  pre.src-mercury:before { content: 'Mercury'; }
+  pre.src-metapost:before { content: 'MetaPost'; }
+  pre.src-modula-2:before { content: 'Modula-2'; }
+  pre.src-pascal:before { content: 'Pascal'; }
+  pre.src-ps:before { content: 'PostScript'; }
+  pre.src-prolog:before { content: 'Prolog'; }
+  pre.src-simula:before { content: 'Simula'; }
+  pre.src-tcl:before { content: 'tcl'; }
+  pre.src-tex:before { content: 'TeX'; }
+  pre.src-plain-tex:before { content: 'Plain TeX'; }
+  pre.src-verilog:before { content: 'Verilog'; }
+  pre.src-vhdl:before { content: 'VHDL'; }
+  pre.src-xml:before { content: 'XML'; }
+  pre.src-nxml:before { content: 'XML'; }
+  /* add a generic configuration mode; LaTeX export needs an additional
+     (add-to-list 'org-latex-listings-langs '(conf " ")) in .emacs */
+  pre.src-conf:before { content: 'Configuration File'; }
+
+  table { border-collapse:collapse; }
+  caption.t-above { caption-side: top; }
+  caption.t-bottom { caption-side: bottom; }
+  td, th { vertical-align:top;  }
+  th.org-right  { text-align: center;  }
+  th.org-left   { text-align: center;   }
+  th.org-center { text-align: center; }
+  td.org-right  { text-align: right;  }
+  td.org-left   { text-align: left;   }
+  td.org-center { text-align: center; }
+  dt { font-weight: bold; }
+  .footpara { display: inline; }
+  .footdef  { margin-bottom: 1em; }
+  .figure { padding: 1em; }
+  .figure p { text-align: center; }
+  .inlinetask {
+    padding: 10px;
+    border: 2px solid gray;
+    margin: 10px;
+    background: #ffffcc;
+  }
+  #org-div-home-and-up
+   { text-align: right; font-size: 70%; white-space: nowrap; }
+  textarea { overflow-x: auto; }
+  .linenr { font-size: smaller }
+  .code-highlighted { background-color: #ffff00; }
+  .org-info-js_info-navigation { border-style: none; }
+  #org-info-js_console-label
+    { font-size: 10px; font-weight: bold; white-space: nowrap; }
+  .org-info-js_search-highlight
+    { background-color: #ffff00; color: #000000; font-weight: bold; }
+  .org-svg { width: 90%; }
+  /*]]>*/-->
+</style>
+<link rel="stylesheet" type="text/css" href="css/main.css" />
+<script type="text/javascript">
+/*
+@licstart  The following is the entire license notice for the
+JavaScript code in this tag.
+
+Copyright (C) 2012-2018 Free Software Foundation, Inc.
+
+The JavaScript code in this tag is free software: you can
+redistribute it and/or modify it under the terms of the GNU
+General Public License (GNU GPL) as published by the Free Software
+Foundation, either version 3 of the License, or (at your option)
+any later version.  The code is distributed WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU GPL for more details.
+
+As additional permission under GNU GPL version 3 section 7, you
+may distribute non-source (e.g., minimized or compacted) forms of
+that code without the copy of the GNU GPL normally required by
+section 4, provided you include this license notice and a URL
+through which recipients can access the Corresponding Source.
+
+
+@licend  The above is the entire license notice
+for the JavaScript code in this tag.
+*/
+<!--/*--><![CDATA[/*><!--*/
+ function CodeHighlightOn(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(null != target) {
+     elem.cacheClassElem = elem.className;
+     elem.cacheClassTarget = target.className;
+     target.className = "code-highlighted";
+     elem.className   = "code-highlighted";
+   }
+ }
+ function CodeHighlightOff(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(elem.cacheClassElem)
+     elem.className = elem.cacheClassElem;
+   if(elem.cacheClassTarget)
+     target.className = elem.cacheClassTarget;
+ }
+/*]]>*///-->
+</script>
+</head>
+<body>
+<div id="content">
+<h1 class="title">元循环求值器</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#org6f6daa9">基本求值过程</a>
+<ul>
+<li><a href="#org368a06b">核心过程</a>
+<ul>
+<li><a href="#org154cf56">eval</a></li>
+<li><a href="#org675218a">apply</a></li>
+<li><a href="#org4c56053">获得过程参数</a></li>
+<li><a href="#org664c02f">if表达式</a></li>
+<li><a href="#orgef4ff7a">顺序求值</a></li>
+<li><a href="#org77a122a">赋值和定义</a></li>
+</ul>
+</li>
+<li><a href="#org9960057">表达式</a>
+<ul>
+<li><a href="#orgaaa33de">自求值表达式</a></li>
+<li><a href="#orgef10bfe">变量表达式</a></li>
+<li><a href="#orge79ca28">表达式类型判断</a>
+<ul>
+<li><a href="#orgc1ebd1d">引用表达式</a></li>
+<li><a href="#org7a0b3ce">赋值</a></li>
+<li><a href="#orgf9697b6">定义表达式</a></li>
+<li><a href="#org70c4277">lambda表达式</a></li>
+<li><a href="#orgcbf275c">if表达式</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<p>
+用一种语言实现其自身的求值器，这叫做 <b>元循环</b> 
+</p>
+
+<div id="outline-container-org6f6daa9" class="outline-2">
+<h2 id="org6f6daa9">基本求值过程</h2>
+<div class="outline-text-2" id="text-org6f6daa9">
+<ol class="org-ol">
+<li>eval:  对一个表达式 <b>求值</b>
+<ul class="org-ul">
+<li>组合表达式：先 <span class="underline">求子表达式的值</span> ，而后把 <span class="underline">运算符的子表达式的值</span> <b>作用</b> 于 <span class="underline">运算参数子表达式的值</span></li>
+</ul></li>
+<li>apply: 把一组参数值 <b>作用</b> 于一个过程体
+<ul class="org-ul">
+<li>复杂过程：原来环境上添加一个新的 <span class="underline">框架</span> ，在新的框架上把 <span class="underline">实参值</span>  <b>绑定</b> 到过程的 <span class="underline">形参</span> 上，在这个 <b>新的环境</b> 中对 <span class="underline">过程体</span> <b>求值</b></li>
+</ul></li>
+</ol>
+
+
+<p>
+在这两个过程中都可能遇到 <b>递归</b> 调用，直到：
+</p>
+<ul class="org-ul">
+<li>变量：从环境中获取</li>
+<li>基本过程：直接调用代码</li>
+<li>基本表达式：直接返回数，字符串，布尔值等</li>
+</ul>
+
+
+<p>
+在一个环境中对表达式求值 -&gt; 把参数值作用于一个过程 -&gt; 在一个新的环境上对表达式求值  &#x2026;&#x2026;
+</p>
+
+
+<div class="figure">
+<p><img src="./pic/eval-apply.gif" alt="eval-apply.gif" width="40%" />
+</p>
+</div>
+</div>
+
+<div id="outline-container-org368a06b" class="outline-3">
+<h3 id="org368a06b">核心过程</h3>
+<div class="outline-text-3" id="text-org368a06b">
+</div>
+<div id="outline-container-org154cf56" class="outline-4">
+<h4 id="org154cf56">eval</h4>
+<div class="outline-text-4" id="text-org154cf56">
+<p>
+<b>eval</b> 以一个 <span class="underline">表达式</span> 和 <span class="underline">环境</span> 作为参数，对表达式进行求值：
+</p>
+<ul class="org-ul">
+<li>基本表达式：
+<ul class="org-ul">
+<li>各种自求值表达式：直接返回，如数，字符串，布尔值等</li>
+<li>变量：从环境查询变量</li>
+</ul></li>
+<li>特殊表达式：
+<ul class="org-ul">
+<li>引号表达式：返回被引用的表达式</li>
+<li>变量赋值或定义：修改环境，建立或者修改相关的约束</li>
+<li>if表达式：条件部分求值，然后根据情况对相应的子表达式进行求值</li>
+<li>lambda表达式：建立过程对象，包装相应的过程体，形参，和环境</li>
+<li>begin表达式：依次对子表达式进行求值</li>
+<li>cond表达式：转换为一系列的if表达式，求值</li>
+<li>&#x2026;&#x2026;</li>
+</ul></li>
+</ul>
+<p>
++组合表达式：先 <span class="underline">求子表达式的值</span> ，而后把 <span class="underline">运算符的子表达式的值</span> <b>作用</b> 于 <span class="underline">运算参数子表达式的值</span> 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00ffff;">define</span> <span style="color: #696969;">(</span><span style="color: #87cefa;">m-eval</span> exp env<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00ffff;">cond</span> <span style="color: #696969;">((</span>self-evaluating? exp<span style="color: #696969;">)</span> exp<span style="color: #696969;">)</span>
+        <span style="color: #696969;">((</span>variable? exp<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>lookup-variable-value exp env<span style="color: #696969;">))</span>
+        <span style="color: #696969;">((</span>quoted? exp<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>text-of-quotation exp<span style="color: #696969;">))</span>
+        <span style="color: #696969;">((</span>assignment? exp<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>eval-assignment exp env<span style="color: #696969;">))</span>
+        <span style="color: #696969;">((</span>definition? exp<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>eval-definition exp env<span style="color: #696969;">))</span>
+        <span style="color: #696969;">((</span>if? exp<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>eval-if exp env<span style="color: #696969;">))</span>
+        <span style="color: #696969;">((</span>lambda? exp<span style="color: #696969;">)</span>
+         <span style="color: #696969;">(</span>make-procedure <span style="color: #696969;">(</span>lambda-parameters exp<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>lambda-body exp<span style="color: #696969;">)</span> env<span style="color: #696969;">))</span>
+        <span style="color: #696969;">((</span>begin? exp<span style="color: #696969;">)</span>
+         <span style="color: #696969;">(</span>eval-sequence <span style="color: #696969;">(</span>begin-actions exp<span style="color: #696969;">)</span> env<span style="color: #696969;">))</span>
+        <span style="color: #696969;">((</span>cond? exp<span style="color: #696969;">)</span>
+         <span style="color: #696969;">(</span>m-eval <span style="color: #696969;">(</span>cond-&gt;if exp<span style="color: #696969;">)</span> env<span style="color: #696969;">))</span>
+        <span style="color: #696969;">((</span>application? exp<span style="color: #696969;">)</span>
+         <span style="color: #696969;">(</span>m-apply <span style="color: #696969;">(</span>m-eval <span style="color: #696969;">(</span>operator exp<span style="color: #696969;">)</span> env<span style="color: #696969;">)</span>
+                  <span style="color: #696969;">(</span>list-of-values <span style="color: #696969;">(</span>operands exp<span style="color: #696969;">)</span> env<span style="color: #696969;">)))</span>
+        <span style="color: #696969;">(</span><span style="color: #00ffff;">else</span> <span style="color: #696969;">(</span>error <span style="color: #ffa07a;">"Unknown expression type -- EVAL"</span> exp<span style="color: #696969;">))))</span>
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org675218a" class="outline-4">
+<h4 id="org675218a">apply</h4>
+<div class="outline-text-4" id="text-org675218a">
+<p>
+<b>apply</b> 以 <span class="underline">一个过程体</span> 和 <span class="underline">一组参数值</span> 作为变量，实现过程应用：
+</p>
+<ul class="org-ul">
+<li>基本过程：直接调用</li>
+<li>复杂过程：原来环境上添加一个新的 <span class="underline">框架</span> ，在新的框架上把 <span class="underline">实参值</span>  <b>绑定</b> 到过程的 <span class="underline">形参</span> 上，在这个 <b>新的环境</b> 中对 <span class="underline">过程体</span> <b>求值</b></li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00ffff;">define</span> <span style="color: #696969;">(</span><span style="color: #87cefa;">m-apply</span> procedure arguments<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00ffff;">cond</span> <span style="color: #696969;">((</span>primitive-procedure? procedure<span style="color: #696969;">)</span>
+         <span style="color: #696969;">(</span>apply-primitive-procedure procedure arguments<span style="color: #696969;">))</span>
+        <span style="color: #696969;">((</span>compound-procedure? procedure<span style="color: #696969;">)</span>
+         <span style="color: #696969;">(</span>eval-sequence
+          <span style="color: #696969;">(</span>procedure-body procedure<span style="color: #696969;">)</span>
+          <span style="color: #696969;">(</span>extend-environment <span style="color: #696969;">(</span>procedure-parameters procedure<span style="color: #696969;">)</span>
+                              arguments
+                              <span style="color: #696969;">(</span>procedure-environment procedure<span style="color: #696969;">))))</span>
+        <span style="color: #696969;">(</span><span style="color: #00ffff;">else</span> <span style="color: #696969;">(</span>error <span style="color: #ffa07a;">"Unknown procedure type -- APPLY"</span> procedure<span style="color: #696969;">))))</span>
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org4c56053" class="outline-4">
+<h4 id="org4c56053">获得过程参数</h4>
+<div class="outline-text-4" id="text-org4c56053">
+<p>
+eval在调用apply前，需要对各实参进行求值
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00ffff;">define</span> <span style="color: #696969;">(</span><span style="color: #87cefa;">list-of-values</span> exps env<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00ffff;">if</span> <span style="color: #696969;">(</span>no-operands? exps<span style="color: #696969;">)</span>
+      '<span style="color: #696969;">()</span>
+      <span style="color: #696969;">(</span>cons <span style="color: #696969;">(</span>eval <span style="color: #696969;">(</span>first-operand exps<span style="color: #696969;">)</span> env<span style="color: #696969;">)</span>
+            <span style="color: #696969;">(</span>list-of-values <span style="color: #696969;">(</span>rest-operands exps<span style="color: #696969;">)</span> env<span style="color: #696969;">))))</span>
+</pre>
+</div>
+
+<pre class="example">
+  这里其实也可以用map实现，上面做法说明元循环求值器也可以使用没有高阶过程的语言来实现
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org664c02f" class="outline-4">
+<h4 id="org664c02f">if表达式</h4>
+<div class="outline-text-4" id="text-org664c02f">
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00ffff;">define</span> <span style="color: #696969;">(</span><span style="color: #87cefa;">eval-if</span> exp env<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00ffff;">if</span> <span style="color: #696969;">(</span>true? <span style="color: #696969;">(</span>eval <span style="color: #696969;">(</span>if-predicate exp<span style="color: #696969;">)</span> env<span style="color: #696969;">))</span>
+      <span style="color: #696969;">(</span>eval <span style="color: #696969;">(</span>if-consequent exp<span style="color: #696969;">)</span> env<span style="color: #696969;">)</span>
+      <span style="color: #696969;">(</span>eval <span style="color: #696969;">(</span>if-alternative exp<span style="color: #696969;">)</span> env<span style="color: #696969;">)))</span>
+</pre>
+</div>
+
+<pre class="example">
+true? 把条件表达式的求值转换成Scheme的逻辑值
+
+好处：元循环的逻辑值可以用任何值来表示，不需要和Schme的逻辑值保持一致
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orgef4ff7a" class="outline-4">
+<h4 id="orgef4ff7a">顺序求值</h4>
+<div class="outline-text-4" id="text-orgef4ff7a">
+<p>
+依次进行求值，最后一个表达式的值作为返回值
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00ffff;">define</span> <span style="color: #696969;">(</span><span style="color: #87cefa;">eval-sequence</span> exps env<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00ffff;">cond</span> <span style="color: #696969;">((</span>last-exp? exps<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>eval <span style="color: #696969;">(</span>first-exp exps<span style="color: #696969;">)</span> env<span style="color: #696969;">))</span>
+        <span style="color: #696969;">(</span><span style="color: #00ffff;">else</span> <span style="color: #696969;">(</span>eval <span style="color: #696969;">(</span>first-exp exps<span style="color: #696969;">)</span> env<span style="color: #696969;">)</span>
+              <span style="color: #696969;">(</span>eval-sequence <span style="color: #696969;">(</span>rest-exps exps<span style="color: #696969;">)</span> env<span style="color: #696969;">))))</span>
+</pre>
+</div>
+
+<ul class="org-ul">
+<li>apply 依次对函数体和参数进行求值</li>
+<li>eval：对begin表达式进行求值</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-org77a122a" class="outline-4">
+<h4 id="org77a122a">赋值和定义</h4>
+<div class="outline-text-4" id="text-org77a122a">
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00ffff;">define</span> <span style="color: #696969;">(</span><span style="color: #87cefa;">eval-assignment</span> exp env<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>set-variable-value! <span style="color: #696969;">(</span>assignment-variable exp<span style="color: #696969;">)</span>
+                       <span style="color: #696969;">(</span>eval <span style="color: #696969;">(</span>assignment-value exp<span style="color: #696969;">)</span> env<span style="color: #696969;">)</span>
+                       env<span style="color: #696969;">)</span>
+  'ok<span style="color: #696969;">)</span>
+</pre>
+</div>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00ffff;">define</span> <span style="color: #696969;">(</span><span style="color: #87cefa;">eval-definition</span> exp env<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>define-variable! <span style="color: #696969;">(</span>definition-variable exp<span style="color: #696969;">)</span>
+    <span style="color: #696969;">(</span>eval <span style="color: #696969;">(</span>definition-value exp<span style="color: #696969;">)</span> env<span style="color: #696969;">)</span>
+    env<span style="color: #696969;">)</span>
+  'ok<span style="color: #696969;">)</span>
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org9960057" class="outline-3">
+<h3 id="org9960057">表达式</h3>
+<div class="outline-text-3" id="text-org9960057">
+</div>
+<div id="outline-container-orgaaa33de" class="outline-4">
+<h4 id="orgaaa33de">自求值表达式</h4>
+<div class="outline-text-4" id="text-orgaaa33de">
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00ffff;">define</span> <span style="color: #696969;">(</span><span style="color: #87cefa;">self-evaluating?</span> exp<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00ffff;">cond</span> <span style="color: #696969;">((</span>number? exp<span style="color: #696969;">)</span> true<span style="color: #696969;">)</span>
+        <span style="color: #696969;">((</span>string? exp<span style="color: #696969;">)</span> true<span style="color: #696969;">)</span>
+        <span style="color: #696969;">(</span><span style="color: #00ffff;">else</span> false<span style="color: #696969;">)))</span>
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgef10bfe" class="outline-4">
+<h4 id="orgef10bfe">变量表达式</h4>
+<div class="outline-text-4" id="text-orgef10bfe">
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00ffff;">define</span> <span style="color: #696969;">(</span><span style="color: #87cefa;">variable?</span> exp<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>symbol? exp<span style="color: #696969;">))</span>
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orge79ca28" class="outline-4">
+<h4 id="orge79ca28">表达式类型判断</h4>
+<div class="outline-text-4" id="text-orge79ca28">
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00ffff;">define</span> <span style="color: #696969;">(</span><span style="color: #87cefa;">tagged-list?</span> exp tag<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00ffff;">if</span> <span style="color: #696969;">(</span>pair? exp<span style="color: #696969;">)</span>
+      <span style="color: #696969;">(</span>eq? <span style="color: #696969;">(</span>car exp<span style="color: #696969;">)</span> tag<span style="color: #696969;">)</span>
+      false<span style="color: #696969;">))</span>
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orgc1ebd1d" class="outline-5">
+<h5 id="orgc1ebd1d">引用表达式</h5>
+<div class="outline-text-5" id="text-orgc1ebd1d">
+<pre class="example">
+(quote &lt;text-of-quotation&gt;)
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00ffff;">define</span> <span style="color: #696969;">(</span><span style="color: #87cefa;">quoted?</span> exp<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>tagged-list? exp 'quote<span style="color: #696969;">))</span>
+
+<span style="color: #696969;">(</span><span style="color: #00ffff;">define</span> <span style="color: #696969;">(</span><span style="color: #87cefa;">text-of-quotation</span> exp<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>cadr exp<span style="color: #696969;">))</span>
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org7a0b3ce" class="outline-5">
+<h5 id="org7a0b3ce">赋值</h5>
+<div class="outline-text-5" id="text-org7a0b3ce">
+<pre class="example">
+(set! &lt;var&gt; &lt;value&gt;)
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00ffff;">define</span> <span style="color: #696969;">(</span><span style="color: #87cefa;">assignment?</span> exp<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>tagged-list? exp 'set!<span style="color: #696969;">))</span>
+
+<span style="color: #696969;">(</span><span style="color: #00ffff;">define</span> <span style="color: #696969;">(</span><span style="color: #87cefa;">assignment-variable</span> exp<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>cadr exp<span style="color: #696969;">))</span>
+
+<span style="color: #696969;">(</span><span style="color: #00ffff;">define</span> <span style="color: #696969;">(</span><span style="color: #87cefa;">assignment-value</span> exp<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>caddr exp<span style="color: #696969;">))</span>
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgf9697b6" class="outline-5">
+<h5 id="orgf9697b6">定义表达式</h5>
+<div class="outline-text-5" id="text-orgf9697b6">
+<pre class="example">
+(define &lt;var&gt; &lt;value&gt;)
+
+(define (&lt;var&gt; &lt;parameter1&gt; ... &lt;parametern&gt;)
+  &lt;body&gt;)
+
+;; 后一种形式是下面的语法糖
+(define &lt;var&gt;
+  (lambda (&lt;parameter1&gt; ... &lt;parametern&gt;)
+    &lt;body&gt;))
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00ffff;">define</span> <span style="color: #696969;">(</span><span style="color: #87cefa;">definition?</span> exp<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>tagged-list? exp 'define<span style="color: #696969;">))</span>
+
+<span style="color: #696969;">(</span><span style="color: #00ffff;">define</span> <span style="color: #696969;">(</span><span style="color: #87cefa;">definition-variable</span> exp<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00ffff;">if</span> <span style="color: #696969;">(</span>symbol? <span style="color: #696969;">(</span>cadr exp<span style="color: #696969;">))</span>
+      <span style="color: #696969;">(</span>cadr exp<span style="color: #696969;">)</span>
+      <span style="color: #696969;">(</span>caadr exp<span style="color: #696969;">)))</span>
+
+<span style="color: #696969;">(</span><span style="color: #00ffff;">define</span> <span style="color: #696969;">(</span><span style="color: #87cefa;">definition-value</span> exp<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00ffff;">if</span> <span style="color: #696969;">(</span>symbol? <span style="color: #696969;">(</span>cadr exp<span style="color: #696969;">))</span>
+      <span style="color: #696969;">(</span>caddr exp<span style="color: #696969;">)</span>
+      <span style="color: #696969;">(</span>make-lambda <span style="color: #696969;">(</span>cdadr exp<span style="color: #696969;">)</span>   <span style="color: #ff4500;">; </span><span style="color: #ff4500;">formal parameters</span>
+                   <span style="color: #696969;">(</span>cddr exp<span style="color: #696969;">))))</span> <span style="color: #ff4500;">; </span><span style="color: #ff4500;">body</span>
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org70c4277" class="outline-5">
+<h5 id="org70c4277">lambda表达式</h5>
+<div class="outline-text-5" id="text-org70c4277">
+<p>
+形式上是一个以lambda开头的表
+</p>
+
+<pre class="example">
+(lambda (&lt;lambda-expressions&gt;) (&lt;lambda-body&gt;)) 
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00ffff;">define</span> <span style="color: #696969;">(</span><span style="color: #87cefa;">lambda?</span> exp<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>tagged-list? exp 'lambda<span style="color: #696969;">))</span>
+
+<span style="color: #696969;">(</span><span style="color: #00ffff;">define</span> <span style="color: #696969;">(</span><span style="color: #87cefa;">lambda-parameters</span> exp<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>cadr exp<span style="color: #696969;">))</span>
+
+<span style="color: #696969;">(</span><span style="color: #00ffff;">define</span> <span style="color: #696969;">(</span><span style="color: #87cefa;">lambda-body</span> exp<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>cddr exp<span style="color: #696969;">))</span>
+</pre>
+</div>
+
+<p>
+为definion-value提供一个lambda构造器
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00ffff;">define</span> <span style="color: #696969;">(</span><span style="color: #87cefa;">make-lambda</span> parameters body<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>cons 'lambda <span style="color: #696969;">(</span>cons parameters body<span style="color: #696969;">)))</span>
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgcbf275c" class="outline-5">
+<h5 id="orgcbf275c">if表达式</h5>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div id="postamble" class="status">
+
+		  <br/>
+		  <div class='ds-thread'></div>
+		  <script>
+		  var duoshuoQuery = {short_name:'klose911'};
+		  (function() {
+					  var dsThread = document.getElementsByClassName('ds-thread')[0];
+					  dsThread.setAttribute('data-thread-key', document.title);
+					  dsThread.setAttribute('data-title', document.title);
+					  dsThread.setAttribute('data-url', window.location.href);
+					  var ds = document.createElement('script');
+					  ds.type = 'text/javascript';ds.async = true;
+					  ds.src = (document.location.protocol == 'https:' ? 'https:' : 'http:') + '//static.duoshuo.com/embed.js';
+					  ds.charset = 'UTF-8';
+					  (document.getElementsByTagName('head')[0] 
+						|| document.getElementsByTagName('body')[0]).appendChild(ds);
+					  })();
+		  </script>
+		  <script>
+		  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+			(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+			m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+			})(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+		  ga('create', 'UA-90850421-1', 'auto');
+		  ga('send', 'pageview');
+		  </script>
+</div>
+</body>
+</html>

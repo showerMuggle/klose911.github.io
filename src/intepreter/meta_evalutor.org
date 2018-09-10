@@ -1,0 +1,241 @@
+#+TITLE: 元循环求值器
+#+HTML_HEAD: <link rel="stylesheet" type="text/css" href="css/main.css" />
+#+OPTIONS: num:nil timestamp:nil 
+
+用一种语言实现其自身的求值器，这叫做 *元循环* 
+
+* 基本求值过程
+1. eval:  对一个表达式 *求值*
+   + 组合表达式：先 _求子表达式的值_ ，而后把 _运算符的子表达式的值_ *作用* 于 _运算参数子表达式的值_ 
+2. apply: 把一组参数值 *作用* 于一个过程体
+   + 复杂过程：原来环境上添加一个新的 _框架_ ，在新的框架上把 _实参值_  *绑定* 到过程的 _形参_ 上，在这个 *新的环境* 中对 _过程体_ *求值* 
+
+
+在这两个过程中都可能遇到 *递归* 调用，直到：
++ 变量：从环境中获取
++ 基本过程：直接调用代码
++ 基本表达式：直接返回数，字符串，布尔值等
+
+
+在一个环境中对表达式求值 -> 把参数值作用于一个过程 -> 在一个新的环境上对表达式求值  ......
+
+ #+ATTR_HTML: image :width 40% 
+  [[./pic/eval-apply.gif]]
+
+** 核心过程
+*** eval 
+*eval* 以一个 _表达式_ 和 _环境_ 作为参数，对表达式进行求值：
++ 基本表达式：
+  + 各种自求值表达式：直接返回，如数，字符串，布尔值等
+  + 变量：从环境查询变量
++ 特殊表达式：
+  + 引号表达式：返回被引用的表达式
+  + 变量赋值或定义：修改环境，建立或者修改相关的约束
+  + if表达式：条件部分求值，然后根据情况对相应的子表达式进行求值
+  + lambda表达式：建立过程对象，包装相应的过程体，形参，和环境
+  + begin表达式：依次对子表达式进行求值
+  + cond表达式：转换为一系列的if表达式，求值
+  + ......
++组合表达式：先 _求子表达式的值_ ，而后把 _运算符的子表达式的值_ *作用* 于 _运算参数子表达式的值_ 
+
+#+BEGIN_SRC scheme
+  (define (m-eval exp env)
+    (cond ((self-evaluating? exp) exp)
+	  ((variable? exp) (lookup-variable-value exp env))
+	  ((quoted? exp) (text-of-quotation exp))
+	  ((assignment? exp) (eval-assignment exp env))
+	  ((definition? exp) (eval-definition exp env))
+	  ((if? exp) (eval-if exp env))
+	  ((lambda? exp)
+	   (make-procedure (lambda-parameters exp) (lambda-body exp) env))
+	  ((begin? exp)
+	   (eval-sequence (begin-actions exp) env))
+	  ((cond? exp)
+	   (m-eval (cond->if exp) env))
+	  ((application? exp)
+	   (m-apply (m-eval (operator exp) env)
+		    (list-of-values (operands exp) env)))
+	  (else (error "Unknown expression type -- EVAL" exp))))
+#+END_SRC
+
+*** apply 
+*apply* 以 _一个过程体_ 和 _一组参数值_ 作为变量，实现过程应用：
++ 基本过程：直接调用
++ 复杂过程：原来环境上添加一个新的 _框架_ ，在新的框架上把 _实参值_  *绑定* 到过程的 _形参_ 上，在这个 *新的环境* 中对 _过程体_ *求值* 
+
+#+BEGIN_SRC scheme
+  (define (m-apply procedure arguments)
+    (cond ((primitive-procedure? procedure)
+	   (apply-primitive-procedure procedure arguments))
+	  ((compound-procedure? procedure)
+	   (eval-sequence
+	    (procedure-body procedure)
+	    (extend-environment (procedure-parameters procedure)
+				arguments
+				(procedure-environment procedure))))
+	  (else (error "Unknown procedure type -- APPLY" procedure))))
+#+END_SRC
+
+*** 获得过程参数
+eval在调用apply前，需要对各实参进行求值
+#+BEGIN_SRC scheme
+  (define (list-of-values exps env)
+    (if (no-operands? exps)
+	'()
+	(cons (eval (first-operand exps) env)
+	      (list-of-values (rest-operands exps) env))))
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  这里其实也可以用map实现，上面做法说明元循环求值器也可以使用没有高阶过程的语言来实现
+#+END_EXAMPLE
+
+*** if表达式
+#+BEGIN_SRC scheme
+  (define (eval-if exp env)
+    (if (true? (eval (if-predicate exp) env))
+	(eval (if-consequent exp) env)
+	(eval (if-alternative exp) env)))
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  true? 把条件表达式的求值转换成Scheme的逻辑值
+
+  好处：元循环的逻辑值可以用任何值来表示，不需要和Schme的逻辑值保持一致
+#+END_EXAMPLE
+
+*** 顺序求值
+依次进行求值，最后一个表达式的值作为返回值
+#+BEGIN_SRC scheme
+  (define (eval-sequence exps env)
+    (cond ((last-exp? exps) (eval (first-exp exps) env))
+	  (else (eval (first-exp exps) env)
+		(eval-sequence (rest-exps exps) env))))
+#+END_SRC
+
++ apply 依次对函数体和参数进行求值
++ eval：对begin表达式进行求值
+
+*** 赋值和定义
+#+BEGIN_SRC scheme
+  (define (eval-assignment exp env)
+    (set-variable-value! (assignment-variable exp)
+			 (eval (assignment-value exp) env)
+			 env)
+    'ok)
+#+END_SRC
+
+#+BEGIN_SRC scheme
+  (define (eval-definition exp env)
+    (define-variable! (definition-variable exp)
+      (eval (definition-value exp) env)
+      env)
+    'ok)
+#+END_SRC
+
+** 表达式
+
+
+*** 自求值表达式
+#+BEGIN_SRC scheme
+  (define (self-evaluating? exp)
+    (cond ((number? exp) true)
+	  ((string? exp) true)
+	  (else false)))
+#+END_SRC
+
+*** 变量表达式
+#+BEGIN_SRC scheme
+  (define (variable? exp) (symbol? exp))
+#+END_SRC
+
+*** 表达式类型判断
+#+BEGIN_SRC scheme
+  (define (tagged-list? exp tag)
+    (if (pair? exp)
+	(eq? (car exp) tag)
+	false))
+#+END_SRC
+
+**** 引用表达式
+#+BEGIN_EXAMPLE
+  (quote <text-of-quotation>)
+#+END_EXAMPLE
+
+#+BEGIN_SRC scheme
+  (define (quoted? exp)
+    (tagged-list? exp 'quote))
+
+  (define (text-of-quotation exp) (cadr exp))
+#+END_SRC
+
+**** 赋值
+#+BEGIN_EXAMPLE
+  (set! <var> <value>)
+#+END_EXAMPLE
+
+#+BEGIN_SRC scheme
+  (define (assignment? exp)
+    (tagged-list? exp 'set!))
+
+  (define (assignment-variable exp)
+    (cadr exp))
+
+  (define (assignment-value exp)
+    (caddr exp))
+#+END_SRC
+
+**** 定义表达式
+#+BEGIN_EXAMPLE
+  (define <var> <value>)
+
+  (define (<var> <parameter1> ... <parametern>)
+    <body>)
+
+  ;; 后一种形式是下面的语法糖
+  (define <var>
+    (lambda (<parameter1> ... <parametern>)
+      <body>))
+#+END_EXAMPLE
+
+#+BEGIN_SRC scheme
+  (define (definition? exp)
+    (tagged-list? exp 'define))
+
+  (define (definition-variable exp)
+    (if (symbol? (cadr exp))
+	(cadr exp)
+	(caadr exp)))
+
+  (define (definition-value exp)
+    (if (symbol? (cadr exp))
+	(caddr exp)
+	(make-lambda (cdadr exp)   ; formal parameters
+		     (cddr exp)))) ; body
+#+END_SRC
+
+**** lambda表达式
+形式上是一个以lambda开头的表
+
+#+BEGIN_EXAMPLE
+(lambda (<lambda-expressions>) (<lambda-body>)) 
+#+END_EXAMPLE
+
+#+BEGIN_SRC scheme
+  (define (lambda? exp) (tagged-list? exp 'lambda))
+
+  (define (lambda-parameters exp)
+    (cadr exp))
+
+  (define (lambda-body exp)
+    (cddr exp))
+#+END_SRC
+
+为definion-value提供一个lambda构造器
+#+BEGIN_SRC scheme
+  (define (make-lambda parameters body)
+    (cons 'lambda (cons parameters body)))
+#+END_SRC
+
+**** if表达式
+

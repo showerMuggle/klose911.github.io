@@ -3,22 +3,29 @@
 "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>如何写一个解释器</title>
-<meta  http-equiv="Content-Type" content="text/html;charset=utf-8" />
-<meta  name="generator" content="Org-mode" />
-<meta  name="author" content="Wu, Shanliang" />
+<meta name="generator" content="Org mode" />
+<meta name="author" content="Wu, Shanliang" />
 <style type="text/css">
  <!--/*--><![CDATA[/*><!--*/
-  .title  { text-align: center; }
+  .title  { text-align: center;
+             margin-bottom: .2em; }
+  .subtitle { text-align: center;
+              font-size: medium;
+              font-weight: bold;
+              margin-top:0; }
   .todo   { font-family: monospace; color: red; }
-  .done   { color: green; }
+  .done   { font-family: monospace; color: green; }
+  .priority { font-family: monospace; color: orange; }
   .tag    { background-color: #eee; font-family: monospace;
             padding: 2px; font-size: 80%; font-weight: normal; }
   .timestamp { color: #bebebe; }
   .timestamp-kwd { color: #5f9ea0; }
-  .right  { margin-left: auto; margin-right: 0px;  text-align: right; }
-  .left   { margin-left: 0px;  margin-right: auto; text-align: left; }
-  .center { margin-left: auto; margin-right: auto; text-align: center; }
+  .org-right  { margin-left: auto; margin-right: 0px;  text-align: right; }
+  .org-left   { margin-left: 0px;  margin-right: auto; text-align: left; }
+  .org-center { margin-left: auto; margin-right: auto; text-align: center; }
   .underline { text-decoration: underline; }
   #postamble p, #preamble p { font-size: 90%; margin: .2em; }
   p.verse { margin-left: 3%; }
@@ -45,27 +52,111 @@
     border: 1px solid black;
   }
   pre.src:hover:before { display: inline;}
-  pre.src-sh:before    { content: 'sh'; }
-  pre.src-bash:before  { content: 'sh'; }
+  /* Languages per Org manual */
+  pre.src-asymptote:before { content: 'Asymptote'; }
+  pre.src-awk:before { content: 'Awk'; }
+  pre.src-C:before { content: 'C'; }
+  /* pre.src-C++ doesn't work in CSS */
+  pre.src-clojure:before { content: 'Clojure'; }
+  pre.src-css:before { content: 'CSS'; }
+  pre.src-D:before { content: 'D'; }
+  pre.src-ditaa:before { content: 'ditaa'; }
+  pre.src-dot:before { content: 'Graphviz'; }
+  pre.src-calc:before { content: 'Emacs Calc'; }
   pre.src-emacs-lisp:before { content: 'Emacs Lisp'; }
-  pre.src-R:before     { content: 'R'; }
-  pre.src-perl:before  { content: 'Perl'; }
-  pre.src-java:before  { content: 'Java'; }
-  pre.src-sql:before   { content: 'SQL'; }
+  pre.src-fortran:before { content: 'Fortran'; }
+  pre.src-gnuplot:before { content: 'gnuplot'; }
+  pre.src-haskell:before { content: 'Haskell'; }
+  pre.src-hledger:before { content: 'hledger'; }
+  pre.src-java:before { content: 'Java'; }
+  pre.src-js:before { content: 'Javascript'; }
+  pre.src-latex:before { content: 'LaTeX'; }
+  pre.src-ledger:before { content: 'Ledger'; }
+  pre.src-lisp:before { content: 'Lisp'; }
+  pre.src-lilypond:before { content: 'Lilypond'; }
+  pre.src-lua:before { content: 'Lua'; }
+  pre.src-matlab:before { content: 'MATLAB'; }
+  pre.src-mscgen:before { content: 'Mscgen'; }
+  pre.src-ocaml:before { content: 'Objective Caml'; }
+  pre.src-octave:before { content: 'Octave'; }
+  pre.src-org:before { content: 'Org mode'; }
+  pre.src-oz:before { content: 'OZ'; }
+  pre.src-plantuml:before { content: 'Plantuml'; }
+  pre.src-processing:before { content: 'Processing.js'; }
+  pre.src-python:before { content: 'Python'; }
+  pre.src-R:before { content: 'R'; }
+  pre.src-ruby:before { content: 'Ruby'; }
+  pre.src-sass:before { content: 'Sass'; }
+  pre.src-scheme:before { content: 'Scheme'; }
+  pre.src-screen:before { content: 'Gnu Screen'; }
+  pre.src-sed:before { content: 'Sed'; }
+  pre.src-sh:before { content: 'shell'; }
+  pre.src-sql:before { content: 'SQL'; }
+  pre.src-sqlite:before { content: 'SQLite'; }
+  /* additional languages in org.el's org-babel-load-languages alist */
+  pre.src-forth:before { content: 'Forth'; }
+  pre.src-io:before { content: 'IO'; }
+  pre.src-J:before { content: 'J'; }
+  pre.src-makefile:before { content: 'Makefile'; }
+  pre.src-maxima:before { content: 'Maxima'; }
+  pre.src-perl:before { content: 'Perl'; }
+  pre.src-picolisp:before { content: 'Pico Lisp'; }
+  pre.src-scala:before { content: 'Scala'; }
+  pre.src-shell:before { content: 'Shell Script'; }
+  pre.src-ebnf2ps:before { content: 'ebfn2ps'; }
+  /* additional language identifiers per "defun org-babel-execute"
+       in ob-*.el */
+  pre.src-cpp:before  { content: 'C++'; }
+  pre.src-abc:before  { content: 'ABC'; }
+  pre.src-coq:before  { content: 'Coq'; }
+  pre.src-groovy:before  { content: 'Groovy'; }
+  /* additional language identifiers from org-babel-shell-names in
+     ob-shell.el: ob-shell is the only babel language using a lambda to put
+     the execution function name together. */
+  pre.src-bash:before  { content: 'bash'; }
+  pre.src-csh:before  { content: 'csh'; }
+  pre.src-ash:before  { content: 'ash'; }
+  pre.src-dash:before  { content: 'dash'; }
+  pre.src-ksh:before  { content: 'ksh'; }
+  pre.src-mksh:before  { content: 'mksh'; }
+  pre.src-posh:before  { content: 'posh'; }
+  /* Additional Emacs modes also supported by the LaTeX listings package */
+  pre.src-ada:before { content: 'Ada'; }
+  pre.src-asm:before { content: 'Assembler'; }
+  pre.src-caml:before { content: 'Caml'; }
+  pre.src-delphi:before { content: 'Delphi'; }
+  pre.src-html:before { content: 'HTML'; }
+  pre.src-idl:before { content: 'IDL'; }
+  pre.src-mercury:before { content: 'Mercury'; }
+  pre.src-metapost:before { content: 'MetaPost'; }
+  pre.src-modula-2:before { content: 'Modula-2'; }
+  pre.src-pascal:before { content: 'Pascal'; }
+  pre.src-ps:before { content: 'PostScript'; }
+  pre.src-prolog:before { content: 'Prolog'; }
+  pre.src-simula:before { content: 'Simula'; }
+  pre.src-tcl:before { content: 'tcl'; }
+  pre.src-tex:before { content: 'TeX'; }
+  pre.src-plain-tex:before { content: 'Plain TeX'; }
+  pre.src-verilog:before { content: 'Verilog'; }
+  pre.src-vhdl:before { content: 'VHDL'; }
+  pre.src-xml:before { content: 'XML'; }
+  pre.src-nxml:before { content: 'XML'; }
+  /* add a generic configuration mode; LaTeX export needs an additional
+     (add-to-list 'org-latex-listings-langs '(conf " ")) in .emacs */
+  pre.src-conf:before { content: 'Configuration File'; }
 
   table { border-collapse:collapse; }
   caption.t-above { caption-side: top; }
   caption.t-bottom { caption-side: bottom; }
   td, th { vertical-align:top;  }
-  th.right  { text-align: center;  }
-  th.left   { text-align: center;   }
-  th.center { text-align: center; }
-  td.right  { text-align: right;  }
-  td.left   { text-align: left;   }
-  td.center { text-align: center; }
+  th.org-right  { text-align: center;  }
+  th.org-left   { text-align: center;   }
+  th.org-center { text-align: center; }
+  td.org-right  { text-align: right;  }
+  td.org-left   { text-align: left;   }
+  td.org-center { text-align: center; }
   dt { font-weight: bold; }
-  .footpara:nth-child(2) { display: inline; }
-  .footpara { display: block; }
+  .footpara { display: inline; }
   .footdef  { margin-bottom: 1em; }
   .figure { padding: 1em; }
   .figure p { text-align: center; }
@@ -85,6 +176,7 @@
     { font-size: 10px; font-weight: bold; white-space: nowrap; }
   .org-info-js_search-highlight
     { background-color: #ffff00; color: #000000; font-weight: bold; }
+  .org-svg { width: 90%; }
   /*]]>*/-->
 </style>
 <link rel="stylesheet" type="text/css" href="css/main.css" />
@@ -93,7 +185,7 @@
 @licstart  The following is the entire license notice for the
 JavaScript code in this tag.
 
-Copyright (C) 2012-2013 Free Software Foundation, Inc.
+Copyright (C) 2012-2018 Free Software Foundation, Inc.
 
 The JavaScript code in this tag is free software: you can
 redistribute it and/or modify it under the terms of the GNU
@@ -142,55 +234,55 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#sec-1">什么是解释器</a></li>
-<li><a href="#sec-2">抽象语法树</a></li>
-<li><a href="#sec-3">树遍历算法</a>
+<li><a href="#orgfa00075">什么是解释器</a></li>
+<li><a href="#org82ac0f5">抽象语法树</a></li>
+<li><a href="#orgab5f485">树遍历算法</a>
 <ul>
-<li><a href="#sec-3-1">模式匹配</a></li>
+<li><a href="#orgc0a8682">模式匹配</a></li>
 </ul>
 </li>
-<li><a href="#sec-4">计算器</a></li>
-<li><a href="#sec-5">R2：一个很小的程序语言</a>
+<li><a href="#orgcc35920">计算器</a></li>
+<li><a href="#orgcb20a41">R2：一个很小的程序语言</a>
 <ul>
-<li><a href="#sec-5-1">柯里化</a></li>
+<li><a href="#org333574c">柯里化</a></li>
 </ul>
 </li>
-<li><a href="#sec-6">R2 的解释器</a>
+<li><a href="#org8342f8c">R2 的解释器</a>
 <ul>
-<li><a href="#sec-6-1">基本算术操作</a></li>
-<li><a href="#sec-6-2">数字</a></li>
-<li><a href="#sec-6-3">变量</a>
+<li><a href="#orgcb246e4">基本算术操作</a></li>
+<li><a href="#org9550753">数字</a></li>
+<li><a href="#orgfb7e76a">变量</a>
 <ul>
-<li><a href="#sec-6-3-1">环境</a>
+<li><a href="#orgcd599a2">环境</a>
 <ul>
-<li><a href="#sec-6-3-1-1">环境扩展</a></li>
+<li><a href="#org63ca568">环境扩展</a></li>
 </ul>
 </li>
-<li><a href="#sec-6-3-2">变量的取值</a></li>
+<li><a href="#orgf233448">变量的取值</a></li>
 </ul>
 </li>
-<li><a href="#sec-6-4">绑定</a></li>
-<li><a href="#sec-6-5">函数</a>
+<li><a href="#org3ff67ca">绑定</a></li>
+<li><a href="#org6aafcfc">函数</a>
 <ul>
-<li><a href="#sec-6-5-1">Lexical Scoping 和 Dynamic Scoping</a></li>
-<li><a href="#sec-6-5-2">函数定义</a></li>
+<li><a href="#org4007aff">Lexical Scoping 和 Dynamic Scoping</a></li>
+<li><a href="#orgc4f777b">函数定义</a></li>
 </ul>
 </li>
-<li><a href="#sec-6-6">调用</a>
+<li><a href="#orge281312">调用</a>
 <ul>
-<li><a href="#sec-6-6-1">dynamic scoping调用</a></li>
+<li><a href="#orgdcbc6d1">dynamic scoping调用</a></li>
 </ul>
 </li>
 </ul>
 </li>
-<li><a href="#sec-7">缺点</a></li>
+<li><a href="#org180f7c9">缺点</a></li>
 </ul>
 </div>
 </div>
 
-<div id="outline-container-sec-1" class="outline-2">
-<h2 id="sec-1">什么是解释器</h2>
-<div class="outline-text-2" id="text-1">
+<div id="outline-container-orgfa00075" class="outline-2">
+<h2 id="orgfa00075">什么是解释器</h2>
+<div class="outline-text-2" id="text-orgfa00075">
 <p>
 说白了，解释器跟计算器差不多。解释器是一个函数，你输入一个“表达式”，它就输出一个 “值”，像这样：
 </p>
@@ -218,9 +310,9 @@ for the JavaScript code in this tag.
 </div>
 </div>
 
-<div id="outline-container-sec-2" class="outline-2">
-<h2 id="sec-2">抽象语法树</h2>
-<div class="outline-text-2" id="text-2">
+<div id="outline-container-org82ac0f5" class="outline-2">
+<h2 id="org82ac0f5">抽象语法树</h2>
+<div class="outline-text-2" id="text-org82ac0f5">
 <p>
 我们用S表达式所表示的代码，本质上是一种叫做“树”的数据结构。更具体一点，这叫做“抽象语法树”。下文为了简洁，我们省略掉“抽象”两个字，就叫它“语法树”
 </p>
@@ -244,9 +336,9 @@ for the JavaScript code in this tag.
 </div>
 </div>
 
-<div id="outline-container-sec-3" class="outline-2">
-<h2 id="sec-3">树遍历算法</h2>
-<div class="outline-text-2" id="text-3">
+<div id="outline-container-orgab5f485" class="outline-2">
+<h2 id="orgab5f485">树遍历算法</h2>
+<div class="outline-text-2" id="text-orgab5f485">
 <p>
 在基础的数据结构课程里，我们都学过二叉树的遍历操作，也就是所谓先序遍历，中序遍历和后序遍历。语法树跟二叉树，其实没有很大区别，所以你也可以在它上面进行遍历。解释器的算法，就是在语法树上的一种遍历操作。
 </p>
@@ -255,17 +347,16 @@ for the JavaScript code in this tag.
 下面这个函数，名叫tree-sum，它对二叉树进行“求和”，把所有节点里的数加在一起，返回它们的和
 </p>
 <div class="org-src-container">
-
 <pre class="src src-racket"><span style="color: #00ffff;">#lang</span> <span style="color: #eedd82;">racket</span>
 
-<span style="color: #ffffff;">(</span><span style="color: #00ffff;">define</span> <span style="color: #eedd82;">tree-sum</span>
-  <span style="color: #ffffff;">(</span><span style="color: #00ffff;">lambda</span> <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">exp</span><span style="color: #ffffff;">)</span>
-    <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">match</span> <span style="color: #b0c4de;">exp</span>                         <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#23545;&#36755;&#20837;exp&#36827;&#34892;&#27169;&#24335;&#21305;&#37197;</span>
-      <span style="color: #ffffff;">[(</span>? <span style="color: #b0c4de;">number?</span> x<span style="color: #ffffff;">)</span> x<span style="color: #ffffff;">]</span>                <span style="color: #ff4500;">; </span><span style="color: #ff4500;">exp&#26159;&#19968;&#20010;&#25968;x&#21527;&#65311;&#22914;&#26524;&#26159;&#65292;&#37027;&#20040;&#36820;&#22238;&#36825;&#20010;&#25968;x</span>
-      <span style="color: #ffffff;">[</span>`<span style="color: #ffffff;">(</span>,e1 ,e2<span style="color: #ffffff;">)</span>                      <span style="color: #ff4500;">; </span><span style="color: #ff4500;">exp&#26159;&#19968;&#20010;&#21547;&#26377;&#20004;&#26869;&#23376;&#26641;&#30340;&#20013;&#38388;&#33410;&#28857;&#21527;&#65311;</span>
-       <span style="color: #ffffff;">(</span><span style="color: #00ffff;">let</span> <span style="color: #ffffff;">([</span><span style="color: #eedd82;">v1</span> <span style="color: #ffffff;">(</span>tree-sum e1<span style="color: #ffffff;">)]</span>        <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#36882;&#24402;&#35843;&#29992;tree-sum&#33258;&#24049;&#65292;&#23545;&#24038;&#23376;&#26641;e1&#27714;&#20540;</span>
-             <span style="color: #ffffff;">[</span><span style="color: #eedd82;">v2</span> <span style="color: #ffffff;">(</span>tree-sum e2<span style="color: #ffffff;">)])</span>       <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#36882;&#24402;&#35843;&#29992;tree-sum&#33258;&#24049;&#65292;&#23545;&#21491;&#23376;&#26641;e2&#27714;&#20540;</span>
-         <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">+</span> v1 v2<span style="color: #ffffff;">))])))</span>                <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#36820;&#22238;&#24038;&#21491;&#23376;&#26641;&#32467;&#26524;v1&#21644;v2&#30340;&#21644;</span>
+(<span style="color: #00ffff;">define</span> <span style="color: #eedd82;">tree-sum</span>
+  (<span style="color: #00ffff;">lambda</span> (<span style="color: #b0c4de;">exp</span>)
+    (<span style="color: #b0c4de;">match</span> <span style="color: #b0c4de;">exp</span>                         <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#23545;&#36755;&#20837;exp&#36827;&#34892;&#27169;&#24335;&#21305;&#37197;</span>
+      [(? <span style="color: #b0c4de;">number?</span> x) x]                <span style="color: #ff4500;">; </span><span style="color: #ff4500;">exp&#26159;&#19968;&#20010;&#25968;x&#21527;&#65311;&#22914;&#26524;&#26159;&#65292;&#37027;&#20040;&#36820;&#22238;&#36825;&#20010;&#25968;x</span>
+      [`(,e1 ,e2)                      <span style="color: #ff4500;">; </span><span style="color: #ff4500;">exp&#26159;&#19968;&#20010;&#21547;&#26377;&#20004;&#26869;&#23376;&#26641;&#30340;&#20013;&#38388;&#33410;&#28857;&#21527;&#65311;</span>
+       (<span style="color: #00ffff;">let</span> ([<span style="color: #eedd82;">v1</span> (tree-sum e1)]        <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#36882;&#24402;&#35843;&#29992;tree-sum&#33258;&#24049;&#65292;&#23545;&#24038;&#23376;&#26641;e1&#27714;&#20540;</span>
+             [<span style="color: #eedd82;">v2</span> (tree-sum e2)])       <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#36882;&#24402;&#35843;&#29992;tree-sum&#33258;&#24049;&#65292;&#23545;&#21491;&#23376;&#26641;e2&#27714;&#20540;</span>
+         (<span style="color: #b0c4de;">+</span> v1 v2))])))                <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#36820;&#22238;&#24038;&#21491;&#23376;&#26641;&#32467;&#26524;v1&#21644;v2&#30340;&#21644;</span>
 </pre>
 </div>
 
@@ -273,14 +364,13 @@ for the JavaScript code in this tag.
 测试结果：
 </p>
 <div class="org-src-container">
-
-<pre class="src src-racket"><span style="color: #ffffff;">(</span>tree-sum '<span style="color: #ffffff;">(</span><span style="color: #2e8b57;">1</span> <span style="color: #2e8b57;">2</span><span style="color: #ffffff;">))</span>
+<pre class="src src-racket">(tree-sum '(<span style="color: #2e8b57;">1</span> <span style="color: #2e8b57;">2</span>))
 <span style="color: #ff4500;">;; </span><span style="color: #ff4500;">=&gt; 3</span>
-<span style="color: #ffffff;">(</span>tree-sum '<span style="color: #ffffff;">(</span><span style="color: #2e8b57;">1</span> <span style="color: #ffffff;">(</span><span style="color: #2e8b57;">2</span> <span style="color: #2e8b57;">3</span><span style="color: #ffffff;">)))</span>
+(tree-sum '(<span style="color: #2e8b57;">1</span> (<span style="color: #2e8b57;">2</span> <span style="color: #2e8b57;">3</span>)))
 <span style="color: #ff4500;">;; </span><span style="color: #ff4500;">=&gt; 6</span>
-<span style="color: #ffffff;">(</span>tree-sum '<span style="color: #ffffff;">((</span><span style="color: #2e8b57;">1</span> <span style="color: #2e8b57;">2</span><span style="color: #ffffff;">)</span> <span style="color: #2e8b57;">3</span><span style="color: #ffffff;">))</span>
+(tree-sum '((<span style="color: #2e8b57;">1</span> <span style="color: #2e8b57;">2</span>) <span style="color: #2e8b57;">3</span>))
 <span style="color: #ff4500;">;; </span><span style="color: #ff4500;">=&gt; 6</span>
-<span style="color: #ffffff;">(</span>tree-sum '<span style="color: #ffffff;">((</span><span style="color: #2e8b57;">1</span> <span style="color: #2e8b57;">2</span><span style="color: #ffffff;">)</span> <span style="color: #ffffff;">(</span><span style="color: #2e8b57;">3</span> <span style="color: #2e8b57;">4</span><span style="color: #ffffff;">)))</span>
+(tree-sum '((<span style="color: #2e8b57;">1</span> <span style="color: #2e8b57;">2</span>) (<span style="color: #2e8b57;">3</span> <span style="color: #2e8b57;">4</span>)))
 <span style="color: #ff4500;">;; </span><span style="color: #ff4500;">=&gt; 10</span>
 </pre>
 </div>
@@ -294,17 +384,15 @@ for the JavaScript code in this tag.
 这个算法很简单，我们可以把它用文字描述如下：
 </p>
 <ol class="org-ol">
-<li>如果输入exp是一个数，那就返回这个数
-</li>
-<li>如果exp是像 (,e1 ,e2) 这样的子树，那么分别对 e1 和 e2 递归调用 tree-sum，进行求和，得到 v1 和 v2，然后返回 v1 + v2 的和
-</li>
+<li>如果输入exp是一个数，那就返回这个数</li>
+<li>如果exp是像 (,e1 ,e2) 这样的子树，那么分别对 e1 和 e2 递归调用 tree-sum，进行求和，得到 v1 和 v2，然后返回 v1 + v2 的和</li>
 </ol>
 </div>
 
 
-<div id="outline-container-sec-3-1" class="outline-3">
-<h3 id="sec-3-1">模式匹配</h3>
-<div class="outline-text-3" id="text-3-1">
+<div id="outline-container-orgc0a8682" class="outline-3">
+<h3 id="orgc0a8682">模式匹配</h3>
+<div class="outline-text-3" id="text-orgc0a8682">
 <p>
 上面的代码里面使用的是Racket的模式匹配。这个例子用if或者cond其实也可以，但要把这代码扩展成一个解释器，所以提前使用了模式匹配。这样跟后面的代码对比的时候，就更容易看出规律来
 </p>
@@ -313,12 +401,11 @@ for the JavaScript code in this tag.
 模式匹配的形式一般是这样：
 </p>
 <div class="org-src-container">
-
-<pre class="src src-racket"><span style="color: #ffffff;">(</span><span style="color: #b0c4de;">match</span> x
-  <span style="color: #ffffff;">[</span>&#27169;&#24335; &#32467;&#26524;<span style="color: #ffffff;">]</span>
-  <span style="color: #ffffff;">[</span>&#27169;&#24335; &#32467;&#26524;<span style="color: #ffffff;">]</span>
+<pre class="src src-racket">(<span style="color: #b0c4de;">match</span> x
+  [&#27169;&#24335; &#32467;&#26524;]
+  [&#27169;&#24335; &#32467;&#26524;]
    <span style="color: #00ffff;">...</span>   <span style="color: #00ffff;">...</span>
-<span style="color: #ffffff;">)</span>
+)    
 </pre>
 </div>
 <p>
@@ -333,22 +420,20 @@ for the JavaScript code in this tag.
 上面的代码里用了这样一个match表达式：
 </p>
 <div class="org-src-container">
-
-<pre class="src src-racket"><span style="color: #ffffff;">(</span><span style="color: #b0c4de;">match</span> <span style="color: #b0c4de;">exp</span>
-  <span style="color: #ffffff;">[(</span>? <span style="color: #b0c4de;">number?</span> x<span style="color: #ffffff;">)</span> x<span style="color: #ffffff;">]</span>
-  <span style="color: #ffffff;">[</span>`<span style="color: #ffffff;">(</span>,e1 ,e2<span style="color: #ffffff;">)</span>
-   <span style="color: #ffffff;">(</span><span style="color: #00ffff;">let</span> <span style="color: #ffffff;">([</span><span style="color: #eedd82;">v1</span> <span style="color: #ffffff;">(</span>tree-sum e1<span style="color: #ffffff;">)]</span>
-         <span style="color: #ffffff;">[</span><span style="color: #eedd82;">v2</span> <span style="color: #ffffff;">(</span>tree-sum e2<span style="color: #ffffff;">)])</span>
-     <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">+</span> v1 v2<span style="color: #ffffff;">))])</span>
+<pre class="src src-racket">(<span style="color: #b0c4de;">match</span> <span style="color: #b0c4de;">exp</span>
+  [(? <span style="color: #b0c4de;">number?</span> x) x]
+  [`(,e1 ,e2)
+   (<span style="color: #00ffff;">let</span> ([<span style="color: #eedd82;">v1</span> (tree-sum e1)]
+         [<span style="color: #eedd82;">v2</span> (tree-sum e2)])
+     (<span style="color: #b0c4de;">+</span> v1 v2))])
 </pre>
 </div>
 <p>
 第二行里面的'(,e1 ,e2)是一个模式，它被用来匹配exp的值。如果exp是'(1 2)，那么它与'(,e1 ,e2)匹配的时候，就会把e1绑定到'1，把e2绑定到'2。这是因为它们结构相同：
 </p>
 <div class="org-src-container">
-
-<pre class="src src-racket">`<span style="color: #ffffff;">(</span>,e1 ,e2<span style="color: #ffffff;">)</span>
-'<span style="color: #ffffff;">(</span>  <span style="color: #2e8b57;">1</span>   <span style="color: #2e8b57;">2</span><span style="color: #ffffff;">)</span>
+<pre class="src src-racket">`(,e1 ,e2)
+'(  <span style="color: #2e8b57;">1</span>   <span style="color: #2e8b57;">2</span>)
 </pre>
 </div>
 <p>
@@ -366,9 +451,9 @@ for the JavaScript code in this tag.
 </div>
 </div>
 
-<div id="outline-container-sec-4" class="outline-2">
-<h2 id="sec-4">计算器</h2>
-<div class="outline-text-2" id="text-4">
+<div id="outline-container-orgcc35920" class="outline-2">
+<h2 id="orgcc35920">计算器</h2>
+<div class="outline-text-2" id="text-orgcc35920">
 <p>
 计算器也是一种解释器，只不过它只能处理算术表达式。我们的下一个目标，就是写出一个计算器。如果你给它'(* (+ 1 2) (+ 3 4))，它就输出 21。可不要小看这个计算器，稍后我们把它稍加改造，就可以得到一个更多功能的解释器
 </p>
@@ -385,21 +470,20 @@ for the JavaScript code in this tag.
 好了，下面就是这个计算器的代码。它接受一个表达式，输出一个数字作为结果：
 </p>
 <div class="org-src-container">
-
 <pre class="src src-racket"><span style="color: #00ffff;">#lang</span> racket                                  <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#22768;&#26126;&#29992; Racket &#35821;&#35328;</span>
 
-<span style="color: #ffffff;">(</span><span style="color: #00ffff;">define</span> <span style="color: #eedd82;">calc</span>
-  <span style="color: #ffffff;">(</span><span style="color: #00ffff;">lambda</span> <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">exp</span><span style="color: #ffffff;">)</span>
-    <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">match</span> <span style="color: #b0c4de;">exp</span>                                <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#20998;&#25903;&#21305;&#37197;&#65306;&#34920;&#36798;&#24335;&#30340;&#20004;&#31181;&#24773;&#20917;</span>
-      <span style="color: #ffffff;">[(</span>? <span style="color: #b0c4de;">number?</span> x<span style="color: #ffffff;">)</span> x<span style="color: #ffffff;">]</span>                       <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#26159;&#25968;&#23383;&#65292;&#30452;&#25509;&#36820;&#22238;</span>
-      <span style="color: #ffffff;">[</span>`<span style="color: #ffffff;">(</span>,op ,e1 ,e2<span style="color: #ffffff;">)</span>                         <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#21305;&#37197;&#25552;&#21462;&#25805;&#20316;&#31526;op&#21644;&#20004;&#20010;&#25805;&#20316;&#25968;e1,e2</span>
-       <span style="color: #ffffff;">(</span><span style="color: #00ffff;">let</span> <span style="color: #ffffff;">([</span><span style="color: #eedd82;">v1</span> <span style="color: #ffffff;">(</span>calc e1<span style="color: #ffffff;">)]</span>                   <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#36882;&#24402;&#35843;&#29992; calc &#33258;&#24049;&#65292;&#24471;&#21040; e1 &#30340;&#20540;</span>
-             <span style="color: #ffffff;">[</span><span style="color: #eedd82;">v2</span> <span style="color: #ffffff;">(</span>calc e2<span style="color: #ffffff;">)])</span>                  <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#36882;&#24402;&#35843;&#29992; calc &#33258;&#24049;&#65292;&#24471;&#21040; e2 &#30340;&#20540;</span>
-         <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">match</span> op                            <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#20998;&#25903;&#21305;&#37197;&#65306;&#25805;&#20316;&#31526; op &#30340; 4 &#31181;&#24773;&#20917;</span>
-           <span style="color: #ffffff;">[</span><span style="color: #2e8b57;">'+</span> <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">+</span> v1 v2<span style="color: #ffffff;">)]</span>                     <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#22914;&#26524;&#26159;&#21152;&#21495;&#65292;&#36755;&#20986;&#32467;&#26524;&#20026; (+ v1 v2)</span>
-           <span style="color: #ffffff;">[</span><span style="color: #2e8b57;">'-</span> <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">-</span> v1 v2<span style="color: #ffffff;">)]</span>                     <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#22914;&#26524;&#26159;&#20943;&#21495;&#65292;&#20056;&#21495;&#65292;&#38500;&#21495;&#65292;&#30456;&#20284;&#30340;&#22788;&#29702;</span>
-           <span style="color: #ffffff;">[</span><span style="color: #2e8b57;">'*</span> <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">*</span> v1 v2<span style="color: #ffffff;">)]</span>
-           <span style="color: #ffffff;">[</span><span style="color: #2e8b57;">'/</span> <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">/</span> v1 v2<span style="color: #ffffff;">)]))])))</span>
+(<span style="color: #00ffff;">define</span> <span style="color: #eedd82;">calc</span>
+  (<span style="color: #00ffff;">lambda</span> (<span style="color: #b0c4de;">exp</span>)
+    (<span style="color: #b0c4de;">match</span> <span style="color: #b0c4de;">exp</span>                                <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#20998;&#25903;&#21305;&#37197;&#65306;&#34920;&#36798;&#24335;&#30340;&#20004;&#31181;&#24773;&#20917;</span>
+      [(? <span style="color: #b0c4de;">number?</span> x) x]                       <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#26159;&#25968;&#23383;&#65292;&#30452;&#25509;&#36820;&#22238;</span>
+      [`(,op ,e1 ,e2)                         <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#21305;&#37197;&#25552;&#21462;&#25805;&#20316;&#31526;op&#21644;&#20004;&#20010;&#25805;&#20316;&#25968;e1,e2</span>
+       (<span style="color: #00ffff;">let</span> ([<span style="color: #eedd82;">v1</span> (calc e1)]                   <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#36882;&#24402;&#35843;&#29992; calc &#33258;&#24049;&#65292;&#24471;&#21040; e1 &#30340;&#20540;</span>
+             [<span style="color: #eedd82;">v2</span> (calc e2)])                  <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#36882;&#24402;&#35843;&#29992; calc &#33258;&#24049;&#65292;&#24471;&#21040; e2 &#30340;&#20540;</span>
+         (<span style="color: #b0c4de;">match</span> op                            <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#20998;&#25903;&#21305;&#37197;&#65306;&#25805;&#20316;&#31526; op &#30340; 4 &#31181;&#24773;&#20917;</span>
+           [<span style="color: #2e8b57;">'+</span> (<span style="color: #b0c4de;">+</span> v1 v2)]                     <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#22914;&#26524;&#26159;&#21152;&#21495;&#65292;&#36755;&#20986;&#32467;&#26524;&#20026; (+ v1 v2)</span>
+           [<span style="color: #2e8b57;">'-</span> (<span style="color: #b0c4de;">-</span> v1 v2)]                     <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#22914;&#26524;&#26159;&#20943;&#21495;&#65292;&#20056;&#21495;&#65292;&#38500;&#21495;&#65292;&#30456;&#20284;&#30340;&#22788;&#29702;</span>
+           [<span style="color: #2e8b57;">'*</span> (<span style="color: #b0c4de;">*</span> v1 v2)]
+           [<span style="color: #2e8b57;">'/</span> (<span style="color: #b0c4de;">/</span> v1 v2)]))])))
 </pre>
 </div>
 <p>
@@ -407,12 +491,11 @@ for the JavaScript code in this tag.
 </p>
 
 <div class="org-src-container">
-
-<pre class="src src-racket"><span style="color: #ffffff;">(</span>calc '<span style="color: #ffffff;">(</span><span style="color: #b0c4de;">+</span> <span style="color: #2e8b57;">1</span> <span style="color: #2e8b57;">2</span><span style="color: #ffffff;">))</span>
+<pre class="src src-racket">(calc '(<span style="color: #b0c4de;">+</span> <span style="color: #2e8b57;">1</span> <span style="color: #2e8b57;">2</span>))
 <span style="color: #ff4500;">;; </span><span style="color: #ff4500;">=&gt; 3</span>
-<span style="color: #ffffff;">(</span>calc '<span style="color: #ffffff;">(</span><span style="color: #b0c4de;">*</span> <span style="color: #2e8b57;">2</span> <span style="color: #2e8b57;">3</span><span style="color: #ffffff;">))</span>
+(calc '(<span style="color: #b0c4de;">*</span> <span style="color: #2e8b57;">2</span> <span style="color: #2e8b57;">3</span>))
 <span style="color: #ff4500;">;; </span><span style="color: #ff4500;">=&gt; 6</span>
-   <span style="color: #ffffff;">(</span>calc '<span style="color: #ffffff;">(</span><span style="color: #b0c4de;">*</span> <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">+</span> <span style="color: #2e8b57;">1</span> <span style="color: #2e8b57;">2</span><span style="color: #ffffff;">)</span> <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">+</span> <span style="color: #2e8b57;">3</span> <span style="color: #2e8b57;">4</span><span style="color: #ffffff;">)))</span>
+   (calc '(<span style="color: #b0c4de;">*</span> (<span style="color: #b0c4de;">+</span> <span style="color: #2e8b57;">1</span> <span style="color: #2e8b57;">2</span>) (<span style="color: #b0c4de;">+</span> <span style="color: #2e8b57;">3</span> <span style="color: #2e8b57;">4</span>)))
 <span style="color: #ff4500;">;; </span><span style="color: #ff4500;">=&gt; 21</span>
 </pre>
 </div>
@@ -421,40 +504,34 @@ for the JavaScript code in this tag.
 跟之前的二叉树求和代码比较一下，你会发现它们惊人的相似，因为解释器本来就是一个树遍历算法。不过你发现它们有什么不同吗？它们的不同点在于：
 </p>
 <ol class="org-ol">
-<li>算术表达式的模式里面，多出了一个“操作符”（op）叶节点：(,op ,e1 ,e2)
-</li>
-<li>对子树e1和e2分别求值之后，我们不是返回 (+ v1 v2)，而是根据op的不同，返回不同的结果：
+<li>算术表达式的模式里面，多出了一个“操作符”（op）叶节点：(,op ,e1 ,e2)</li>
+<li><p>
+对子树e1和e2分别求值之后，我们不是返回 (+ v1 v2)，而是根据op的不同，返回不同的结果：
+</p>
 <div class="org-src-container">
-
-<pre class="src src-racket"><span style="color: #ffffff;">(</span><span style="color: #b0c4de;">match</span> op
-  <span style="color: #ffffff;">[</span><span style="color: #2e8b57;">'+</span> <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">+</span> v1 v2<span style="color: #ffffff;">)]</span>
-  <span style="color: #ffffff;">[</span><span style="color: #2e8b57;">'-</span> <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">-</span> v1 v2<span style="color: #ffffff;">)]</span>
-  <span style="color: #ffffff;">[</span><span style="color: #2e8b57;">'*</span> <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">*</span> v1 v2<span style="color: #ffffff;">)]</span>
-  <span style="color: #ffffff;">[</span><span style="color: #2e8b57;">'/</span> <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">/</span> v1 v2<span style="color: #ffffff;">)])</span>
+<pre class="src src-racket">(<span style="color: #b0c4de;">match</span> op
+  [<span style="color: #2e8b57;">'+</span> (<span style="color: #b0c4de;">+</span> v1 v2)]
+  [<span style="color: #2e8b57;">'-</span> (<span style="color: #b0c4de;">-</span> v1 v2)]
+  [<span style="color: #2e8b57;">'*</span> (<span style="color: #b0c4de;">*</span> v1 v2)]
+  [<span style="color: #2e8b57;">'/</span> (<span style="color: #b0c4de;">/</span> v1 v2)])
 </pre>
-</div>
-</li>
+</div></li>
 </ol>
 </div>
 </div>
 
-<div id="outline-container-sec-5" class="outline-2">
-<h2 id="sec-5">R2：一个很小的程序语言</h2>
-<div class="outline-text-2" id="text-5">
+<div id="outline-container-orgcb20a41" class="outline-2">
+<h2 id="orgcb20a41">R2：一个很小的程序语言</h2>
+<div class="outline-text-2" id="text-orgcb20a41">
 <p>
 实现了一个计算器，现在让我们过渡到一种更强大的语言。为了方便称呼，我给它起了一个叫R2。R2 起之前的计算器，只多出四个元素，它们分别是：变量，函数，绑定，调用。再加上之前介绍的算术操作，我们就得到一个很简单的程序语言，它只有5种不同的构造。用Scheme的语法，这5种构造看起来就像这样：
 </p>
 <ul class="org-ul">
-<li>变量：x
-</li>
-<li>函数：(lambda (x) e)
-</li>
-<li>绑定：(let ([x e1]) e2)
-</li>
-<li>调用：(e1 e2)
-</li>
-<li>算术：(• e1 e2)
-</li>
+<li>变量：x</li>
+<li>函数：(lambda (x) e)</li>
+<li>绑定：(let ([x e1]) e2)</li>
+<li>调用：(e1 e2)</li>
+<li>算术：(• e1 e2)</li>
 </ul>
 <p>
 其中，• 是一个算术操作符，可以选择 +, -, *, / 其中之一
@@ -469,9 +546,9 @@ for the JavaScript code in this tag.
 </p>
 </div>
 
-<div id="outline-container-sec-5-1" class="outline-3">
-<h3 id="sec-5-1">柯里化</h3>
-<div class="outline-text-3" id="text-5-1">
+<div id="outline-container-org333574c" class="outline-3">
+<h3 id="org333574c">柯里化</h3>
+<div class="outline-text-3" id="text-org333574c">
 <p>
 需要注意的是，跟一般语言不同，我们的函数只接受一个参数。这不是一个严重的限制，因为在我们的语言里，函数可以被作为值传递，也就是所谓“first-class function”。所以你可以用嵌套的函数定义来表示有两个以上参数的函数
 </p>
@@ -480,8 +557,7 @@ for the JavaScript code in this tag.
 举个例子， (lambda (x) (lambda (y) (+ x y))) 是个嵌套的函数定义，它也可以被看成是有两个参数（x 和 y）的函数，这个函数返回 x 和 y 的和。当这样的函数被调用的时候，需要两层调用，就像这样：
 </p>
 <div class="org-src-container">
-
-<pre class="src src-scheme">(((<span style="color: #00ffff;">lambda</span> (x) (<span style="color: #00ffff;">lambda</span> (y) (+ x y))) 1) 2)
+<pre class="src src-scheme"><span style="color: #696969;">(((</span><span style="color: #00ffff;">lambda</span> <span style="color: #696969;">(</span>x<span style="color: #696969;">)</span> <span style="color: #696969;">(</span><span style="color: #00ffff;">lambda</span> <span style="color: #696969;">(</span>y<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>+ x y<span style="color: #696969;">)))</span> 1<span style="color: #696969;">)</span> 2<span style="color: #696969;">)</span>
 <span style="color: #ff4500;">;; </span><span style="color: #ff4500;">=&gt; 3</span>
 </pre>
 </div>
@@ -494,105 +570,102 @@ for the JavaScript code in this tag.
 另外，我们的绑定语法(let ([x e1]) e2)，比起Scheme的绑定也有一些局限。我们的let只能绑定一个变量，而Scheme可以绑定多个，像这样(let ([x 1] [y 2]) (+ x y))。这也不是一个严重的限制，因为可以啰嗦一点，用嵌套的 let 绑定：
 </p>
 <div class="org-src-container">
-
-<pre class="src src-scheme">(<span style="color: #00ffff;">let</span> ([x 1])
-  (<span style="color: #00ffff;">let</span> ([y 2])
-    (+ x y)))
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00ffff;">let</span> <span style="color: #696969;">(</span><span style="color: #36648b;">[</span>x 1<span style="color: #36648b;">]</span><span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00ffff;">let</span> <span style="color: #696969;">(</span><span style="color: #36648b;">[</span>y 2<span style="color: #36648b;">]</span><span style="color: #696969;">)</span>
+    <span style="color: #696969;">(</span>+ x y<span style="color: #696969;">)))</span>
 </pre>
 </div>
 </div>
 </div>
 </div>
 
-<div id="outline-container-sec-6" class="outline-2">
-<h2 id="sec-6">R2 的解释器</h2>
-<div class="outline-text-2" id="text-6">
+<div id="outline-container-org8342f8c" class="outline-2">
+<h2 id="org8342f8c">R2 的解释器</h2>
+<div class="outline-text-2" id="text-org8342f8c">
 <p>
 下面是我们今天要完成的解释器，它可以运行一个R2程序：
 </p>
 <div class="org-src-container">
-
 <pre class="src src-racket"><span style="color: #00ffff;">#lang</span> <span style="color: #eedd82;">racket</span>
 
 <span style="color: #ff4500;">;;; </span><span style="color: #ff4500;">&#20197;&#19979;&#19977;&#20010;&#23450;&#20041; env0, ext-env, lookup &#26159;&#23545;&#29615;&#22659;&#65288;environment&#65289;&#30340;&#22522;&#26412;&#25805;&#20316;&#65306;</span>
 
 <span style="color: #ff4500;">;; </span><span style="color: #ff4500;">&#31354;&#29615;&#22659;</span>
-<span style="color: #ffffff;">(</span><span style="color: #00ffff;">define</span> <span style="color: #eedd82;">env0</span> '<span style="color: #ffffff;">())</span>
+(<span style="color: #00ffff;">define</span> <span style="color: #eedd82;">env0</span> '())
 
 <span style="color: #ff4500;">;; </span><span style="color: #ff4500;">&#25193;&#23637;&#12290;&#23545;&#29615;&#22659; env &#36827;&#34892;&#25193;&#23637;&#65292;&#25226; x &#26144;&#23556;&#21040; v&#65292;&#24471;&#21040;&#19968;&#20010;&#26032;&#30340;&#29615;&#22659;</span>
-<span style="color: #ffffff;">(</span><span style="color: #00ffff;">define</span> <span style="color: #eedd82;">ext-env</span>
-  <span style="color: #ffffff;">(</span><span style="color: #00ffff;">lambda</span> <span style="color: #ffffff;">(</span>x v env<span style="color: #ffffff;">)</span>
-    <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">cons</span> `<span style="color: #ffffff;">(</span>,x . ,v<span style="color: #ffffff;">)</span> env<span style="color: #ffffff;">)))</span>
+(<span style="color: #00ffff;">define</span> <span style="color: #eedd82;">ext-env</span>
+  (<span style="color: #00ffff;">lambda</span> (x v env)
+    (<span style="color: #b0c4de;">cons</span> `(,x . ,v) env)))
 
 <span style="color: #ff4500;">;; </span><span style="color: #ff4500;">&#26597;&#25214;&#12290;&#22312;&#29615;&#22659;&#20013; env &#20013;&#26597;&#25214; x &#30340;&#20540;&#12290;&#22914;&#26524;&#27809;&#25214;&#21040;&#23601;&#36820;&#22238; #f</span>
-<span style="color: #ffffff;">(</span><span style="color: #00ffff;">define</span> <span style="color: #eedd82;">lookup</span>
-  <span style="color: #ffffff;">(</span><span style="color: #00ffff;">lambda</span> <span style="color: #ffffff;">(</span>x env<span style="color: #ffffff;">)</span>
-    <span style="color: #ffffff;">(</span><span style="color: #00ffff;">let</span> <span style="color: #ffffff;">([</span><span style="color: #eedd82;">p</span> <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">assq</span> x env<span style="color: #ffffff;">)])</span>
-      <span style="color: #ffffff;">(</span><span style="color: #00ffff;">cond</span>
-        <span style="color: #ffffff;">[(</span><span style="color: #b0c4de;">not</span> p<span style="color: #ffffff;">)</span> <span style="color: #2e8b57;">#f</span><span style="color: #ffffff;">]</span>
-        <span style="color: #ffffff;">[</span><span style="color: #00ffff;">else</span> <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">cdr</span> p<span style="color: #ffffff;">)]))))</span>
+(<span style="color: #00ffff;">define</span> <span style="color: #eedd82;">lookup</span>
+  (<span style="color: #00ffff;">lambda</span> (x env)
+    (<span style="color: #00ffff;">let</span> ([<span style="color: #eedd82;">p</span> (<span style="color: #b0c4de;">assq</span> x env)])
+      (<span style="color: #00ffff;">cond</span>
+        [(<span style="color: #b0c4de;">not</span> p) <span style="color: #2e8b57;">#f</span>]
+        [<span style="color: #00ffff;">else</span> (<span style="color: #b0c4de;">cdr</span> p)]))))
 
 <span style="color: #ff4500;">;; </span><span style="color: #ff4500;">&#38381;&#21253;&#30340;&#25968;&#25454;&#32467;&#26500;&#23450;&#20041;&#65292;&#21253;&#21547;&#19968;&#20010;&#20989;&#25968;&#23450;&#20041; f &#21644;&#23427;&#23450;&#20041;&#26102;&#25152;&#22312;&#30340;&#29615;&#22659;</span>
-<span style="color: #ffffff;">(</span><span style="color: #00ffff;">struct</span> Closure <span style="color: #ffffff;">(</span>f env<span style="color: #ffffff;">))</span>
+(<span style="color: #00ffff;">struct</span> Closure (f env))
 
 <span style="color: #ff4500;">;; </span><span style="color: #ff4500;">&#35299;&#37322;&#22120;&#30340;&#36882;&#24402;&#23450;&#20041;&#65288;&#25509;&#21463;&#20004;&#20010;&#21442;&#25968;&#65292;&#34920;&#36798;&#24335; exp &#21644;&#29615;&#22659; env&#65289;</span>
 <span style="color: #ff4500;">;; </span><span style="color: #ff4500;">&#20849; 5 &#31181;&#24773;&#20917;&#65288;&#21464;&#37327;&#65292;&#20989;&#25968;&#65292;&#32465;&#23450;&#65292;&#35843;&#29992;&#65292;&#25968;&#23383;&#65292;&#31639;&#26415;&#34920;&#36798;&#24335;&#65289;</span>
-<span style="color: #ffffff;">(</span><span style="color: #00ffff;">define</span> <span style="color: #eedd82;">interp</span>
-  <span style="color: #ffffff;">(</span><span style="color: #00ffff;">lambda</span> <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">exp</span> env<span style="color: #ffffff;">)</span>
-    <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">match</span> <span style="color: #b0c4de;">exp</span>                                          <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#23545;exp&#36827;&#34892;&#27169;&#24335;&#21305;&#37197;</span>
-      <span style="color: #ffffff;">[(</span>? <span style="color: #b0c4de;">symbol?</span> x<span style="color: #ffffff;">)</span>                                    <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#21464;&#37327;</span>
-       <span style="color: #ffffff;">(</span><span style="color: #00ffff;">let</span> <span style="color: #ffffff;">([</span><span style="color: #eedd82;">v</span> <span style="color: #ffffff;">(</span>lookup x env<span style="color: #ffffff;">)])</span>
-         <span style="color: #ffffff;">(</span><span style="color: #00ffff;">cond</span>
-           <span style="color: #ffffff;">[(</span><span style="color: #b0c4de;">not</span> v<span style="color: #ffffff;">)</span>
-            <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">error</span> <span style="color: #ffa07a;">"undefined variable"</span> x<span style="color: #ffffff;">)]</span>
-           <span style="color: #ffffff;">[</span><span style="color: #00ffff;">else</span> v<span style="color: #ffffff;">]))]</span>      
-      <span style="color: #ffffff;">[(</span>? <span style="color: #b0c4de;">number?</span> x<span style="color: #ffffff;">)</span> x<span style="color: #ffffff;">]</span>                                 <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#25968;&#23383;</span>
-      <span style="color: #ffffff;">[</span>`<span style="color: #ffffff;">(</span><span style="color: #00ffff;">lambda</span> <span style="color: #ffffff;">(</span>,x<span style="color: #ffffff;">)</span> ,e<span style="color: #ffffff;">)</span>                                <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#20989;&#25968;</span>
-       <span style="color: #ffffff;">(</span>Closure <span style="color: #b0c4de;">exp</span> env<span style="color: #ffffff;">)]</span>
-      <span style="color: #ffffff;">[</span>`<span style="color: #ffffff;">(</span><span style="color: #00ffff;">let</span> <span style="color: #ffffff;">([</span><span style="color: #eedd82;">,x</span> ,e1<span style="color: #ffffff;">])</span> ,e2<span style="color: #ffffff;">)</span>                            <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#32465;&#23450;</span>
-       <span style="color: #ffffff;">(</span><span style="color: #00ffff;">let</span> <span style="color: #ffffff;">([</span><span style="color: #eedd82;">v1</span> <span style="color: #ffffff;">(</span>interp e1 env<span style="color: #ffffff;">)])</span>
-         <span style="color: #ffffff;">(</span>interp e2 <span style="color: #ffffff;">(</span>ext-env x v1 env<span style="color: #ffffff;">)))]</span>
-      <span style="color: #ffffff;">[</span>`<span style="color: #ffffff;">(</span>,e1 ,e2<span style="color: #ffffff;">)</span>                                       <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#35843;&#29992;</span>
-       <span style="color: #ffffff;">(</span><span style="color: #00ffff;">let</span> <span style="color: #ffffff;">([</span><span style="color: #eedd82;">v1</span> <span style="color: #ffffff;">(</span>interp e1 env<span style="color: #ffffff;">)]</span>
-             <span style="color: #ffffff;">[</span><span style="color: #eedd82;">v2</span> <span style="color: #ffffff;">(</span>interp e2 env<span style="color: #ffffff;">)])</span>
-         <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">match</span> v1
-           <span style="color: #ffffff;">[(</span>Closure `<span style="color: #ffffff;">(</span><span style="color: #00ffff;">lambda</span> <span style="color: #ffffff;">(</span>,x<span style="color: #ffffff;">)</span> ,e<span style="color: #ffffff;">)</span> env-save<span style="color: #ffffff;">)</span>
-            <span style="color: #ffffff;">(</span>interp e <span style="color: #ffffff;">(</span>ext-env x v2 env-save<span style="color: #ffffff;">))]))]</span>
-      <span style="color: #ffffff;">[</span>`<span style="color: #ffffff;">(</span>,op ,e1 ,e2<span style="color: #ffffff;">)</span>                                   <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#31639;&#26415;&#34920;&#36798;&#24335;</span>
-       <span style="color: #ffffff;">(</span><span style="color: #00ffff;">let</span> <span style="color: #ffffff;">([</span><span style="color: #eedd82;">v1</span> <span style="color: #ffffff;">(</span>interp e1 env<span style="color: #ffffff;">)]</span>
-             <span style="color: #ffffff;">[</span><span style="color: #eedd82;">v2</span> <span style="color: #ffffff;">(</span>interp e2 env<span style="color: #ffffff;">)])</span>
-         <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">match</span> op
-           <span style="color: #ffffff;">[</span><span style="color: #2e8b57;">'+</span> <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">+</span> v1 v2<span style="color: #ffffff;">)]</span>
-           <span style="color: #ffffff;">[</span><span style="color: #2e8b57;">'-</span> <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">-</span> v1 v2<span style="color: #ffffff;">)]</span>
-           <span style="color: #ffffff;">[</span><span style="color: #2e8b57;">'*</span> <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">*</span> v1 v2<span style="color: #ffffff;">)]</span>
-           <span style="color: #ffffff;">[</span><span style="color: #2e8b57;">'/</span> <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">/</span> v1 v2<span style="color: #ffffff;">)]))])))</span>
+(<span style="color: #00ffff;">define</span> <span style="color: #eedd82;">interp</span>
+  (<span style="color: #00ffff;">lambda</span> (<span style="color: #b0c4de;">exp</span> env)
+    (<span style="color: #b0c4de;">match</span> <span style="color: #b0c4de;">exp</span>                                          <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#23545;exp&#36827;&#34892;&#27169;&#24335;&#21305;&#37197;</span>
+      [(? <span style="color: #b0c4de;">symbol?</span> x)                                    <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#21464;&#37327;</span>
+       (<span style="color: #00ffff;">let</span> ([<span style="color: #eedd82;">v</span> (lookup x env)])
+         (<span style="color: #00ffff;">cond</span>
+           [(<span style="color: #b0c4de;">not</span> v)
+            (<span style="color: #b0c4de;">error</span> <span style="color: #ffa07a;">"undefined variable"</span> x)]
+           [<span style="color: #00ffff;">else</span> v]))]      
+      [(? <span style="color: #b0c4de;">number?</span> x) x]                                 <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#25968;&#23383;</span>
+      [`(<span style="color: #00ffff;">lambda</span> (,x) ,e)                                <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#20989;&#25968;</span>
+       (Closure <span style="color: #b0c4de;">exp</span> env)]
+      [`(<span style="color: #00ffff;">let</span> ([<span style="color: #eedd82;">,x</span> ,e1]) ,e2)                            <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#32465;&#23450;</span>
+       (<span style="color: #00ffff;">let</span> ([<span style="color: #eedd82;">v1</span> (interp e1 env)])
+         (interp e2 (ext-env x v1 env)))]
+      [`(,e1 ,e2)                                       <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#35843;&#29992;</span>
+       (<span style="color: #00ffff;">let</span> ([<span style="color: #eedd82;">v1</span> (interp e1 env)]
+             [<span style="color: #eedd82;">v2</span> (interp e2 env)])
+         (<span style="color: #b0c4de;">match</span> v1
+           [(Closure `(<span style="color: #00ffff;">lambda</span> (,x) ,e) env-save)
+            (interp e (ext-env x v2 env-save))]))]
+      [`(,op ,e1 ,e2)                                   <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#31639;&#26415;&#34920;&#36798;&#24335;</span>
+       (<span style="color: #00ffff;">let</span> ([<span style="color: #eedd82;">v1</span> (interp e1 env)]
+             [<span style="color: #eedd82;">v2</span> (interp e2 env)])
+         (<span style="color: #b0c4de;">match</span> op
+           [<span style="color: #2e8b57;">'+</span> (<span style="color: #b0c4de;">+</span> v1 v2)]
+           [<span style="color: #2e8b57;">'-</span> (<span style="color: #b0c4de;">-</span> v1 v2)]
+           [<span style="color: #2e8b57;">'*</span> (<span style="color: #b0c4de;">*</span> v1 v2)]
+           [<span style="color: #2e8b57;">'/</span> (<span style="color: #b0c4de;">/</span> v1 v2)]))])))
 
 <span style="color: #ff4500;">;; </span><span style="color: #ff4500;">&#35299;&#37322;&#22120;&#30340;&#8220;&#29992;&#25143;&#30028;&#38754;&#8221;&#20989;&#25968;&#12290;&#23427;&#25226; interp &#21253;&#35013;&#36215;&#26469;&#65292;&#25513;&#30422;&#31532;&#20108;&#20010;&#21442;&#25968;&#65292;&#21021;&#22987;&#20540;&#20026; env0</span>
-<span style="color: #ffffff;">(</span><span style="color: #00ffff;">define</span> <span style="color: #eedd82;">r2</span>
-  <span style="color: #ffffff;">(</span><span style="color: #00ffff;">lambda</span> <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">exp</span><span style="color: #ffffff;">)</span>
-    <span style="color: #ffffff;">(</span>interp <span style="color: #b0c4de;">exp</span> env0<span style="color: #ffffff;">)))</span>
+(<span style="color: #00ffff;">define</span> <span style="color: #eedd82;">r2</span>
+  (<span style="color: #00ffff;">lambda</span> (<span style="color: #b0c4de;">exp</span>)
+    (interp <span style="color: #b0c4de;">exp</span> env0)))
 </pre>
 </div>
 </div>
 
-<div id="outline-container-sec-6-1" class="outline-3">
-<h3 id="sec-6-1">基本算术操作</h3>
-<div class="outline-text-3" id="text-6-1">
+<div id="outline-container-orgcb246e4" class="outline-3">
+<h3 id="orgcb246e4">基本算术操作</h3>
+<div class="outline-text-3" id="text-orgcb246e4">
 <p>
 算术操作一般都是程序里最基本的构造，它们不能再被细分为多个步骤，所以我们先来看看对算术操作的处理。以下就是R2解释器处理算术的部分，它是interp的最后一个分支：
 </p>
 <div class="org-src-container">
-
-<pre class="src src-racket"><span style="color: #ffffff;">(</span><span style="color: #b0c4de;">match</span> <span style="color: #b0c4de;">exp</span>
+<pre class="src src-racket">(<span style="color: #b0c4de;">match</span> <span style="color: #b0c4de;">exp</span>
   <span style="color: #00ffff;">...</span> <span style="color: #00ffff;">...</span>
-  <span style="color: #ffffff;">[</span>`<span style="color: #ffffff;">(</span>,op ,e1 ,e2<span style="color: #ffffff;">)</span>
-   <span style="color: #ffffff;">(</span><span style="color: #00ffff;">let</span> <span style="color: #ffffff;">([</span><span style="color: #eedd82;">v1</span> <span style="color: #ffffff;">(</span>interp e1 env<span style="color: #ffffff;">)]</span>             <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#36882;&#24402;&#35843;&#29992; interp &#33258;&#24049;&#65292;&#24471;&#21040; e1 &#30340;&#20540;</span>
-         <span style="color: #ffffff;">[</span><span style="color: #eedd82;">v2</span> <span style="color: #ffffff;">(</span>interp e2 env<span style="color: #ffffff;">)])</span>            <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#36882;&#24402;&#35843;&#29992; interp &#33258;&#24049;&#65292;&#24471;&#21040; e2 &#30340;&#20540;</span>
-     <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">match</span> op                            <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#20998;&#25903;&#65306;&#22788;&#29702;&#25805;&#20316;&#31526; op &#30340; 4 &#31181;&#24773;&#20917;</span>
-       <span style="color: #ffffff;">[</span><span style="color: #2e8b57;">'+</span> <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">+</span> v1 v2<span style="color: #ffffff;">)]</span>                     <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#22914;&#26524;&#26159;&#21152;&#21495;&#65292;&#36755;&#20986;&#32467;&#26524;&#20026; (+ v1 v2)</span>
-       <span style="color: #ffffff;">[</span><span style="color: #2e8b57;">'-</span> <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">-</span> v1 v2<span style="color: #ffffff;">)]</span>                     <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#22914;&#26524;&#26159;&#20943;&#21495;&#65292;&#20056;&#21495;&#65292;&#38500;&#21495;&#65292;&#30456;&#20284;&#30340;&#22788;&#29702;</span>
-       <span style="color: #ffffff;">[</span><span style="color: #2e8b57;">'*</span> <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">*</span> v1 v2<span style="color: #ffffff;">)]</span>
-       <span style="color: #ffffff;">[</span><span style="color: #2e8b57;">'/</span> <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">/</span> v1 v2<span style="color: #ffffff;">)]))])</span>
+  [`(,op ,e1 ,e2)
+   (<span style="color: #00ffff;">let</span> ([<span style="color: #eedd82;">v1</span> (interp e1 env)]             <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#36882;&#24402;&#35843;&#29992; interp &#33258;&#24049;&#65292;&#24471;&#21040; e1 &#30340;&#20540;</span>
+         [<span style="color: #eedd82;">v2</span> (interp e2 env)])            <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#36882;&#24402;&#35843;&#29992; interp &#33258;&#24049;&#65292;&#24471;&#21040; e2 &#30340;&#20540;</span>
+     (<span style="color: #b0c4de;">match</span> op                            <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#20998;&#25903;&#65306;&#22788;&#29702;&#25805;&#20316;&#31526; op &#30340; 4 &#31181;&#24773;&#20917;</span>
+       [<span style="color: #2e8b57;">'+</span> (<span style="color: #b0c4de;">+</span> v1 v2)]                     <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#22914;&#26524;&#26159;&#21152;&#21495;&#65292;&#36755;&#20986;&#32467;&#26524;&#20026; (+ v1 v2)</span>
+       [<span style="color: #2e8b57;">'-</span> (<span style="color: #b0c4de;">-</span> v1 v2)]                     <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#22914;&#26524;&#26159;&#20943;&#21495;&#65292;&#20056;&#21495;&#65292;&#38500;&#21495;&#65292;&#30456;&#20284;&#30340;&#22788;&#29702;</span>
+       [<span style="color: #2e8b57;">'*</span> (<span style="color: #b0c4de;">*</span> v1 v2)]
+       [<span style="color: #2e8b57;">'/</span> (<span style="color: #b0c4de;">/</span> v1 v2)]))])
 </pre>
 </div>
 <p>
@@ -601,23 +674,22 @@ for the JavaScript code in this tag.
 </div>
 </div>
 
-<div id="outline-container-sec-6-2" class="outline-3">
-<h3 id="sec-6-2">数字</h3>
-<div class="outline-text-3" id="text-6-2">
+<div id="outline-container-org9550753" class="outline-3">
+<h3 id="org9550753">数字</h3>
+<div class="outline-text-3" id="text-org9550753">
 <p>
 对数字的解释很简单，把它们原封不动返回就可以了
 </p>
 <div class="org-src-container">
-
-<pre class="src src-racket"><span style="color: #ffffff;">[(</span>? <span style="color: #b0c4de;">number?</span> x<span style="color: #ffffff;">)</span> x<span style="color: #ffffff;">]</span>
+<pre class="src src-racket">[(? <span style="color: #b0c4de;">number?</span> x) x]
 </pre>
 </div>
 </div>
 </div>
 
-<div id="outline-container-sec-6-3" class="outline-3">
-<h3 id="sec-6-3">变量</h3>
-<div class="outline-text-3" id="text-6-3">
+<div id="outline-container-orgfb7e76a" class="outline-3">
+<h3 id="orgfb7e76a">变量</h3>
+<div class="outline-text-3" id="text-orgfb7e76a">
 <p>
 变量的产生，是数学史上的最大突破之一。因为变量可以被绑定到不同的值，从而使函数的实现成为可能。比如数学函数f(x) = x * 2，其中x是一个变量，它把输入的值传递到函数体x * 2 里面。如果没有变量，函数就不可能实现
 </p>
@@ -627,49 +699,45 @@ for the JavaScript code in this tag.
 </p>
 </div>
 
-<div id="outline-container-sec-6-3-1" class="outline-4">
-<h4 id="sec-6-3-1">环境</h4>
-<div class="outline-text-4" id="text-6-3-1">
+<div id="outline-container-orgcd599a2" class="outline-4">
+<h4 id="orgcd599a2">环境</h4>
+<div class="outline-text-4" id="text-orgcd599a2">
 <p>
 我们的解释器只能一步一步的做事情。比如，当它需要求f(1)的值的时候，它分成两步操作：
 </p>
 <ol class="org-ol">
-<li>把x绑定到1，这样函数体内才能看见这个绑定
-</li>
-<li>进入f的函数体，对x * 2 进行求值
-</li>
+<li>把x绑定到1，这样函数体内才能看见这个绑定</li>
+<li>进入f的函数体，对x * 2 进行求值</li>
 </ol>
 
 <p>
 在我们的解释器里，用于处理环境的代码如下：
 </p>
 <div class="org-src-container">
-
 <pre class="src src-racket"><span style="color: #ff4500;">;; </span><span style="color: #ff4500;">&#31354;&#29615;&#22659;</span>
-<span style="color: #ffffff;">(</span><span style="color: #00ffff;">define</span> <span style="color: #eedd82;">env0</span> '<span style="color: #ffffff;">())</span>
+(<span style="color: #00ffff;">define</span> <span style="color: #eedd82;">env0</span> '())
 
 <span style="color: #ff4500;">;; </span><span style="color: #ff4500;">&#23545;&#29615;&#22659; env &#36827;&#34892;&#25193;&#23637;&#65292;&#25226; x &#26144;&#23556;&#21040; v</span>
-<span style="color: #ffffff;">(</span><span style="color: #00ffff;">define</span> <span style="color: #eedd82;">ext-env</span>
-  <span style="color: #ffffff;">(</span><span style="color: #00ffff;">lambda</span> <span style="color: #ffffff;">(</span>x v env<span style="color: #ffffff;">)</span>
-    <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">cons</span> `<span style="color: #ffffff;">(</span>,x . ,v<span style="color: #ffffff;">)</span> env<span style="color: #ffffff;">)))</span>
+(<span style="color: #00ffff;">define</span> <span style="color: #eedd82;">ext-env</span>
+  (<span style="color: #00ffff;">lambda</span> (x v env)
+    (<span style="color: #b0c4de;">cons</span> `(,x . ,v) env)))
 
 <span style="color: #ff4500;">;; </span><span style="color: #ff4500;">&#21462;&#20540;&#12290;&#22312;&#29615;&#22659;&#20013; env &#20013;&#26597;&#25214; x &#30340;&#20540;</span>
-<span style="color: #ffffff;">(</span><span style="color: #00ffff;">define</span> <span style="color: #eedd82;">lookup</span>
-  <span style="color: #ffffff;">(</span><span style="color: #00ffff;">lambda</span> <span style="color: #ffffff;">(</span>x env<span style="color: #ffffff;">)</span>
-    <span style="color: #ffffff;">(</span><span style="color: #00ffff;">let</span> <span style="color: #ffffff;">([</span><span style="color: #eedd82;">p</span> <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">assq</span> x env<span style="color: #ffffff;">)])</span>
-      <span style="color: #ffffff;">(</span><span style="color: #00ffff;">cond</span>
-        <span style="color: #ffffff;">[(</span><span style="color: #b0c4de;">not</span> p<span style="color: #ffffff;">)</span> <span style="color: #2e8b57;">#f</span><span style="color: #ffffff;">]</span>
-        <span style="color: #ffffff;">[</span><span style="color: #00ffff;">else</span> <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">cdr</span> p<span style="color: #ffffff;">)]))))</span>
+(<span style="color: #00ffff;">define</span> <span style="color: #eedd82;">lookup</span>
+  (<span style="color: #00ffff;">lambda</span> (x env)
+    (<span style="color: #00ffff;">let</span> ([<span style="color: #eedd82;">p</span> (<span style="color: #b0c4de;">assq</span> x env)])
+      (<span style="color: #00ffff;">cond</span>
+        [(<span style="color: #b0c4de;">not</span> p) <span style="color: #2e8b57;">#f</span>]
+        [<span style="color: #00ffff;">else</span> (<span style="color: #b0c4de;">cdr</span> p)]))))
 </pre>
 </div>
 <p>
 这里我们用一种最简单的数据结构，association list来表示环境。看起来像这个样子：((x . 1) (y . 2) (z . 5))。它是一个两元组（pair）的链表，左边的元素是key，右边的元素是value。写得直观一点就是：
 </p>
 <div class="org-src-container">
-
-<pre class="src src-scheme">((x . 1)
- (y . 2)
- (z . 5))
+<pre class="src src-scheme"><span style="color: #696969;">((</span>x . 1<span style="color: #696969;">)</span>
+ <span style="color: #696969;">(</span>y . 2<span style="color: #696969;">)</span>
+ <span style="color: #696969;">(</span>z . 5<span style="color: #696969;">))</span>
 </pre>
 </div>
 <p>
@@ -677,9 +745,9 @@ for the JavaScript code in this tag.
 </p>
 </div>
 
-<div id="outline-container-sec-6-3-1-1" class="outline-5">
-<h5 id="sec-6-3-1-1">环境扩展</h5>
-<div class="outline-text-5" id="text-6-3-1-1">
+<div id="outline-container-org63ca568" class="outline-5">
+<h5 id="org63ca568">环境扩展</h5>
+<div class="outline-text-5" id="text-org63ca568">
 <p>
 扩展一个环境。比如，如果原来的环境env1是((y . 2) (x . 1)) 那么(ext-env x 3 env1)，就会返回((x . 3) (y . 2) (x . 1))。也就是把(x . 3)加到env1的最前面去
 </p>
@@ -692,11 +760,10 @@ for the JavaScript code in this tag.
 环境其实是一个堆栈。内层的绑定，会出现在环境的最上面，这就是在“压栈”。这样我们查找变量的时候，会优先找到最内层定义的变量：
 </p>
 <div class="org-src-container">
-
-<pre class="src src-racket"><span style="color: #ffffff;">(</span><span style="color: #00ffff;">let</span> <span style="color: #ffffff;">([</span><span style="color: #eedd82;">x</span> <span style="color: #2e8b57;">1</span><span style="color: #ffffff;">])</span>         <span style="color: #ff4500;">; </span><span style="color: #ff4500;">env='()&#12290;&#32465;&#23450;x&#21040;1&#12290;</span>
-  <span style="color: #ffffff;">(</span><span style="color: #00ffff;">let</span> <span style="color: #ffffff;">([</span><span style="color: #eedd82;">y</span> <span style="color: #2e8b57;">2</span><span style="color: #ffffff;">])</span>       <span style="color: #ff4500;">; </span><span style="color: #ff4500;">env='((x . 1))&#12290;&#32465;&#23450;y&#21040;2&#12290;</span>
-    <span style="color: #ffffff;">(</span><span style="color: #00ffff;">let</span> <span style="color: #ffffff;">([</span><span style="color: #eedd82;">x</span> <span style="color: #2e8b57;">3</span><span style="color: #ffffff;">])</span>     <span style="color: #ff4500;">; </span><span style="color: #ff4500;">env='((y . 2) (x . 1))&#12290;&#32465;&#23450;x&#21040;3&#12290;</span>
-      <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">+</span> x y<span style="color: #ffffff;">))))</span>     <span style="color: #ff4500;">; </span><span style="color: #ff4500;">env='((x . 3) (y . 2) (x . 1))&#12290;&#26597;&#25214;x&#65292;&#24471;&#21040;3&#65307;&#26597;&#25214;y&#65292;&#24471;&#21040;2&#12290;</span>
+<pre class="src src-racket">(<span style="color: #00ffff;">let</span> ([<span style="color: #eedd82;">x</span> <span style="color: #2e8b57;">1</span>])         <span style="color: #ff4500;">; </span><span style="color: #ff4500;">env='()&#12290;&#32465;&#23450;x&#21040;1&#12290;</span>
+  (<span style="color: #00ffff;">let</span> ([<span style="color: #eedd82;">y</span> <span style="color: #2e8b57;">2</span>])       <span style="color: #ff4500;">; </span><span style="color: #ff4500;">env='((x . 1))&#12290;&#32465;&#23450;y&#21040;2&#12290;</span>
+    (<span style="color: #00ffff;">let</span> ([<span style="color: #eedd82;">x</span> <span style="color: #2e8b57;">3</span>])     <span style="color: #ff4500;">; </span><span style="color: #ff4500;">env='((y . 2) (x . 1))&#12290;&#32465;&#23450;x&#21040;3&#12290;</span>
+      (<span style="color: #b0c4de;">+</span> x y))))     <span style="color: #ff4500;">; </span><span style="color: #ff4500;">env='((x . 3) (y . 2) (x . 1))&#12290;&#26597;&#25214;x&#65292;&#24471;&#21040;3&#65307;&#26597;&#25214;y&#65292;&#24471;&#21040;2&#12290;</span>
 <span style="color: #ff4500;">;; </span><span style="color: #ff4500;">=&gt; 5</span>
 </pre>
 </div>
@@ -708,11 +775,10 @@ for the JavaScript code in this tag.
 这并不等于说(x . 1) 就可以被改写或者丢弃，因为它仍然是有用的。你只需要看一个稍微不同的例子，就知道这是怎么回事：
 </p>
 <div class="org-src-container">
-
-<pre class="src src-racket"><span style="color: #ffffff;">(</span><span style="color: #00ffff;">let</span> <span style="color: #ffffff;">([</span><span style="color: #eedd82;">x</span> <span style="color: #2e8b57;">1</span><span style="color: #ffffff;">])</span>          <span style="color: #ff4500;">; </span><span style="color: #ff4500;">env='()&#12290;&#32465;&#23450;x&#21040;1&#12290;</span>
-  <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">+</span> <span style="color: #ffffff;">(</span><span style="color: #00ffff;">let</span> <span style="color: #ffffff;">([</span><span style="color: #eedd82;">x</span> <span style="color: #2e8b57;">2</span><span style="color: #ffffff;">])</span>     <span style="color: #ff4500;">; </span><span style="color: #ff4500;">env='((x . 1))&#12290;&#32465;&#23450;x&#21040;2&#12290;</span>
-       x<span style="color: #ffffff;">)</span>             <span style="color: #ff4500;">; </span><span style="color: #ff4500;">env='((x . 2) (x . 1))&#12290;&#26597;&#25214;x&#65292;&#24471;&#21040;2&#12290;</span>
-     x<span style="color: #ffffff;">))</span>                <span style="color: #ff4500;">; </span><span style="color: #ff4500;">env='((x . 1))&#12290;&#26597;&#25214;x&#65292;&#24471;&#21040;1&#12290;</span>
+<pre class="src src-racket">(<span style="color: #00ffff;">let</span> ([<span style="color: #eedd82;">x</span> <span style="color: #2e8b57;">1</span>])          <span style="color: #ff4500;">; </span><span style="color: #ff4500;">env='()&#12290;&#32465;&#23450;x&#21040;1&#12290;</span>
+  (<span style="color: #b0c4de;">+</span> (<span style="color: #00ffff;">let</span> ([<span style="color: #eedd82;">x</span> <span style="color: #2e8b57;">2</span>])     <span style="color: #ff4500;">; </span><span style="color: #ff4500;">env='((x . 1))&#12290;&#32465;&#23450;x&#21040;2&#12290;</span>
+       x)             <span style="color: #ff4500;">; </span><span style="color: #ff4500;">env='((x . 2) (x . 1))&#12290;&#26597;&#25214;x&#65292;&#24471;&#21040;2&#12290;</span>
+     x))                <span style="color: #ff4500;">; </span><span style="color: #ff4500;">env='((x . 1))&#12290;&#26597;&#25214;x&#65292;&#24471;&#21040;1&#12290;</span>
 <span style="color: #ff4500;">;; </span><span style="color: #ff4500;">=&gt; 3               ; &#20004;&#20010;&#19981;&#21516;&#30340;x&#30340;&#21644;&#65292;1+2&#31561;&#20110;3&#12290;</span>
 </pre>
 </div>
@@ -735,15 +801,14 @@ for the JavaScript code in this tag.
 </div>
 </div>
 
-<div id="outline-container-sec-6-3-2" class="outline-4">
-<h4 id="sec-6-3-2">变量的取值</h4>
-<div class="outline-text-4" id="text-6-3-2">
+<div id="outline-container-orgf233448" class="outline-4">
+<h4 id="orgf233448">变量的取值</h4>
+<div class="outline-text-4" id="text-orgf233448">
 <p>
 了解了变量，函数和环境，我们来看看解释器对变量的“取值”操作，也就是match的第一种情况：
 </p>
 <div class="org-src-container">
-
-<pre class="src src-racket"><span style="color: #ffffff;">[(</span>? <span style="color: #b0c4de;">symbol?</span> x<span style="color: #ffffff;">)</span> <span style="color: #ffffff;">(</span>lookup x env<span style="color: #ffffff;">)]</span>
+<pre class="src src-racket">[(? <span style="color: #b0c4de;">symbol?</span> x) (lookup x env)]
 </pre>
 </div>
 <p>
@@ -757,17 +822,16 @@ for the JavaScript code in this tag.
 </div>
 </div>
 
-<div id="outline-container-sec-6-4" class="outline-3">
-<h3 id="sec-6-4">绑定</h3>
-<div class="outline-text-3" id="text-6-4">
+<div id="outline-container-org3ff67ca" class="outline-3">
+<h3 id="org3ff67ca">绑定</h3>
+<div class="outline-text-3" id="text-org3ff67ca">
 <p>
 现在我们来看看对let绑定的解释：
 </p>
 <div class="org-src-container">
-
-<pre class="src src-racket"><span style="color: #ffffff;">[</span>`<span style="color: #ffffff;">(</span><span style="color: #00ffff;">let</span> <span style="color: #ffffff;">([</span><span style="color: #eedd82;">,x</span> ,e1<span style="color: #ffffff;">])</span> ,e2<span style="color: #ffffff;">)</span>                           
- <span style="color: #ffffff;">(</span><span style="color: #00ffff;">let</span> <span style="color: #ffffff;">([</span><span style="color: #eedd82;">v1</span> <span style="color: #ffffff;">(</span>interp e1 env<span style="color: #ffffff;">)])</span>              <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#35299;&#37322;&#21491;&#36793;&#34920;&#36798;&#24335;e1&#65292;&#24471;&#21040;&#20540;v1</span>
-   <span style="color: #ffffff;">(</span>interp e2 <span style="color: #ffffff;">(</span>ext-env x v1 env<span style="color: #ffffff;">)))]</span>       <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#25226;(x . v1)&#25193;&#20805;&#21040;&#29615;&#22659;&#39030;&#37096;&#65292;&#23545;e2&#27714;&#20540;</span>
+<pre class="src src-racket">[`(<span style="color: #00ffff;">let</span> ([<span style="color: #eedd82;">,x</span> ,e1]) ,e2)                           
+ (<span style="color: #00ffff;">let</span> ([<span style="color: #eedd82;">v1</span> (interp e1 env)])              <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#35299;&#37322;&#21491;&#36793;&#34920;&#36798;&#24335;e1&#65292;&#24471;&#21040;&#20540;v1</span>
+   (interp e2 (ext-env x v1 env)))]       <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#25226;(x . v1)&#25193;&#20805;&#21040;&#29615;&#22659;&#39030;&#37096;&#65292;&#23545;e2&#27714;&#20540;</span>
 </pre>
 </div>
 <p>
@@ -776,25 +840,24 @@ for the JavaScript code in this tag.
 </div>
 </div>
 
-<div id="outline-container-sec-6-5" class="outline-3">
-<h3 id="sec-6-5">函数</h3>
-<div class="outline-text-3" id="text-6-5">
+<div id="outline-container-org6aafcfc" class="outline-3">
+<h3 id="org6aafcfc">函数</h3>
+<div class="outline-text-3" id="text-org6aafcfc">
 <p>
 下面我们准备谈谈函数定义和调用。对函数的解释是一个微妙的问题，很容易弄错，这是由于函数体内也许会含有外层的变量，叫做“自由变量”。所以在分析函数的代码之前，我们来了解一下不同的“作用域”规则
 </p>
 </div>
-<div id="outline-container-sec-6-5-1" class="outline-4">
-<h4 id="sec-6-5-1">Lexical Scoping 和 Dynamic Scoping</h4>
-<div class="outline-text-4" id="text-6-5-1">
+<div id="outline-container-org4007aff" class="outline-4">
+<h4 id="org4007aff">Lexical Scoping 和 Dynamic Scoping</h4>
+<div class="outline-text-4" id="text-org4007aff">
 <p>
 我们举个例子来解释这个问题。下面这段代码，它的值应该是多少呢？
 </p>
 <div class="org-src-container">
-
-<pre class="src src-racket"><span style="color: #ffffff;">(</span><span style="color: #00ffff;">let</span> <span style="color: #ffffff;">([</span><span style="color: #eedd82;">x</span> <span style="color: #2e8b57;">2</span><span style="color: #ffffff;">])</span>
-  <span style="color: #ffffff;">(</span><span style="color: #00ffff;">let</span> <span style="color: #ffffff;">([</span><span style="color: #eedd82;">f</span> <span style="color: #ffffff;">(</span><span style="color: #00ffff;">lambda</span> <span style="color: #ffffff;">(</span>y<span style="color: #ffffff;">)</span> <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">*</span> x y<span style="color: #ffffff;">))])</span>
-    <span style="color: #ffffff;">(</span><span style="color: #00ffff;">let</span> <span style="color: #ffffff;">([</span><span style="color: #eedd82;">x</span> <span style="color: #2e8b57;">4</span><span style="color: #ffffff;">])</span>
-      <span style="color: #ffffff;">(</span>f <span style="color: #2e8b57;">3</span><span style="color: #ffffff;">))))</span>
+<pre class="src src-racket">(<span style="color: #00ffff;">let</span> ([<span style="color: #eedd82;">x</span> <span style="color: #2e8b57;">2</span>])
+  (<span style="color: #00ffff;">let</span> ([<span style="color: #eedd82;">f</span> (<span style="color: #00ffff;">lambda</span> (y) (<span style="color: #b0c4de;">*</span> x y))])
+    (<span style="color: #00ffff;">let</span> ([<span style="color: #eedd82;">x</span> <span style="color: #2e8b57;">4</span>])
+      (f <span style="color: #2e8b57;">3</span>))))
 </pre>
 </div>
 <p>
@@ -823,15 +886,14 @@ Racket的方式叫做lexical scoping，而Emacs的方式叫做dynamic scoping
 </div>
 </div>
 
-<div id="outline-container-sec-6-5-2" class="outline-4">
-<h4 id="sec-6-5-2">函数定义</h4>
-<div class="outline-text-4" id="text-6-5-2">
+<div id="outline-container-orgc4f777b" class="outline-4">
+<h4 id="orgc4f777b">函数定义</h4>
+<div class="outline-text-4" id="text-orgc4f777b">
 <p>
 为了实现lexical scoping，我们必须把函数做成“闭包”。闭包是一种特殊的数据结构，它由两个元素组成：函数的定义和当前的环境。我们把闭包定义为一个Racket的struct结构：
 </p>
 <div class="org-src-container">
-
-<pre class="src src-racket"><span style="color: #ffffff;">(</span><span style="color: #00ffff;">struct</span> Closure <span style="color: #ffffff;">(</span>f env<span style="color: #ffffff;">))</span>
+<pre class="src src-racket">(<span style="color: #00ffff;">struct</span> Closure (f env))
 </pre>
 </div>
 
@@ -839,9 +901,8 @@ Racket的方式叫做lexical scoping，而Emacs的方式叫做dynamic scoping
 有了这个数据结构，我们对(lambda (x) e)的解释就可以写成这样：
 </p>
 <div class="org-src-container">
-
-<pre class="src src-racket"><span style="color: #ffffff;">[</span>`<span style="color: #ffffff;">(</span><span style="color: #00ffff;">lambda</span> <span style="color: #ffffff;">(</span>,x<span style="color: #ffffff;">)</span> ,e<span style="color: #ffffff;">)</span>
- <span style="color: #ffffff;">(</span>Closure <span style="color: #b0c4de;">exp</span> env<span style="color: #ffffff;">)]</span>
+<pre class="src src-racket">[`(<span style="color: #00ffff;">lambda</span> (,x) ,e)
+ (Closure <span style="color: #b0c4de;">exp</span> env)]
 </pre>
 </div>
 
@@ -856,17 +917,16 @@ Racket的方式叫做lexical scoping，而Emacs的方式叫做dynamic scoping
 </div>
 </div>
 
-<div id="outline-container-sec-6-6" class="outline-3">
-<h3 id="sec-6-6">调用</h3>
-<div class="outline-text-3" id="text-6-6">
+<div id="outline-container-orge281312" class="outline-3">
+<h3 id="orge281312">调用</h3>
+<div class="outline-text-3" id="text-orge281312">
 <div class="org-src-container">
-
-<pre class="src src-racket"><span style="color: #ffffff;">[</span>`<span style="color: #ffffff;">(</span>,e1 ,e2<span style="color: #ffffff;">)</span>                                            
- <span style="color: #ffffff;">(</span><span style="color: #00ffff;">let</span> <span style="color: #ffffff;">([</span><span style="color: #eedd82;">v1</span> <span style="color: #ffffff;">(</span>interp e1 env<span style="color: #ffffff;">)]</span>             <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#35745;&#31639;&#20989;&#25968; e1 &#30340;&#20540;</span>
-       <span style="color: #ffffff;">[</span><span style="color: #eedd82;">v2</span> <span style="color: #ffffff;">(</span>interp e2 env<span style="color: #ffffff;">)])</span>            <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#35745;&#31639;&#21442;&#25968; e2 &#30340;&#20540;</span>
-   <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">match</span> v1
-     <span style="color: #ffffff;">[(</span>Closure `<span style="color: #ffffff;">(</span><span style="color: #00ffff;">lambda</span> <span style="color: #ffffff;">(</span>,x<span style="color: #ffffff;">)</span> ,e<span style="color: #ffffff;">)</span> env-save<span style="color: #ffffff;">)</span>      <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#29992;&#27169;&#24335;&#21305;&#37197;&#30340;&#26041;&#24335;&#21462;&#20986;&#38381;&#21253;&#37324;&#30340;&#21508;&#20010;&#23376;&#32467;&#26500;</span>
-      <span style="color: #ffffff;">(</span>interp e <span style="color: #ffffff;">(</span>ext-env x v2 env-save<span style="color: #ffffff;">))]))]</span>    <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#22312;&#38381;&#21253;&#30340;&#29615;&#22659;env-save&#20013;&#25226;x&#32465;&#23450;&#21040;v2&#65292;&#35299;&#37322;&#20989;&#25968;&#20307;</span>
+<pre class="src src-racket">[`(,e1 ,e2)                                            
+ (<span style="color: #00ffff;">let</span> ([<span style="color: #eedd82;">v1</span> (interp e1 env)]             <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#35745;&#31639;&#20989;&#25968; e1 &#30340;&#20540;</span>
+       [<span style="color: #eedd82;">v2</span> (interp e2 env)])            <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#35745;&#31639;&#21442;&#25968; e2 &#30340;&#20540;</span>
+   (<span style="color: #b0c4de;">match</span> v1
+     [(Closure `(<span style="color: #00ffff;">lambda</span> (,x) ,e) env-save)      <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#29992;&#27169;&#24335;&#21305;&#37197;&#30340;&#26041;&#24335;&#21462;&#20986;&#38381;&#21253;&#37324;&#30340;&#21508;&#20010;&#23376;&#32467;&#26500;</span>
+      (interp e (ext-env x v2 env-save))]))]    <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#22312;&#38381;&#21253;&#30340;&#29615;&#22659;env-save&#20013;&#25226;x&#32465;&#23450;&#21040;v2&#65292;&#35299;&#37322;&#20989;&#25968;&#20307;</span>
 </pre>
 </div>
 <p>
@@ -882,9 +942,9 @@ Racket的方式叫做lexical scoping，而Emacs的方式叫做dynamic scoping
 </p>
 </div>
 
-<div id="outline-container-sec-6-6-1" class="outline-4">
-<h4 id="sec-6-6-1">dynamic scoping调用</h4>
-<div class="outline-text-4" id="text-6-6-1">
+<div id="outline-container-orgdcbc6d1" class="outline-4">
+<h4 id="orgdcbc6d1">dynamic scoping调用</h4>
+<div class="outline-text-4" id="text-orgdcbc6d1">
 <p>
 你可能会奇怪，那么解释器的环境env难道这里就不用了吗？是的。我们通过env来计算e1和e2的值，是因为e1和e2里面的变量，在“当前环境”env里面看得见。可是函数体的定义，在当前环境下是看不见的。它的代码在别的地方，而那个地方看得见的环境，被我们存在闭包里了，它就是env-save。所以我们把v1里面的闭包环境env-save取出来，用于计算函数体的值
 </p>
@@ -897,22 +957,21 @@ Racket的方式叫做lexical scoping，而Emacs的方式叫做dynamic scoping
 如果我们的语言是dynamic scoping，那就没必要使用闭包了，因为我们根本不需要闭包里面保存的环境。这样一来，dynamic scoping的解释器就可以写成这样：
 </p>
 <div class="org-src-container">
-
-<pre class="src src-racket"><span style="color: #ffffff;">(</span><span style="color: #00ffff;">define</span> <span style="color: #eedd82;">interp</span>
-  <span style="color: #ffffff;">(</span><span style="color: #00ffff;">lambda</span> <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">exp</span> env<span style="color: #ffffff;">)</span>
-    <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">match</span> <span style="color: #b0c4de;">exp</span>                                          
+<pre class="src src-racket">(<span style="color: #00ffff;">define</span> <span style="color: #eedd82;">interp</span>
+  (<span style="color: #00ffff;">lambda</span> (<span style="color: #b0c4de;">exp</span> env)
+    (<span style="color: #b0c4de;">match</span> <span style="color: #b0c4de;">exp</span>                                          
       <span style="color: #00ffff;">...</span> <span style="color: #00ffff;">...</span>
-      <span style="color: #ffffff;">[</span>`<span style="color: #ffffff;">(</span><span style="color: #00ffff;">lambda</span> <span style="color: #ffffff;">(</span>,x<span style="color: #ffffff;">)</span> ,e<span style="color: #ffffff;">)</span>                          <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#20989;&#25968;&#65306;&#30452;&#25509;&#36820;&#22238;&#33258;&#24049;&#30340;&#34920;&#36798;&#24335;</span>
-       <span style="color: #b0c4de;">exp</span><span style="color: #ffffff;">]</span>
+      [`(<span style="color: #00ffff;">lambda</span> (,x) ,e)                          <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#20989;&#25968;&#65306;&#30452;&#25509;&#36820;&#22238;&#33258;&#24049;&#30340;&#34920;&#36798;&#24335;</span>
+       <span style="color: #b0c4de;">exp</span>]
       <span style="color: #00ffff;">...</span> <span style="color: #00ffff;">...</span>
-      <span style="color: #ffffff;">[</span>`<span style="color: #ffffff;">(</span>,e1 ,e2<span style="color: #ffffff;">)</span>                                       
-       <span style="color: #ffffff;">(</span><span style="color: #00ffff;">let</span> <span style="color: #ffffff;">([</span><span style="color: #eedd82;">v1</span> <span style="color: #ffffff;">(</span>interp e1 env<span style="color: #ffffff;">)]</span>
-             <span style="color: #ffffff;">[</span><span style="color: #eedd82;">v2</span> <span style="color: #ffffff;">(</span>interp e2 env<span style="color: #ffffff;">)])</span>
-         <span style="color: #ffffff;">(</span><span style="color: #b0c4de;">match</span> v1
-           <span style="color: #ffffff;">[</span>`<span style="color: #ffffff;">(</span><span style="color: #00ffff;">lambda</span> <span style="color: #ffffff;">(</span>,x<span style="color: #ffffff;">)</span> ,e<span style="color: #ffffff;">)</span>                     <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#35843;&#29992;&#65306;&#30452;&#25509;&#20351;&#29992;&#20989;&#25968;&#30340;&#34920;&#36798;&#24335;&#26412;&#36523;</span>
-            <span style="color: #ffffff;">(</span>interp e <span style="color: #ffffff;">(</span>ext-env x v2 env<span style="color: #ffffff;">))]))]</span>
+      [`(,e1 ,e2)                                       
+       (<span style="color: #00ffff;">let</span> ([<span style="color: #eedd82;">v1</span> (interp e1 env)]
+             [<span style="color: #eedd82;">v2</span> (interp e2 env)])
+         (<span style="color: #b0c4de;">match</span> v1
+           [`(<span style="color: #00ffff;">lambda</span> (,x) ,e)                     <span style="color: #ff4500;">; </span><span style="color: #ff4500;">&#35843;&#29992;&#65306;&#30452;&#25509;&#20351;&#29992;&#20989;&#25968;&#30340;&#34920;&#36798;&#24335;&#26412;&#36523;</span>
+            (interp e (ext-env x v2 env))]))]
       <span style="color: #00ffff;">...</span> <span style="color: #00ffff;">...</span>
-      <span style="color: #ffffff;">)))</span>
+      )))
 </pre>
 </div>
 <p>
@@ -935,22 +994,18 @@ Racket的方式叫做lexical scoping，而Emacs的方式叫做dynamic scoping
 </div>
 </div>
 
-<div id="outline-container-sec-7" class="outline-2">
-<h2 id="sec-7">缺点</h2>
-<div class="outline-text-2" id="text-7">
+<div id="outline-container-org180f7c9" class="outline-2">
+<h2 id="org180f7c9">缺点</h2>
+<div class="outline-text-2" id="text-org180f7c9">
 <p>
 现在你已经学会了如何写出一个简单的解释器，它可以处理一个相当强的，具有“first-class 函数”的语言。出于教学的考虑，这个解释器并没有考虑实用的需求，所以它并不能作为“工业应用”。在这里，我指出它的一些不足之处
 </p>
 
 <ol class="org-ol">
-<li>缺少必要的语言构造。我们的语言里缺少好些实用语言必须的构造：递归，数组，赋值操作，字符串，自定义数据结构
-</li>
-<li>不合法代码的检测和报告。一个实用的解释器，必须加入对代码格式进行全面检测，报告不合法的代码结构
-</li>
-<li>低效率的数据结构。一个实用的解释器，需要更高效的数据结构。这种数据结构不一定非得是函数式的。你也可以用非函数式的数据结构（比如哈希表），经过一定的改造，达到同样的性质，却具有更高的效率。另外，你还可以把环境转化成一个数组。给环境里的每个变量分配一个下标（index），在这个数组里就可以找到它的值。如果你用数组表示环境，那么这个解释器就向编译器迈进了一步
-</li>
-<li>S表达式的歧义问题。我们的解释器直接使用S表达式来表达语法树，用模式匹配来进行分支遍历。在实际的语言里，这种方式会带来比较大的问题。因为S表达式是一种通用的数据结构，用它表示的东西，看起来都差不多的样子。一旦程序的语法构造多起来，直接对S表达式进行模式匹配，会造成歧义。 ​
-</li>
+<li>缺少必要的语言构造。我们的语言里缺少好些实用语言必须的构造：递归，数组，赋值操作，字符串，自定义数据结构</li>
+<li>不合法代码的检测和报告。一个实用的解释器，必须加入对代码格式进行全面检测，报告不合法的代码结构</li>
+<li>低效率的数据结构。一个实用的解释器，需要更高效的数据结构。这种数据结构不一定非得是函数式的。你也可以用非函数式的数据结构（比如哈希表），经过一定的改造，达到同样的性质，却具有更高的效率。另外，你还可以把环境转化成一个数组。给环境里的每个变量分配一个下标（index），在这个数组里就可以找到它的值。如果你用数组表示环境，那么这个解释器就向编译器迈进了一步</li>
+<li>S表达式的歧义问题。我们的解释器直接使用S表达式来表达语法树，用模式匹配来进行分支遍历。在实际的语言里，这种方式会带来比较大的问题。因为S表达式是一种通用的数据结构，用它表示的东西，看起来都差不多的样子。一旦程序的语法构造多起来，直接对S表达式进行模式匹配，会造成歧义。 ​</li>
 </ol>
 
 <p>
