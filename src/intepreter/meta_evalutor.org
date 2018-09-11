@@ -339,3 +339,230 @@ cond表达式可以被翻译成if表达式：
 #+END_SRC
 
 ** 数据结构
+
+*** 谓词检测
+所有 *非false* 对象都是 _逻辑真_
+#+BEGIN_SRC scheme
+  (define (true? x)
+    (not (eq? x false)))
+  (define (false? x)
+    (eq? x false))
+#+END_SRC
+
+*** 过程
+调用基本过程
+#+BEGIN_SRC scheme
+  (apply-primitive-procedure <proc> <args>)
+#+END_SRC
+
+测试是否基本过程
+#+BEGIN_SRC scheme
+  (primitive-procedure? <proc>)
+#+END_SRC
+
+复杂过程数据结构：
+#+BEGIN_SRC scheme
+  (define (make-procedure parameters body env)
+    (list 'procedure parameters body env))
+  (define (compound-procedure? p)
+    (tagged-list? p 'procedure))
+  (define (procedure-parameters p) (cadr p))
+  (define (procedure-body p) (caddr p))
+  (define (procedure-environment p) (cadddr p))
+#+END_SRC
+
+*** 环境
+环境是一系列框架的序列，框架是一个表格，其中的项就是变量名和值的绑定， 环境的主要操作是：
++ 查找变量值：
+#+BEGIN_EXAMPLE
+(lookup-variable-value <var> <env>)
+#+END_EXAMPLE
+取得符号 _<var>_ 在环境 _<env>_ 中的约束值，如果变量未被绑定则报错
++ 添加新的框架：
+#+BEGIN_EXAMPLE
+(extend-environment <variables> <values> <base-env>)
+#+END_EXAMPLE
+新建一个框架，在这个新框架里把 _<values>_ 序列中的值分别绑定到 _<variables>_ 序列中的变量名，这个新的框架指向 _<base_env>_ 环境
++ 定义变量：
+#+BEGIN_EXAMPLE
+  (define-variable! <var> <value> <env>) 
+#+END_EXAMPLE
+在 _<env>_ 环境中的 _第一个框架_ 中添加新的绑定 ，把 _<value>_  值绑定到 _<var>_ 变量上
++ 变量赋值：
+#+BEGIN_EXAMPLE
+  (set-variable-value! <var> <value> <env>)
+#+END_EXAMPLE
+在 _<env>_ 环境中把 _<var>_ 绑定的值改为 _<value>_ ，如果变量未绑定则报错
+
+**** 环境实现
+环境用框架的表来表示，
+#+BEGIN_SRC scheme
+  (define (enclosing-environment env) (cdr env))
+  (define (first-frame env) (car env))
+  (define the-empty-environment '())
+#+END_SRC
+
+框架是表的序对，car是变量名表，cdr是变量值表
+#+BEGIN_SRC scheme
+  (define (make-frame variables values)
+    (cons variables values))
+  (define (frame-variables frame) (car frame))
+  (define (frame-values frame) (cdr frame))
+  (define (add-binding-to-frame! var val frame)
+    (set-car! frame (cons var (car frame)))
+    (set-cdr! frame (cons val (cdr frame))))
+#+END_SRC
+
+添加新的框架
+#+BEGIN_SRC scheme
+  (define (extend-environment vars vals base-env)
+    (if (= (length vars) (length vals))
+	(cons (make-frame vars vals) base-env)
+	(if (< (length vars) (length vals))
+	    (error "Too many arguments supplied" vars vals)
+	    (error "Too few arguments supplied" vars vals))))
+#+END_SRC
+
+#+BEGIN_SRC scheme
+  (define (lookup-variable-value var env)
+    (define (env-loop env)
+      (define (scan vars vals)
+	(cond ((null? vars)
+	       (env-loop (enclosing-environment env)))
+	      ((eq? var (car vars))
+	       (car vals))
+	      (else (scan (cdr vars) (cdr vals)))))
+      (if (eq? env the-empty-environment)
+	  (error "Unbound variable" var)
+	  (let ((frame (first-frame env)))
+	    (scan (frame-variables frame)
+		  (frame-values frame)))))
+    (env-loop env))
+#+END_SRC
+
+变量赋值
+#+BEGIN_SRC scheme
+  (define (set-variable-value! var val env)
+    (define (env-loop env)
+      (define (scan vars vals)
+	(cond ((null? vars)
+	       (env-loop (enclosing-environment env)))
+	      ((eq? var (car vars))
+	       (set-car! vals val))
+	      (else (scan (cdr vars) (cdr vals)))))
+      (if (eq? env the-empty-environment)
+	  (error "Unbound variable -- SET!" var)
+	  (let ((frame (first-frame env)))
+	    (scan (frame-variables frame)
+		  (frame-values frame)))))
+    (env-loop env))
+#+END_SRC
+
+定义变量
+#+BEGIN_SRC scheme
+  (define (define-variable! var val env)
+    (let ((frame (first-frame env)))
+      (define (scan vars vals)
+	(cond ((null? vars)
+	       (add-binding-to-frame! var val frame))
+	      ((eq? var (car vars))
+	       (set-car! vals val))
+	      (else (scan (cdr vars) (cdr vals)))))
+      (scan (frame-variables frame)
+	    (frame-values frame))))
+#+END_SRC
+
+** 运行
+求值器递归到最后是对基本过程的调用，因此需要做一系列的设置：
++ 为每个基本过程在环境中做一个绑定，这样eval才能在求值过程中获得过程对象并传递给apply
++ 环境中还必须包含true, false等基础值的绑定
+
+#+BEGIN_SRC scheme
+  (define (setup-environment)
+    (let ((initial-env
+	   (extend-environment (primitive-procedure-names)
+			       (primitive-procedure-objects)
+			       the-empty-environment)))
+      (define-variable! 'true true initial-env)
+      (define-variable! 'false false initial-env)
+      initial-env))
+
+  (define the-global-environment (setup-environment))
+#+END_SRC
+
+基本过程如何表达并不重要，但是求值器必须能分辨是否基本过程，这里用符号 'primitive来标识：
+#+BEGIN_SRC scheme
+  (define (primitive-procedure? proc)
+    (tagged-list? proc 'primitive))
+
+  (define (primitive-implementation proc) (cadr proc))
+#+END_SRC
+
+定义基本过程：
+#+BEGIN_SRC scheme
+  (define primitive-procedures
+    (list (list 'car car)
+	  (list 'cdr cdr)
+	  (list 'cons cons)
+	  (list 'null? null?)
+	  (list '+ +)
+	  (list '> >)
+	  (list '= =)
+	  (list '* *) 
+	 ;; <more primitives>
+	  ))
+  (define (primitive-procedure-names)
+    (map car
+	 primitive-procedures))
+
+  (define (primitive-procedure-objects)
+    (map (lambda (proc) (list 'primitive (cadr proc)))
+	 primitive-procedures))
+#+END_SRC
+
+调用基本过程，使用基础scheme系统提供的apply方法
+#+BEGIN_SRC scheme
+  (define (apply-primitive-procedure proc args)
+    (apply-in-underlying-scheme
+     (primitive-implementation proc) args))
+#+END_SRC
+
+*** 定义REPL
+提示符 -> 输入 -> 读取 -> 求值 -> 打印结果 -> 提示符 
+#+BEGIN_SRC scheme
+  (define input-prompt ";;; M-Eval input:")
+  (define output-prompt ";;; M-Eval value:")
+
+  (define (driver-loop)
+    (prompt-for-input input-prompt)
+    (let ((input (read)))
+      (let ((output (eval input the-global-environment)))
+	(announce-output output-prompt)
+	(user-print output)))
+    (driver-loop))
+
+  (define (prompt-for-input string)
+    (newline) (newline) (display string) (newline))
+
+  (define (announce-output string)
+    (newline) (display string) (newline))
+#+END_SRC
+
+为了避免打印复合过程的环境：
+#+BEGIN_SRC scheme
+  define (user-print object)
+    (if (compound-procedure? object)
+	(display (list 'compound-procedure
+		       (procedure-parameters object)
+		       (procedure-body object)
+		       '<procedure-env>))
+	(display object)))
+#+END_SRC
+
+启动求值器：
+#+BEGIN_SRC scheme
+  (define the-global-environment (setup-environment))
+  (driver-loop)
+#+END_SRC
+
+
