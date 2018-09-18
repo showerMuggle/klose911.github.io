@@ -202,20 +202,35 @@
 ;; (rest-operands '(y 2)) ; => (2)
 ;; (rest-operands '(y (+ 20 x) 40)) ; => ((+ 20 x) 40)
 
-
 (define (cond? exp) (tagged-list? exp 'cond))
+;; (cond? '(cond
+;; 	 ((null? seq) seq)
+;; 	 ((last-exp? seq) (first-exp seq))
+;; 	 (else (make-begin seq)))) ; => #t
 
 (define (cond-clauses exp) (cdr exp))
+;; (cond-clauses '(cond
+;; 	 ((null? seq) seq)
+;; 	 ((last-exp? seq) (first-exp seq))
+;; 	 (else (make-begin seq))))
+;; => (((null? seq) seq)
+;;     ((last-exp? seq) (first-exp seq))
+;;     (else (make-begin seq)))
 
 (define (cond-else-clause? clause)
   (eq? (cond-predicate clause) 'else))
+;; (cond-else-clause? '((null? seq) seq)) ; => #f
+;; (cond-else-clause? '(else (make-begin seq))) ; => #t 
 
 (define (cond-predicate clause) (car clause))
+;; (cond-predicate '((null? seq) seq)) ; => (null? seq) 
+;; (cond-predicate '((last-exp? seq) (first-exp seq))) ; => (last-exp? seq) 
+;; (cond-predicate '(else (make-begin seq))) ; => else
 
 (define (cond-actions clause) (cdr clause))
-
-(define (cond->if exp)
-  (expand-clauses (cond-clauses exp)))
+;; (cond-actions '((null? seq) seq)) ; => (seq) 
+;; (cond-actions '((last-exp? seq) (first-exp seq))) ; => ((first-exp seq))
+;; (cond-actions '(else (make-begin seq))) ; => ((make-begin seq))
 
 (define (expand-clauses clauses)
   (if (null? clauses)
@@ -230,6 +245,36 @@
             (make-if (cond-predicate first)
                      (sequence->exp (cond-actions first))
                      (expand-clauses rest))))))
+
+;; (expand-clauses '()) ; => false
+
+;; (expand-clauses '(((null? seq) seq)
+;; 		     ((last-exp? seq) (first-exp seq))
+;; 		     (else (make-begin seq))))
+;; => (if
+;;     (null? seq) seq
+;;     (if (last-exp? seq)
+;; 	(first-exp seq)
+;; 	(make-begin seq)))
+
+(define (cond->if exp)
+  (expand-clauses (cond-clauses exp)))
+
+;; (cond-clauses '(cond ((null? seq) seq)
+;; 	             ((last-exp? seq) (first-exp seq))
+;; 	             (else (make-begin seq))))
+;; => (((null? seq) seq)
+;;     ((last-exp? seq) (first-exp seq))
+;;     (else (make-begin seq))
+
+;; (cond->if '(cond ((null? seq) seq)
+;; 	          ((last-exp? seq) (first-exp seq))
+;; 	          (else (make-begin seq))))
+;; => (if
+;;     (null? seq) seq
+;;     (if (last-exp? seq)
+;; 	(first-exp seq)
+;; 	(make-begin seq)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -427,7 +472,8 @@
         (list 'cdr cdr)
         (list 'cons cons)
         (list 'null? null?)
-	(list '+ +) 
+	(list '+ +)
+	(list '> >)
 ;;      more primitives
         ))
 ;; primitive-procedures 
@@ -613,10 +659,59 @@
       (eval (if-consequent exp) env)
       (eval (if-alternative exp) env)))
 
+;; (define test-environment (setup-environment))
+;; (eval '(if (null? '(1 2)) (+ 3 4) (+ 5 6)) test-environment) ;=> 11
+;; (if-predicate '(if (null? '(1 2)) (+ 3 4) (+ 5 6))) ; => (null? (quote (1 2))) 
+;; (eval '(null? '(1 2)) test-environment) ; => #f
+;; (if-alternative '(if (null? '(1 2)) (+ 3 4) (+ 5 6)))  ; => (+ 5 6)
+;; (eval '(+ 5 6) test-environment) ; => 11 
+
 (define (eval-sequence exps env)
   (cond ((last-exp? exps) (eval (first-exp exps) env))
         (else (eval (first-exp exps) env)
               (eval-sequence (rest-exps exps) env))))
+
+;; (define test-environment (setup-environment))
+;; (eval-sequence '((+ 1 2) true (+ 2 3)) test-environment) ; =>5 
+;; (last-exp? '((+ 1 2) true (+ 2 3))) ; => #f
+;; (first-exp '((+ 1 2) true (+ 2 3))) ; => (+ 1 2)
+;; (eval '(+ 1 2) test-environment) ; => 5
+;; (rest-exps '((+ 1 2) true (+ 2 3))) ; => (true (+ 2 3))
+
+;; (eval-sequence '(true (+ 2 3)) test-environment) ; =>5
+;; (last-exp? '(true (+ 2 3))) ; => #f
+;; (first-exp '(true (+ 2 3))) ; => true
+;; (eval 'true test-environment) ; => #t
+;; (rest-exps '(true (+ 2 3))) ; => ((+ 2 3))
+
+;; (eval-sequence '((+ 2 3)) test-environment) ; =>5
+;; (last-exp? '((+ 2 3))) ; => #t
+;; (first-exp '((+ 2 3))) ; => (+ 2 3)
+;; (eval '(+ 2 3) test-environment) ; => 5
+
+
+(define (eval-definition exp env)
+  (define-variable! (definition-variable exp)
+                    (eval (definition-value exp) env)
+                    env)
+  'ok)
+
+;; (define test-environment (setup-environment))
+;; (eval-definition '(define a (+ 100 200)) test-environment) ; => ok
+;; (definition-variable '(define a (+ 100 200))) ; => a
+;; (definition-value '(define a (+ 100 200))) ; => (+ 100 200)
+;; (eval '(+ 100 200) test-environment) ; => 300 
+;; (define-variable! 'a 300 test-environment) ; => 
+;; test-environment
+;; => (((a false true car cdr cons null? +)
+;;      300
+;;      #f
+;;      #t
+;;      (primitive #[compiled-procedure 26 ("list" #x1) #x1a #x1bf9052])
+;;      (primitive #[compiled-procedure 27 ("list" #x2) #x1a #x1bf90c2])
+;;      (primitive #[compiled-procedure 28 ("list" #x3) #x14 #x1bf912c])
+;;      (primitive #[compiled-procedure 29 ("list" #x5) #x14 #x1bf91cc])
+;;      (primitive #[arity-dispatched-procedure 30])))
 
 (define (eval-assignment exp env)
   (set-variable-value! (assignment-variable exp)
@@ -624,11 +719,34 @@
                        env)
   'ok)
 
-(define (eval-definition exp env)
-  (define-variable! (definition-variable exp)
-                    (eval (definition-value exp) env)
-                    env)
-  'ok)
+;; (define test-environment (setup-environment))
+;; (eval-definition '(define a (+ 100 200)) test-environment)
+;; test-environment
+;; => (((a false true car cdr cons null? +)
+;;      300
+;;      #f
+;;      #t
+;;      (primitive #[compiled-procedure 26 ("list" #x1) #x1a #x1bf9052])
+;;      (primitive #[compiled-procedure 27 ("list" #x2) #x1a #x1bf90c2])
+;;      (primitive #[compiled-procedure 28 ("list" #x3) #x14 #x1bf912c])
+;;      (primitive #[compiled-procedure 29 ("list" #x5) #x14 #x1bf91cc])
+;;      (primitive #[arity-dispatched-procedure 30])))
+
+;; (eval-assignment '(set! a (+ 200 300)) test-environment) ; => ok 
+;; (assignment-variable '(set! a (+ 200 300))) ; => a
+;; (assignment-value '(set! a (+ 200 300))) ; =>  (+ 200 300)
+;; (eval '(+ 200 300) test-environment) ; => 500
+;; (set-variable-value! 'a 500 test-environment)
+;; test-environment
+;; => (((a false true car cdr cons null? +)
+;;      500
+;;      #f
+;;      #t
+;;      (primitive #[compiled-procedure 26 ("list" #x1) #x1a #x1bf9052])
+;;      (primitive #[compiled-procedure 27 ("list" #x2) #x1a #x1bf90c2])
+;;      (primitive #[compiled-procedure 28 ("list" #x3) #x14 #x1bf912c])
+;;      (primitive #[compiled-procedure 29 ("list" #x5) #x14 #x1bf91cc])
+;;      (primitive #[arity-dispatched-procedure 30])))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; read->eval->print loop ;;
