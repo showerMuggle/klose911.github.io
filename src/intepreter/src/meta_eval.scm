@@ -85,7 +85,6 @@
       (caddr exp)
       (make-lambda (cdadr exp)
                    (cddr exp))))
-
 ;; (definition-value '(define zero 0)) ; => 0
 
 ;; (definition-value '(define add (lambda (x y) (+ x y)))) ; => (lambda (x y) (+ x y)) 
@@ -141,7 +140,7 @@
 ;; (begin? '(begin (set! balance (- balance amount)) balance)) ;=> #t
 
 (define (begin-actions exp) (cdr exp))
-(begin-actions '(begin (set! balance (- balance amount)) balance)) ; => ((set! balance (- balance amount)) balance)
+;; (begin-actions '(begin (set! balance (- balance amount)) balance)) ; => ((set! balance (- balance amount)) balance)
 
 (define (last-exp? seq) (null? (cdr seq)))
 ;; (last-exp? '((set! balance (- balance amount)) balance)) ; => #f
@@ -181,8 +180,8 @@
 ;; (application? '(add (+ 20 x) 40)) ; => #t
 
 (define (operator exp) (car exp))
-(operator '(/ y 2)) ; => /
-(operator '(add (+ 20 x) 40)) ; => add
+;; (operator '(/ y 2)) ; => /
+;; (operator '(add (+ 20 x) 40)) ; => add
 
 (define (operands exp) (cdr exp))
 ;; (operands '(/ y 2)) ; => (y 2)
@@ -259,7 +258,6 @@
 
 (define (cond->if exp)
   (expand-clauses (cond-clauses exp)))
-
 ;; (cond-clauses '(cond ((null? seq) seq)
 ;; 	             ((last-exp? seq) (first-exp seq))
 ;; 	             (else (make-begin seq))))
@@ -338,12 +336,12 @@
 ;; 			 ((a b) 300 400))) ; => (((x y) "hello" "world") ((a b) 300 400))
 
 (define (first-frame env) (car env))
-(first-frame '(((a b) 300 400))) ; => ((a b) 300 400) 
-(first-frame '(((x y z) "hello" "world"  (procedure (u v) (+ u v)))
-			 ((a b) 300 400)))  ; => ((x y z) "hello" "world" (procedure (u v) (+ u v)))  
-(first-frame '(((add) (procedure (u v) (+ u v))) 
-			 ((x y) "hello" "world")
-			 ((a b) 300 400))) ; => ((add) (procedure (u v) (+ u v))) 
+;; (first-frame '(((a b) 300 400))) ; => ((a b) 300 400) 
+;; (first-frame '(((x y z) "hello" "world"  (procedure (u v) (+ u v)))
+;; 			 ((a b) 300 400)))  ; => ((x y z) "hello" "world" (procedure (u v) (+ u v)))  
+;; (first-frame '(((add) (procedure (u v) (+ u v))) 
+;; 			 ((x y) "hello" "world")
+;; 			 ((a b) 300 400))) ; => ((add) (procedure (u v) (+ u v))) 
 
 (define the-empty-environment '())
 
@@ -688,7 +686,6 @@
 ;; (last-exp? '((+ 2 3))) ; => #t
 ;; (first-exp '((+ 2 3))) ; => (+ 2 3)
 ;; (eval '(+ 2 3) test-environment) ; => 5
-
 
 (define (eval-definition exp env)
   (define-variable! (definition-variable exp)
