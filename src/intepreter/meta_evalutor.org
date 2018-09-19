@@ -5,9 +5,9 @@
 用一种语言实现其自身的求值器，这叫做 *元循环* 
 
 * 基本求值过程
-  1. eval:  对一个表达式 *求值*
+  + eval:  对一个表达式 *求值*
      + 组合表达式：先 _求子表达式的值_ ，而后把 _运算符的子表达式的值_ *作用* 于 _运算参数子表达式的值_ 
-  2. apply: 把一组参数值 *作用* 于一个过程体
+  + apply: 把一组参数值 *作用* 于一个过程体
      + 复杂过程：原来环境上添加一个新的 _框架_ ，在新的框架上把 _实参值_  *绑定* 到过程的 _形参_ 上，在这个 *新的环境* 中对 _过程体_ *求值* 
 
 
@@ -26,10 +26,10 @@
 *** eval 
     *eval* 以一个 _表达式_ 和 _环境_ 作为参数，对表达式进行求值：
     + 基本表达式：
-      + 各种 _自求值_ 表达式：直接返回，如 _数_ ， _字符串_ 等
+      + _自求值_ ：直接返回，如 _数_ ， _字符串_ 等
       + _变量_ ：从环境查询变量
     + 特殊表达式：
-      + _引号_ 表达式：返回被引用的表达式
+      + _引号_ ：返回被引用的表达式
       + 变量 _赋值_ 或 _定义_ ：修改环境，建立或者修改相关的约束
       + _if_ ：条件部分求值，然后根据情况对相应的子表达式进行求值
       + _lambda_ ：建立过程对象，包装相应的过程体，形参，和环境
@@ -333,15 +333,16 @@
     #+END_EXAMPLE
 
     #+BEGIN_SRC scheme
-  (define (quoted? exp)
-    (tagged-list? exp 'quote))
-  ;; (tagged-list? '(define a 1) 'quote) ; #f
-  ;; (tagged-list? '(quote 1 2) 'quote) ; #t
-
-  (define (text-of-quotation exp) (cadr exp))
-  ;; (text-of-quotation '(quote abc)) ; abc 
+      (define (quoted? exp)
+	(tagged-list? exp 'quote))
+      ;; (tagged-list? '(define a 1) 'quote) ; #f
+      ;; (tagged-list? '(quote 1 2) 'quote) ; #t
     #+END_SRC
 
+    #+BEGIN_SRC scheme
+      (define (text-of-quotation exp) (cadr exp))
+      ;; (text-of-quotation '(quote abc)) ; abc 
+    #+END_SRC
 *** 赋值表达式
     #+BEGIN_EXAMPLE
       (set! <var> <value>)
@@ -352,16 +353,19 @@
     (tagged-list? exp 'set!))
   ;; (assignment? '(set! a b)) ; => #t
   ;; (assignment? '(quote a)) ; => #f
+    #+END_SRC
 
+    #+BEGIN_SRC scheme
   (define (assignment-variable exp)
     (cadr exp))
   ;; (assignment-variable '(set! x (+ b 200))) ; => x
+    #+END_SRC
 
+    #+BEGIN_SRC scheme
   (define (assignment-value exp)
     (caddr exp))
   ;; (assignment-value '(set! x (+ b 200))) ; => (+ b 200) 
     #+END_SRC
-
 *** 定义表达式
     #+BEGIN_EXAMPLE
       (define <var> <value>)
@@ -376,38 +380,41 @@
     #+END_EXAMPLE
 
     #+BEGIN_SRC scheme
-  (define (definition? exp)
-    (tagged-list? exp 'define))
-  ;; (definition? '(define zero 0))  ; => #t
-  ;; (definition? '(define add (lambda (x y) (+ x y)))) ; => #t
-  ;; (definition? '(define (sub x y) (- x y))  ; => #t
-  ;; (definition? '(quote define)) ; => #f
-
-  (define (definition-variable exp)
-    (if (symbol? (cadr exp))
-	(cadr exp)
-	(caadr exp)))
-  ;; (definition-variable '(define zero 0)) ; => zero
-  ;; (definition-variable '(define add (lambda (x y) (+ x y)))) ; => add
-  ;; (definition-variable '(define (sub x y) (- x y)))) ; => sub
-
-  (define (definition-value exp)
-    (if (symbol? (cadr exp))
-	(caddr exp)
-	(make-lambda (cdadr exp)   ; formal parameters
-		     (cddr exp)))) ; body
-  ;; (definition-value '(define zero 0)) ; => 0
-
-  ;; (definition-value '(define add (lambda (x y) (+ x y)))) ; => (lambda (x y) (+ x y)) 
-  ;; (cadr '(define add (lambda (x y) (+ x y)))) => add 
-  ;; (caddr '(define add (lambda (x y) (+ x y)))) ; => (lambda (x y) (+ x y)) 
-
-  ;; (definition-value '(define (sub x y) (- x y))) ; => (lambda (x y) (- x y))
-  ;; (cdadr '(define (sub x y) (- x y))) ; => (x y)
-  ;; (cddr '(define (sub x y) (- x y))) ; => ((- x y))
-  ;; (make-lambda '(x y) '((- x y))) ; =>  (lambda (x y) (-x  y))
+      (define (definition? exp)
+	(tagged-list? exp 'define))
+      ;; (definition? '(define zero 0))  ; => #t
+      ;; (definition? '(define add (lambda (x y) (+ x y)))) ; => #t
+      ;; (definition? '(define (sub x y) (- x y))  ; => #t
+      ;; (definition? '(quote define)) ; => #f
     #+END_SRC
 
+    #+BEGIN_SRC scheme
+      (define (definition-variable exp)
+	(if (symbol? (cadr exp))
+	    (cadr exp)
+	    (caadr exp)))
+      ;; (definition-variable '(define zero 0)) ; => zero
+      ;; (definition-variable '(define add (lambda (x y) (+ x y)))) ; => add
+      ;; (definition-variable '(define (sub x y) (- x y)))) ; => sub    
+    #+END_SRC
+
+    #+BEGIN_SRC scheme
+      (define (definition-value exp)
+	(if (symbol? (cadr exp))
+	    (caddr exp)
+	    (make-lambda (cdadr exp)   ; formal parameters
+			 (cddr exp)))) ; body
+      ;; (definition-value '(define zero 0)) ; => 0
+
+      ;; (definition-value '(define add (lambda (x y) (+ x y)))) ; => (lambda (x y) (+ x y)) 
+      ;; (cadr '(define add (lambda (x y) (+ x y)))) => add 
+      ;; (caddr '(define add (lambda (x y) (+ x y)))) ; => (lambda (x y) (+ x y)) 
+
+      ;; (definition-value '(define (sub x y) (- x y))) ; => (lambda (x y) (- x y))
+      ;; (cdadr '(define (sub x y) (- x y))) ; => (x y)
+      ;; (cddr '(define (sub x y) (- x y))) ; => ((- x y))
+      ;; (make-lambda '(x y) '((- x y))) ; =>  (lambda (x y) (-x  y))
+    #+END_SRC
 *** lambda表达式
     一个以 _lambda_ 开头的 *表* 
 
@@ -419,16 +426,19 @@
   (define (lambda? exp) (tagged-list? exp 'lambda))
   ;; (lambda? '(quote a)) ; #f
   ;; (lambda? '(lambda (x y) (- x y))) ; #t
-
-  (define (lambda-parameters exp)
-    (cadr exp))
-  ;; (lambda-parameters '(lambda (x y) (- x y))) ; => (x y)
-
-  (define (lambda-body exp)
-    (cddr exp))
-  ;; (lambda-body '(lambda (x y) (- x y))) ; => ((- x y)) 
     #+END_SRC
 
+    #+BEGIN_SRC scheme
+      (define (lambda-parameters exp)
+	(cadr exp))
+      ;; (lambda-parameters '(lambda (x y) (- x y))) ; => (x y)    
+    #+END_SRC
+
+    #+BEGIN_SRC scheme
+      (define (lambda-body exp)
+	(cddr exp))
+      ;; (lambda-body '(lambda (x y) (- x y))) ; => ((- x y)) 
+    #+END_SRC
     为 _definion-value_ 提供一个 _lambda构造器_ 
     #+BEGIN_SRC scheme
   (define (make-lambda parameters body)
@@ -441,27 +451,33 @@
     (if (<predicate>) (<consequent>) (<alternative>))  
     #+END_EXAMPLE
 
-    如果 _alternative_ 表达式确实，则返回 _false_ 
     #+BEGIN_SRC scheme
-  (define (if? exp) (tagged-list? exp 'if))
-  ;; (if? '(quote  a)) ; => #f
-  ;; (if? '(if (> 2 1) 4 )) ; => #t
-  ;; (if? '(if (> a b) 1 2)) ; => #t 
+      (define (if? exp) (tagged-list? exp 'if))
+      ;; (if? '(quote  a)) ; => #f
+      ;; (if? '(if (> 2 1) 4 )) ; => #t
+      ;; (if? '(if (> a b) 1 2)) ; => #t 
+    #+END_SRC
+          
+    #+BEGIN_SRC scheme
+      (define (if-predicate exp) (cadr exp))
+      ;; (if-predicate '(if (> 2 1) 4 )) ; => (> 2 1) 
+      ;; (if-predicate '(if (> a b) (+ 1 2) (/ 4 2))) ; => (> a b)
+    #+END_SRC
+    
+    #+BEGIN_SRC scheme
+      (define (if-consequent exp) (caddr exp))
+      ;; (if-consequent '(if (> 2 1) 4 )) ; => 4 
+      ;; (if-consequent '(if (> a b) (+ 1 2) (/ 4 2))) ; => (+ 1 2)    
+    #+END_SRC
 
-  (define (if-predicate exp) (cadr exp))
-  ;; (if-predicate '(if (> 2 1) 4 )) ; => (> 2 1) 
-  ;; (if-predicate '(if (> a b) (+ 1 2) (/ 4 2))) ; => (> a b)
-
-  (define (if-consequent exp) (caddr exp))
-  ;; (if-consequent '(if (> 2 1) 4 )) ; => 4 
-  ;; (if-consequent '(if (> a b) (+ 1 2) (/ 4 2))) ; => (+ 1 2)
-
-  (define (if-alternative exp)
-    (if (not (null? (cdddr exp)))
-	(cadddr exp)
-	'false))
-  ;; (if-alternative '(if (> 2 1) 4 )) ; => false
-  ;; (if-alternative '(if (> a b) (+ 1 2) (/ 4 2))) ; =>  (/ 4 2)
+    如果没有 _alternative_ 表达式，则返回 _false_ 
+    #+BEGIN_SRC scheme
+      (define (if-alternative exp)
+	(if (not (null? (cdddr exp)))
+	    (cadddr exp)
+	    'false))
+      ;; (if-alternative '(if (> 2 1) 4 )) ; => false
+      ;; (if-alternative '(if (> a b) (+ 1 2) (/ 4 2))) ; =>  (/ 4 2)
     #+END_SRC
 
     为 _cond->if_ 提供一个构造器：
@@ -476,20 +492,29 @@
   (define (begin? exp) (tagged-list? exp 'begin))
   ;; (begin? '(quote a)) ;=> f
   ;; (begin? '(begin (set! balance (- balance amount)) balance)) ;=> #t
+    #+END_SRC
 
+    #+BEGIN_SRC scheme
   (define (begin-actions exp) (cdr exp))
   ;; (begin-actions '(begin (set! balance (- balance amount)) balance)) ; => ((set! balance (- balance amount)) balance)
 
+    #+END_SRC
+
+    #+BEGIN_SRC scheme
   (define (last-exp? seq) (null? (cdr seq)))
   ;; (last-exp? '((set! balance (- balance amount)) balance)) ; => #f
   ;; (last-exp? '(balance)) ; => #t
   ;; (last-exp? '((* 2 5))) ; => #t
   ;; (last-exp? '(* 2 5)) ; => #f
+    #+END_SRC
 
+    #+BEGIN_SRC scheme
   (define (first-exp seq) (car seq))
   ;; (first-exp '((set! balance (- balance amount)) balance)) ; => (set! balance (- balance amount)) 
   ;; (first-exp '((+ 1 2) (/ 4 2) (* 2 5))) ; => (+ 1 2)
+    #+END_SRC
 
+    #+BEGIN_SRC scheme
   (define (rest-exps seq) (cdr seq))
   ;; (rest-exps '((set! balance (- balance amount)) balance)) ; => (balance)
   ;; (rest-exps '((/ 4 2) (* 2 5))) ; => ((* 2 5)) 
@@ -505,12 +530,13 @@
   ;; (sequence->exp '((+ 1 2))) ; =>  (+ 1 2) 
   ;; (sequence->exp '((set! balance (- balance amount)) balance)) ; => (begin (set! balance (- balance amount)) balance)
   ;; (sequence->exp '((+ 1 2) (/ 4 2) (* 2 5))) ; =>  (begin (+ 1 2) (/ 4 2) (* 2 5))
-
-  (define (make-begin seq) (cons 'begin seq))
-  ;; (make-begin '((set! balance (- balance amount)) balance)) ; => (begin (set! balance (- balance amount)) balance)
-  ;; (make-begin '((+ 1 2) (/ 4 2) (* 2 5))) ; =>  (begin (+ 1 2) (/ 4 2) (* 2 5)) 
     #+END_SRC
 
+    #+BEGIN_SRC scheme
+  (define (make-begin seq) (cons 'begin seq))
+  ;; (make-begin '((set! balance (- balance amount)) balance)) ; => (begin (set! balance (- balance amount)) balance)
+  ;; (make-begin '((+ 1 2) (/ 4 2) (* 2 5))) ; =>  (begin (+ 1 2) (/ 4 2) (* 2 5))
+    #+END_SRC
 *** cond表达式
     #+BEGIN_SRC scheme
   (cond ((> x 0) x)
@@ -535,7 +561,9 @@
   ;; 	 ((null? seq) seq)
   ;; 	 ((last-exp? seq) (first-exp seq))
   ;; 	 (else (make-begin seq)))) ; => #t
+    #+END_SRC
 
+    #+BEGIN_SRC scheme
   (define (cond-clauses exp) (cdr exp))
   ;; (cond-clauses '(cond
   ;; 	 ((null? seq) seq)
@@ -544,22 +572,30 @@
   ;; => (((null? seq) seq)
   ;;     ((last-exp? seq) (first-exp seq))
   ;;     (else (make-begin seq)))
+    #+END_SRC
 
+    #+BEGIN_SRC scheme
   (define (cond-else-clause? clause)
     (eq? (cond-predicate clause) 'else))
   ;; (cond-else-clause? '((null? seq) seq)) ; => #f
   ;; (cond-else-clause? '(else (make-begin seq))) ; => #t 
+    #+END_SRC
 
+    #+BEGIN_SRC scheme
   (define (cond-predicate clause) (car clause))
   ;; (cond-predicate '((null? seq) seq)) ; => (null? seq) 
   ;; (cond-predicate '((last-exp? seq) (first-exp seq))) ; => (last-exp? seq) 
   ;; (cond-predicate '(else (make-begin seq))) ; => else
+    #+END_SRC
 
+    #+BEGIN_SRC scheme
   (define (cond-actions clause) (cdr clause))
   ;; (cond-actions '((null? seq) seq)) ; => (seq) 
   ;; (cond-actions '((last-exp? seq) (first-exp seq))) ; => ((first-exp seq))
   ;; (cond-actions '(else (make-begin seq))) ; => ((make-begin seq))
+    #+END_SRC
 
+    #+BEGIN_SRC scheme
   (define (expand-clauses clauses)
     (if (null? clauses)
 	'false                          ; no else clause
@@ -584,7 +620,9 @@
   ;;     (if (last-exp? seq)
   ;; 	(first-exp seq)
   ;; 	(make-begin seq)))
+    #+END_SRC
 
+    #+BEGIN_SRC scheme
   (define (cond->if exp)
     (expand-clauses (cond-clauses exp)))
   ;; (cond-clauses '(cond ((null? seq) seq)
@@ -616,30 +654,39 @@
   ;; (application? '(deine add_1 (lambda (x) (+ 1 x)))) ; => #t
   ;; (application? '(/ y 2)) ; => #t
   ;; (application? '(add (+ 20 x) 40)) ; => #t
+    #+END_SRC
 
+    #+BEGIN_SRC scheme
   (define (operator exp) (car exp)) ;; 运算符
   ;; (operator '(/ y 2)) ; => /
   ;; (operator '(add (+ 20 x) 40)) ; => add
+    #+END_SRC
 
+    #+BEGIN_SRC scheme
   (define (operands exp) (cdr exp)) ;;运算参数
   ;; (operands '(/ y 2)) ; => (y 2)
   ;; (operands '(add (+ 20 x) 40)) ; =>  ((+ 20 x) 40)
+    #+END_SRC
 
+    #+BEGIN_SRC scheme
   (define (no-operands? ops) (null? ops))
   ;; (no-operands? '())  ; => #t
   ;; (no-operands? '(y 2))  ; => #f
   ;; (no-operands? '((+ 20 x) 40))  ; => #f
+    #+END_SRC
 
+    #+BEGIN_SRC scheme
   (define (first-operand ops) (car ops))
   ;; (first-operand '(y 2)) ; => y
   ;; (first-operand '((+ 20 x) 40)) ; => (+ 20 x)
+    #+END_SRC
 
+    #+BEGIN_SRC scheme
   (define (rest-operands ops) (cdr ops))
   ;; (rest-operands '(x)) ; => ()
   ;; (rest-operands '(y 2)) ; => (2)
   ;; (rest-operands '(y (+ 20 x) 40)) ; => ((+ 20 x) 40)
     #+END_SRC
-
 ** 数据结构
 
 *** 谓词检测
@@ -655,7 +702,9 @@
 
   ;; (true? false) ; => #f 
   ;; (true? (not true)) ; => #f 
+    #+END_SRC
 
+    #+BEGIN_SRC scheme
   (define (false? x)
     (eq? x false))
   ;; (false? 100) ; => #f
@@ -667,7 +716,6 @@
   ;; (false? false) ; => #t 
   ;; (false? (not true)) ; => #t 
     #+END_SRC
-
 *** 过程
     基本过程
     #+BEGIN_SRC scheme
@@ -685,21 +733,29 @@
     (list 'procedure parameters body env))
   ;; (make-procedure '(x y) '(+ x y) '()) ; =>  (procedure (x y) (+ x y) ())
   ;; (make-procedure '() '(/ 20 5) '()) ; => (procedure () (/ 20 5) ()) 
+    #+END_SRC
 
+    #+BEGIN_SRC scheme
   (define (compound-procedure? p)
     (tagged-list? p 'procedure))
   ;; (compound-procedure? '(procedure (x y) (+ x y) ())) ; =>#t
   ;; (compound-procedure? '(procedure () (/ 20 5) ())) ; => #t 
-  ;; (compound-procedure? '(primitive () (/ 20 5) ())) ; => #f 
+  ;; (compound-procedure? '(primitive () (/ 20 5) ())) ; => #f
+    #+END_SRC
 
+    #+BEGIN_SRC scheme
   (define (procedure-parameters p) (cadr p))
   ;; (procedure-parameters '(procedure (x y) (+ x y) ())) ; => (x y)
   ;; (procedure-parameters '(procedure () (/ 20 5) ())) ; => ()
+    #+END_SRC
 
+    #+BEGIN_SRC scheme
   (define (procedure-body p) (caddr p))
   ;; (procedure-body '(procedure (x y) (+ x y) ())) ; => (+ x y)
   ;; (procedure-body '(procedure () (/ 20 5) ())) ; =>  (/ 20 5)
+    #+END_SRC
 
+    #+BEGIN_SRC scheme
   (define (procedure-environment p) (cadddr p))
   ;; (procedure-environment '(procedure (x y) (+ x y) (((a b) 300 400)))) ; => (((a b) 300 400)) 
   ;; (cadddr '(procedure (x y) (+ x y) (((a b) 300 400)))) ; =>  (((a b) 300 400))
@@ -734,6 +790,10 @@
 **** 环境实现
      _环境_ 用 _框架的表_ 来表示，
      #+BEGIN_SRC scheme
+  (define the-empty-environment '())
+     #+END_SRC
+
+     #+BEGIN_SRC scheme
   (define (enclosing-environment env) (cdr env))
   ;; (enclosing-environment '(((a b) 300 400))) ; => () 
   ;; (enclosing-environment '(((x y z) "hello" "world"  (procedure (u v) (+ u v)))
@@ -741,7 +801,9 @@
   ;; (enclosing-environment '(((add) (procedure (u v) (+ u v))) 
   ;; 			 ((x y) "hello" "world")
   ;; 			 ((a b) 300 400))) ; => (((x y) "hello" "world") ((a b) 300 400))
+     #+END_SRC
 
+     #+BEGIN_SRC scheme
   (define (first-frame env) (car env))
   ;; (first-frame '(((a b) 300 400))) ; => ((a b) 300 400) 
   ;; (first-frame '(((x y z) "hello" "world"  (procedure (u v) (+ u v)))
@@ -749,8 +811,6 @@
   ;; (first-frame '(((add) (procedure (u v) (+ u v))) 
   ;; 			 ((x y) "hello" "world")
   ;; 			 ((a b) 300 400))) ; => ((add) (procedure (u v) (+ u v))) 
-
-  (define the-empty-environment '())
      #+END_SRC
 
      _框架_ 是 _表的序对_ ， _car_ 是 _变量名表_ ， _cdr_ 是 _变量值表_ 
@@ -760,7 +820,9 @@
   ;; (make-frame '(x) '(100)) ; => ((x) 100) 
   ;; (make-frame '(x y) '(100 200))  ; => ((x y) 100 200) 
   ;; (make-frame '(x y add) '(100 200 (lambda (x y) (+ x y)))) ; => ((x y add) 100 200 (lambda (x y) (+ x y))) 
+     #+END_SRC
 
+     #+BEGIN_SRC scheme
   (define (frame-variables frame) (car frame))
   (define (frame-values frame) (cdr frame))
   (define (add-binding-to-frame! var val frame)
@@ -793,7 +855,8 @@
   ;;     ((a b) 300 400)
   ;;     )
      #+END_SRC
-
+     
+     查找变量
      #+BEGIN_SRC scheme
   (define (lookup-variable-value var env)
     (define (env-loop env)
@@ -886,24 +949,25 @@
    + 环境中还必须包含 _true_ , _false_ 等基础值的绑定
 
    #+BEGIN_SRC scheme
-  (define (setup-environment)
-    (let ((initial-env
-	   (extend-environment (primitive-procedure-names)
-			       (primitive-procedure-objects)
-			       the-empty-environment)))
-      (define-variable! 'true true initial-env)
-      (define-variable! 'false false initial-env)
-      initial-env))
+     (define (setup-environment)
+       (let ((initial-env
+	      (extend-environment (primitive-procedure-names)
+				  (primitive-procedure-objects)
+				  the-empty-environment)))
+	 (define-variable! 'true true initial-env)
+	 (define-variable! 'false false initial-env)
+	 initial-env))
 
-  (define the-global-environment (setup-environment))
-  ;; => (((false true car cdr cons null? +)
-  ;;      #f
-  ;;      #t
-  ;;      (primitive #[compiled-procedure 18 ("list" #x1) #x1a #x12ff3e2])
-  ;;      (primitive #[compiled-procedure 19 ("list" #x2) #x1a #x12ff452])
-  ;;      (primitive #[compiled-procedure 20 ("list" #x3) #x14 #x12ff4bc])
-  ;;      (primitive #[compiled-procedure 21 ("list" #x5) #x14 #x12ff55c])
-  ;;      (primitive #[arity-dispatched-procedure 22])))
+     (define the-global-environment (setup-environment))
+     ;; the-global-environment
+     ;; => (((false true car cdr cons null? +)
+     ;;      #f
+     ;;      #t
+     ;;      (primitive #[compiled-procedure 18 ("list" #x1) #x1a #x12ff3e2])
+     ;;      (primitive #[compiled-procedure 19 ("list" #x2) #x1a #x12ff452])
+     ;;      (primitive #[compiled-procedure 20 ("list" #x3) #x14 #x12ff4bc])
+     ;;      (primitive #[compiled-procedure 21 ("list" #x5) #x14 #x12ff55c])
+     ;;      (primitive #[arity-dispatched-procedure 22])))
    #+END_SRC
 
    基本过程如何表达并不重要，但是求值器必须能分辨是否基本过程，这里用符号 _'primitive_ 来标识：
@@ -911,7 +975,9 @@
   (define (primitive-procedure? proc)
     (tagged-list? proc 'primitive))
   ;; (primitive-procedure? '(primitive #[compiled-procedure 94 ("list" #x1) #x1a #x19213e2])) ; => #t
+   #+END_SRC
 
+   #+BEGIN_SRC scheme
   (define (primitive-implementation proc) (cadr proc))
   ;; (primitive-implementation '(primitive #[compiled-procedure 94 ("list" #x1) #x1a #x19213e2]))
   ;; => #[compiled-procedure 94 ("list" #x1) #x1a #x19213e2] 
@@ -926,18 +992,21 @@
 	  (list 'null? null?)
 	 ;; <more primitives>
 	  ))
-
   ;; primitive-procedures 
   ;; => ((car #[compiled-procedure 94 ("list" #x1) #x1a #x19213e2])
   ;;     (cdr #[compiled-procedure 95 ("list" #x2) #x1a #x1921452])
   ;;     (cons #[compiled-procedure 96 ("list" #x3) #x14 #x19214bc])
   ;;     (null? #[compiled-procedure 97 ("list" #x5) #x14 #x192155c])) 
+   #+END_SRC
 
+   #+BEGIN_SRC scheme
   (define (primitive-procedure-names)
     (map car
 	 primitive-procedures))
   ;; (primitive-procedure-names) ; =>  (car cdr cons null?)
+   #+END_SRC
 
+   #+BEGIN_SRC scheme
   (define (primitive-procedure-objects)
     (map (lambda (proc) (list 'primitive (cadr proc)))
 	 primitive-procedures))
@@ -984,13 +1053,13 @@
 
     为了避免打印复合过程的环境：
     #+BEGIN_SRC scheme
-  define (user-print object)
-    (if (compound-procedure? object)
-	(display (list 'compound-procedure
-		       (procedure-parameters object)
-		       (procedure-body object)
-		       '<procedure-env>))
-	(display object)))
+      (define (user-print object)
+	(if (compound-procedure? object)
+	    (display (list 'compound-procedure
+			   (procedure-parameters object)
+			   (procedure-body object)
+			   '<procedure-env>))
+	    (display object)))
     #+END_SRC
 
     启动求值器：
