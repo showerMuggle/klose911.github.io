@@ -6,9 +6,9 @@
 
 * 基本求值过程
   + eval:  对一个表达式 *求值*
-     + 组合表达式：先 _求子表达式的值_ ，而后把 _运算符的子表达式的值_ *作用* 于 _运算参数子表达式的值_ 
+    + 组合表达式：先 _求子表达式的值_ ，而后把 _运算符的子表达式的值_ *作用* 于 _运算参数子表达式的值_ 
   + apply: 把一组参数值 *作用* 于一个过程体
-     + 复杂过程：原来环境上添加一个新的 _框架_ ，在新的框架上把 _实参值_  *绑定* 到过程的 _形参_ 上，在这个 *新的环境* 中对 _过程体_ *求值* 
+    + 复杂过程：原来环境上添加一个新的 _框架_ ，在新的框架上把 _实参值_  *绑定* 到过程的 _形参_ 上，在这个 *新的环境* 中对 _过程体_ *求值* 
 
 
   在这两个过程中都可能遇到 *递归* 调用，直到：
@@ -1070,46 +1070,46 @@
 
 
 * 优化效率
-主要问题： *表达式的语法分析和执行交织在一起* 。如果一个表达式需要执行多次，就要做多次语法分析。比如：
-#+BEGIN_SRC scheme
+  主要问题： *表达式的语法分析和执行交织在一起* 。如果一个表达式需要执行多次，就要做多次语法分析。比如：
+  #+BEGIN_SRC scheme
   (define (factorial n)
     (if (= n 1)
 	1
 	(* (factorial (- n 1)) n)))
-#+END_SRC
+  #+END_SRC
 
-在执行 _(factorial 4)_ 时候：
-+ 确定过程体是否为 _if_ ，而后再提取谓词部分并基于其值继续求值
-+ 求值其中的子表达式时， _eval_ 又都要做分情况处理
+  在执行 _(factorial 4)_ 时候：
+  + 确定过程体是否为 _if_ ，而后再提取谓词部分并基于其值继续求值
+  + 求值其中的子表达式时， _eval_ 又都要做分情况处理
 
-上面这种分析的代价很高，没必要重复做
+  上面这种分析的代价很高，没必要重复做
 
-#+BEGIN_EXAMPLE
-提高效率的一种方式:修改求值器，重新安排处理过程,使表达式分析只做一次
-#+END_EXAMPLE
+  #+BEGIN_EXAMPLE
+  提高效率的一种方式:修改求值器，重新安排处理过程,使表达式分析只做一次
+  #+END_EXAMPLE
 
 ** 语法分析
-把 _eval_ 的工作分为两部分:
-+ 定义过程 _analyze_ ：它专门做对被求值表达式的语法分析
-  + _analyze_ 对每个被分析的表达式返回一个 *执行过程* ,分析结果被封装在这个表达式里
-+ 执行过程以环境作为参数实际执行，产生表达式求值的效果
+   把 _eval_ 的工作分为两部分:
+   + 定义过程 _analyze_ ：它专门做对被求值表达式的语法分析
+     + _analyze_ 对每个被分析的表达式返回一个 *执行过程* ,分析结果被封装在这个表达式里
+   + 执行过程以环境作为参数实际执行，产生表达式求值的效果
 
-#+BEGIN_EXAMPLE
-  对一个表达式就只需要做一次分析，生成的执行过程可以任意地多次执行
-#+END_EXAMPLE
+   #+BEGIN_EXAMPLE
+     对一个表达式就只需要做一次分析，生成的执行过程可以任意地多次执行
+   #+END_EXAMPLE
 
-分析和执行分离后, _eval_ 变成:
-#+BEGIN_SRC scheme
+   分析和执行分离后, _eval_ 变成:
+   #+BEGIN_SRC scheme
   (define (eval exp env)
     ((analyze exp) env))
-#+END_SRC
-_analyze_ 从 _exp_ 出发生成一个 *过程* ：该过程以 _env_ 为参数执行，产生求值器解释 _exp_ 的效果
+   #+END_SRC
+   _analyze_ 从 _exp_ 出发生成一个 *过程* ：该过程以 _env_ 为参数执行，产生求值器解释 _exp_ 的效果
 
 ** analyze过程
-+ 过程 _analyze_ 的工作方式像 _eval_ 一样，做 *表达式的分情况分析*
-+ 但 _analyze_ 不做完全的求值，它只是 *构造一个可以直接执行的程序* ，具体的构造同样通过调用相应的子程序完成
+   + 过程 _analyze_ 的工作方式像 _eval_ 一样，做 *表达式的分情况分析*
+   + 但 _analyze_ 不做完全的求值，它只是 *构造一个可以直接执行的程序* ，具体的构造同样通过调用相应的子程序完成
 
-#+BEGIN_SRC scheme
+   #+BEGIN_SRC scheme
   (define (analyze exp)
     (cond ((self-evaluating? exp) (analyze-self-evaluating exp))
 	  ((quoted? exp) (analyze-quoted exp))
@@ -1122,17 +1122,96 @@ _analyze_ 从 _exp_ 出发生成一个 *过程* ：该过程以 _env_ 为参数�
 	  ((cond? exp) (analyze (cond->if exp)))
 	  ((application? exp) (analyze-application exp))
 	  (else (error "Unknown expression type -- ANALYZE" exp))))
-#+END_SRC
+   #+END_SRC
 
-#+BEGIN_EXAMPLE
-  现在要分析各种表达式,生成相应的执行过程
+   #+BEGIN_EXAMPLE
+     现在要分析各种表达式,生成相应的执行过程
 
-  对各种表达式的分析生成的过程都以一个环境作为参数
+     对各种表达式的分析生成的过程都以一个环境作为参数
 
-  过程的执行产生的是表达式求值的效果
+     过程的执行产生的是表达式求值的效果
 
-  组合表达式产生的过程是成分表达式的过程的适当组合
-#+END_EXAMPLE
+     组合表达式产生的过程是成分表达式的过程的适当组合
+   #+END_EXAMPLE
 
-*** 分析self-evaluating
+*** analyze-self-evaluating
+    #+BEGIN_SRC scheme
+  (define (analyze-self-evaluating exp)
+    (lambda (env) exp))
 
+  ;; ((analyze-self-evaluating 100) '()) ;=> 100 
+    #+END_SRC
+
+*** analyze-quoted
+    直接取出被引表达式，不必每次求值时再做
+    #+BEGIN_SRC scheme
+  (define (analyze-quoted exp)
+    (let ((qval (text-of-quotation exp)))
+      (lambda (env) qval)))
+
+  ;; ((analyze-quoted '(quote abc)) '()) ;=> abc 
+    #+END_SRC
+
+
+*** analyze-variable
+    生成的过程仍是在执行时到环境里查找变量的值
+    #+BEGIN_SRC scheme
+  (define (analyze-variable exp)
+    (lambda (env) (lookup-variable-value exp env)))
+
+  ;; (define test-extend-dev (extend-environment '(a b) '(300 400) '())) ; => test-extend-dev
+  ;; ((analyze-variable 'a) test-extend-dev) ; => 300   
+  ;; ((analyze-variable 'b) test-extend-dev) ; => 400 
+    #+END_SRC
+
+*** analyze-definition
+    定义表达式的工作都需要到求值时做，因为必须在环境中设置变量(依赖环境)，但是先 *完成被定义表达式的分析* ，可以大大提高执行时的效率
+
+    #+BEGIN_SRC scheme
+  (define (analyze-definition exp)
+    (let ((var (definition-variable exp))
+	  (vproc (analyze (definition-value exp))))
+      (lambda (env)
+	(define-variable! var (vproc env) env)
+	'ok)))
+
+  ;; (define test-environment (setup-environment)) 
+  ;; ((analyze-definition '(define a (quote hello))) test-environment) ;=> ok
+  ;; test-environment
+  ;; => (((a false true car cdr cons null? + >)
+  ;;      hello
+  ;;      #f
+  ;;      #t (primitive #[compiled-procedure 20 ("list" #x1) #x1a #x23d73e2])
+  ;;      (primitive #[compiled-procedure 21 ("list" #x2) #x1a #x23d7452])
+  ;;      (primitive #[compiled-procedure 22 ("list" #x3) #x14 #x23d74bc])
+  ;;      (primitive #[compiled-procedure 23 ("list" #x5) #x14 #x23d755c])
+  ;;      (primitive #[arity-dispatched-procedure 24])
+  ;;      (primitive #[arity-dispatched-procedure 25])))
+    #+END_SRC
+*** analyze-assignment
+    和 _analyze-definition_ 类似处理
+    #+BEGIN_SRC scheme
+  (define (analyze-assignment exp)
+    (let ((var (assignment-variable exp))
+	  (vproc (analyze (assignment-value exp))))
+      (lambda (env)
+	(set-variable-value! var (vproc env) env)
+	'ok)))
+
+  ;; (define test-environment (setup-environment)) 
+  ;; ((analyze-definition '(define a (quote hello))) test-environment) ;=> ok
+
+  ;; ((analyze-assignment '(set! a (quote world))) test-environment) ;=> ok
+  ;; test-environment
+  ;; => (((a false true car cdr cons null? + >)
+  ;;      world
+  ;;      #f
+  ;;      #t
+  ;;      (primitive #[compiled-procedure 20 ("list" #x1) #x1a #x23d73e2])
+  ;;      (primitive #[compiled-procedure 21 ("list" #x2) #x1a #x23d7452])
+  ;;      (primitive #[compiled-procedure 22 ("list" #x3) #x14 #x23d74bc])
+  ;;      (primitive #[compiled-procedure 23 ("list" #x5) #x14 #x23d755c])
+  ;;      (primitive #[arity-dispatched-procedure 24])
+  ;;      (primitive #[arity-dispatched-procedure 25])))
+    #+END_SRC
+*** analyze-if 

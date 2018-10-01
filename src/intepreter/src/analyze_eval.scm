@@ -310,6 +310,24 @@
          (error
           "Unknown procedure type -- APPLY" procedure))))
 
+(define (analyze-self-evaluating exp)
+  (lambda (env) exp))
+
+;; ((analyze-self-evaluating 100) '()) ;=> 100 
+
+(define (analyze-quoted exp)
+  (let ((qval (text-of-quotation exp)))
+    (lambda (env) qval)))
+
+;; ((analyze-quoted '(quote abc)) '()) ;=> abc 
+
+(define (analyze-variable exp)
+  (lambda (env) (lookup-variable-value exp env)))
+
+;; (define test-extend-dev (extend-environment '(a b) '(300 400) '())) ; => test-extend-dev
+;; ((analyze-variable 'a) test-extend-dev) ; => 300   
+;; ((analyze-variable 'b) test-extend-dev) ; => 400   
+
 (define (list-of-values exps env)
   (if (no-operands? exps)
       '()
@@ -326,18 +344,64 @@
         (else (eval (first-exp exps) env)
               (eval-sequence (rest-exps exps) env))))
 
-(define (eval-definition exp env)
-  (define-variable! (definition-variable exp)
-                    (eval (definition-value exp) env)
-                    env)
-  'ok)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; (define (eval-definition exp env)			 ;;
+;;   (define-variable! (definition-variable exp)	 ;;
+;;                     (eval (definition-value exp) env) ;;
+;;                     env)				 ;;
+;;   'ok)						 ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(define (eval-assignment exp env)
-  (set-variable-value! (assignment-variable exp)
-                       (eval (assignment-value exp) env)
-                       env)
-  'ok)
+(define (analyze-definition exp)
+  (let ((var (definition-variable exp))
+        (vproc (analyze (definition-value exp))))
+    (lambda (env)
+      (define-variable! var (vproc env) env)
+      'ok)))
 
+;; (define test-environment (setup-environment)) 
+;; ((analyze-definition '(define a (quote hello))) test-environment) ;=> ok
+;; test-environment
+;; => (((a false true car cdr cons null? + >)
+;;      hello
+;;      #f
+;;      #t (primitive #[compiled-procedure 20 ("list" #x1) #x1a #x23d73e2])
+;;      (primitive #[compiled-procedure 21 ("list" #x2) #x1a #x23d7452])
+;;      (primitive #[compiled-procedure 22 ("list" #x3) #x14 #x23d74bc])
+;;      (primitive #[compiled-procedure 23 ("list" #x5) #x14 #x23d755c])
+;;      (primitive #[arity-dispatched-procedure 24])
+;;      (primitive #[arity-dispatched-procedure 25])))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; (define (eval-assignment exp env)			    ;;
+;;   (set-variable-value! (assignment-variable exp)	    ;;
+;;                        (eval (assignment-value exp) env) ;;
+;;                        env)				    ;;
+;;   'ok)						    ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(define (analyze-assignment exp)
+  (let ((var (assignment-variable exp))
+        (vproc (analyze (assignment-value exp))))
+    (lambda (env)
+      (set-variable-value! var (vproc env) env)
+      'ok)))
+
+;; (define test-environment (setup-environment)) 
+;; ((analyze-definition '(define a (quote hello))) test-environment) ;=> ok
+
+;; ((analyze-assignment '(set! a (quote world))) test-environment) ;=> ok
+;; test-environment
+;; => (((a false true car cdr cons null? + >)
+;;      world
+;;      #f
+;;      #t
+;;      (primitive #[compiled-procedure 20 ("list" #x1) #x1a #x23d73e2])
+;;      (primitive #[compiled-procedure 21 ("list" #x2) #x1a #x23d7452])
+;;      (primitive #[compiled-procedure 22 ("list" #x3) #x14 #x23d74bc])
+;;      (primitive #[compiled-procedure 23 ("list" #x5) #x14 #x23d755c])
+;;      (primitive #[arity-dispatched-procedure 24])
+;;      (primitive #[arity-dispatched-procedure 25])))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; read->eval->print loop ;;
