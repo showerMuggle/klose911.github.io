@@ -234,12 +234,12 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org419e24a">定义</a></li>
-<li><a href="#org41d7074">call/cc</a></li>
-<li><a href="#orgf63576d">CPS</a>
+<li><a href="#orge7a07e2">定义</a></li>
+<li><a href="#org4cb8779">call/cc</a></li>
+<li><a href="#orgfce23b5">CPS</a>
 <ul>
-<li><a href="#org798c1ea">递归CPS</a></li>
-<li><a href="#org927faf9">续延和CPS</a></li>
+<li><a href="#org9670b79">递归CPS</a></li>
+<li><a href="#orgda309ab">续延和CPS</a></li>
 </ul>
 </li>
 </ul>
@@ -257,14 +257,14 @@ for the JavaScript code in this tag.
 <li>在非确定性的搜索问题里，续延可以用来表示搜索树中的节点</li>
 </ul>
 
-<div id="outline-container-org419e24a" class="outline-2">
-<h2 id="org419e24a">定义</h2>
-<div class="outline-text-2" id="text-org419e24a">
+<div id="outline-container-orge7a07e2" class="outline-2">
+<h2 id="orge7a07e2">定义</h2>
+<div class="outline-text-2" id="text-orge7a07e2">
 <p>
 <b>续延</b> 是一个代表着 <span class="underline">计算的将来</span> 的函数。不管是哪一个表达式被求值，总会有谁在翘首以待它将要返回的值：
 </p>
 <div class="org-src-container">
-<pre class="src src-scheme"><span style="color: #696969;">(</span>/ <span style="color: #696969;">(</span>- x 1<span style="color: #696969;">)</span> 2<span style="color: #696969;">)</span>
+<pre class="src src-scheme">(/ (- x 1) 2)
 </pre>
 </div>
 <p>
@@ -275,7 +275,7 @@ for the JavaScript code in this tag.
 无论何时，都可以把续延视为 <b>带一个参数的函数</b> 。上面的表达式被输入到 toplevel，那么当子表达式 <span class="underline">(- x 1)</span> 被求值时，续延将是：
 </p>
 <div class="org-src-container">
-<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>val<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>/ val 2<span style="color: #696969;">))</span>
+<pre class="src src-scheme">(<span style="color: #00ffff;">lambda</span> (val) (/ val 2))
 </pre>
 </div>
 
@@ -283,12 +283,12 @@ for the JavaScript code in this tag.
 也就是说，接下来的计算可以通过在返回值上调用这个函数来重现。如果该表达式在下面的上下文中出现：
 </p>
 <div class="org-src-container">
-<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">f1</span> w<span style="color: #696969;">)</span>
-  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>y <span style="color: #696969;">(</span>f2 w<span style="color: #696969;">)))</span>
-    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>integer? y<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>list 'a y<span style="color: #696969;">)</span> 'b<span style="color: #696969;">)))</span>
+<pre class="src src-scheme">(<span style="color: #00ffff;">define</span> (<span style="color: #87cefa;">f1</span> w)
+  (<span style="color: #00ffff;">let</span> ((y (f2 w)))
+    (<span style="color: #00ffff;">if</span> (integer? y) (list 'a y) 'b)))
 
-<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">f2</span> x<span style="color: #696969;">)</span>
-  <span style="color: #696969;">(</span>/ <span style="color: #696969;">(</span>- x 1<span style="color: #696969;">)</span> 2<span style="color: #696969;">))</span>
+(<span style="color: #00ffff;">define</span> (<span style="color: #87cefa;">f2</span> x)
+  (/ (- x 1) 2))
 </pre>
 </div>
 
@@ -296,9 +296,9 @@ for the JavaScript code in this tag.
 并且 <span class="underline">f1</span> 在toplevel 下被调用，那么当 <span class="underline">(- x 1)</span> 被求值时，续延将等价于：
 </p>
 <div class="org-src-container">
-<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>val<span style="color: #696969;">)</span>
-  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>y <span style="color: #696969;">(</span>/ val 2<span style="color: #696969;">)))</span>
-    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>integer? y<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>list 'a y<span style="color: #696969;">)</span> 'b<span style="color: #696969;">)))</span>
+<pre class="src src-scheme">(<span style="color: #00ffff;">lambda</span> (val)
+  (<span style="color: #00ffff;">let</span> ((y (/ val 2)))
+    (<span style="color: #00ffff;">if</span> (integer? y) (list 'a y) 'b)))
 </pre>
 </div>
 
@@ -318,9 +318,9 @@ for the JavaScript code in this tag.
 </div>
 </div>
 
-<div id="outline-container-org41d7074" class="outline-2">
-<h2 id="org41d7074">call/cc</h2>
-<div class="outline-text-2" id="text-org41d7074">
+<div id="outline-container-org4cb8779" class="outline-2">
+<h2 id="org4cb8779">call/cc</h2>
+<div class="outline-text-2" id="text-org4cb8779">
 <p>
 在 Scheme 中，续延和函数同样是第一类对象。可以要求 Scheme 返回当前的续延，然后它将为你 <b>生成一个只有单个参数的函数</b> ，以表示 <b>未来的计算</b> 。可以任意长时间地保存这个对象，然后在你调用它时，它将重启当它被创建时所发生的计算
 </p>
@@ -330,20 +330,20 @@ Scheme 程序通过内置操作符 <span class="underline">call-with-current-con
 </p>
 
 <div class="org-src-container">
-<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">call-with-current-continuation</span>
-  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>cc<span style="color: #696969;">)</span>
-    ...<span style="color: #696969;">))</span> 
+<pre class="src src-scheme">(<span style="color: #00ffff;">call-with-current-continuation</span>
+  (<span style="color: #00ffff;">lambda</span> (cc)
+    ...)) 
 </pre>
 </div>
 
 <div class="org-src-container">
-<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">frozen</span> '<span style="color: #696969;">())</span>
+<pre class="src src-scheme">(<span style="color: #00ffff;">define</span> <span style="color: #87cefa;">frozen</span> '())
 
-<span style="color: #696969;">(</span>append '<span style="color: #696969;">(</span>the call/cc returned<span style="color: #696969;">)</span>
-  <span style="color: #696969;">(</span>list <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">call-with-current-continuation</span>
-      <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>cc<span style="color: #696969;">)</span>
-        <span style="color: #696969;">(</span>set! frozen cc<span style="color: #696969;">)</span>
-        'a<span style="color: #696969;">))))</span>
+(append '(the call/cc returned)
+  (list (<span style="color: #00ffff;">call-with-current-continuation</span>
+      (<span style="color: #00ffff;">lambda</span> (cc)
+        (set! frozen cc)
+        'a))))
 </pre>
 </div>
 
@@ -352,13 +352,13 @@ Scheme 程序通过内置操作符 <span class="underline">call-with-current-con
 </p>
 
 <div class="org-src-container">
-<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>val<span style="color: #696969;">)</span>
-  <span style="color: #696969;">(</span>append '<span style="color: #696969;">(</span>the call/cc returned<span style="color: #696969;">)</span>
-          <span style="color: #696969;">(</span>list val<span style="color: #696969;">)))</span>
+<pre class="src src-scheme">(<span style="color: #00ffff;">lambda</span> (val)
+  (append '(the call/cc returned)
+          (list val)))
 
-<span style="color: #696969;">(</span>set! frozen <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>val<span style="color: #696969;">)</span>
-               <span style="color: #696969;">(</span>append '<span style="color: #696969;">(</span>the call/cc returned<span style="color: #696969;">)</span>
-                       <span style="color: #696969;">(</span>list val<span style="color: #696969;">))))</span>
+(set! frozen (<span style="color: #00ffff;">lambda</span> (val)
+               (append '(the call/cc returned)
+                       (list val))))
 </pre>
 </div>
 
@@ -366,10 +366,10 @@ Scheme 程序通过内置操作符 <span class="underline">call-with-current-con
 以后每次调用 <span class="underline">frozen</span> 都可以认为是执行上面这段续延保存的过程：
 </p>
 <div class="org-src-container">
-<pre class="src src-scheme"><span style="color: #696969;">(</span>frozen 'again<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">=&gt;  (the call/cc returned again) </span>
+<pre class="src src-scheme">(frozen 'again) <span style="color: #ff4500;">; </span><span style="color: #ff4500;">=&gt;  (the call/cc returned again) </span>
 
-<span style="color: #696969;">(</span>append '<span style="color: #696969;">(</span>the call/cc returned<span style="color: #696969;">)</span>
-        <span style="color: #696969;">(</span>list 'again<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">=&gt;  (the call/cc returned again) </span>
+(append '(the call/cc returned)
+        (list 'again)) <span style="color: #ff4500;">; </span><span style="color: #ff4500;">=&gt;  (the call/cc returned again) </span>
 </pre>
 </div>
 
@@ -377,10 +377,10 @@ Scheme 程序通过内置操作符 <span class="underline">call-with-current-con
 续延不会因为被求值而用完。它们可以被 <b>重复</b> 调用，就像任何其他的函数型对象一样：
 </p>
 <div class="org-src-container">
-<pre class="src src-scheme"><span style="color: #696969;">(</span>frozen 'thrice<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">=&gt;  (the call/cc returned thrice) </span>
+<pre class="src src-scheme">(frozen 'thrice) <span style="color: #ff4500;">; </span><span style="color: #ff4500;">=&gt;  (the call/cc returned thrice) </span>
 
-<span style="color: #696969;">(</span>append '<span style="color: #696969;">(</span>the call/cc returned<span style="color: #696969;">)</span>
-        <span style="color: #696969;">(</span>list 'thrice<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">=&gt;  (the call/cc returned thrice) </span>
+(append '(the call/cc returned)
+        (list 'thrice)) <span style="color: #ff4500;">; </span><span style="color: #ff4500;">=&gt;  (the call/cc returned thrice) </span>
 </pre>
 </div>
 
@@ -389,7 +389,7 @@ Scheme 程序通过内置操作符 <span class="underline">call-with-current-con
 </p>
 
 <div class="org-src-container">
-<pre class="src src-scheme"><span style="color: #696969;">(</span>+ 1 <span style="color: #696969;">(</span>frozen 'safely<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">=&gt; (the call/cc returned safely)</span>
+<pre class="src src-scheme">(+ 1 (frozen 'safely)) <span style="color: #ff4500;">; </span><span style="color: #ff4500;">=&gt; (the call/cc returned safely)</span>
 </pre>
 </div>
 
@@ -402,16 +402,16 @@ Scheme 程序通过内置操作符 <span class="underline">call-with-current-con
 </p>
 
 <div class="org-src-container">
-<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">froz1</span> '<span style="color: #696969;">())</span>
-<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">froz2</span> '<span style="color: #696969;">())</span>
+<pre class="src src-scheme">(<span style="color: #00ffff;">define</span> <span style="color: #87cefa;">froz1</span> '())
+(<span style="color: #00ffff;">define</span> <span style="color: #87cefa;">froz2</span> '())
 
-<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>x 0<span style="color: #696969;">))</span>
-  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">call-with-current-continuation</span>
-    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>cc<span style="color: #696969;">)</span>
-      <span style="color: #696969;">(</span>set! froz1 cc<span style="color: #696969;">)</span>
-      <span style="color: #696969;">(</span>set! froz2 cc<span style="color: #696969;">)))</span>
-  <span style="color: #696969;">(</span>set! x <span style="color: #696969;">(</span>+ 1 x<span style="color: #696969;">))</span>
-  x<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">=&gt; 1</span>
+(<span style="color: #00ffff;">let</span> ((x 0))
+  (<span style="color: #00ffff;">call-with-current-continuation</span>
+    (<span style="color: #00ffff;">lambda</span> (cc)
+      (set! froz1 cc)
+      (set! froz2 cc)))
+  (set! x (+ 1 x))
+  x) <span style="color: #ff4500;">; </span><span style="color: #ff4500;">=&gt; 1</span>
 </pre>
 </div>
 
@@ -419,9 +419,9 @@ Scheme 程序通过内置操作符 <span class="underline">call-with-current-con
 因此调用任何一个都将返回后继的整数：
 </p>
 <div class="org-src-container">
-<pre class="src src-scheme"><span style="color: #696969;">(</span>froz1 '<span style="color: #696969;">())</span> <span style="color: #5f9ea0; font-style: italic;">;</span><span style="color: #5f9ea0; font-style: italic;">=&gt; 2</span>
+<pre class="src src-scheme">(froz1 '()) <span style="color: #ff4500;">;</span><span style="color: #ff4500;">=&gt; 2</span>
 
-<span style="color: #696969;">(</span>froz2 '<span style="color: #696969;">())</span> <span style="color: #5f9ea0; font-style: italic;">;</span><span style="color: #5f9ea0; font-style: italic;">=&gt; 3</span>
+(froz2 '()) <span style="color: #ff4500;">;</span><span style="color: #ff4500;">=&gt; 3</span>
 </pre>
 </div>
 
@@ -431,22 +431,22 @@ Scheme 程序通过内置操作符 <span class="underline">call-with-current-con
 </div>
 </div>
 
-<div id="outline-container-orgf63576d" class="outline-2">
-<h2 id="orgf63576d">CPS</h2>
-<div class="outline-text-2" id="text-orgf63576d">
+<div id="outline-container-orgfce23b5" class="outline-2">
+<h2 id="orgfce23b5">CPS</h2>
+<div class="outline-text-2" id="text-orgfce23b5">
 <p>
 <b>CPS</b> ( <span class="underline">continuation-programming-style</span> ) 是一种编程方式： <b>附加的最后一个参数是一个函数，把原来的计算结果传入这个函数作为返回值</b> 
 </p>
 
 <div class="org-src-container">
-<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">return</span> x<span style="color: #696969;">)</span>
-  x<span style="color: #696969;">)</span>
+<pre class="src src-scheme">(<span style="color: #00ffff;">define</span> (<span style="color: #87cefa;">return</span> x)
+  x)
 
-<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">k+</span> a b k<span style="color: #696969;">)</span>
-  <span style="color: #696969;">(</span>k <span style="color: #696969;">(</span>+ a b<span style="color: #696969;">)))</span>
+(<span style="color: #00ffff;">define</span> (<span style="color: #87cefa;">k+</span> a b k)
+  (k (+ a b)))
 
-<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">k*</span> a b k<span style="color: #696969;">)</span>
-  <span style="color: #696969;">(</span>k <span style="color: #696969;">(</span>* a b<span style="color: #696969;">)))</span> 
+(<span style="color: #00ffff;">define</span> (<span style="color: #87cefa;">k*</span> a b k)
+  (k (* a b))) 
 </pre>
 </div>
 
@@ -454,9 +454,9 @@ Scheme 程序通过内置操作符 <span class="underline">call-with-current-con
 使用CPS风格来计算 <span class="underline">(* (+ 1 2) 3)</span> 
 </p>
 <div class="org-src-container">
-<pre class="src src-scheme"><span style="color: #696969;">(</span>k+ 1 2
-    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>x<span style="color: #696969;">)</span>
-      <span style="color: #696969;">(</span>k* x 3 return<span style="color: #696969;">)))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">=&gt; 9</span>
+<pre class="src src-scheme">(k+ 1 2
+    (<span style="color: #00ffff;">lambda</span> (x)
+      (k* x 3 return))) <span style="color: #ff4500;">; </span><span style="color: #ff4500;">=&gt; 9</span>
 </pre>
 </div>
 
@@ -465,35 +465,35 @@ Scheme 程序通过内置操作符 <span class="underline">call-with-current-con
 </p>
 </div>
 
-<div id="outline-container-org798c1ea" class="outline-3">
-<h3 id="org798c1ea">递归CPS</h3>
-<div class="outline-text-3" id="text-org798c1ea">
+<div id="outline-container-org9670b79" class="outline-3">
+<h3 id="org9670b79">递归CPS</h3>
+<div class="outline-text-3" id="text-org9670b79">
 <p>
 递归函数仍然可以被写成CPS风格：
 </p>
 <div class="org-src-container">
-<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">normal factorial</span>
-<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">fact</span> n<span style="color: #696969;">)</span>
-  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>= n 1<span style="color: #696969;">)</span> 
+<pre class="src src-scheme"><span style="color: #ff4500;">;;; </span><span style="color: #ff4500;">normal factorial</span>
+(<span style="color: #00ffff;">define</span> (<span style="color: #87cefa;">fact</span> n)
+  (<span style="color: #00ffff;">if</span> (= n 1) 
       1
-      <span style="color: #696969;">(</span>* n <span style="color: #696969;">(</span>fact <span style="color: #696969;">(</span>- n 1<span style="color: #696969;">)))))</span>
+      (* n (fact (- n 1)))))
 
-<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">CPS factorial</span>
-<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">kfact</span> n k<span style="color: #696969;">)</span>
-  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>= n 1<span style="color: #696969;">)</span> 
-      <span style="color: #696969;">(</span>k 1<span style="color: #696969;">)</span>
-      <span style="color: #696969;">(</span>kfact <span style="color: #696969;">(</span>- n 1<span style="color: #696969;">)</span>
-             <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>x<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>k <span style="color: #696969;">(</span>* n x<span style="color: #696969;">))))))</span>
+<span style="color: #ff4500;">;;; </span><span style="color: #ff4500;">CPS factorial</span>
+(<span style="color: #00ffff;">define</span> (<span style="color: #87cefa;">kfact</span> n k)
+  (<span style="color: #00ffff;">if</span> (= n 1) 
+      (k 1)
+      (kfact (- n 1)
+             (<span style="color: #00ffff;">lambda</span> (x) (k (* n x))))))
 
-<span style="color: #696969;">(</span>kfact 5 return<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">=&gt;  120</span>
+(kfact 5 return) <span style="color: #ff4500;">; </span><span style="color: #ff4500;">=&gt;  120</span>
 
-<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(kfact 1 return) ; =&gt; (return 1)  =&gt; 1 </span>
+<span style="color: #ff4500;">;; </span><span style="color: #ff4500;">(kfact 1 return) ; =&gt; (return 1)  =&gt; 1 </span>
 
-<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(kfact 2 return) </span>
-<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(kfact 1 (lambda (x) (return (* 2 x)))) ;=&gt; (return (* 2 (kfact 1 return))) =&gt; 2 </span>
+<span style="color: #ff4500;">;; </span><span style="color: #ff4500;">(kfact 2 return) </span>
+<span style="color: #ff4500;">;; </span><span style="color: #ff4500;">(kfact 1 (lambda (x) (return (* 2 x)))) ;=&gt; (return (* 2 (kfact 1 return))) =&gt; 2 </span>
 
-<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(kfact 3 return)</span>
-<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(kfact 2 (lambda (x) (return (* 3 x)))) ; =&gt; (return (* 3 (kfact 2 return))) =&gt; 6  </span>
+<span style="color: #ff4500;">;; </span><span style="color: #ff4500;">(kfact 3 return)</span>
+<span style="color: #ff4500;">;; </span><span style="color: #ff4500;">(kfact 2 (lambda (x) (return (* 3 x)))) ; =&gt; (return (* 3 (kfact 2 return))) =&gt; 6  </span>
 </pre>
 </div>
 
@@ -501,11 +501,11 @@ Scheme 程序通过内置操作符 <span class="underline">call-with-current-con
 用CPS来计算 <span class="underline">(+ 3 (fact 4))</span>  
 </p>
 <div class="org-src-container">
-<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">normal</span>
-<span style="color: #696969;">(</span>+ 3 <span style="color: #696969;">(</span>fact 4<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;</span><span style="color: #5f9ea0; font-style: italic;">=&gt; 27</span>
+<pre class="src src-scheme"><span style="color: #ff4500;">;;; </span><span style="color: #ff4500;">normal</span>
+(+ 3 (fact 4)) <span style="color: #ff4500;">;</span><span style="color: #ff4500;">=&gt; 27</span>
 
-<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">CPS</span>
-<span style="color: #696969;">(</span>kfact 4 <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>x<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>k+ x 3 return<span style="color: #696969;">)))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">=&gt; 27 </span>
+<span style="color: #ff4500;">;;; </span><span style="color: #ff4500;">CPS</span>
+(kfact 4 (<span style="color: #00ffff;">lambda</span> (x) (k+ x 3 return))) <span style="color: #ff4500;">; </span><span style="color: #ff4500;">=&gt; 27 </span>
 </pre>
 </div>
 
@@ -513,22 +513,22 @@ Scheme 程序通过内置操作符 <span class="underline">call-with-current-con
 用CPS来计算多个数的乘积， 注意：这里使用了一个局部变量break来保存返回函数，是的出现数字0的情况下，可以马上返回
 </p>
 <div class="org-src-container">
-<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">normal</span>
-<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">product</span> ls<span style="color: #696969;">)</span>
-  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #daa520; font-weight: bold;">loop</span> <span style="color: #696969;">((</span>ls ls<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>acc 1<span style="color: #696969;">))</span>
-    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">cond</span>
-     <span style="color: #696969;">((</span>null? ls<span style="color: #696969;">)</span> acc<span style="color: #696969;">)</span>
-     <span style="color: #696969;">((</span>zero? <span style="color: #696969;">(</span>car ls<span style="color: #696969;">))</span> 0<span style="color: #696969;">)</span>
-     <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">else</span> <span style="color: #696969;">(</span>loop <span style="color: #696969;">(</span>cdr ls<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>* <span style="color: #696969;">(</span>car ls<span style="color: #696969;">)</span> acc<span style="color: #696969;">))))))</span>
+<pre class="src src-scheme"><span style="color: #ff4500;">;;; </span><span style="color: #ff4500;">normal</span>
+(<span style="color: #00ffff;">define</span> (<span style="color: #87cefa;">product</span> ls)
+  (<span style="color: #00ffff;">let</span> <span style="color: #87cefa;">loop</span> ((ls ls) (acc 1))
+    (<span style="color: #00ffff;">cond</span>
+     ((null? ls) acc)
+     ((zero? (car ls)) 0)
+     (<span style="color: #00ffff;">else</span> (loop (cdr ls) (* (car ls) acc))))))
 
-<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">CPS</span>
-<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">kproduct</span> ls k<span style="color: #696969;">)</span>
-  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>break k<span style="color: #696969;">))</span>
-    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #daa520; font-weight: bold;">loop</span> <span style="color: #696969;">((</span>ls ls<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>k k<span style="color: #696969;">))</span>
-      <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">cond</span>
-       <span style="color: #696969;">((</span>null? ls<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>k 1<span style="color: #696969;">))</span>
-       <span style="color: #696969;">((</span>zero? <span style="color: #696969;">(</span>car ls<span style="color: #696969;">))</span> <span style="color: #696969;">(</span>break 0<span style="color: #696969;">))</span>
-       <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">else</span> <span style="color: #696969;">(</span>loop <span style="color: #696969;">(</span>cdr ls<span style="color: #696969;">)</span> <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>x<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>k <span style="color: #696969;">(</span>* <span style="color: #696969;">(</span>car ls<span style="color: #696969;">)</span> x<span style="color: #696969;">)))))))))</span>
+<span style="color: #ff4500;">;;; </span><span style="color: #ff4500;">CPS</span>
+(<span style="color: #00ffff;">define</span> (<span style="color: #87cefa;">kproduct</span> ls k)
+  (<span style="color: #00ffff;">let</span> ((break k))
+    (<span style="color: #00ffff;">let</span> <span style="color: #87cefa;">loop</span> ((ls ls) (k k))
+      (<span style="color: #00ffff;">cond</span>
+       ((null? ls) (k 1))
+       ((zero? (car ls)) (break 0))
+       (<span style="color: #00ffff;">else</span> (loop (cdr ls) (<span style="color: #00ffff;">lambda</span> (x) (k (* (car ls) x)))))))))
 </pre>
 </div>
 
@@ -536,13 +536,13 @@ Scheme 程序通过内置操作符 <span class="underline">call-with-current-con
 计算 <span class="underline">(+ 100 (product '(2 4 7)))</span> ：
 </p>
 <div class="org-src-container">
-<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">normal</span>
-<span style="color: #696969;">(</span>+ 100 <span style="color: #696969;">(</span>product '<span style="color: #696969;">(</span>2 4 7<span style="color: #696969;">)))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">=&gt; 156 </span>
+<pre class="src src-scheme"><span style="color: #ff4500;">;;; </span><span style="color: #ff4500;">normal</span>
+(+ 100 (product '(2 4 7))) <span style="color: #ff4500;">; </span><span style="color: #ff4500;">=&gt; 156 </span>
 
-<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">CPS</span>
-<span style="color: #696969;">(</span>kproduct '<span style="color: #696969;">(</span>2 4 7<span style="color: #696969;">)</span>
-          <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>x<span style="color: #696969;">)</span>
-            <span style="color: #696969;">(</span>k+ x 100 return<span style="color: #696969;">)))</span> <span style="color: #5f9ea0; font-style: italic;">;</span><span style="color: #5f9ea0; font-style: italic;">=&gt; 156</span>
+<span style="color: #ff4500;">;;; </span><span style="color: #ff4500;">CPS</span>
+(kproduct '(2 4 7)
+          (<span style="color: #00ffff;">lambda</span> (x)
+            (k+ x 100 return))) <span style="color: #ff4500;">;</span><span style="color: #ff4500;">=&gt; 156</span>
 </pre>
 </div>
 
@@ -555,21 +555,21 @@ Scheme 程序通过内置操作符 <span class="underline">call-with-current-con
 </p>
 
 <div class="org-src-container">
-<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">non-number-value-error</span> x<span style="color: #696969;">)</span>
-  <span style="color: #696969;">(</span>display <span style="color: #deb887;">"Value error: "</span><span style="color: #696969;">)</span>
-  <span style="color: #696969;">(</span>display  x<span style="color: #696969;">)</span>
-  <span style="color: #696969;">(</span>display <span style="color: #deb887;">" is not number."</span><span style="color: #696969;">)</span>
-  <span style="color: #696969;">(</span>newline<span style="color: #696969;">)</span>
-  'error<span style="color: #696969;">)</span>
+<pre class="src src-scheme">(<span style="color: #00ffff;">define</span> (<span style="color: #87cefa;">non-number-value-error</span> x)
+  (display <span style="color: #ffa07a;">"Value error: "</span>)
+  (display  x)
+  (display <span style="color: #ffa07a;">" is not number."</span>)
+  (newline)
+  'error)
 
-<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">kproduct</span> ls k k-value-error<span style="color: #696969;">)</span>
-  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>break k<span style="color: #696969;">))</span>
-    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #daa520; font-weight: bold;">loop</span> <span style="color: #696969;">((</span>ls ls<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>k k<span style="color: #696969;">))</span>
-      <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">cond</span>
-       <span style="color: #696969;">((</span>null? ls<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>k 1<span style="color: #696969;">))</span>
-       <span style="color: #696969;">((</span>not <span style="color: #696969;">(</span>number? <span style="color: #696969;">(</span>car ls<span style="color: #696969;">)))</span> <span style="color: #696969;">(</span>k-value-error <span style="color: #696969;">(</span>car ls<span style="color: #696969;">)))</span>
-       <span style="color: #696969;">((</span>zero? <span style="color: #696969;">(</span>car ls<span style="color: #696969;">))</span> <span style="color: #696969;">(</span>break 0<span style="color: #696969;">))</span>
-       <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">else</span> <span style="color: #696969;">(</span>loop <span style="color: #696969;">(</span>cdr ls<span style="color: #696969;">)</span> <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>x<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>k <span style="color: #696969;">(</span>* <span style="color: #696969;">(</span>car ls<span style="color: #696969;">)</span> x<span style="color: #696969;">)))))))))</span>
+(<span style="color: #00ffff;">define</span> (<span style="color: #87cefa;">kproduct</span> ls k k-value-error)
+  (<span style="color: #00ffff;">let</span> ((break k))
+    (<span style="color: #00ffff;">let</span> <span style="color: #87cefa;">loop</span> ((ls ls) (k k))
+      (<span style="color: #00ffff;">cond</span>
+       ((null? ls) (k 1))
+       ((not (number? (car ls))) (k-value-error (car ls)))
+       ((zero? (car ls)) (break 0))
+       (<span style="color: #00ffff;">else</span> (loop (cdr ls) (<span style="color: #00ffff;">lambda</span> (x) (k (* (car ls) x)))))))))
 </pre>
 </div>
 
@@ -577,26 +577,26 @@ Scheme 程序通过内置操作符 <span class="underline">call-with-current-con
 测试结果：
 </p>
 <div class="org-src-container">
-<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">valid</span>
-<span style="color: #696969;">(</span>kproduct '<span style="color: #696969;">(</span>2 4 7<span style="color: #696969;">)</span> 
-          <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>x<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>k+ x 100 return<span style="color: #696969;">))</span> 
-          non-number-value-error<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">=&gt; 156</span>
+<pre class="src src-scheme"><span style="color: #ff4500;">;;; </span><span style="color: #ff4500;">valid</span>
+(kproduct '(2 4 7) 
+          (<span style="color: #00ffff;">lambda</span> (x) (k+ x 100 return)) 
+          non-number-value-error) <span style="color: #ff4500;">; </span><span style="color: #ff4500;">=&gt; 156</span>
 
-<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">invalid</span>
-<span style="color: #696969;">(</span>kproduct '<span style="color: #696969;">(</span>2 4 7 hoge<span style="color: #696969;">)</span> 
-          <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>x<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>k+ x 100 return<span style="color: #696969;">))</span> 
-          non-number-value-error<span style="color: #696969;">)</span>
+<span style="color: #ff4500;">;;; </span><span style="color: #ff4500;">invalid</span>
+(kproduct '(2 4 7 hoge) 
+          (<span style="color: #00ffff;">lambda</span> (x) (k+ x 100 return)) 
+          non-number-value-error)
 
-<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">Value error: hoge is not number.</span>
-<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">=&gt; error</span>
+<span style="color: #ff4500;">;; </span><span style="color: #ff4500;">Value error: hoge is not number.</span>
+<span style="color: #ff4500;">;; </span><span style="color: #ff4500;">=&gt; error</span>
 </pre>
 </div>
 </div>
 </div>
 
-<div id="outline-container-org927faf9" class="outline-3">
-<h3 id="org927faf9">续延和CPS</h3>
-<div class="outline-text-3" id="text-org927faf9">
+<div id="outline-container-orgda309ab" class="outline-3">
+<h3 id="orgda309ab">续延和CPS</h3>
+<div class="outline-text-3" id="text-orgda309ab">
 <p>
 实际上CPS风格的最后一个参数，就可以被认为是当前的续延。所以一种通用的实现续延的方式就是 <b>通过遍历代码，把代码转换成CPS风格来得到当前续延</b>
 </p>

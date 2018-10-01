@@ -1069,3 +1069,70 @@
     #+END_SRC
 
 
+* 优化效率
+主要问题： *表达式的语法分析和执行交织在一起* 。如果一个表达式需要执行多次，就要做多次语法分析。比如：
+#+BEGIN_SRC scheme
+  (define (factorial n)
+    (if (= n 1)
+	1
+	(* (factorial (- n 1)) n)))
+#+END_SRC
+
+在执行 _(factorial 4)_ 时候：
++ 确定过程体是否为 _if_ ，而后再提取谓词部分并基于其值继续求值
++ 求值其中的子表达式时， _eval_ 又都要做分情况处理
+
+上面这种分析的代价很高，没必要重复做
+
+#+BEGIN_EXAMPLE
+提高效率的一种方式:修改求值器，重新安排处理过程,使表达式分析只做一次
+#+END_EXAMPLE
+
+** 语法分析
+把 _eval_ 的工作分为两部分:
++ 定义过程 _analyze_ ：它专门做对被求值表达式的语法分析
+  + _analyze_ 对每个被分析的表达式返回一个 *执行过程* ,分析结果被封装在这个表达式里
++ 执行过程以环境作为参数实际执行，产生表达式求值的效果
+
+#+BEGIN_EXAMPLE
+  对一个表达式就只需要做一次分析，生成的执行过程可以任意地多次执行
+#+END_EXAMPLE
+
+分析和执行分离后, _eval_ 变成:
+#+BEGIN_SRC scheme
+  (define (eval exp env)
+    ((analyze exp) env))
+#+END_SRC
+_analyze_ 从 _exp_ 出发生成一个 *过程* ：该过程以 _env_ 为参数执行，产生求值器解释 _exp_ 的效果
+
+** analyze过程
++ 过程 _analyze_ 的工作方式像 _eval_ 一样，做 *表达式的分情况分析*
++ 但 _analyze_ 不做完全的求值，它只是 *构造一个可以直接执行的程序* ，具体的构造同样通过调用相应的子程序完成
+
+#+BEGIN_SRC scheme
+  (define (analyze exp)
+    (cond ((self-evaluating? exp) (analyze-self-evaluating exp))
+	  ((quoted? exp) (analyze-quoted exp))
+	  ((variable? exp) (analyze-variable exp))
+	  ((assignment? exp) (analyze-assignment exp))
+	  ((definition? exp) (analyze-definition exp))
+	  ((if? exp) (analyze-if exp))
+	  ((lambda? exp) (analyze-lambda exp))
+	  ((begin? exp) (analyze-sequence (begin-actions exp)))
+	  ((cond? exp) (analyze (cond->if exp)))
+	  ((application? exp) (analyze-application exp))
+	  (else (error "Unknown expression type -- ANALYZE" exp))))
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  现在要分析各种表达式,生成相应的执行过程
+
+  对各种表达式的分析生成的过程都以一个环境作为参数
+
+  过程的执行产生的是表达式求值的效果
+
+  组合表达式产生的过程是成分表达式的过程的适当组合
+#+END_EXAMPLE
+
+*** 分析self-evaluating
+
