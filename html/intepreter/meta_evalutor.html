@@ -241,7 +241,7 @@ for the JavaScript code in this tag.
 <li><a href="#org28ca04a">eval</a></li>
 <li><a href="#org32b800c">apply</a></li>
 <li><a href="#org5db0d0e">获得过程参数</a></li>
-<li><a href="#orgc7af108">if表达式</a></li>
+<li><a href="#orgfa157a6">if表达式</a></li>
 <li><a href="#orgb4771b1">顺序求值</a></li>
 <li><a href="#org9fbde3a">赋值和定义</a></li>
 </ul>
@@ -255,7 +255,7 @@ for the JavaScript code in this tag.
 <li><a href="#orgba8bc77">赋值表达式</a></li>
 <li><a href="#org8c1eaa7">定义表达式</a></li>
 <li><a href="#org4a318bb">lambda表达式</a></li>
-<li><a href="#orgf8d5402">if表达式</a></li>
+<li><a href="#org8ef4b9b">if表达式</a></li>
 <li><a href="#org0bc66dc">begin表达式</a></li>
 <li><a href="#org90f6787">cond表达式</a></li>
 <li><a href="#orgca27ff8">application表达式</a></li>
@@ -279,9 +279,9 @@ for the JavaScript code in this tag.
 </li>
 </ul>
 </li>
-<li><a href="#orge352372">优化效率</a>
+<li><a href="#orgd566459">语法分析</a>
 <ul>
-<li><a href="#orgd566459">语法分析</a></li>
+<li><a href="#org85973aa">核心思路</a></li>
 <li><a href="#orgde2a828">analyze过程</a>
 <ul>
 <li><a href="#org0d81256">analyze-self-evaluating</a></li>
@@ -290,8 +290,13 @@ for the JavaScript code in this tag.
 <li><a href="#org11018c7">analyze-definition</a></li>
 <li><a href="#org68bd7fe">analyze-assignment</a></li>
 <li><a href="#org58b31f4">analyze-if</a></li>
+<li><a href="#orgd743530">analyze-lambda</a></li>
+<li><a href="#orgc4fe9c3">analyze-sequence</a></li>
+<li><a href="#org181d6b2">analyze-application</a></li>
 </ul>
 </li>
+<li><a href="#org12336a0">execute-application过程</a></li>
+<li><a href="#orgf88945c">总结</a></li>
 </ul>
 </li>
 </ul>
@@ -522,9 +527,9 @@ for the JavaScript code in this tag.
 </div>
 </div>
 
-<div id="outline-container-orgc7af108" class="outline-4">
-<h4 id="orgc7af108">if表达式</h4>
-<div class="outline-text-4" id="text-orgc7af108">
+<div id="outline-container-orgfa157a6" class="outline-4">
+<h4 id="orgfa157a6">if表达式</h4>
+<div class="outline-text-4" id="text-orgfa157a6">
 <div class="org-src-container">
 <pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">eval-if</span> exp env<span style="color: #696969;">)</span>
   <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>true? <span style="color: #696969;">(</span>eval <span style="color: #696969;">(</span>if-predicate exp<span style="color: #696969;">)</span> env<span style="color: #696969;">))</span>
@@ -861,9 +866,9 @@ true? 把条件表达式的求值转换成Scheme的逻辑值
 </div>
 </div>
 
-<div id="outline-container-orgf8d5402" class="outline-4">
-<h4 id="orgf8d5402">if表达式</h4>
-<div class="outline-text-4" id="text-orgf8d5402">
+<div id="outline-container-org8ef4b9b" class="outline-4">
+<h4 id="org8ef4b9b">if表达式</h4>
+<div class="outline-text-4" id="text-org8ef4b9b">
 <pre class="example">
 (if (&lt;predicate&gt;) (&lt;consequent&gt;) (&lt;alternative&gt;))  
 </pre>
@@ -1650,9 +1655,9 @@ true? 把条件表达式的求值转换成Scheme的逻辑值
 </div>
 
 
-<div id="outline-container-orge352372" class="outline-2">
-<h2 id="orge352372">优化效率</h2>
-<div class="outline-text-2" id="text-orge352372">
+<div id="outline-container-orgd566459" class="outline-2">
+<h2 id="orgd566459">语法分析</h2>
+<div class="outline-text-2" id="text-orgd566459">
 <p>
 主要问题： <b>表达式的语法分析和执行交织在一起</b> 。如果一个表达式需要执行多次，就要做多次语法分析。比如：
 </p>
@@ -1681,9 +1686,9 @@ true? 把条件表达式的求值转换成Scheme的逻辑值
 </pre>
 </div>
 
-<div id="outline-container-orgd566459" class="outline-3">
-<h3 id="orgd566459">语法分析</h3>
-<div class="outline-text-3" id="text-orgd566459">
+<div id="outline-container-org85973aa" class="outline-3">
+<h3 id="org85973aa">核心思路</h3>
+<div class="outline-text-3" id="text-org85973aa">
 <p>
 把 <span class="underline">eval</span> 的工作分为两部分:
 </p>
@@ -1863,6 +1868,166 @@ true? 把条件表达式的求值转换成Scheme的逻辑值
 </div>
 <div id="outline-container-org58b31f4" class="outline-4">
 <h4 id="org58b31f4">analyze-if</h4>
+<div class="outline-text-4" id="text-org58b31f4">
+<p>
+分析 <span class="underline">谓词</span> 和两个 <span class="underline">分支</span> 表达式：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">analyze-if</span> exp<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>pproc <span style="color: #696969;">(</span>analyze <span style="color: #696969;">(</span>if-predicate exp<span style="color: #696969;">)))</span>
+        <span style="color: #696969;">(</span>cproc <span style="color: #696969;">(</span>analyze <span style="color: #696969;">(</span>if-consequent exp<span style="color: #696969;">)))</span>
+        <span style="color: #696969;">(</span>aproc <span style="color: #696969;">(</span>analyze <span style="color: #696969;">(</span>if-alternative exp<span style="color: #696969;">))))</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>env<span style="color: #696969;">)</span>
+      <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>true? <span style="color: #696969;">(</span>pproc env<span style="color: #696969;">))</span>
+          <span style="color: #696969;">(</span>cproc env<span style="color: #696969;">)</span>
+          <span style="color: #696969;">(</span>aproc env<span style="color: #696969;">)))))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define test-environment (setup-environment))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">((analyze-if '(if (null?</span>
+<span style="color: #5f9ea0; font-style: italic;">;;                 </span><span style="color: #5f9ea0; font-style: italic;">'(1 2))</span>
+<span style="color: #5f9ea0; font-style: italic;">;;                </span><span style="color: #5f9ea0; font-style: italic;">(+ 3 4) (+ 5 6)))</span>
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">test-environment) ;=&gt; 11 </span>
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-orgd743530" class="outline-4">
+<h4 id="orgd743530">analyze-lambda</h4>
+<div class="outline-text-4" id="text-orgd743530">
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">analyze-lambda</span> exp<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>vars <span style="color: #696969;">(</span>lambda-parameters exp<span style="color: #696969;">))</span>
+        <span style="color: #696969;">(</span>bproc <span style="color: #696969;">(</span>analyze-sequence <span style="color: #696969;">(</span>lambda-body exp<span style="color: #696969;">))))</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>env<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>make-procedure vars bproc env<span style="color: #696969;">))))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define test-env '()) </span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">((analyze-lambda '(lambda (x) (+ 1 x))) test-env)</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">=&gt; (procedure (x) #[compound-procedure 19] ())</span>
+</pre>
+</div>
+
+<p>
+避免对过程体的分析可以大大提高效率
+</p>
+</div>
+</div>
+<div id="outline-container-orgc4fe9c3" class="outline-4">
+<h4 id="orgc4fe9c3">analyze-sequence</h4>
+<div class="outline-text-4" id="text-orgc4fe9c3">
+<p>
+每个表达式分析为一个过程，再把他们组合起来称为一个过程：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">analyze-sequence</span> exps<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">sequentially</span> proc1 proc2<span style="color: #696969;">)</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>env<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>proc1 env<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>proc2 env<span style="color: #696969;">)))</span> 
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">loop</span> first-proc rest-procs<span style="color: #696969;">)</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>null? rest-procs<span style="color: #696969;">)</span>
+        first-proc
+        <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#25226;&#21069;&#38754;&#20004;&#20010;&#34920;&#36798;&#24335;&#32452;&#21512;&#36215;&#26469;</span>
+        <span style="color: #696969;">(</span>loop <span style="color: #696969;">(</span>sequentially first-proc <span style="color: #696969;">(</span>car rest-procs<span style="color: #696969;">))</span>
+              <span style="color: #696969;">(</span>cdr rest-procs<span style="color: #696969;">))))</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>procs <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">map</span> analyze exps<span style="color: #696969;">)))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#20998;&#26512;&#21508;&#20010;&#23376;&#34920;&#36798;&#24335;</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>null? procs<span style="color: #696969;">)</span>
+        <span style="color: #696969;">(</span>error <span style="color: #deb887;">"Empty sequence -- ANALYZE"</span><span style="color: #696969;">))</span>
+    <span style="color: #696969;">(</span>loop <span style="color: #696969;">(</span>car procs<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>cdr procs<span style="color: #696969;">))))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define test-environment1 (setup-environment))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define test-environment2 (setup-environment))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define sequence-analyzed</span>
+<span style="color: #5f9ea0; font-style: italic;">;;   </span><span style="color: #5f9ea0; font-style: italic;">(analyze-sequence '((+ 1 2) true (+ 2 3))))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(sequence-analyzed test-environment1) ; =&gt; 5</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(sequence-analyzed test-environment2) ; =&gt; 5</span>
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org181d6b2" class="outline-4">
+<h4 id="org181d6b2">analyze-application</h4>
+<div class="outline-text-4" id="text-org181d6b2">
+<p>
+分别分析其中的 <span class="underline">运算符</span> 和 <span class="underline">运算参数</span> ，对每个子表达式生成一个执行过程， <b>组合为一个过程</b> 之后将其送给 <span class="underline">execute-application</span> 过程，要求它执行这个过程
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">analyze-application</span> exp<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>fproc <span style="color: #696969;">(</span>analyze <span style="color: #696969;">(</span>operator exp<span style="color: #696969;">)))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#20998;&#26512;&#36816;&#31639;&#31526;</span>
+        <span style="color: #696969;">(</span>aprocs <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">map</span> analyze <span style="color: #696969;">(</span>operands exp<span style="color: #696969;">))))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#20998;&#26512;&#36816;&#31639;&#21442;&#25968;</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>env<span style="color: #696969;">)</span>
+      <span style="color: #696969;">(</span>execute-application <span style="color: #696969;">(</span>fproc env<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#25191;&#34892;&#36816;&#31639;&#31526;&#30340;&#25191;&#34892;&#36807;&#31243;&#65292;&#33719;&#24471;&#36816;&#31639;&#31526;</span>
+                           <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">map</span> <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>aproc<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>aproc env<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#25191;&#34892;&#20010;&#36816;&#31639;&#23545;&#35937;&#30340;&#25191;&#34892;&#36807;&#31243;&#65292;&#24471;&#21040;&#23454;&#21442;</span>
+                                aprocs<span style="color: #696969;">)))))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define test-environment (setup-environment))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">((analyze '(define (add x y) (+ x y))) test-environment)</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define add-analyzed (analyze-application '(add 100 (+ 2 20))))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(add-analyzed test-environment) ; =&gt; 122</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define fproc (analyze 'add))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(operands '(add 100 (+ 2 20))) </span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define aprocs</span>
+<span style="color: #5f9ea0; font-style: italic;">;;   </span><span style="color: #5f9ea0; font-style: italic;">(map analyze '(100 (+ 2 20))))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define arguments</span>
+<span style="color: #5f9ea0; font-style: italic;">;;   </span><span style="color: #5f9ea0; font-style: italic;">(map (lambda (aproc) (aproc test-environment))</span>
+<span style="color: #5f9ea0; font-style: italic;">;;        </span><span style="color: #5f9ea0; font-style: italic;">aprocs))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">arguments ; =&gt;  (100 22)</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(execute-application (fproc test-environment) '(100 22)) ; =&gt; 122</span>
+</pre>
+</div>
+</div>
+</div>
+</div>
+<div id="outline-container-org12336a0" class="outline-3">
+<h3 id="org12336a0">execute-application过程</h3>
+<div class="outline-text-3" id="text-org12336a0">
+<p>
+<span class="underline">execute-application</span> 与 <span class="underline">apply</span> 几乎一样，唯一的区别：
+</p>
+<ul class="org-ul">
+<li><span class="underline">apply</span> 还要继续调用 <span class="underline">eval</span> 来继续求值</li>
+<li><span class="underline">execute-application</span> 已经分析完毕，直接执行就可以</li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">execute-application</span> proc args<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">cond</span> <span style="color: #696969;">((</span>primitive-procedure? proc<span style="color: #696969;">)</span>
+         <span style="color: #696969;">(</span>apply-primitive-procedure proc args<span style="color: #696969;">))</span>
+        <span style="color: #696969;">((</span>compound-procedure? proc<span style="color: #696969;">)</span>
+         <span style="color: #696969;">((</span>procedure-body proc<span style="color: #696969;">)</span>
+          <span style="color: #696969;">(</span>extend-environment <span style="color: #696969;">(</span>procedure-parameters proc<span style="color: #696969;">)</span>
+                              args
+                              <span style="color: #696969;">(</span>procedure-environment proc<span style="color: #696969;">))))</span>
+        <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">else</span>
+         <span style="color: #696969;">(</span>error
+          <span style="color: #deb887;">"Unknown procedure type -- EXECUTE-APPLICATION"</span>
+          proc<span style="color: #696969;">))))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define test-environment (setup-environment))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">((analyze '(define (add x y) (+ x y))) test-environment)</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define proc ((analyze 'add) test-environment)) </span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(execute-application proc '(100 22)) ; =&gt; 122</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define proc-body (procedure-body proc))  </span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(procedure-parameters proc) ; =&gt; (x y)</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define test-extended-enviroment (extend-environment '(x y) '(100 22) test-environment))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(proc-body test-extended-enviroment) ; =&gt; 122 </span>
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-orgf88945c" class="outline-3">
+<h3 id="orgf88945c">总结</h3>
+<div class="outline-text-3" id="text-orgf88945c">
+<p>
+这一做法类似于高级语言程序的解释和编译：
+</p>
+<ul class="org-ul">
+<li><b>解释</b> ：一遍遍分析程序代码，实现其语义</li>
+<li><b>编译</b> ：把实现程序功能的工作分为两步：
+<ol class="org-ol">
+<li>通过一次分析生成一个可执行的程序</li>
+<li>任意地多次执行这个程序</li>
+</ol></li>
+</ul>
 </div>
 </div>
 </div>

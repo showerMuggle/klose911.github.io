@@ -1069,7 +1069,7 @@
     #+END_SRC
 
 
-* 优化效率
+* 语法分析
   主要问题： *表达式的语法分析和执行交织在一起* 。如果一个表达式需要执行多次，就要做多次语法分析。比如：
   #+BEGIN_SRC scheme
   (define (factorial n)
@@ -1088,7 +1088,7 @@
   提高效率的一种方式:修改求值器，重新安排处理过程,使表达式分析只做一次
   #+END_EXAMPLE
 
-** 语法分析
+** 核心思路
    把 _eval_ 的工作分为两部分:
    + 定义过程 _analyze_ ：它专门做对被求值表达式的语法分析
      + _analyze_ 对每个被分析的表达式返回一个 *执行过程* ,分析结果被封装在这个表达式里
@@ -1215,3 +1215,118 @@
   ;;      (primitive #[arity-dispatched-procedure 25])))
     #+END_SRC
 *** analyze-if 
+分析 _谓词_ 和两个 _分支_ 表达式：
+#+BEGIN_SRC scheme
+  (define (analyze-if exp)
+    (let ((pproc (analyze (if-predicate exp)))
+	  (cproc (analyze (if-consequent exp)))
+	  (aproc (analyze (if-alternative exp))))
+      (lambda (env)
+	(if (true? (pproc env))
+	    (cproc env)
+	    (aproc env)))))
+
+  ;; (define test-environment (setup-environment))
+  ;; ((analyze-if '(if (null?
+  ;; 		   '(1 2))
+  ;; 		  (+ 3 4) (+ 5 6)))
+  ;;  test-environment) ;=> 11 
+#+END_SRC
+*** analyze-lambda
+#+BEGIN_SRC scheme
+  (define (analyze-lambda exp)
+    (let ((vars (lambda-parameters exp))
+	  (bproc (analyze-sequence (lambda-body exp))))
+      (lambda (env) (make-procedure vars bproc env))))
+
+  ;; (define test-env '()) 
+  ;; ((analyze-lambda '(lambda (x) (+ 1 x))) test-env)
+  ;; => (procedure (x) #[compound-procedure 19] ())
+#+END_SRC
+
+避免对过程体的分析可以大大提高效率
+*** analyze-sequence
+每个表达式分析为一个过程，再把他们组合起来称为一个过程：
+#+BEGIN_SRC scheme
+  (define (analyze-sequence exps)
+    (define (sequentially proc1 proc2)
+      (lambda (env) (proc1 env) (proc2 env))) 
+    (define (loop first-proc rest-procs)
+      (if (null? rest-procs)
+	  first-proc
+	  ;; 把前面两个表达式组合起来
+	  (loop (sequentially first-proc (car rest-procs))
+		(cdr rest-procs))))
+    (let ((procs (map analyze exps))) ;; 分析各个子表达式
+      (if (null? procs)
+	  (error "Empty sequence -- ANALYZE"))
+      (loop (car procs) (cdr procs))))
+
+  ;; (define test-environment1 (setup-environment))
+  ;; (define test-environment2 (setup-environment))
+  ;; (define sequence-analyzed
+  ;;   (analyze-sequence '((+ 1 2) true (+ 2 3))))
+  ;; (sequence-analyzed test-environment1) ; => 5
+  ;; (sequence-analyzed test-environment2) ; => 5
+#+END_SRC
+*** analyze-application
+分别分析其中的 _运算符_ 和 _运算参数_ ，对每个子表达式生成一个执行过程， *组合为一个过程* 之后将其送给 _execute-application_ 过程，要求它执行这个过程
+#+BEGIN_SRC scheme
+  (define (analyze-application exp)
+    (let ((fproc (analyze (operator exp))) ;; 分析运算符
+	  (aprocs (map analyze (operands exp)))) ;; 分析运算参数
+      (lambda (env)
+	(execute-application (fproc env) ;; 执行运算符的执行过程，获得运算符
+			     (map (lambda (aproc) (aproc env)) ;; 执行个运算对象的执行过程，得到实参
+				  aprocs)))))
+
+  ;; (define test-environment (setup-environment))
+  ;; ((analyze '(define (add x y) (+ x y))) test-environment)
+  ;; (define add-analyzed (analyze-application '(add 100 (+ 2 20))))
+  ;; (add-analyzed test-environment) ; => 122
+
+  ;; (define fproc (analyze 'add))
+  ;; (operands '(add 100 (+ 2 20))) 
+  ;; (define aprocs
+  ;;   (map analyze '(100 (+ 2 20))))
+  ;; (define arguments
+  ;;   (map (lambda (aproc) (aproc test-environment))
+  ;;        aprocs))
+  ;; arguments ; =>  (100 22)
+  ;; (execute-application (fproc test-environment) '(100 22)) ; => 122
+#+END_SRC
+** execute-application过程
+_execute-application_ 与 _apply_ 几乎一样，唯一的区别：
++ _apply_ 还要继续调用 _eval_ 来继续求值
++ _execute-application_ 已经分析完毕，直接执行就可以
+
+#+BEGIN_SRC scheme
+  (define (execute-application proc args)
+    (cond ((primitive-procedure? proc)
+	   (apply-primitive-procedure proc args))
+	  ((compound-procedure? proc)
+	   ((procedure-body proc)
+	    (extend-environment (procedure-parameters proc)
+				args
+				(procedure-environment proc))))
+	  (else
+	   (error
+	    "Unknown procedure type -- EXECUTE-APPLICATION"
+	    proc))))
+
+  ;; (define test-environment (setup-environment))
+  ;; ((analyze '(define (add x y) (+ x y))) test-environment)
+  ;; (define proc ((analyze 'add) test-environment)) 
+  ;; (execute-application proc '(100 22)) ; => 122
+
+  ;; (define proc-body (procedure-body proc))  
+  ;; (procedure-parameters proc) ; => (x y)
+  ;; (define test-extended-enviroment (extend-environment '(x y) '(100 22) test-environment))
+  ;; (proc-body test-extended-enviroment) ; => 122 
+#+END_SRC
+** 总结
+这一做法类似于高级语言程序的解释和编译：
++ *解释* ：一遍遍分析程序代码，实现其语义
++ *编译* ：把实现程序功能的工作分为两步：
+  1. 通过一次分析生成一个可执行的程序
+  2. 任意地多次执行这个程序

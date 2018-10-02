@@ -82,7 +82,7 @@
 (define (first-exp seq) (car seq))
 
 (define (rest-exps seq) (cdr seq))
- 
+
 
 (define (sequence->exp seq)
   (cond ((null? seq) seq)
@@ -146,7 +146,7 @@
 
 (define (procedure-environment p) (cadddr p))
 
-				   
+
 (define (enclosing-environment env) (cdr env))
 
 (define (first-frame env) (car env))
@@ -220,7 +220,7 @@
         (list 'null? null?)
 	(list '+ +)
 	(list '> >)
-;;      more primitives
+	;;      more primitives
         ))
 
 (define (primitive-procedure-names)
@@ -260,25 +260,27 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; eval and apply process  ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; (define (eval exp env)
-;;   (cond ((self-evaluating? exp) exp) ; (eval '100 env) 
-;;         ((variable? exp) (lookup-variable-value exp env)) ; (eval x env) 
-;;         ((quoted? exp) (text-of-quotation exp)) ; (eval '(quote a) env) 
-;;         ((assignment? exp) (eval-assignment exp env)) ; (eval '(set! a 10) env)
-;;         ((definition? exp) (eval-definition exp env)) ; (eval '(define a 20) env) 
-;;         ((if? exp) (eval-if exp env)) ; (eval '(if (> a 3) 100 a) env) 
-;;         ((lambda? exp) ; (eval '(lambda (x y) (+ x y)) env)  
-;;          (make-procedure (lambda-parameters exp) 
-;;                          (lambda-body exp)
-;;                          env))
-;;         ((begin? exp) ; (eval '(begin (+ 1 2) (/ 2 1)) env) 
-;;          (eval-sequence (begin-actions exp) env)) 
-;;         ((cond? exp) (eval (cond->if exp) env)) 
-;;         ((application? exp) ; (eval '(add 100 (+ 2 20)) env)
-;;          (apply (eval (operator exp) env)
-;;                 (list-of-values (operands exp) env)))
-;;         (else
-;;          (error "Unknown expression type -- EVAL" exp))))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; (define (eval exp env)							      ;;
+;;   (cond ((self-evaluating? exp) exp) ; (eval '100 env) 			      ;;
+;;         ((variable? exp) (lookup-variable-value exp env)) ; (eval x env) 	      ;;
+;;         ((quoted? exp) (text-of-quotation exp)) ; (eval '(quote a) env) 	      ;;
+;;         ((assignment? exp) (eval-assignment exp env)) ; (eval '(set! a 10) env)    ;;
+;;         ((definition? exp) (eval-definition exp env)) ; (eval '(define a 20) env)  ;;
+;;         ((if? exp) (eval-if exp env)) ; (eval '(if (> a 3) 100 a) env) 	      ;;
+;;         ((lambda? exp) ; (eval '(lambda (x y) (+ x y)) env)  		      ;;
+;;          (make-procedure (lambda-parameters exp) 				      ;;
+;;                          (lambda-body exp)					      ;;
+;;                          env))						      ;;
+;;         ((begin? exp) ; (eval '(begin (+ 1 2) (/ 2 1)) env) 			      ;;
+;;          (eval-sequence (begin-actions exp) env)) 				      ;;
+;;         ((cond? exp) (eval (cond->if exp) env)) 				      ;;
+;;         ((application? exp) ; (eval '(add 100 (+ 2 20)) env)			      ;;
+;;          (apply (eval (operator exp) env)					      ;;
+;;                 (list-of-values (operands exp) env)))			      ;;
+;;         (else								      ;;
+;;          (error "Unknown expression type -- EVAL" exp))))			      ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (define (eval exp env)
   ((analyze exp) env))
@@ -296,19 +298,67 @@
 	((application? exp) (analyze-application exp))
 	(else (error "Unknown expression type -- ANALYZE" exp))))
 
-(define (apply procedure arguments)
-  (cond ((primitive-procedure? procedure) 
-         (apply-primitive-procedure procedure arguments)) ; directly call scheme system given apply function 
-        ((compound-procedure? procedure)
-         (eval-sequence
-           (procedure-body procedure) ; eval procedure body 
-           (extend-environment ; eval arguments and bound them to a new frame 
-             (procedure-parameters procedure)
-             arguments
-             (procedure-environment procedure))))
+(define (analyze-application exp)
+  (let ((fproc (analyze (operator exp))) ;; 分析运算符
+        (aprocs (map analyze (operands exp)))) ;; 分析运算参数
+    (lambda (env)
+      (execute-application (fproc env) ;; 执行运算符的执行过程，获得运算符
+                           (map (lambda (aproc) (aproc env)) ;; 执行个运算对象的执行过程，得到实参
+                                aprocs)))))
+
+;; (define test-environment (setup-environment))
+;; ((analyze '(define (add x y) (+ x y))) test-environment)
+;; (define add-analyzed (analyze-application '(add 100 (+ 2 20))))
+;; (add-analyzed test-environment) ; => 122
+
+;; (define fproc (analyze 'add))
+;; (operands '(add 100 (+ 2 20))) 
+;; (define aprocs
+;;   (map analyze '(100 (+ 2 20))))
+;; (define arguments
+;;   (map (lambda (aproc) (aproc test-environment))
+;;        aprocs))
+;; arguments ; =>  (100 22)
+;; (execute-application (fproc test-environment) '(100 22)) ; => 122
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; (define (apply procedure arguments)										 ;;
+;;   (cond ((primitive-procedure? procedure) 									 ;;
+;;          (apply-primitive-procedure procedure arguments)) ; directly call scheme system given apply function  ;;
+;;         ((compound-procedure? procedure)									 ;;
+;;          (eval-sequence											 ;;
+;;            (procedure-body procedure) ; eval procedure body 							 ;;
+;;            (extend-environment ; eval arguments and bound them to a new frame 				 ;;
+;;              (procedure-parameters procedure)								 ;;
+;;              arguments											 ;;
+;;              (procedure-environment procedure))))								 ;;
+;;         (else												 ;;
+;;          (error												 ;;
+;;           "Unknown procedure type -- APPLY" procedure))))							 ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(define (execute-application proc args)
+  (cond ((primitive-procedure? proc)
+         (apply-primitive-procedure proc args))
+        ((compound-procedure? proc)
+         ((procedure-body proc)
+          (extend-environment (procedure-parameters proc)
+                              args
+                              (procedure-environment proc))))
         (else
          (error
-          "Unknown procedure type -- APPLY" procedure))))
+          "Unknown procedure type -- EXECUTE-APPLICATION"
+          proc))))
+
+;; (define test-environment (setup-environment))
+;; ((analyze '(define (add x y) (+ x y))) test-environment)
+;; (define proc ((analyze 'add) test-environment)) 
+;; (execute-application proc '(100 22)) ; => 122
+
+;; (define proc-body (procedure-body proc))  
+;; (procedure-parameters proc) ; => (x y)
+;; (define test-extended-enviroment (extend-environment '(x y) '(100 22) test-environment))
+;; (proc-body test-extended-enviroment) ; => 122 
 
 (define (analyze-self-evaluating exp)
   (lambda (env) exp))
@@ -334,15 +384,65 @@
       (cons (eval (first-operand exps) env)
             (list-of-values (rest-operands exps) env))))
 
-(define (eval-if exp env)
-  (if (true? (eval (if-predicate exp) env))
-      (eval (if-consequent exp) env)
-      (eval (if-alternative exp) env)))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; (define (eval-if exp env)		       ;;
+;;   (if (true? (eval (if-predicate exp) env)) ;;
+;;       (eval (if-consequent exp) env)	       ;;
+;;       (eval (if-alternative exp) env)))     ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(define (eval-sequence exps env)
-  (cond ((last-exp? exps) (eval (first-exp exps) env))
-        (else (eval (first-exp exps) env)
-              (eval-sequence (rest-exps exps) env))))
+(define (analyze-if exp)
+  (let ((pproc (analyze (if-predicate exp)))
+        (cproc (analyze (if-consequent exp)))
+        (aproc (analyze (if-alternative exp))))
+    (lambda (env)
+      (if (true? (pproc env))
+          (cproc env)
+          (aproc env)))))
+
+;; (define test-environment (setup-environment))
+;; ((analyze-if '(if (null?
+;; 		   '(1 2))
+;; 		  (+ 3 4) (+ 5 6)))
+;;  test-environment) ;=> 11
+
+
+(define (analyze-lambda exp)
+  (let ((vars (lambda-parameters exp))
+        (bproc (analyze-sequence (lambda-body exp))))
+    (lambda (env) (make-procedure vars bproc env))))
+
+;; (define test-env '()) 
+;; ((analyze-lambda '(lambda (x) (+ 1 x))) test-env)
+;; => (procedure (x) #[compound-procedure 19] ())
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; (define (eval-sequence exps env)			  ;;
+;;   (cond ((last-exp? exps) (eval (first-exp exps) env)) ;;
+;;         (else (eval (first-exp exps) env)		  ;;
+;;               (eval-sequence (rest-exps exps) env))))  ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(define (analyze-sequence exps)
+  (define (sequentially proc1 proc2)
+    (lambda (env) (proc1 env) (proc2 env))) 
+  (define (loop first-proc rest-procs)
+    (if (null? rest-procs)
+        first-proc
+	;; 把前面两个表达式组合起来
+        (loop (sequentially first-proc (car rest-procs))
+              (cdr rest-procs))))
+  (let ((procs (map analyze exps))) ;; 分析各个子表达式
+    (if (null? procs)
+        (error "Empty sequence -- ANALYZE"))
+    (loop (car procs) (cdr procs))))
+
+;; (define test-environment1 (setup-environment))
+;; (define test-environment2 (setup-environment))
+;; (define sequence-analyzed
+;;   (analyze-sequence '((+ 1 2) true (+ 2 3))))
+;; (sequence-analyzed test-environment1) ; => 5
+;; (sequence-analyzed test-environment2) ; => 5
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; (define (eval-definition exp env)			 ;;
