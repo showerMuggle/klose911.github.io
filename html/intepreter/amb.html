@@ -238,9 +238,39 @@ for the JavaScript code in this tag.
 <ul>
 <li><a href="#orgc895f11">思想</a></li>
 <li><a href="#org4126b94">与流的比较</a></li>
+<li><a href="#org13218fe">amb求值器</a>
+<ul>
+<li><a href="#org8be9767">amb形式</a></li>
+<li><a href="#org408cd50">搜索</a></li>
+<li><a href="#org0998fad">驱动循环</a></li>
 </ul>
 </li>
-<li><a href="#org13218fe">amb求值器</a></li>
+</ul>
+</li>
+<li><a href="#orgd8688ab">实现</a>
+<ul>
+<li><a href="#org082cb25">基本设计</a>
+<ul>
+<li><a href="#org7971c64">续延</a></li>
+<li><a href="#orgb820d65">执行过程</a>
+<ul>
+<li><a href="#orgc924623">回溯</a></li>
+</ul>
+</li>
+<li><a href="#org2d8b388">总结</a></li>
+</ul>
+</li>
+<li><a href="#orgd42cf9a">程序结构</a></li>
+<li><a href="#org835ffee">续延过程</a>
+<ul>
+<li><a href="#orgeedc25b">简单表达式</a></li>
+<li><a href="#org8240567">条件表达式</a></li>
+<li><a href="#orge0e8ce6">顺序表达式</a></li>
+<li><a href="#org5638f2b">定义表达式</a></li>
+</ul>
+</li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
@@ -285,14 +315,561 @@ for the JavaScript code in this tag.
 </ul>
 </div>
 </div>
+
+<div id="outline-container-org13218fe" class="outline-3">
+<h3 id="org13218fe">amb求值器</h3>
+<div class="outline-text-3" id="text-org13218fe">
+<p>
+非确定性语言基于一种称为 <b>amb</b> 的特殊形式
+</p>
+
+<pre class="example">
+这个语言的名字和设计思想来自 John McCarthy。他还提出了＂人工智能＂这个词,被称为＂人工智能之父＂
+
+amb 的名字取自 ambiguous
+</pre>
+
+<p>
+在定义了前面非确定性过程后，将其送给 <span class="underline">amb</span> 求值器，会看到:
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">Amb-Eval input:</span>
+<span style="color: #696969;">(</span>prime-sum-pair '<span style="color: #696969;">(</span>1 3 5 8<span style="color: #696969;">)</span> '<span style="color: #696969;">(</span>20 35 110<span style="color: #696969;">))</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">Starting a new problem</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">Amb-Eval value:</span>
+<span style="color: #696969;">(</span>3 20<span style="color: #696969;">)</span>
+</pre>
 </div>
 
-<div id="outline-container-org13218fe" class="outline-2">
-<h2 id="org13218fe">amb求值器</h2>
-<div class="outline-text-2" id="text-org13218fe">
+<ul class="org-ul">
+<li>表达式求值时， <span class="underline">amb求值器</span> 将从两个表里反复选择元素，直至做出一次成功选择</li>
+<li>如果需要，还可以要求它做进一步的选择，求出更多可能的值</li>
+</ul>
+</div>
+
+
+<div id="outline-container-org8be9767" class="outline-4">
+<h4 id="org8be9767">amb形式</h4>
+<div class="outline-text-4" id="text-org8be9767">
 <p>
-我们的非确定性计算
+我们的求值器中引入一种称为 <span class="underline">amb</span> 的特殊形式：
 </p>
+<pre class="example">
+(amb &lt;e1&gt; &lt;e2&gt; ... &lt;en&gt;)
+
+返回几个参数表达式之一的值
+</pre>
+
+<p>
+比如：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span>list <span style="color: #696969;">(</span>amb 1 2 3<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>amb 'a 'b<span style="color: #696969;">))</span>
+</pre>
+</div>
+
+<p>
+这个表达式可能返回下面任一结果：
+</p>
+<pre class="example">
+(1 a), (1 b), (2 a), (2 b), (3 a), (3 b)
+</pre>
+
+<ul class="org-ul">
+<li>如果一个 <span class="underline">amb</span> 表达式只有一个选择，就 <b>确定</b> 地返回该元素的值</li>
+<li>无选择的表达式 <span class="underline">(amb)</span> 没有值，其求值导致 <b>计算失败且不产生值</b></li>
+</ul>
+
+<pre class="example">
+可以认为 (amb) 用来表示 fail
+</pre>
+
+<p>
+由此可以用 <span class="underline">amb</span> 来表示某个谓词 <span class="underline">p</span> 必须为 <span class="underline">真</span> ：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">require</span> p<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>not p<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>amb<span style="color: #696969;">)))</span>
+</pre>
+</div>
+
+<p>
+结合 <span class="underline">amb</span> 和 <span class="underline">require</span> 可以得到 an-element-of 过程：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">an-element-of</span> items<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>require <span style="color: #696969;">(</span>not <span style="color: #696969;">(</span>null? items<span style="color: #696969;">)))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#34920;&#20026;&#31354;&#26159;&#35745;&#31639;&#22833;&#36133;</span>
+  <span style="color: #696969;">(</span>amb <span style="color: #696969;">(</span>car items<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>an-element-of <span style="color: #696969;">(</span>cdr items<span style="color: #696969;">))))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#21453;&#20043;&#65292;&#36820;&#22238;&#34920;&#20013;&#20219;&#20309;&#19968;&#20010;&#20803;&#32032;</span>
+</pre>
+</div>
+
+<p>
+也可以用来表达 <b>无穷选择</b> ，下面代码返回一个大于或等于给定 <span class="underline">n</span> 的值：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">an-integer-starting-from</span> n<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>amb n <span style="color: #696969;">(</span>an-integer-starting-from <span style="color: #696969;">(</span>+ n 1<span style="color: #696969;">))))</span>
+</pre>
+</div>
+
+<pre class="example">
+这个过程像是在构造一个流，但 amb 表达式只返回一个整数
+
+而流返回的是一个对象，这个对象表示所有大于或等于 n 的整数的序列 
+
+用户看到 amb 表达式返回一个选择，而流的实现则看到它能逐个地返回所有选择
+</pre>
+</div>
+</div>
+<div id="outline-container-org408cd50" class="outline-4">
+<h4 id="org408cd50">搜索</h4>
+<div class="outline-text-4" id="text-org408cd50">
+<p>
+<span class="underline">amb</span> 表达式导致计算进程分裂为多个分支：
+</p>
+<ul class="org-ul">
+<li>如果有多个处理器，可把它们分派到不同处理器，同时搜索</li>
+<li>只有一个处理器时每次选一个分支，保留其他选择权:
+<ul class="org-ul">
+<li><b>随机</b> 选择，失败了退回重新选择</li>
+<li>按某种 <b>系统化</b> 的方式探查可能的分支。例如 <span class="underline">深度优先</span> : 每次总选第一个尚未检查过的分支，失败时退回最近选择点．探查那里的下一个尚未探查过的分支</li>
+</ul></li>
+</ul>
+</div>
+</div>
+<div id="outline-container-org0998fad" class="outline-4">
+<h4 id="org0998fad">驱动循环</h4>
+<div class="outline-text-4" id="text-org0998fad">
+<p>
+<span class="underline">amb</span> 求值器读入表达式，输出 <b>第一个成功</b> 得到的值。允许人工要求回溯：输入 <b>try-again</b> ，求值器将设法找 <b>下一结果</b> ：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">Amb-Eval input:</span>
+<span style="color: #696969;">(</span>prime-sum-pair '<span style="color: #696969;">(</span>1 3 5 8<span style="color: #696969;">)</span> '<span style="color: #696969;">(</span>20 35 110<span style="color: #696969;">))</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">Starting a new problem</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">Amb-Eval value:</span>
+<span style="color: #696969;">(</span>3 20<span style="color: #696969;">)</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">Amb-Eval input:</span>
+try-again
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">Amb-Eval value:</span>
+<span style="color: #696969;">(</span>3 110<span style="color: #696969;">)</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">Amb-Eval input:</span>
+try-again
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">Amb-Eval value:</span>
+<span style="color: #696969;">(</span>8 35<span style="color: #696969;">)</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">Amb-Eval input:</span>
+try-again
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">There are no more values of</span>
+<span style="color: #696969;">(</span>prime-sum-pair <span style="color: #696969;">(</span>quote <span style="color: #696969;">(</span>1 3 5 8<span style="color: #696969;">))</span> <span style="color: #696969;">(</span>quote <span style="color: #696969;">(</span>20 35 110<span style="color: #696969;">)))</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">Amb-Eval input:</span>
+<span style="color: #696969;">(</span>prime-sum-pair '<span style="color: #696969;">(</span>19 27 30<span style="color: #696969;">)</span> '<span style="color: #696969;">(</span>11 36 58<span style="color: #696969;">))</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">Starting a new problem</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">Amb-Eval value:</span>
+<span style="color: #696969;">(</span>30 11<span style="color: #696969;">)</span>
+</pre>
+</div>
+
+<p>
+遇到 <span class="underline">try-again</span> 之外的其他表达式，都认为是重新开始一个新任务
+</p>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgd8688ab" class="outline-2">
+<h2 id="orgd8688ab">实现</h2>
+<div class="outline-text-2" id="text-orgd8688ab">
+<p>
+常规的 <span class="underline">Scheme</span> 表达式可能：
+</p>
+<ul class="org-ul">
+<li>求出一个值</li>
+<li>不终止</li>
+<li>产生错误</li>
+</ul>
+
+<p>
+<b>非确定性</b> 的 <span class="underline">Scheme</span> 表达式还可能：
+</p>
+<ul class="org-ul">
+<li>走入死胡同</li>
+<li>使求值过程 <b>回溯</b></li>
+</ul>
+
+<p>
+思路：
+</p>
+<ul class="org-ul">
+<li>基于 <b>分析求值器</b> 实现 amb 求值器</li>
+<li>不同点就在于它将 <b>生成不同的执行过程</b></li>
+</ul>
+</div>
+
+
+<div id="outline-container-org082cb25" class="outline-3">
+<h3 id="org082cb25">基本设计</h3>
+<div class="outline-text-3" id="text-org082cb25">
+</div>
+<div id="outline-container-org7971c64" class="outline-4">
+<h4 id="org7971c64">续延</h4>
+<div class="outline-text-4" id="text-org7971c64">
+<p>
+<b>续延</b> ( <span class="underline">continuation</span>)是一种 <b>过程参数，将在过程的最后一步调用</b> ： 
+</p>
+<ul class="org-ul">
+<li>具有 <span class="underline">续延</span> 参数的过程不准备返回，最后总调用某个 <span class="underline">续延</span> 过程</li>
+<li>有 <span class="underline">尾递归优化</span> 的语言可以处理这种续延参数，能够自动优化运行所需的空间</li>
+</ul>
+
+<pre class="example">
+如果语言没有尾递归优化，栈空间就会越来越大
+
+例如:
+
+typedef int (*Fun) (int)
+
+int f (..., Fun p) { ...; p(...); return ...; }
+
+从 f 实际返回前都不会释放 f 占用的栈空间
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orgb820d65" class="outline-4">
+<h4 id="orgb820d65">执行过程</h4>
+<div class="outline-text-4" id="text-orgb820d65">
+<p>
+在常规 Scheme 语言的分析求值器里， <span class="underline">eval</span> 生成的执行过程要求一个 <span class="underline">环境</span> 参数，而 <span class="underline">amb</span> 分析器产生的执行过程要求三个参数:
+</p>
+<ol class="org-ol">
+<li>一个 <span class="underline">环境</span></li>
+<li>一个 <span class="underline">成功续延</span></li>
+<li>一个 <span class="underline">失败续延</span></li>
+</ol>
+
+<p>
+<span class="underline">amb</span> 表达式求值结束时总调用这两个过程之一：
+</p>
+<ul class="org-ul">
+<li>如果求值正常并得到结果，就调用 <b>成功续延</b></li>
+<li>如果求值进入死胡同，就调用 <b>失败续延</b></li>
+</ul>
+</div>
+
+<div id="outline-container-orgc924623" class="outline-5">
+<h5 id="orgc924623">回溯</h5>
+<div class="outline-text-5" id="text-orgc924623">
+<p>
+求值过程中的实际 <span class="underline">回溯</span> 是通过 <b>构造适当的成功续延和失败续延</b> 实现的：
+</p>
+<ul class="org-ul">
+<li><span class="underline">成功续延</span> （过程）：将 <b>得到一个值（参数）并将计算进行下去</b> 
+<ul class="org-ul">
+<li>它还得到一个 <span class="underline">失败续延</span></li>
+<li>如果用得到的值做计算将来遇到死胡同，就会调用该 <span class="underline">失败续延</span></li>
+</ul></li>
+<li><span class="underline">失败续延</span> （过程）的作用是 <b>探查另一个非确定性分支</b> ：
+<ul class="org-ul">
+<li>在遇到无法确定取哪个值能得到最后结果时先取一个值</li>
+<li>同时构造一个失败续延，并将它们一起送给成功续延过程，以便将来遇到失败时回溯</li>
+<li>求值无法进行时（如遇到 <span class="underline">require</span> 失败时）：
+<ul class="org-ul">
+<li>调用当时的失败续延，使执行回到前一选择点去考虑其他分支</li>
+<li>如果前一选择点已无更多选择，执行就会回到更前面的选择点（那里保存有以前的失败续延）</li>
+</ul></li>
+<li><span class="underline">try-again</span> 导致驱动循环直接调用 <b>当时的失败续延</b></li>
+<li>如果被选分支做了有副作用的操作（例如 <span class="underline">变量赋值</span> ），后来遇到死胡同回溯时，需要在进入其他选择前 <b>撤销该副作用</b> ：
+<ul class="org-ul">
+<li>处理方法：让 <span class="underline">产生副作用的操作生成一个能撤销副作用的失败续延过程</span> ，该过程撤销所做修改之后再回溯到前面选择点</li>
+</ul></li>
+</ul></li>
+</ul>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org2d8b388" class="outline-4">
+<h4 id="org2d8b388">总结</h4>
+<div class="outline-text-4" id="text-org2d8b388">
+<pre class="example">
+失败续延（过程）的构造，几种情况:
+1. amb 表达式：提供一种机制，使当前选择失败时可以换一个选择
+2. 最高层驱动循环：在用尽了所有选择的情况下报告失败
+3. 赋值：拦截出现的失败并在回溯前消除赋值的效果
+</pre>
+
+<pre class="example">
+失败的原因是求值遇到死胡同，两种情况下出现：
+1. 用户程序执行 (amb) 时
+2. 用户输入 try-again 时
+</pre>
+
+<pre class="example">
+  一个执行过程失败，它就调用自己的失败继续：
+
+  由赋值构造出的失败续延先消除自己的副作用．然后调用该赋值拦截的那个失败续延，将失败进一步回传
+
+  如果某 amb 的失败续延发现所有选择已用完时，就调用这个 amb 早先得到的那个失败续延，把失败传到更早的选择点
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-orgd42cf9a" class="outline-3">
+<h3 id="orgd42cf9a">程序结构</h3>
+<div class="outline-text-3" id="text-orgd42cf9a">
+<p>
+<span class="underline">amb</span> 求值器的 <b>语法过程</b> 和 <b>数据结构</b> 表示、基本的 <span class="underline">analyze</span> 过程都与分析求值器一样。只需增加识别 <span class="underline">amb</span> 表达式的语法过程：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">amb?</span> exp<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>tagged-list? exp 'amb<span style="color: #696969;">))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(amb? '(amb 1 2 3)) ; =&gt; #t </span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(amb? #t) ; =&gt; #f </span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(amb? 1) ; =&gt; #f</span>
+</pre>
+</div>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">amb-choices</span> exp<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>cdr exp<span style="color: #696969;">))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(amb-choices '(amb 1 2 3)) ; =&gt; (1 2 3)</span>
+</pre>
+</div>
+
+<p>
+在 <span class="underline">analyze</span> 里增加处理 <span class="underline">amb</span> 表达式的分支：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">((</span>amb? exp<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>analyze-amb exp<span style="color: #696969;">))</span>
+</pre>
+</div>
+
+<p>
+最高层的 <span class="underline">ambeval</span> 分析给定的表达式，应用得到的执行过程:
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">ambeval</span> exp env succeed fail<span style="color: #696969;">)</span>
+  <span style="color: #696969;">((</span>analyze exp<span style="color: #696969;">)</span> env succeed fail<span style="color: #696969;">))</span> 
+</pre>
+</div>
+
+<p>
+<span class="underline">成功续延</span> 过程都有两个参数：
+</p>
+<ul class="org-ul">
+<li>一个值参数</li>
+<li>一个失败续延</li>
+</ul>
+
+<p>
+<span class="underline">失败续延</span> ：无参过程
+</p>
+
+<p>
+因此执行过程的形式都是三个参数：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>env succeed fail<span style="color: #696969;">)</span>
+  <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">succeed is (lambda (value fail) ...)</span>
+  <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">fail is (lambda () ...)</span>
+  <span style="color: #5f9ea0; font-style: italic;">;;</span><span style="color: #5f9ea0; font-style: italic;">...)</span>
+</pre>
+</div>
+
+<p>
+在最上层的 <span class="underline">ambeval</span> 调用：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span>ambeval <span style="color: #98f5ff;">&lt;exp&gt;</span>
+         the-global-environment
+         <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>value fail<span style="color: #696969;">)</span> value<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#30452;&#25509;&#36820;&#22238; value </span>
+         <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">()</span> 'failed<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#36820;&#22238; 'failed</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define (my-succeed value fail) value) </span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define (my-fail) 'failed) </span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(my-succeed 1 my-fail) ; =&gt; 1</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(my-fail) ; =&gt; failed</span>
+</pre>
+</div>
+
+<p>
+执行求值 <span class="underline">&lt;exp&gt;</span> ，最后可能返回求出的值(如果得到值),或返回符号 <span class="underline">failed</span> 表示求值失败
+</p>
+<pre class="example">
+  后面实现的驱动循环里用了一个更复杂的续延过程，以便能支持用户输入的 try-again 请求
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org835ffee" class="outline-3">
+<h3 id="org835ffee">续延过程</h3>
+<div class="outline-text-3" id="text-org835ffee">
+<p>
+<span class="underline">amb</span> 求值器实现中，最复杂的东西就是 <b>续延过程的构造和传递</b> 
+</p>
+</div>
+
+
+<div id="outline-container-orgeedc25b" class="outline-4">
+<h4 id="orgeedc25b">简单表达式</h4>
+<div class="outline-text-4" id="text-orgeedc25b">
+<p>
+简单表达式的分析和前面一样。这些表达式的 <b>求值总成功</b> ，所以都 <b>调用自己的成功续延</b> ，但都 <b>需要传递 fail 续延过程</b> 
+</p>
+
+<p>
+<span class="underline">自求值</span> 表达式：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">analyze-self-evaluating</span> exp<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>env succeed fail<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">succeed &#36807;&#31243;&#26377; 2 &#20010;&#21442;&#25968;&#65292;&#31532;&#19968;&#20010;&#26159;&#36820;&#22238;&#20540;&#65292;&#31532;&#20108;&#20010;&#26159;&#22833;&#36133;&#32493;&#24310;&#65294;&#32780; fail &#36807;&#31243;&#27809;&#26377;&#21442;&#25968;</span>
+    <span style="color: #696969;">(</span>succeed exp fail<span style="color: #696969;">)))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#30452;&#25509;&#36820;&#22238; exp, &#25226;&#24403;&#21069;&#30340;&#22833;&#36133;&#32493;&#24310;&#20256;&#36882;&#36827;&#21435;</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">((analyze-self-evaluating 1)</span>
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">'()</span>
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">(lambda (value faile) value)</span>
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">(lambda () 'failed)) ; =&gt; 1 </span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">((analyze-self-evaluating "hello")</span>
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">'()</span>
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">(lambda (value faile) value)</span>
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">(lambda () 'failed)) ; =&gt; "hello"</span>
+</pre>
+</div>
+
+<p>
+<span class="underline">引用</span> 表达式：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">analyze-quoted</span> exp<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>qval <span style="color: #696969;">(</span>text-of-quotation exp<span style="color: #696969;">)))</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>env succeed fail<span style="color: #696969;">)</span>
+      <span style="color: #696969;">(</span>succeed qval fail<span style="color: #696969;">))))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">((analyze-quoted '(quote abc))</span>
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">'()</span>
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">(lambda (value faile) value)</span>
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">(lambda () 'failed)) ; =&gt; abc</span>
+</pre>
+</div>
+
+<p>
+<span class="underline">变量</span> 表达式：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">analyze-variable</span> exp<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>env succeed fail<span style="color: #696969;">)</span>
+    <span style="color: #696969;">(</span>succeed <span style="color: #696969;">(</span>lookup-variable-value exp env<span style="color: #696969;">)</span>
+             fail<span style="color: #696969;">)))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define test-extend-dev (extend-environment '(a b) '(300 400) '())) ; =&gt; test-extend-dev</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">((analyze-variable 'a)</span>
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">test-extend-dev</span>
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">(lambda (value faile) value)</span>
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">(lambda () 'failed))  ; =&gt; 300   </span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">((analyze-variable 'b)</span>
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">test-extend-dev</span>
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">(lambda (value faile) value)</span>
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">(lambda () 'failed)) ; =&gt; 400</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">((analyze-variable 'c)</span>
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">test-extend-dev</span>
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">(lambda (value faile) value)</span>
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">(lambda () 'failed)) ; =&gt; ;Unbound variable c</span>
+</pre>
+</div>
+
+<pre class="example">
+  注意：查找变量的值可能出错，但程序错误并不导致回溯和重新选择
+</pre>
+
+<p>
+<span class="underline">lambda</span> 表达式：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">analyze-lambda</span> exp<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>vars <span style="color: #696969;">(</span>lambda-parameters exp<span style="color: #696969;">))</span>
+        <span style="color: #696969;">(</span>bproc <span style="color: #696969;">(</span>analyze-sequence <span style="color: #696969;">(</span>lambda-body exp<span style="color: #696969;">))))</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>env succeed fail<span style="color: #696969;">)</span>
+      <span style="color: #696969;">(</span>succeed <span style="color: #696969;">(</span>make-procedure vars bproc env<span style="color: #696969;">)</span>
+               fail<span style="color: #696969;">))))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">((analyze-lambda '(lambda (x) (+ 1 x))) </span>
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">'()</span>
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">(lambda (value faile) value)</span>
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">(lambda () 'failed)) ; =&gt;  (procedure (x) #[compound-procedure 14] ())</span>
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org8240567" class="outline-4">
+<h4 id="org8240567">条件表达式</h4>
+<div class="outline-text-4" id="text-org8240567">
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">analyze-if</span> exp<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>pproc <span style="color: #696969;">(</span>analyze <span style="color: #696969;">(</span>if-predicate exp<span style="color: #696969;">)))</span>
+        <span style="color: #696969;">(</span>cproc <span style="color: #696969;">(</span>analyze <span style="color: #696969;">(</span>if-consequent exp<span style="color: #696969;">)))</span>
+        <span style="color: #696969;">(</span>aproc <span style="color: #696969;">(</span>analyze <span style="color: #696969;">(</span>if-alternative exp<span style="color: #696969;">))))</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>env succeed fail<span style="color: #696969;">)</span>
+      <span style="color: #696969;">(</span>pproc env
+             <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">pproc &#36807;&#31243;&#30340;&#25104;&#21151;&#32493;&#24310;</span>
+             <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>pred-value fail2<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#22914;&#26524; pproc &#36807;&#31243;&#25191;&#34892;&#25104;&#21151;&#65292;&#20250;&#25226;&#35745;&#31639;&#20986;&#30340;&#30495;&#20551;&#20540;&#20256;&#36882;&#32473;pred-value</span>
+               <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>true? pred-value<span style="color: #696969;">)</span>
+                   <span style="color: #696969;">(</span>cproc env succeed fail2<span style="color: #696969;">)</span>
+                   <span style="color: #696969;">(</span>aproc env succeed fail2<span style="color: #696969;">)))</span>
+             <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">pproc &#36807;&#31243;&#30340;&#22833;&#36133;&#32493;&#24310;&#65292;&#23601;&#26159; if &#36807;&#31243;&#30340;&#22833;&#36133;&#32493;&#24310;</span>
+             fail<span style="color: #696969;">))))</span>
+</pre>
+</div>
+
+<p>
+生成的执行过程调用由产生的谓词执行过程 <span class="underline">pproc</span> : 
+</p>
+<ul class="org-ul">
+<li><span class="underline">pproc</span> 的成功续延检查谓词的值，根据其真假调用 <span class="underline">cproc</span> 或 <span class="underline">aproc</span></li>
+<li><span class="underline">pproc</span> 执行失败时调用 <span class="underline">if</span> 表达式的失败续延过程 <span class="underline">fail</span></li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-orge0e8ce6" class="outline-4">
+<h4 id="orge0e8ce6">顺序表达式</h4>
+<div class="outline-text-4" id="text-orge0e8ce6">
+<p>
+顺序执行两个表达式 <span class="underline">a</span> 和 <span class="underline">b</span> ，实际上是在 <span class="underline">a</span> 的成功续延中执行 <span class="underline">b</span> ： 
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">analyze-sequence</span> exps<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">sequentially</span> a b<span style="color: #696969;">)</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>env succeed fail<span style="color: #696969;">)</span>
+      <span style="color: #696969;">(</span>a env
+         <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">a &#36807;&#31243;&#30340;&#25104;&#21151;&#32493;&#24310;&#65292;&#22914;&#26524; a &#36807;&#31243;&#25104;&#21151;&#25191;&#34892;&#65292;&#35745;&#31639;&#30340;&#32467;&#26524;&#20316;&#20026; a-value &#20256;&#36882;&#36827;&#19979;&#38754;&#30340;&#25104;&#21151;&#32493;&#24310;&#65292;</span>
+         <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>a-value fail2<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">a-value &#34987;&#33293;&#24323;&#65292;&#19979;&#38754;&#19981;&#20250;&#29992;&#21040;</span>
+           <span style="color: #696969;">(</span>b env succeed fail2<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#32487;&#32493;&#25191;&#34892; b &#36807;&#31243;</span>
+         <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">a &#36807;&#31243;&#30340;&#22833;&#36133;&#32493;&#24310;&#65292;&#35843;&#29992;&#20256;&#36882;&#36827;&#26469;&#30340;&#22833;&#36133;&#32493;&#24310;</span>
+         fail<span style="color: #696969;">)))</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">loop</span> first-proc rest-procs<span style="color: #696969;">)</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>null? rest-procs<span style="color: #696969;">)</span>
+        first-proc
+        <span style="color: #696969;">(</span>loop <span style="color: #696969;">(</span>sequentially first-proc <span style="color: #696969;">(</span>car rest-procs<span style="color: #696969;">))</span>
+              <span style="color: #696969;">(</span>cdr rest-procs<span style="color: #696969;">))))</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>procs <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">map</span> analyze exps<span style="color: #696969;">)))</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>null? procs<span style="color: #696969;">)</span>
+        <span style="color: #696969;">(</span>error <span style="color: #deb887;">"Empty sequence -- ANALYZE"</span><span style="color: #696969;">))</span>
+    <span style="color: #696969;">(</span>loop <span style="color: #696969;">(</span>car procs<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>cdr procs<span style="color: #696969;">))))</span>&#12288;
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org5638f2b" class="outline-4">
+<h4 id="org5638f2b">定义表达式</h4>
+</div>
 </div>
 </div>
 </div>
