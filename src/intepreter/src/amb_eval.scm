@@ -216,6 +216,33 @@
     (scan (frame-variables frame)
           (frame-values frame))))
 
+;;;;;;;;;;;;;;;;;;;;
+;; amb operations ;;
+;;;;;;;;;;;;;;;;;;;;
+(define (require p)
+  (if (not p) (amb)))
+
+(define (an-element-of items)
+  (require (not (null? items))) ;; 表为空是计算失败
+  (amb (car items) (an-element-of (cdr items)))) ;; 反之，返回表中任何一个元素
+
+;;;;;;;;;;;;;;;;;;;
+;; just for test ;;
+;;;;;;;;;;;;;;;;;;;
+(define (smallest-divisor n)
+  (find-divisor n 2))
+
+(define (find-divisor n test-divisor)
+  (cond ((> (square test-divisor) n) n)
+        ((divides? test-divisor n) test-divisor)
+        (else (find-divisor n (+ test-divisor 1)))))
+
+(define (divides? a b)
+  (= (remainder b a) 0))
+
+(define (prime? n)
+  (= n (smallest-divisor n)))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;
 ;; set up environment ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;
@@ -226,6 +253,10 @@
         (list 'null? null?)
 	(list '+ +)
 	(list '> >)
+	(list 'list list)
+	(list 'require require)
+	(list 'an-element-of an-element-of)
+	(list 'prime? prime?)
 	;;      more primitives
         ))
 
@@ -289,22 +320,81 @@
 	((application? exp) (analyze-application exp))
 	(else (error "Unknown expression type -- ANALYZE" exp))))
 
-(define (analyze-application exp)
-  (let ((fproc (analyze (operator exp))) ;; 分析运算符
-        (aprocs (map analyze (operands exp)))) ;; 分析运算参数
-    (lambda (env)
-      (execute-application (fproc env) ;; 执行运算符的执行过程，获得运算符
-                           (map (lambda (aproc) (aproc env)) ;; 执行个运算对象的执行过程，得到实参
-                                aprocs)))))
+(define (analyze-amb exp)
+  (let ((cprocs (map analyze (amb-choices exp)))) ; 分析各子表达式的执行过程
+    (lambda (env succeed fail) 
+      (define (try-next choices) 
+        (if (null? choices)
+            (fail) ; 没有任何值可以试探的时候，报出失败
+            ((car choices) env ; 调用 "第一个可能值" 的执行过程
+             succeed ; (car choices) 成功续延：原始的成功续延，实际上就是 amb 执行成功
+             (lambda () ; (car choices) 失败续延：尝试下一个可能值
+               (try-next (cdr choices))))))
+      (try-next cprocs))))
 
-(define (execute-application proc args)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; (define (analyze-application exp)								      ;;
+;;   (let ((fproc (analyze (operator exp))) ;; 分析运算符					      ;;
+;;         (aprocs (map analyze (operands exp)))) ;; 分析运算参数				      ;;
+;;     (lambda (env)										      ;;
+;;       (execute-application (fproc env) ;; 执行运算符的执行过程，获得运算符			      ;;
+;;                            (map (lambda (aproc) (aproc env)) ;; 执行个运算对象的执行过程，得到实参 ;;
+;;                                 aprocs)))))							      ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(define (analyze-application exp)
+  (let ((fproc (analyze (operator exp)))
+        (aprocs (map analyze (operands exp))))
+    (lambda (env succeed fail)
+      (fproc env
+             (lambda (proc fail2) ; fproc 的成功续延：依次计算每个实参
+               (get-args aprocs
+                         env
+                         (lambda (args fail3) ; get-args 的成功续延：所有参数都成功计算完毕后，做实际的过程调用
+                           (execute-application
+                            proc args succeed fail3))
+                         fail2))
+             fail)))) 
+
+(define (get-args aprocs env succeed fail)
+  (if (null? aprocs)
+      (succeed '() fail)
+      ((car aprocs) env ;  "求值第一个运算参数" 的执行过程
+       (lambda (arg fail2) ; (car aprocs) 的成功续延
+         (get-args (cdr aprocs) ; 对余下参数进行求值
+                   env
+                   (lambda (args fail3) ; (get-args (cdr aprocs)) 的成功续延
+                     (succeed (cons arg args) ; 用 cons 来收集所有的求值结果，然后把他送给最初调用的成功续延
+                              fail3))
+                   fail2))
+       fail)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; (define (execute-application proc args)			 ;;
+;;   (cond ((primitive-procedure? proc)				 ;;
+;;          (apply-primitive-procedure proc args))		 ;;
+;;         ((compound-procedure? proc)				 ;;
+;;          ((procedure-body proc)				 ;;
+;;           (extend-environment (procedure-parameters proc)	 ;;
+;;                               args				 ;;
+;;                               (procedure-environment proc)))) ;;
+;;         (else						 ;;
+;;          (error						 ;;
+;;           "Unknown procedure type -- EXECUTE-APPLICATION"	 ;;
+;;           proc))))						 ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(define (execute-application proc args succeed fail)
   (cond ((primitive-procedure? proc)
-         (apply-primitive-procedure proc args))
+         (succeed (apply-primitive-procedure proc args)
+                  fail))
         ((compound-procedure? proc)
          ((procedure-body proc)
           (extend-environment (procedure-parameters proc)
                               args
-                              (procedure-environment proc))))
+                              (procedure-environment proc))
+          succeed
+          fail))
         (else
          (error
           "Unknown procedure type -- EXECUTE-APPLICATION"
@@ -364,7 +454,7 @@
 
 ;; ((analyze-variable 'b)
 ;;  test-extend-dev
-;;  (lambda (value faile) value)
+;;  (lambda (value fail) value)
 ;;  (lambda () 'failed)) ; => 400
 
 ;; ((analyze-variable 'c)
@@ -415,12 +505,53 @@
     (lambda (env succeed fail)
       (pproc env
              ;; pproc 过程的成功续延
-             (lambda (pred-value fail2) ;; 如果 pproc 过程执行成功，会把计算出的真假值传递给pred-value
+	     ;; 如果 pproc 过程执行成功，会把计算出的真假值传递给pred-value，以及当前的 fail 传递给 fail2
+             (lambda (pred-value fail2)  
                (if (true? pred-value)
                    (cproc env succeed fail2)
                    (aproc env succeed fail2)))
              ;; pproc 过程的失败续延，就是 if 过程的失败续延
              fail))))
+
+;; (define my-succeed (lambda (value fail) value))
+;; (define my-fail (lambda () 'failed))
+;; (define test-environment (setup-environment))
+
+;; (define if-proc (analyze-if '(if true 100 200)))
+;; (if-proc test-environment my-succeed my-fail) ; => 100
+
+;; (define if-pproc (analyze 'true))
+;; (define if-cproc (analyze 100))
+;; (define if-aproc (analyze 200))
+
+;; (if-pproc test-environment
+;; 	  (lambda (pred-value fail2) 
+;;                (if (true? pred-value)
+;;                    (if-cproc test-environment my-succeed fail2)
+;;                    (if-aproc test-environment my-succeed fail2)))
+;;              my-fail) ;=> 100
+
+;; ((analyze-variable 'true) test-environment
+;; 	  (lambda (pred-value fail2) 
+;;                (if (true? pred-value)
+;;                    (if-cproc test-environment my-succeed fail2)
+;;                    (if-aproc test-environment my-succeed fail2)))
+;;              my-fail) ; => 100
+
+;; (define if-pproc-succeed
+;;   (lambda (pred-value fail2) 
+;;                (if (true? pred-value)
+;;                    (if-cproc test-environment my-succeed fail2)
+;;                    (if-aproc test-environment my-succeed fail2))))
+
+;; (if-pproc-succeed
+;;  (lookup-variable-value 'true test-environment)
+;;  my-fail) ; => 100
+
+;; (if (true? (lookup-variable-value 'true test-environment))
+;;     (if-cproc test-environment my-succeed my-fail)
+;;     (if-aproc test-environment my-succeed my-fail)) ; => 100
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; (define (analyze-sequence exps)				   ;;
@@ -455,35 +586,145 @@
   (let ((procs (map analyze exps)))
     (if (null? procs)
         (error "Empty sequence -- ANALYZE"))
-    (loop (car procs) (cdr procs))))　
+    (loop (car procs) (cdr procs))))
+
+;; (define my-succeed (lambda (value fail) value))
+;; (define my-fail (lambda () 'failed))
+;; (define test-environment (setup-environment))
+
+;; (define sequence-proc (analyze-sequence '(100 true "hello")))
+;; (sequence-proc test-environment my-succeed my-fail) ; => "hello"
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; (define (analyze-definition exp)		     ;;
+;;   (let ((var (definition-variable exp))	     ;;
+;;         (vproc (analyze (definition-value exp)))) ;;
+;;     (lambda (env)				     ;;
+;;       (define-variable! var (vproc env) env)	     ;;
+;;       'ok)))					     ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (define (analyze-definition exp)
   (let ((var (definition-variable exp))
-        (vproc (analyze (definition-value exp))))
-    (lambda (env)
-      (define-variable! var (vproc env) env)
-      'ok)))
+        (vproc (analyze (definition-value exp)))) 
+    (lambda (env succeed fail)
+      (vproc env ; 当时的环境                       
+             (lambda (val fail2)
+               (define-variable! var val env) ; 在 vproc 的成功续延里完成在环境中变量的定义
+               (succeed 'ok fail2))
+             fail))))
+
+;; (define my-succeed (lambda (value fail) value))
+;; (define my-fail (lambda () 'failed))
+;; (define test-environment (setup-environment))
+
+;; ((analyze-definition '(define a (quote hello))) test-environment my-succeed my-fail) ; => ok
+;; test-environment 
+;; => (((a false true car cdr cons null? + >)
+;;      hello
+;;      #f
+;;      #t
+;;      (primitive #[compiled-procedure 17 ("list" #x1) #x1a #x1fc23e2])
+;;      (primitive #[compiled-procedure 18 ("list" #x2) #x1a #x1fc2452])
+;;      (primitive #[compiled-procedure 19 ("list" #x3) #x14 #x1fc24bc])
+;;      (primitive #[compiled-procedure 20 ("list" #x5) #x14 #x1fc255c])
+;;      (primitive #[arity-dispatched-procedure 21])
+;;      (primitive #[arity-dispatched-procedure 22])))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; (define (analyze-assignment exp)		     ;;
+;;   (let ((var (assignment-variable exp))	     ;;
+;;         (vproc (analyze (assignment-value exp)))) ;;
+;;     (lambda (env)				     ;;
+;;       (set-variable-value! var (vproc env) env)   ;;
+;;       'ok)))					     ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (define (analyze-assignment exp)
   (let ((var (assignment-variable exp))
         (vproc (analyze (assignment-value exp))))
-    (lambda (env)
-      (set-variable-value! var (vproc env) env)
-      'ok)))
+    (lambda (env succeed fail)
+      (vproc env
+             (lambda (val fail2)        ; *1* 求值表达式的成功续延，先保存变量的原始值，再赋值，赋值完成后，调用传入的 succeed 续延
+               (let ((old-value
+                      (lookup-variable-value var env))) 
+                 (set-variable-value! var val env)
+                 (succeed 'ok
+                          (lambda ()    ; *2*
+                            (set-variable-value! var
+                                                 old-value
+                                                 env) ; 一旦 succeed 失败，将恢复变量原始值，再调用最初的失败续延
+                            (fail2)))))
+             fail))))
+
+;; (define my-succeed (lambda (value fail) value))
+;; (define my-fail (lambda () 'failed))
+;; (define test-environment (setup-environment)) 
+;; ((analyze-definition '(define a (quote hello))) test-environment my-succeed my-fail) ; => ok
+
+;; ((analyze-assignment '(set! a (quote world))) test-environment my-succeed my-fail)  ;=> ok
+;; test-environment
+;; =>  (((a false true car cdr cons null? + >)
+;;       world
+;;       #f
+;;       #t
+;;       (primitive #[compiled-procedure 17 ("list" #x1) #x1a #x1fc23e2])
+;;       (primitive #[compiled-procedure 18 ("list" #x2) #x1a #x1fc2452])
+;;       (primitive #[compiled-procedure 19 ("list" #x3) #x14 #x1fc24bc])
+;;       (primitive #[compiled-procedure 20 ("list" #x5) #x14 #x1fc255c])
+;;       (primitive #[arity-dispatched-procedure 21])
+;;       (primitive #[arity-dispatched-procedure 22])))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; read->eval->print loop ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(define input-prompt ";;; M-Eval input:")
-(define output-prompt ";;; M-Eval value:")
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; (define input-prompt ";;; M-Eval input:")  ;;
+;; (define output-prompt ";;; M-Eval value:") ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(define input-prompt ";;; Amb-Eval input:")
+(define output-prompt ";;; Amb-Eval value:")
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; (define (driver-loop)				   ;;
+;;   (prompt-for-input input-prompt)			   ;;
+;;   (let ((input (read)))				   ;;
+;;     (let ((output (eval input the-global-environment))) ;;
+;;       (announce-output output-prompt)		   ;;
+;;       (user-print output)))				   ;;
+;;   (driver-loop))					   ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (define (driver-loop)
-  (prompt-for-input input-prompt)
-  (let ((input (read)))
-    (let ((output (eval input the-global-environment)))
-      (announce-output output-prompt)
-      (user-print output)))
-  (driver-loop))
+  (define (internal-loop try-again)
+    (prompt-for-input input-prompt)
+    (let ((input (read)))
+      (if (eq? input 'try-again)
+          (try-again)
+          (begin
+            (newline)
+            (display ";;; Starting a new problem ")
+            (ambeval input
+                     the-global-environment
+                     ;; ambeval success
+                     (lambda (val next-alternative)
+                       (announce-output output-prompt)
+                       (user-print val)
+                       (internal-loop next-alternative))
+                     ;; ambeval failure
+                     (lambda ()
+                       (announce-output
+                        ";;; There are no more values of")
+                       (user-print input)
+                       (driver-loop)))))))
+  (internal-loop
+   (lambda ()
+     (newline)
+     (display ";;; There is no current problem")
+     (driver-loop))))
 
 (define (prompt-for-input string)
   (newline) (newline) (display string) (newline))

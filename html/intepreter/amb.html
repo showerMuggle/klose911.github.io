@@ -267,8 +267,12 @@ for the JavaScript code in this tag.
 <li><a href="#org8240567">条件表达式</a></li>
 <li><a href="#orge0e8ce6">顺序表达式</a></li>
 <li><a href="#org5638f2b">定义表达式</a></li>
+<li><a href="#org4796a8e">赋值表达式</a></li>
+<li><a href="#org6559313">过程表达式</a></li>
+<li><a href="#orge753963">amb表达式</a></li>
 </ul>
 </li>
+<li><a href="#org4a32218">驱动循环</a></li>
 </ul>
 </li>
 </ul>
@@ -818,12 +822,52 @@ int f (..., Fun p) { ...; p(...); return ...; }
     <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>env succeed fail<span style="color: #696969;">)</span>
       <span style="color: #696969;">(</span>pproc env
              <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">pproc &#36807;&#31243;&#30340;&#25104;&#21151;&#32493;&#24310;</span>
-             <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>pred-value fail2<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#22914;&#26524; pproc &#36807;&#31243;&#25191;&#34892;&#25104;&#21151;&#65292;&#20250;&#25226;&#35745;&#31639;&#20986;&#30340;&#30495;&#20551;&#20540;&#20256;&#36882;&#32473;pred-value</span>
+             <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#22914;&#26524; pproc &#36807;&#31243;&#25191;&#34892;&#25104;&#21151;&#65292;&#20250;&#25226;&#35745;&#31639;&#20986;&#30340;&#30495;&#20551;&#20540;&#20256;&#36882;&#32473;pred-value&#65292;&#20197;&#21450;&#24403;&#21069;&#30340; fail &#20256;&#36882;&#32473; fail2</span>
+             <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>pred-value fail2<span style="color: #696969;">)</span>  
                <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>true? pred-value<span style="color: #696969;">)</span>
                    <span style="color: #696969;">(</span>cproc env succeed fail2<span style="color: #696969;">)</span>
                    <span style="color: #696969;">(</span>aproc env succeed fail2<span style="color: #696969;">)))</span>
              <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">pproc &#36807;&#31243;&#30340;&#22833;&#36133;&#32493;&#24310;&#65292;&#23601;&#26159; if &#36807;&#31243;&#30340;&#22833;&#36133;&#32493;&#24310;</span>
              fail<span style="color: #696969;">))))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define my-succeed (lambda (value fail) value))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define my-fail (lambda () 'failed))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define test-environment (setup-environment))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define if-proc (analyze-if '(if true 100 200)))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(if-proc test-environment my-succeed my-fail) ; =&gt; 100</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define if-pproc (analyze 'true))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define if-cproc (analyze 100))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define if-aproc (analyze 200))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(if-pproc test-environment</span>
+<span style="color: #5f9ea0; font-style: italic;">;;        </span><span style="color: #5f9ea0; font-style: italic;">(lambda (pred-value fail2) </span>
+<span style="color: #5f9ea0; font-style: italic;">;;                </span><span style="color: #5f9ea0; font-style: italic;">(if (true? pred-value)</span>
+<span style="color: #5f9ea0; font-style: italic;">;;                    </span><span style="color: #5f9ea0; font-style: italic;">(if-cproc test-environment my-succeed fail2)</span>
+<span style="color: #5f9ea0; font-style: italic;">;;                    </span><span style="color: #5f9ea0; font-style: italic;">(if-aproc test-environment my-succeed fail2)))</span>
+<span style="color: #5f9ea0; font-style: italic;">;;              </span><span style="color: #5f9ea0; font-style: italic;">my-fail) ;=&gt; 100</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">((analyze-variable 'true) test-environment</span>
+<span style="color: #5f9ea0; font-style: italic;">;;        </span><span style="color: #5f9ea0; font-style: italic;">(lambda (pred-value fail2) </span>
+<span style="color: #5f9ea0; font-style: italic;">;;                </span><span style="color: #5f9ea0; font-style: italic;">(if (true? pred-value)</span>
+<span style="color: #5f9ea0; font-style: italic;">;;                    </span><span style="color: #5f9ea0; font-style: italic;">(if-cproc test-environment my-succeed fail2)</span>
+<span style="color: #5f9ea0; font-style: italic;">;;                    </span><span style="color: #5f9ea0; font-style: italic;">(if-aproc test-environment my-succeed fail2)))</span>
+<span style="color: #5f9ea0; font-style: italic;">;;              </span><span style="color: #5f9ea0; font-style: italic;">my-fail) ; =&gt; 100</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define if-pproc-succeed</span>
+<span style="color: #5f9ea0; font-style: italic;">;;   </span><span style="color: #5f9ea0; font-style: italic;">(lambda (pred-value fail2) </span>
+<span style="color: #5f9ea0; font-style: italic;">;;                </span><span style="color: #5f9ea0; font-style: italic;">(if (true? pred-value)</span>
+<span style="color: #5f9ea0; font-style: italic;">;;                    </span><span style="color: #5f9ea0; font-style: italic;">(if-cproc test-environment my-succeed fail2)</span>
+<span style="color: #5f9ea0; font-style: italic;">;;                    </span><span style="color: #5f9ea0; font-style: italic;">(if-aproc test-environment my-succeed fail2))))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(if-pproc-succeed</span>
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">(lookup-variable-value 'true test-environment)</span>
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">my-fail) ; =&gt; 100</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(if (true? (lookup-variable-value 'true test-environment))</span>
+<span style="color: #5f9ea0; font-style: italic;">;;     </span><span style="color: #5f9ea0; font-style: italic;">(if-cproc test-environment my-succeed my-fail)</span>
+<span style="color: #5f9ea0; font-style: italic;">;;     </span><span style="color: #5f9ea0; font-style: italic;">(if-aproc test-environment my-succeed my-fail)) ; =&gt; 100</span>
 </pre>
 </div>
 
@@ -862,6 +906,13 @@ int f (..., Fun p) { ...; p(...); return ...; }
     <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>null? procs<span style="color: #696969;">)</span>
         <span style="color: #696969;">(</span>error <span style="color: #deb887;">"Empty sequence -- ANALYZE"</span><span style="color: #696969;">))</span>
     <span style="color: #696969;">(</span>loop <span style="color: #696969;">(</span>car procs<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>cdr procs<span style="color: #696969;">))))</span>&#12288;
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define my-succeed (lambda (value fail) value))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define my-fail (lambda () 'failed))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define test-environment (setup-environment))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define sequence-proc (analyze-sequence '(100 true "hello")))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(sequence-proc test-environment my-succeed my-fail) ; =&gt; "hello"</span>
 </pre>
 </div>
 </div>
@@ -869,7 +920,204 @@ int f (..., Fun p) { ...; p(...); return ...; }
 
 <div id="outline-container-org5638f2b" class="outline-4">
 <h4 id="org5638f2b">定义表达式</h4>
+<div class="outline-text-4" id="text-org5638f2b">
+<p>
+调用值表达式的执行过程 <span class="underline">vproc</span> ，以 <span class="underline">当时环境</span> 、 <span class="underline">完成实际定义的成功续延</span> 和 <span class="underline">调用时的失败续延 fail</span> 为参数：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">analyze-definition</span> exp<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>var <span style="color: #696969;">(</span>definition-variable exp<span style="color: #696969;">))</span>
+        <span style="color: #696969;">(</span>vproc <span style="color: #696969;">(</span>analyze <span style="color: #696969;">(</span>definition-value exp<span style="color: #696969;">))))</span> 
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>env succeed fail<span style="color: #696969;">)</span>
+      <span style="color: #696969;">(</span>vproc env <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#24403;&#26102;&#30340;&#29615;&#22659;                       </span>
+             <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>val fail2<span style="color: #696969;">)</span>
+               <span style="color: #696969;">(</span>define-variable! var val env<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#22312; vproc &#30340;&#25104;&#21151;&#32493;&#24310;&#37324;&#23436;&#25104;&#22312;&#29615;&#22659;&#20013;&#21464;&#37327;&#30340;&#23450;&#20041;</span>
+               <span style="color: #696969;">(</span>succeed 'ok fail2<span style="color: #696969;">))</span>
+             fail<span style="color: #696969;">))))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define my-succeed (lambda (value fail) value))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define my-fail (lambda () 'failed))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define test-environment (setup-environment))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">((analyze-definition '(define a (quote hello))) test-environment my-succeed my-fail) ; =&gt; ok</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">test-environment </span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">=&gt; (((a false true car cdr cons null? + &gt;)</span>
+<span style="color: #5f9ea0; font-style: italic;">;;      </span><span style="color: #5f9ea0; font-style: italic;">hello</span>
+<span style="color: #5f9ea0; font-style: italic;">;;      </span><span style="color: #5f9ea0; font-style: italic;">#f</span>
+<span style="color: #5f9ea0; font-style: italic;">;;      </span><span style="color: #5f9ea0; font-style: italic;">#t</span>
+<span style="color: #5f9ea0; font-style: italic;">;;      </span><span style="color: #5f9ea0; font-style: italic;">(primitive #[compiled-procedure 17 ("list" #x1) #x1a #x1fc23e2])</span>
+<span style="color: #5f9ea0; font-style: italic;">;;      </span><span style="color: #5f9ea0; font-style: italic;">(primitive #[compiled-procedure 18 ("list" #x2) #x1a #x1fc2452])</span>
+<span style="color: #5f9ea0; font-style: italic;">;;      </span><span style="color: #5f9ea0; font-style: italic;">(primitive #[compiled-procedure 19 ("list" #x3) #x14 #x1fc24bc])</span>
+<span style="color: #5f9ea0; font-style: italic;">;;      </span><span style="color: #5f9ea0; font-style: italic;">(primitive #[compiled-procedure 20 ("list" #x5) #x14 #x1fc255c])</span>
+<span style="color: #5f9ea0; font-style: italic;">;;      </span><span style="color: #5f9ea0; font-style: italic;">(primitive #[arity-dispatched-procedure 21])</span>
+<span style="color: #5f9ea0; font-style: italic;">;;      </span><span style="color: #5f9ea0; font-style: italic;">(primitive #[arity-dispatched-procedure 22])))</span>
+</pre>
 </div>
+
+<p>
+<span class="underline">vproc</span> 的成功续延完成 <b>实际的变量定义</b> 并成功返回 
+</p>
+
+<pre class="example">
+  这里没有考虑覆盖原有定义可能需要回滚
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org4796a8e" class="outline-4">
+<h4 id="org4796a8e">赋值表达式</h4>
+<div class="outline-text-4" id="text-org4796a8e">
+<p>
+赋值的情况更复杂。其前一部分与处理定义类似，先做值表达式的执行过程，其失败也是整个赋值表达式失败
+</p>
+
+<p>
+值表达式求值成功后。为了让将来失败时可以 <b>撤销赋值</b> 效果，在 <span class="underline">求值表达式的成功续延</span> ( <span class="underline">*1</span> )把原变量值保存在 <span class="underline">old-value</span> 后再赋值，并把恢复值的动作插入它传给 <span class="underline">赋值的成功续延</span>  中的 <span class="underline">失败续延</span> 里( <span class="underline">*2</span> )，该失败续延过程最后调用 <span class="underline">fail2</span> ，来把失败返回给最初的失败续延
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">analyze-assignment</span> exp<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>var <span style="color: #696969;">(</span>assignment-variable exp<span style="color: #696969;">))</span>
+        <span style="color: #696969;">(</span>vproc <span style="color: #696969;">(</span>analyze <span style="color: #696969;">(</span>assignment-value exp<span style="color: #696969;">))))</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>env succeed fail<span style="color: #696969;">)</span>
+      <span style="color: #696969;">(</span>vproc env
+             <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>val fail2<span style="color: #696969;">)</span>        <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">*1* &#27714;&#20540;&#34920;&#36798;&#24335;&#30340;&#25104;&#21151;&#32493;&#24310;&#65292;&#20808;&#20445;&#23384;&#21464;&#37327;&#30340;&#21407;&#22987;&#20540;&#65292;&#20877;&#36171;&#20540;&#65292;&#36171;&#20540;&#23436;&#25104;&#21518;&#65292;&#35843;&#29992;&#20256;&#20837;&#30340; succeed &#32493;&#24310;</span>
+               <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>old-value
+                      <span style="color: #696969;">(</span>lookup-variable-value var env<span style="color: #696969;">)))</span> 
+                 <span style="color: #696969;">(</span>set-variable-value! var val env<span style="color: #696969;">)</span>
+                 <span style="color: #696969;">(</span>succeed 'ok
+                          <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">()</span>    <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">*2*</span>
+                            <span style="color: #696969;">(</span>set-variable-value! var
+                                                 old-value
+                                                 env<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#19968;&#26086; succeed &#22833;&#36133;&#65292;&#23558;&#24674;&#22797;&#21464;&#37327;&#21407;&#22987;&#20540;&#65292;&#20877;&#35843;&#29992;&#26368;&#21021;&#30340;&#22833;&#36133;&#32493;&#24310;</span>
+                            <span style="color: #696969;">(</span>fail2<span style="color: #696969;">)))))</span>
+             fail<span style="color: #696969;">))))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define my-succeed (lambda (value fail) value))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define my-fail (lambda () 'failed))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define test-environment (setup-environment)) </span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">((analyze-definition '(define a (quote hello))) test-environment my-succeed my-fail) ; =&gt; ok</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">((analyze-assignment '(set! a (quote world))) test-environment my-succeed my-fail)  ;=&gt; ok</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">test-environment</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">=&gt;  (((a false true car cdr cons null? + &gt;)</span>
+<span style="color: #5f9ea0; font-style: italic;">;;       </span><span style="color: #5f9ea0; font-style: italic;">world</span>
+<span style="color: #5f9ea0; font-style: italic;">;;       </span><span style="color: #5f9ea0; font-style: italic;">#f</span>
+<span style="color: #5f9ea0; font-style: italic;">;;       </span><span style="color: #5f9ea0; font-style: italic;">#t</span>
+<span style="color: #5f9ea0; font-style: italic;">;;       </span><span style="color: #5f9ea0; font-style: italic;">(primitive #[compiled-procedure 17 ("list" #x1) #x1a #x1fc23e2])</span>
+<span style="color: #5f9ea0; font-style: italic;">;;       </span><span style="color: #5f9ea0; font-style: italic;">(primitive #[compiled-procedure 18 ("list" #x2) #x1a #x1fc2452])</span>
+<span style="color: #5f9ea0; font-style: italic;">;;       </span><span style="color: #5f9ea0; font-style: italic;">(primitive #[compiled-procedure 19 ("list" #x3) #x14 #x1fc24bc])</span>
+<span style="color: #5f9ea0; font-style: italic;">;;       </span><span style="color: #5f9ea0; font-style: italic;">(primitive #[compiled-procedure 20 ("list" #x5) #x14 #x1fc255c])</span>
+<span style="color: #5f9ea0; font-style: italic;">;;       </span><span style="color: #5f9ea0; font-style: italic;">(primitive #[arity-dispatched-procedure 21])</span>
+<span style="color: #5f9ea0; font-style: italic;">;;       </span><span style="color: #5f9ea0; font-style: italic;">(primitive #[arity-dispatched-procedure 22])))</span>
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org6559313" class="outline-4">
+<h4 id="org6559313">过程表达式</h4>
+<div class="outline-text-4" id="text-org6559313">
+<p>
+过程表达式的复杂性来自于 <b>依次计算每个实参的时候，每一步都需要维护成功和失败续延的轨迹</b> 。因此需要提供一个新的 <span class="underline">get-args</span> 函数来替代原来的 <span class="underline">map</span> 过程：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">analyze-application</span> exp<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>fproc <span style="color: #696969;">(</span>analyze <span style="color: #696969;">(</span>operator exp<span style="color: #696969;">)))</span>
+        <span style="color: #696969;">(</span>aprocs <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">map</span> analyze <span style="color: #696969;">(</span>operands exp<span style="color: #696969;">))))</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>env succeed fail<span style="color: #696969;">)</span>
+      <span style="color: #696969;">(</span>fproc env
+             <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>proc fail2<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">fproc &#30340;&#25104;&#21151;&#32493;&#24310;&#65306;&#20381;&#27425;&#35745;&#31639;&#27599;&#20010;&#23454;&#21442;</span>
+               <span style="color: #696969;">(</span>get-args aprocs
+                         env
+                         <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>args fail3<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">get-args &#30340;&#25104;&#21151;&#32493;&#24310;&#65306;&#25152;&#26377;&#21442;&#25968;&#37117;&#25104;&#21151;&#35745;&#31639;&#23436;&#27605;&#21518;&#65292;&#20570;&#23454;&#38469;&#30340;&#36807;&#31243;&#35843;&#29992;</span>
+                           <span style="color: #696969;">(</span>execute-application
+                            proc args succeed fail3<span style="color: #696969;">))</span>
+                         fail2<span style="color: #696969;">))</span>
+             fail<span style="color: #696969;">))))</span> 
+</pre>
+</div>
+
+<p>
+<span class="underline">get-args</span> : 顺序执行各运算对象的执行过程
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">get-args</span> aprocs env succeed fail<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>null? aprocs<span style="color: #696969;">)</span>
+      <span style="color: #696969;">(</span>succeed '<span style="color: #696969;">()</span> fail<span style="color: #696969;">)</span>
+      <span style="color: #696969;">((</span>car aprocs<span style="color: #696969;">)</span> env <span style="color: #5f9ea0; font-style: italic;">;  </span><span style="color: #5f9ea0; font-style: italic;">"&#27714;&#20540;&#31532;&#19968;&#20010;&#36816;&#31639;&#21442;&#25968;" &#30340;&#25191;&#34892;&#36807;&#31243;</span>
+       <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>arg fail2<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">(car aprocs) &#30340;&#25104;&#21151;&#32493;&#24310;</span>
+         <span style="color: #696969;">(</span>get-args <span style="color: #696969;">(</span>cdr aprocs<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#23545;&#20313;&#19979;&#21442;&#25968;&#36827;&#34892;&#27714;&#20540;</span>
+                   env
+                   <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>args fail3<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">(get-args (cdr aprocs)) &#30340;&#25104;&#21151;&#32493;&#24310;</span>
+                     <span style="color: #696969;">(</span>succeed <span style="color: #696969;">(</span>cons arg args<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#29992; cons &#26469;&#25910;&#38598;&#25152;&#26377;&#30340;&#27714;&#20540;&#32467;&#26524;&#65292;&#28982;&#21518;&#25226;&#20182;&#36865;&#32473;&#26368;&#21021;&#35843;&#29992;&#30340;&#25104;&#21151;&#32493;&#24310;</span>
+                              fail3<span style="color: #696969;">))</span>
+                   fail2<span style="color: #696969;">))</span>
+       fail<span style="color: #696969;">)))</span>
+</pre>
+</div>
+
+<p>
+<span class="underline">execute-application</span> : 执行实际的过程调用
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">execute-application</span> proc args succeed fail<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">cond</span> <span style="color: #696969;">((</span>primitive-procedure? proc<span style="color: #696969;">)</span>
+         <span style="color: #696969;">(</span>succeed <span style="color: #696969;">(</span>apply-primitive-procedure proc args<span style="color: #696969;">)</span>
+                  fail<span style="color: #696969;">))</span>
+        <span style="color: #696969;">((</span>compound-procedure? proc<span style="color: #696969;">)</span>
+         <span style="color: #696969;">((</span>procedure-body proc<span style="color: #696969;">)</span>
+          <span style="color: #696969;">(</span>extend-environment <span style="color: #696969;">(</span>procedure-parameters proc<span style="color: #696969;">)</span>
+                              args
+                              <span style="color: #696969;">(</span>procedure-environment proc<span style="color: #696969;">))</span>
+          succeed
+          fail<span style="color: #696969;">))</span>
+        <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">else</span>
+         <span style="color: #696969;">(</span>error
+          <span style="color: #deb887;">"Unknown procedure type -- EXECUTE-APPLICATION"</span>
+          proc<span style="color: #696969;">))))</span>
+</pre>
+</div>
+
+<p>
+这个过程较长，实际上和 <span class="underline">简单表达式</span> 处理一样
+</p>
+</div>
+</div>
+
+<div id="outline-container-orge753963" class="outline-4">
+<h4 id="orge753963">amb表达式</h4>
+<div class="outline-text-4" id="text-orge753963">
+<p>
+<span class="underline">amb</span> 的 <span class="underline">执行过程</span> 定义了一个循环 try-next，它周而复始地去做针对表达式所有可能值的执行过程：
+</p>
+<ul class="org-ul">
+<li>对于每个执行过程的调用，都带有一个 <span class="underline">失败续延</span> ，这个失败续延会 <b>导致去试探下一个可能值</b></li>
+<li>如果不再存在可能值时候，整个 <span class="underline">amb</span> 表达式失败</li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">analyze-amb</span> exp<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>cprocs <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">map</span> analyze <span style="color: #696969;">(</span>amb-choices exp<span style="color: #696969;">))))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#20998;&#26512;&#21508;&#23376;&#34920;&#36798;&#24335;&#30340;&#25191;&#34892;&#36807;&#31243;</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>env succeed fail<span style="color: #696969;">)</span> 
+      <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">try-next</span> choices<span style="color: #696969;">)</span> 
+        <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>null? choices<span style="color: #696969;">)</span>
+            <span style="color: #696969;">(</span>fail<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#27809;&#26377;&#20219;&#20309;&#20540;&#21487;&#20197;&#35797;&#25506;&#30340;&#26102;&#20505;&#65292;&#25253;&#20986;&#22833;&#36133;</span>
+            <span style="color: #696969;">((</span>car choices<span style="color: #696969;">)</span> env <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#35843;&#29992; "&#31532;&#19968;&#20010;&#21487;&#33021;&#20540;" &#30340;&#25191;&#34892;&#36807;&#31243;</span>
+             succeed <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">(car choices) &#25104;&#21151;&#32493;&#24310;&#65306;&#21407;&#22987;&#30340;&#25104;&#21151;&#32493;&#24310;&#65292;&#23454;&#38469;&#19978;&#23601;&#26159; amb &#25191;&#34892;&#25104;&#21151;</span>
+             <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">()</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">(car choices) &#22833;&#36133;&#32493;&#24310;&#65306;&#23581;&#35797;&#19979;&#19968;&#20010;&#21487;&#33021;&#20540;</span>
+               <span style="color: #696969;">(</span>try-next <span style="color: #696969;">(</span>cdr choices<span style="color: #696969;">))))))</span>
+      <span style="color: #696969;">(</span>try-next cprocs<span style="color: #696969;">))))</span>
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org4a32218" class="outline-3">
+<h3 id="org4a32218">驱动循环</h3>
 </div>
 </div>
 </div>
