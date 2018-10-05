@@ -1,0 +1,315 @@
+#+TITLE: 续延
+#+HTML_HEAD: <link rel="stylesheet" type="text/css" href="css/main.css" />
+#+OPTIONS: num:nil timestamp:nil 
+
+*续延* 是在 *运行中被暂停了的程序* ：即含有 *计算状态* 的 *单个函数型对象* 。当这个对象被求值时，就会在它上次停下来的地方重新启动之前保存下来的计算
+
+对于求解特定类型的问题，能够保存程序的状态并在之后重启是非常有用的：
++ 在多进程中，续延可以很方便地表示挂起的进程
++ 在非确定性的搜索问题里，续延可以用来表示搜索树中的节点
+
+* 定义
+  *续延* 是一个代表着 _计算的将来_ 的函数。不管是哪一个表达式被求值，总会有谁在翘首以待它将要返回的值：
+  #+BEGIN_SRC scheme
+  (/ (- x 1) 2)
+  #+END_SRC
+  例如，当求值  _(- x 1)_ 时，外面的 _/_ 表达式就在等着这个值，依此类推下去，最后总是回到toplevel上 _print_ 正等在那里
+
+  无论何时，都可以把续延视为 *带一个参数的函数* 。上面的表达式被输入到 toplevel，那么当子表达式 _(- x 1)_ 被求值时，续延将是：
+  #+BEGIN_SRC scheme
+  (lambda (val) (/ val 2))
+  #+END_SRC
+
+  也就是说，接下来的计算可以通过在返回值上调用这个函数来重现。如果该表达式在下面的上下文中出现：
+  #+BEGIN_SRC scheme
+  (define (f1 w)
+    (let ((y (f2 w)))
+      (if (integer? y) (list 'a y) 'b)))
+
+  (define (f2 x)
+    (/ (- x 1) 2))
+  #+END_SRC
+
+  并且 _f1_ 在toplevel 下被调用，那么当 _(- x 1)_ 被求值时，续延将等价于：
+  #+BEGIN_SRC scheme
+    (lambda (val)
+      (let ((y (/ val 2)))
+	(if (integer? y) (list 'a y) 'b)))
+  #+END_SRC
+
+  续延可以理解成是一种广义的闭包：
+  + 闭包：一个 _函数_ 加上一些指向 _闭包创建时可见的词法变量的指针_
+  + 续延：一个 _函数_ 加上一个指向其 _创建时所在的整个栈的指针_ 
+
+  #+BEGIN_EXAMPLE
+    当续延被求值时，它返回的是使用自己的栈拷贝算出的结果，而没有用当前栈
+
+    如果某个续延是在 T1 时刻创建的，而在 T2 时刻被求值，那么它求值时使用的将是 T1 时刻的栈
+  #+END_EXAMPLE
+
+* call/cc
+  在 Scheme 中，续延和函数同样是第一类对象。可以要求 Scheme 返回当前的续延，然后它将为你 *生成一个只有单个参数的函数* ，以表示 *未来的计算* 。可以任意长时间地保存这个对象，然后在你调用它时，它将重启当它被创建时所发生的计算
+
+  Scheme 程序通过内置操作符 _call-with-current-continuation_ (缩写为 _call/cc_ ) 来 *访问当前续延* 。当一个程序在一个单个参数的函数上调用 call/cc 时：
+
+  #+BEGIN_SRC scheme
+  (call-with-current-continuation
+    (lambda (cc)
+      ...)) 
+  #+END_SRC
+
+  #+BEGIN_SRC scheme
+  (define frozen '())
+
+  (append '(the call/cc returned)
+    (list (call-with-current-continuation
+	(lambda (cc)
+	  (set! frozen cc)
+	  'a))))
+  #+END_SRC
+
+  虽然这个 call/cc 返回了 a ，实际上会把 *当前续延* 通过参数 _cc_ 传入，然后保存在了全局变量 _frozen_ 中，当前续延等价于：
+
+  #+BEGIN_SRC scheme
+  (lambda (val)
+    (append '(the call/cc returned)
+	    (list val)))
+
+  (set! frozen (lambda (val)
+		 (append '(the call/cc returned)
+			 (list val))))
+  #+END_SRC
+
+  以后每次调用 _frozen_ 都可以认为是执行上面这段续延保存的过程：
+  #+BEGIN_SRC scheme
+  (frozen 'again) ; =>  (the call/cc returned again) 
+
+  (append '(the call/cc returned)
+	  (list 'again)) ; =>  (the call/cc returned again) 
+  #+END_SRC 
+
+  续延不会因为被求值而用完。它们可以被 *重复* 调用，就像任何其他的函数型对象一样：
+  #+BEGIN_SRC scheme
+  (frozen 'thrice) ; =>  (the call/cc returned thrice) 
+
+  (append '(the call/cc returned)
+	  (list 'thrice)) ; =>  (the call/cc returned thrice) 
+  #+END_SRC
+
+  当在某些其他的计算里调用一个续延时，可以更清楚地看到所谓返回到原先的栈上是什么意思：
+
+  #+BEGIN_SRC scheme
+  (+ 1 (frozen 'safely)) ; => (the call/cc returned safely)
+  #+END_SRC
+
+  注意：紧接着的 _+_ 当 _frozen_ 调用时被忽略掉了。后者返回到了它首次被创建时的栈上：先经过 list ，然后是 append ，直到 toplevel。如果 frozen 像正常函数调用那样返回了一个值，那么上面的表达式将在试图给一个列表加 1 时产生一个错误
+
+  各续延并不会每人都分到自己的一份栈的拷贝。它们可能跟其他续延或者当前正在进行的计算 *共享一些变量* 。两个续延共享了同一个栈：
+
+  #+BEGIN_SRC scheme
+  (define froz1 '())
+  (define froz2 '())
+
+  (let ((x 0))
+    (call-with-current-continuation
+      (lambda (cc)
+	(set! froz1 cc)
+	(set! froz2 cc)))
+    (set! x (+ 1 x))
+    x) ; => 1
+  #+END_SRC
+
+  因此调用任何一个都将返回后继的整数：
+  #+BEGIN_SRC scheme
+  (froz1 '()) ;=> 2
+
+  (froz2 '()) ;=> 3
+  #+END_SRC
+
+  由于 call/cc 表达式的值将被丢弃，所以无论给 _froz1_ 和 _froz2_ 什么参数都无关紧要
+
+* CPS 
+  *CPS* ( _continuation-programming-style_ ) 是一种编程方式： *附加的最后一个参数是一个函数，把原来的计算结果传入这个函数作为返回值* 
+
+  #+BEGIN_SRC scheme
+  (define (return x)
+    x)
+
+  (define (k+ a b k)
+    (k (+ a b)))
+
+  (define (k* a b k)
+    (k (* a b))) 
+  #+END_SRC 
+
+  使用CPS风格来计算 _(* (+ 1 2) 3)_ 
+  #+BEGIN_SRC scheme
+  (k+ 1 2
+      (lambda (x)
+	(k* x 3 return))) ; => 9
+  #+END_SRC
+
+  一般情况下，括号内的结算结果作为返回值，对于CPS而言括号内计算结果被传入下一个参数， 比如 _(+ 1 2)_ 被传入了 _(k * x 3 return)_ ，而 (* 3 3) 的结果被传入 _return_ 
+
+** 递归CPS 
+   递归函数仍然可以被写成CPS风格：
+   #+BEGIN_SRC scheme
+  ;;; normal factorial
+  (define (fact n)
+    (if (= n 1) 
+	1
+	(* n (fact (- n 1)))))
+
+  ;;; CPS factorial
+  (define (kfact n k)
+    (if (= n 1) 
+	(k 1)
+	(kfact (- n 1)
+	       (lambda (x) (k (* n x))))))
+
+  (kfact 5 return) ; =>  120
+
+  ;; (kfact 1 return) ; => (return 1)  => 1 
+
+  ;; (kfact 2 return) 
+  ;; (kfact 1 (lambda (x) (return (* 2 x)))) ;=> (return (* 2 (kfact 1 return))) => 2 
+
+  ;; (kfact 3 return)
+  ;; (kfact 2 (lambda (x) (return (* 3 x)))) ; => (return (* 3 (kfact 2 return))) => 6  
+   #+END_SRC
+
+   用CPS来计算 _(+ 3 (fact 4))_  
+   #+BEGIN_SRC scheme
+  ;;; normal
+  (+ 3 (fact 4)) ;=> 27
+
+  ;;; CPS
+  (kfact 4 (lambda (x) (k+ x 3 return))) ; => 27 
+   #+END_SRC
+
+   用CPS来计算多个数的乘积， 注意：这里使用了一个局部变量break来保存返回函数，是的出现数字0的情况下，可以马上返回
+   #+BEGIN_SRC scheme
+  ;;; normal
+  (define (product ls)
+    (let loop ((ls ls) (acc 1))
+      (cond
+       ((null? ls) acc)
+       ((zero? (car ls)) 0)
+       (else (loop (cdr ls) (* (car ls) acc))))))
+
+  ;;; CPS
+  (define (kproduct ls k)
+    (let ((break k))
+      (let loop ((ls ls) (k k))
+	(cond
+	 ((null? ls) (k 1))
+	 ((zero? (car ls)) (break 0))
+	 (else (loop (cdr ls) (lambda (x) (k (* (car ls) x)))))))))
+   #+END_SRC
+
+   计算 _(+ 100 (product '(2 4 7)))_ ：
+   #+BEGIN_SRC scheme
+  ;;; normal
+  (+ 100 (product '(2 4 7))) ; => 156 
+
+  ;;; CPS
+  (kproduct '(2 4 7)
+	    (lambda (x)
+	      (k+ x 100 return))) ;=> 156
+   #+END_SRC
+
+   尽管对于上面那些简单的例子而言：CPS编程风格显得有点迂回，但是对于复杂的问题，比如自然语言解析和逻辑式编程非常有用。因为这时候由于可以动态传入如何处理返回值，比起同样的判断返回值而言，显得灵活得多 
+
+   下面是一个异常处理的例子：
+
+   #+BEGIN_SRC scheme
+  (define (non-number-value-error x)
+    (display "Value error: ")
+    (display  x)
+    (display " is not number.")
+    (newline)
+    'error)
+
+  (define (kproduct ls k k-value-error)
+    (let ((break k))
+      (let loop ((ls ls) (k k))
+	(cond
+	 ((null? ls) (k 1))
+	 ((not (number? (car ls))) (k-value-error (car ls)))
+	 ((zero? (car ls)) (break 0))
+	 (else (loop (cdr ls) (lambda (x) (k (* (car ls) x)))))))))
+   #+END_SRC
+
+   测试结果：
+   #+BEGIN_SRC scheme
+  ;;; valid
+  (kproduct '(2 4 7) 
+	    (lambda (x) (k+ x 100 return)) 
+	    non-number-value-error) ; => 156
+
+  ;;; invalid
+  (kproduct '(2 4 7 hoge) 
+	    (lambda (x) (k+ x 100 return)) 
+	    non-number-value-error)
+
+  ;; Value error: hoge is not number.
+  ;; => error
+   #+END_SRC
+
+** 续延和CPS
+实际上CPS风格的最后一个参数，就可以被认为是当前的续延。所以一种通用的实现续延的方式就是 *通过遍历代码，把代码转换成CPS风格来得到当前续延*
+
+* 应用
+
+** 实现amb 
+_amb-fail_ 是最近一个失败的分支设置的函数。如果执行没有参数的 _(amb)_ 就会转到这个 _amb-fail_
+
+这个例子里，把 _amb-fail_ 被初始化为打印 _amb tree exhausted_ ：
+
+#+BEGIN_SRC scheme
+  (define amb-fail '*)
+
+  (define initialize-amb-fail
+    (lambda ()
+      (set! amb-fail
+	(lambda ()
+	  (error "amb tree exhausted")))))
+
+  (initialize-amb-fail)
+#+END_SRC
+
+利用 _宏_ 来定义 _amb_ 操作符：
+#+BEGIN_SRC scheme
+  (define-syntax amb
+    (syntax-rules ()
+      ((_) (amb-fail))
+      ((_ a) a)
+      ((_ a b ...)
+       (let ((prev-amb-fail amb-fail)) ; 把全局变量 amb-fail 赋值给 prev-amb-fail 供回溯 // 续延1 
+	 (call/cc ;调用下面的匿名函数 lambda (k) ...  
+	  (lambda (k) ; 续延1 作为参数 k 传入
+	    (set! amb-fail ; 设置全局变量 amb-fail 为下面匿名函数
+		  (lambda () ; 如果 (k a) 调用失败，会调用下面的函数
+		    (set! amb-fail prev-amb-fail) ; 恢复全局变量 amb-fail 为续延1时候的值
+		    (k (amb b ...)))) ; 在续延1 时候求值 b 表达式
+	    (k a))))))) ; 续延1 时候求值 a 表达式，如果求值失败，调用 amb-fail，
+#+END_SRC
+
+通过实例来理解这个宏：
+
+#+BEGIN_SRC scheme
+  (amb 1 2 3) ; => 1
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  ;; 每调用一次 amb 都会触发 (amb-fail) 的调用，转而调用宏中的 (k (amb b) ...) ，这在保存的续延1中去求值下一个表达式 ;;
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  (amb) ; => 2
+  (amb) ; => 3
+  (amb) ;amb tree exhausted
+
+  (if (amb (> 1 2) (< 2 1) (> 5 1))
+       1
+       (amb)) 
+  ;; => 1
+#+END_SRC
+
+*** 应用

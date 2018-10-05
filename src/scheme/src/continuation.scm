@@ -20,7 +20,7 @@
 ;;  (lambda (cc)
 ;;    ...))
 
-(define frozen #f)
+(define frozen '())
 
 (append '(the call/cc returned)
 	(list (call-with-current-continuation
