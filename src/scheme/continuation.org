@@ -257,9 +257,59 @@
    #+END_SRC
 
 ** 续延和CPS
-实际上CPS风格的最后一个参数，就可以被认为是当前的续延。所以一种通用的实现续延的方式就是 *通过遍历代码，把代码转换成CPS风格来得到当前续延*
+   实际上CPS风格的最后一个参数，就可以被认为是当前的续延。所以一种通用的实现续延的方式就是 *通过遍历代码，把代码转换成CPS风格来得到当前续延*
 
 * 应用
 
 ** 实现amb 
+   _amb-fail_ 是最近一个失败的分支设置的函数。如果执行没有参数的 _(amb)_ 就会转到这个 _amb-fail_
 
+   这个例子里，把 _amb-fail_ 被初始化为打印 _amb tree exhausted_ ：
+
+   #+BEGIN_SRC scheme
+  (define amb-fail '*)
+
+  (define initialize-amb-fail
+    (lambda ()
+      (set! amb-fail
+	(lambda ()
+	  (error "amb tree exhausted")))))
+
+  (initialize-amb-fail)
+   #+END_SRC
+
+   利用 _宏_ 来定义 _amb_ 操作符：
+   #+BEGIN_SRC scheme
+  (define-syntax amb
+    (syntax-rules ()
+      ((_) (amb-fail))
+      ((_ a) a)
+      ((_ a b ...)
+       (let ((prev-amb-fail amb-fail)) ; 把全局变量 amb-fail 赋值给 prev-amb-fail 供回溯 ;; 这里是续延1 
+	 (call/cc ;调用下面的匿名函数 lambda (k) ...  
+	  (lambda (k) ; 续延1 作为参数 k 传入
+	    (set! amb-fail ; 设置全局变量 amb-fail 为下面匿名函数
+		  (lambda () ; 如果 (k a) 调用失败，会调用下面的函数
+		    (set! amb-fail prev-amb-fail) ; 恢复全局变量 amb-fail 为续延1时候的值
+		    (k (amb b ...)))) ; 在续延1 时候求值 b 表达式
+	    (k a))))))) ; 续延1 时候求值 a 表达式，如果求值失败，调用 amb-fail
+   #+END_SRC
+
+   通过实例来理解这个宏：
+
+   #+BEGIN_SRC scheme
+  (amb 1 2 3) ; => 1
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  ;; 每调用一次 amb 都会触发 (amb-fail) 的调用，转而调用宏中的 (k (amb b) ...) ，这在保存的续延1中去求值下一个表达式 ;;
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  (amb) ; => 2
+  (amb) ; => 3
+  (amb) ;amb tree exhausted
+
+  (if (amb (> 1 2) (< 2 1) (> 5 1))
+       1
+       (amb)) 
+  ;; => 1
+   #+END_SRC
+
+*** 逻辑问题

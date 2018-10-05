@@ -244,7 +244,11 @@ for the JavaScript code in this tag.
 </li>
 <li><a href="#org4ac85cd">应用</a>
 <ul>
-<li><a href="#org87b76d0">实现amb</a></li>
+<li><a href="#org87b76d0">实现amb</a>
+<ul>
+<li><a href="#org7021dab">逻辑问题</a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -615,6 +619,72 @@ Scheme 程序通过内置操作符 <span class="underline">call-with-current-con
 </div>
 <div id="outline-container-org87b76d0" class="outline-3">
 <h3 id="org87b76d0">实现amb</h3>
+<div class="outline-text-3" id="text-org87b76d0">
+<p>
+<span class="underline">amb-fail</span> 是最近一个失败的分支设置的函数。如果执行没有参数的 <span class="underline">(amb)</span> 就会转到这个 <span class="underline">amb-fail</span>
+</p>
+
+<p>
+这个例子里，把 <span class="underline">amb-fail</span> 被初始化为打印 <span class="underline">amb tree exhausted</span> ：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">amb-fail</span> '*<span style="color: #696969;">)</span>
+
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">initialize-amb-fail</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">()</span>
+    <span style="color: #696969;">(</span>set! amb-fail
+      <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">()</span>
+        <span style="color: #696969;">(</span>error <span style="color: #deb887;">"amb tree exhausted"</span><span style="color: #696969;">)))))</span>
+
+<span style="color: #696969;">(</span>initialize-amb-fail<span style="color: #696969;">)</span>
+</pre>
+</div>
+
+<p>
+利用 <span class="underline">宏</span> 来定义 <span class="underline">amb</span> 操作符：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define-syntax</span> <span style="color: #4eee94;">amb</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">syntax-rules</span> <span style="color: #696969;">()</span>
+    <span style="color: #696969;">((</span>_<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>amb-fail<span style="color: #696969;">))</span>
+    <span style="color: #696969;">((</span>_ a<span style="color: #696969;">)</span> a<span style="color: #696969;">)</span>
+    <span style="color: #696969;">((</span>_ a b ...<span style="color: #696969;">)</span>
+     <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>prev-amb-fail amb-fail<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#25226;&#20840;&#23616;&#21464;&#37327; amb-fail &#36171;&#20540;&#32473; prev-amb-fail &#20379;&#22238;&#28335; ;; &#36825;&#37324;&#26159;&#32493;&#24310;1 </span>
+       <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">call/cc</span> <span style="color: #5f9ea0; font-style: italic;">;</span><span style="color: #5f9ea0; font-style: italic;">&#35843;&#29992;&#19979;&#38754;&#30340;&#21311;&#21517;&#20989;&#25968; lambda (k) ...  </span>
+        <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>k<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#32493;&#24310;1 &#20316;&#20026;&#21442;&#25968; k &#20256;&#20837;</span>
+          <span style="color: #696969;">(</span>set! amb-fail <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#35774;&#32622;&#20840;&#23616;&#21464;&#37327; amb-fail &#20026;&#19979;&#38754;&#21311;&#21517;&#20989;&#25968;</span>
+                <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">()</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#22914;&#26524; (k a) &#35843;&#29992;&#22833;&#36133;&#65292;&#20250;&#35843;&#29992;&#19979;&#38754;&#30340;&#20989;&#25968;</span>
+                  <span style="color: #696969;">(</span>set! amb-fail prev-amb-fail<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#24674;&#22797;&#20840;&#23616;&#21464;&#37327; amb-fail &#20026;&#32493;&#24310;1&#26102;&#20505;&#30340;&#20540;</span>
+                  <span style="color: #696969;">(</span>k <span style="color: #696969;">(</span>amb b ...<span style="color: #696969;">))))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#22312;&#32493;&#24310;1 &#26102;&#20505;&#27714;&#20540; b &#34920;&#36798;&#24335;</span>
+          <span style="color: #696969;">(</span>k a<span style="color: #696969;">)))))))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#32493;&#24310;1 &#26102;&#20505;&#27714;&#20540; a &#34920;&#36798;&#24335;&#65292;&#22914;&#26524;&#27714;&#20540;&#22833;&#36133;&#65292;&#35843;&#29992; amb-fail</span>
+</pre>
+</div>
+
+<p>
+通过实例来理解这个宏：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span>amb 1 2 3<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">=&gt; 1</span>
+<span style="color: #5f9ea0; font-style: italic;">;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#27599;&#35843;&#29992;&#19968;&#27425; amb &#37117;&#20250;&#35302;&#21457; (amb-fail) &#30340;&#35843;&#29992;&#65292;&#36716;&#32780;&#35843;&#29992;&#23439;&#20013;&#30340; (k (amb b) ...) &#65292;&#36825;&#22312;&#20445;&#23384;&#30340;&#32493;&#24310;1&#20013;&#21435;&#27714;&#20540;&#19979;&#19968;&#20010;&#34920;&#36798;&#24335; ;;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;</span>
+<span style="color: #696969;">(</span>amb<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">=&gt; 2</span>
+<span style="color: #696969;">(</span>amb<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">=&gt; 3</span>
+<span style="color: #696969;">(</span>amb<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;</span><span style="color: #5f9ea0; font-style: italic;">amb tree exhausted</span>
+
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>amb <span style="color: #696969;">(</span>&gt; 1 2<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>&lt; 2 1<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>&gt; 5 1<span style="color: #696969;">))</span>
+     1
+     <span style="color: #696969;">(</span>amb<span style="color: #696969;">))</span> 
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">=&gt; 1</span>
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org7021dab" class="outline-4">
+<h4 id="org7021dab">逻辑问题</h4>
+</div>
 </div>
 </div>
 </div>
