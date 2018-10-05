@@ -216,15 +216,15 @@
     (scan (frame-variables frame)
           (frame-values frame))))
 
-;;;;;;;;;;;;;;;;;;;;
-;; amb operations ;;
-;;;;;;;;;;;;;;;;;;;;
-(define (require p)
-  (if (not p) (amb)))
-
-(define (an-element-of items)
-  (require (not (null? items))) ;; 表为空是计算失败
-  (amb (car items) (an-element-of (cdr items)))) ;; 反之，返回表中任何一个元素
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; amb operations 								  ;;
+;; (define (require p)								  ;;
+;;   (if (not p) (amb)))							  ;;
+;; 										  ;;
+;; (define (an-element-of items)						  ;;
+;;   (require (not (null? items))) ;; 表为空是计算失败				  ;;
+;;   (amb (car items) (an-element-of (cdr items)))) ;; 反之，返回表中任何一个元素 ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;;;;;;;;;;;;;;;;;;;
 ;; just for test ;;
@@ -251,11 +251,10 @@
         (list 'cdr cdr)
         (list 'cons cons)
         (list 'null? null?)
+	(list 'not not)
 	(list '+ +)
 	(list '> >)
 	(list 'list list)
-	(list 'require require)
-	(list 'an-element-of an-element-of)
 	(list 'prime? prime?)
 	;;      more primitives
         ))
@@ -699,30 +698,30 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (define (driver-loop)
-  (define (internal-loop try-again)
+  (define (internal-loop try-again) 
     (prompt-for-input input-prompt)
     (let ((input (read)))
-      (if (eq? input 'try-again)
+      (if (eq? input 'try-again) ; 用户输入 "try-again"，调用传入的 try-again 过程
           (try-again)
-          (begin
+          (begin ; 开始新的一次求值
             (newline)
             (display ";;; Starting a new problem ")
             (ambeval input
                      the-global-environment
-                     ;; ambeval success
+                     ;; ambeval 的成功续延
                      (lambda (val next-alternative)
                        (announce-output output-prompt)
-                       (user-print val)
-                       (internal-loop next-alternative))
-                     ;; ambeval failure
+                       (user-print val) ; 打印返回值
+                       (internal-loop next-alternative)) ; 把成功求值后得到的失败续延作为 interal-loop 的 try-again 参数
+                     ;; ambeval 的失败续延
                      (lambda ()
                        (announce-output
                         ";;; There are no more values of")
-                       (user-print input)
-                       (driver-loop)))))))
-  (internal-loop
-   (lambda ()
-     (newline)
+                       (user-print input) ; 打印失败信息
+                       (driver-loop))))))) ; 重新开始驱动循环
+  (internal-loop ; internal-loop 的初始 try-again 过程
+   (lambda () ; 显示 "无事可做"，然后重新开始驱动循环
+     (newline) 
      (display ";;; There is no current problem")
      (driver-loop))))
 
@@ -747,4 +746,24 @@
 ;; (driver-loop)					      ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-'METACIRCULAR-EVALUATOR-LOADED
+'AMB-METACIRCULAR-EVALUATOR-LOADED
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; amb operations 								  	 ;;
+;; (define (require p)									 ;;
+;;   (if (not p) (amb)))								 ;;
+;; 											 ;;
+;; (define (an-element-of items)							 ;;
+;;   (require (not (null? items))) ;; 表为空是计算失败					 ;;
+;;   (amb (car items) (an-element-of (cdr items)))) ;; 反之，返回表中任何一个元素	         ;;
+;; 											 ;;
+;; (define (prime-sum-pair list1 list2)							 ;;
+;;   (begin 										 ;;
+;;     (define a (an-element-of list1))							 ;;
+;;     (define b (an-element-of list2))							 ;;
+;;     (require (prime? (+ a b)))							 ;;
+;;     (list a b)))									 ;;
+;; 											 ;;
+;; (prime-sum-pair '(1 3 5 8) '(20 35 110))						 ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

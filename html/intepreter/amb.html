@@ -5,7 +5,7 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>非确定性计算</title>
+<title>amb求值器</title>
 <meta name="generator" content="Org mode" />
 <meta name="author" content="Wu, Shanliang" />
 <style type="text/css">
@@ -229,7 +229,7 @@ for the JavaScript code in this tag.
 </head>
 <body>
 <div id="content">
-<h1 class="title">非确定性计算</h1>
+<h1 class="title">amb求值器</h1>
 <div id="table-of-contents">
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
@@ -242,7 +242,7 @@ for the JavaScript code in this tag.
 <ul>
 <li><a href="#org8be9767">amb形式</a></li>
 <li><a href="#org408cd50">搜索</a></li>
-<li><a href="#org4a32218">驱动循环</a></li>
+<li><a href="#orgc0f4047">驱动循环</a></li>
 </ul>
 </li>
 </ul>
@@ -257,7 +257,7 @@ for the JavaScript code in this tag.
 <li><a href="#orgc924623">回溯</a></li>
 </ul>
 </li>
-<li><a href="#org2d8b388">总结</a></li>
+<li><a href="#orgb05002f">总结</a></li>
 </ul>
 </li>
 <li><a href="#orgd42cf9a">程序结构</a></li>
@@ -272,7 +272,8 @@ for the JavaScript code in this tag.
 <li><a href="#orge753963">amb表达式</a></li>
 </ul>
 </li>
-<li><a href="#orga49de66">驱动循环</a></li>
+<li><a href="#orgb5030bf">驱动循环</a></li>
+<li><a href="#org7e661dd">总结</a></li>
 </ul>
 </li>
 </ul>
@@ -442,9 +443,9 @@ amb 的名字取自 ambiguous
 </ul>
 </div>
 </div>
-<div id="outline-container-org4a32218" class="outline-4">
-<h4 id="org4a32218">驱动循环</h4>
-<div class="outline-text-4" id="text-org4a32218">
+<div id="outline-container-orgc0f4047" class="outline-4">
+<h4 id="orgc0f4047">驱动循环</h4>
+<div class="outline-text-4" id="text-orgc0f4047">
 <p>
 <span class="underline">amb</span> 求值器读入表达式，输出 <b>第一个成功</b> 得到的值。允许人工要求回溯：输入 <b>try-again</b> ，求值器将设法找 <b>下一结果</b> ：
 </p>
@@ -595,9 +596,9 @@ int f (..., Fun p) { ...; p(...); return ...; }
 </div>
 </div>
 
-<div id="outline-container-org2d8b388" class="outline-4">
-<h4 id="org2d8b388">总结</h4>
-<div class="outline-text-4" id="text-org2d8b388">
+<div id="outline-container-orgb05002f" class="outline-4">
+<h4 id="orgb05002f">总结</h4>
+<div class="outline-text-4" id="text-orgb05002f">
 <pre class="example">
 失败续延（过程）的构造，几种情况:
 1. amb 表达式：提供一种机制，使当前选择失败时可以换一个选择
@@ -1116,8 +1117,64 @@ int f (..., Fun p) { ...; p(...); return ...; }
 </div>
 </div>
 
-<div id="outline-container-orga49de66" class="outline-3">
-<h3 id="orga49de66">驱动循环</h3>
+<div id="outline-container-orgb5030bf" class="outline-3">
+<h3 id="orgb5030bf">驱动循环</h3>
+<div class="outline-text-3" id="text-orgb5030bf">
+<p>
+<span class="underline">amb</span> 的驱动循环的特点是用户可以输入 <span class="underline">try-again</span> 要求找下一个成功选择。这一特性使驱动循环比较复杂：
+</p>
+<ul class="org-ul">
+<li>循环中用了一个 <span class="underline">internal-loop</span> ，它以一个 <span class="underline">try-again</span> 过程为参数：
+<ul class="org-ul">
+<li>如果用户的输入为 "try-again"，就调用由参数 <span class="underline">try-again</span> 得到的过程</li>
+<li>否则就重新启动 <span class="underline">ambeval</span> 去求值下一表达式</li>
+</ul></li>
+<li><span class="underline">ambeval</span> 的失败续延：通知用户没有下一个值并继续循环</li>
+<li><span class="underline">ambeval</span> 的成功续延：输出得到的值，并用得到的 <span class="underline">失败续延</span> 作为 <span class="underline">try-again</span> 过程</li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">driver-loop</span><span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">internal-loop</span> try-again<span style="color: #696969;">)</span> 
+    <span style="color: #696969;">(</span>prompt-for-input input-prompt<span style="color: #696969;">)</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>input <span style="color: #696969;">(</span>read<span style="color: #696969;">)))</span>
+      <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>eq? input 'try-again<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#29992;&#25143;&#36755;&#20837; "try-again"&#65292;&#35843;&#29992;&#20256;&#20837;&#30340; try-again &#36807;&#31243;</span>
+          <span style="color: #696969;">(</span>try-again<span style="color: #696969;">)</span>
+          <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">begin</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#24320;&#22987;&#26032;&#30340;&#19968;&#27425;&#27714;&#20540;</span>
+            <span style="color: #696969;">(</span>newline<span style="color: #696969;">)</span>
+            <span style="color: #696969;">(</span>display <span style="color: #deb887;">";;; Starting a new problem "</span><span style="color: #696969;">)</span>
+            <span style="color: #696969;">(</span>ambeval input
+                     the-global-environment
+                     <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">ambeval &#30340;&#25104;&#21151;&#32493;&#24310;</span>
+                     <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>val next-alternative<span style="color: #696969;">)</span>
+                       <span style="color: #696969;">(</span>announce-output output-prompt<span style="color: #696969;">)</span>
+                       <span style="color: #696969;">(</span>user-print val<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#25171;&#21360;&#36820;&#22238;&#20540;</span>
+                       <span style="color: #696969;">(</span>internal-loop next-alternative<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#25226;&#25104;&#21151;&#27714;&#20540;&#21518;&#24471;&#21040;&#30340;&#22833;&#36133;&#32493;&#24310;&#20316;&#20026; interal-loop &#30340; try-again &#21442;&#25968;</span>
+                     <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">ambeval &#30340;&#22833;&#36133;&#32493;&#24310;</span>
+                     <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">()</span>
+                       <span style="color: #696969;">(</span>announce-output
+                        <span style="color: #deb887;">";;; There are no more values of"</span><span style="color: #696969;">)</span>
+                       <span style="color: #696969;">(</span>user-print input<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#25171;&#21360;&#22833;&#36133;&#20449;&#24687;</span>
+                       <span style="color: #696969;">(</span>driver-loop<span style="color: #696969;">)))))))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#37325;&#26032;&#24320;&#22987;&#39537;&#21160;&#24490;&#29615;</span>
+  <span style="color: #696969;">(</span>internal-loop <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">internal-loop &#30340;&#21021;&#22987; try-again &#36807;&#31243;</span>
+   <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">()</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#26174;&#31034; "&#26080;&#20107;&#21487;&#20570;"&#65292;&#28982;&#21518;&#37325;&#26032;&#24320;&#22987;&#39537;&#21160;&#24490;&#29615;</span>
+     <span style="color: #696969;">(</span>newline<span style="color: #696969;">)</span> 
+     <span style="color: #696969;">(</span>display <span style="color: #deb887;">";;; There is no current problem"</span><span style="color: #696969;">)</span>
+     <span style="color: #696969;">(</span>driver-loop<span style="color: #696969;">))))</span>
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org7e661dd" class="outline-3">
+<h3 id="org7e661dd">总结</h3>
+<div class="outline-text-3" id="text-org7e661dd">
+<ul class="org-ul">
+<li>续延是一种过程参数，它被过程作为最后的动作调用，且不返回</li>
+<li>amb 实现技术：分析被求值表达式生成的执行过程采用一种标准接口（成功续延和失败续延），把复杂的控制流隐含在巧妙设计的结构中</li>
+<li>要恢复破坏性操作（如赋值等），必须设法保存恢复信息</li>
+</ul>
+</div>
 </div>
 </div>
 </div>
