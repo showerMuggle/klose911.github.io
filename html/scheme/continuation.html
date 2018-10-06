@@ -246,9 +246,16 @@ for the JavaScript code in this tag.
 <ul>
 <li><a href="#org87b76d0">实现amb</a>
 <ul>
-<li><a href="#org7021dab">逻辑问题</a></li>
+<li><a href="#org1bda26c">初始化 amb-fail 全局变量</a></li>
+<li><a href="#org2406c73">choose 函数</a></li>
+<li><a href="#org21f01c1">amb 宏</a>
+<ul>
+<li><a href="#orgd6efaf5">楼层问题</a></li>
 </ul>
 </li>
+</ul>
+</li>
+<li><a href="#org289780a">corutine</a></li>
 </ul>
 </li>
 </ul>
@@ -621,11 +628,18 @@ Scheme 程序通过内置操作符 <span class="underline">call-with-current-con
 <h3 id="org87b76d0">实现amb</h3>
 <div class="outline-text-3" id="text-org87b76d0">
 <p>
+用 <b>一组通过续延来连接的闭包链</b> 来实现回溯，这组链条使用一个全局续延变量 <b>amb-fail</b> 作为入口，每次调用 <span class="underline">amb-fail</span> ， 都会把 <span class="underline">amb-fail</span> 恢复成前一个续延
+</p>
+</div>
+<div id="outline-container-org1bda26c" class="outline-4">
+<h4 id="org1bda26c">初始化 amb-fail 全局变量</h4>
+<div class="outline-text-4" id="text-org1bda26c">
+<p>
 <span class="underline">amb-fail</span> 是最近一个失败的分支设置的函数。如果执行没有参数的 <span class="underline">(amb)</span> 就会转到这个 <span class="underline">amb-fail</span>
 </p>
 
 <p>
-这个例子里，把 <span class="underline">amb-fail</span> 被初始化为打印 <span class="underline">amb tree exhausted</span> ：
+这里，把 <span class="underline">amb-fail</span> 初始化成打印 “amb tree exhausted” ：
 </p>
 
 <div class="org-src-container">
@@ -640,10 +654,77 @@ Scheme 程序通过内置操作符 <span class="underline">call-with-current-con
 <span style="color: #696969;">(</span>initialize-amb-fail<span style="color: #696969;">)</span>
 </pre>
 </div>
+</div>
+</div>
+<div id="outline-container-org2406c73" class="outline-4">
+<h4 id="org2406c73">choose 函数</h4>
+<div class="outline-text-4" id="text-org2406c73">
+<p>
+定义 <span class="underline">choose</span> 函数：
+</p>
+<ol class="org-ol">
+<li>如果没有选择：那调用 <span class="underline">amb-fail</span> 续延打印失败消息</li>
+<li>如果还有选择：
+<ol class="org-ol">
+<li>保存 <span class="underline">amb-fail</span> 到一个局部变量 <span class="underline">prev-amb-fail</span></li>
+<li>调用 <span class="underline">当前续延cc</span> 
+<ol class="org-ol">
+<li>创建一个新的匿名函数并赋值给 <span class="underline">amb-fail</span> ，这个匿名函数： 
+<ul class="org-ul">
+<li>恢复 <span class="underline">amb-fail</span> 为保存的 <span class="underline">prev-amb-fail</span></li>
+<li>在保存的 <span class="underline">续延 cc</span> 中递归求值 <span class="underline">余下的选择</span></li>
+</ul></li>
+<li>在 <span class="underline">当前续延cc</span> 内求值 <span class="underline">第一个选择</span> ，无论求值是否成功，都直接返回</li>
+</ol></li>
+</ol></li>
+</ol>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">choose</span> . ls<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">. &#34920;&#31034;&#21487;&#21464;&#21442;&#25968;</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>null? ls<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#22914;&#26524;&#27809;&#26377;&#36873;&#25321;&#65306;&#37027;&#35843;&#29992; amb-fail &#32493;&#24310;&#25171;&#21360;&#22833;&#36133;&#28040;&#24687;</span>
+      <span style="color: #696969;">(</span>amb-fail<span style="color: #696969;">)</span> 
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>prev-amb-fail amb-fail<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;  </span><span style="color: #5f9ea0; font-style: italic;">&#20445;&#23384; amb-fail &#21040;&#19968;&#20010;&#23616;&#37096;&#21464;&#37327; prev-amb-fail</span>
+      <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">call/cc</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#35843;&#29992;&#24403;&#21069;&#32493;&#24310;cc</span>
+       <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>cc<span style="color: #696969;">)</span> 
+          <span style="color: #696969;">(</span>set! amb-fail <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#21019;&#24314;&#19968;&#20010;&#26032;&#30340;&#21311;&#21517;&#20989;&#25968;&#24182;&#36171;&#20540;&#32473; amb-fail</span>
+                <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">()</span>
+                  <span style="color: #696969;">(</span>set! amb-fail prev-amb-fail<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#24674;&#22797; amb-fail &#20026;&#20445;&#23384;&#30340; prev-amb-fail</span>
+                  <span style="color: #696969;">(</span>cc <span style="color: #696969;">(</span>apply choose <span style="color: #696969;">(</span>cdr ls<span style="color: #696969;">)))))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#22312;&#20445;&#23384;&#30340;&#32493;&#24310; cc &#20013;&#36882;&#24402;&#27714;&#20540;&#20313;&#19979;&#30340;&#36873;&#25321;</span>
+          <span style="color: #696969;">(</span>cc <span style="color: #696969;">(</span>car ls<span style="color: #696969;">)))))))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#22312;&#24403;&#21069;&#32493;&#24310;cc&#20869;&#27714;&#20540;&#31532;&#19968;&#20010;&#36873;&#25321;&#65292;&#26080;&#35770;&#27714;&#20540;&#26159;&#21542;&#25104;&#21151;&#65292;&#37117;&#30452;&#25509;&#36820;&#22238;</span>
+</pre>
+</div>
 
 <p>
-利用 <span class="underline">宏</span> 来定义 <span class="underline">amb</span> 操作符：
+计算一个满足勾股定律的结果：
 </p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#24179;&#26041;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">sq</span> x<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>* x x<span style="color: #696969;">))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#21246;&#32929;&#23450;&#24459;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">pythag</span> a b c<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>= <span style="color: #696969;">(</span>+ <span style="color: #696969;">(</span>sq a<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>sq b<span style="color: #696969;">))</span> <span style="color: #696969;">(</span>sq c<span style="color: #696969;">))</span>
+      <span style="color: #696969;">(</span>list a b c<span style="color: #696969;">)</span>
+      <span style="color: #696969;">(</span>choose<span style="color: #696969;">)))</span>
+
+<span style="color: #696969;">(</span>pythag <span style="color: #696969;">(</span>choose 1 2 3<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>choose 3 4 5<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>choose  4 5 6<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">=&gt; (3 4 5)</span>
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org21f01c1" class="outline-4">
+<h4 id="org21f01c1">amb 宏</h4>
+<div class="outline-text-4" id="text-org21f01c1">
+<pre class="example">
+choose函数有一个问题是：可供选择的值必须是已经计算出来的，不能是S表达式 
+</pre>
+
+<p>
+需要把 <span class="underline">choose</span> 函数改写成宏的形式，实际上这就是要实现的 <span class="underline">amb</span> 操作符：
+</p>
+
 <div class="org-src-container">
 <pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define-syntax</span> <span style="color: #4eee94;">amb</span>
   <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">syntax-rules</span> <span style="color: #696969;">()</span>
@@ -682,9 +763,87 @@ Scheme 程序通过内置操作符 <span class="underline">call-with-current-con
 </div>
 </div>
 
-<div id="outline-container-org7021dab" class="outline-4">
-<h4 id="org7021dab">逻辑问题</h4>
+<div id="outline-container-orgd6efaf5" class="outline-5">
+<h5 id="orgd6efaf5">楼层问题</h5>
+<div class="outline-text-5" id="text-orgd6efaf5">
+<pre class="example">
+Baker、Cooper、Fletcher、Miller 和 Smith 住在五层公寓的不同层
+
+Baker 没住顶层，Cooper 没住底层，Fletcher 没住顶层和底层
+
+Miller 比 Cooper 高一层，Smith 没有住与 Fletcher 相邻的层
+
+Fletcher 没有住与 Cooper 相邻的层
+
+问：这些人各住在哪一层？
+</pre>
+
+<p>
+首先定义辅助逻辑函数：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#30830;&#20445;&#26576;&#20010;&#35859;&#35789;&#24517;&#39035;&#20026;&#30495;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">require</span> p<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>not p<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>amb<span style="color: #696969;">)))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#27809;&#26377;&#37325;&#22797;&#30340;&#20803;&#32032;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">distinct?</span> . ls<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #daa520; font-weight: bold;">loop</span> <span style="color: #696969;">((</span>lst <span style="color: #696969;">(</span>car ls<span style="color: #696969;">)))</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>first <span style="color: #696969;">(</span>car lst<span style="color: #696969;">))</span> <span style="color: #696969;">(</span>rest <span style="color: #696969;">(</span>cdr lst<span style="color: #696969;">)))</span>
+      <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">cond</span> 
+       <span style="color: #696969;">((</span>null? rest<span style="color: #696969;">)</span> #t<span style="color: #696969;">)</span>
+       <span style="color: #696969;">((</span>member first rest<span style="color: #696969;">)</span> #f<span style="color: #696969;">)</span>
+       <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">else</span> <span style="color: #696969;">(</span>loop rest<span style="color: #696969;">))))))</span>
+</pre>
 </div>
+
+<p>
+现在只需要用 <span class="underline">amb</span> 简单列举各种可能性，就可以得到这个问题的解：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#21021;&#22987;&#21270;</span>
+<span style="color: #696969;">(</span>initialize-amb-fail<span style="color: #696969;">)</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#27004;&#23618;&#38382;&#39064;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">multiple-dwelling</span><span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>baker <span style="color: #696969;">(</span>amb 1 2 3 4 5<span style="color: #696969;">))</span>
+        <span style="color: #696969;">(</span>cooper <span style="color: #696969;">(</span>amb 1 2 3 4 5<span style="color: #696969;">))</span>
+        <span style="color: #696969;">(</span>fletcher <span style="color: #696969;">(</span>amb 1 2 3 4 5<span style="color: #696969;">))</span>
+        <span style="color: #696969;">(</span>miller <span style="color: #696969;">(</span>amb 1 2 3 4 5<span style="color: #696969;">))</span>
+        <span style="color: #696969;">(</span>smith <span style="color: #696969;">(</span>amb 1 2 3 4 5<span style="color: #696969;">)))</span>
+    <span style="color: #696969;">(</span>require
+     <span style="color: #696969;">(</span>distinct? <span style="color: #696969;">(</span>list baker cooper fletcher miller smith<span style="color: #696969;">)))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#27809;&#26377;&#20154;&#20303;&#22312;&#21516;&#19968;&#23618;</span>
+    <span style="color: #696969;">(</span>require <span style="color: #696969;">(</span>not <span style="color: #696969;">(</span>= baker 5<span style="color: #696969;">)))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">baker &#19981;&#20303;&#22312; &#31532;5&#23618;</span>
+    <span style="color: #696969;">(</span>require <span style="color: #696969;">(</span>not <span style="color: #696969;">(</span>= cooper 1<span style="color: #696969;">)))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">cooper &#19981;&#20303;&#22312; &#31532;1&#23618;</span>
+    <span style="color: #696969;">(</span>require <span style="color: #696969;">(</span>not <span style="color: #696969;">(</span>= fletcher 5<span style="color: #696969;">)))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">fletcher &#19981;&#20303;&#22312; &#31532;5&#23618;</span>
+    <span style="color: #696969;">(</span>require <span style="color: #696969;">(</span>not <span style="color: #696969;">(</span>= fletcher 1<span style="color: #696969;">)))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">fletcher &#19981;&#20303;&#22312; &#31532;1&#23618;</span>
+    <span style="color: #696969;">(</span>require <span style="color: #696969;">(</span>&gt; miller cooper<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">miller &#27604; cooper &#20303;&#24471;&#39640;</span>
+    <span style="color: #696969;">(</span>require <span style="color: #696969;">(</span>not <span style="color: #696969;">(</span>= <span style="color: #696969;">(</span>abs <span style="color: #696969;">(</span>- smith fletcher<span style="color: #696969;">))</span> 1<span style="color: #696969;">)))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">smith &#21644; fletcher &#19981;&#20303;&#22312;&#30456;&#37051;&#30340;&#20004;&#23618;</span>
+    <span style="color: #696969;">(</span>require <span style="color: #696969;">(</span>not <span style="color: #696969;">(</span>= <span style="color: #696969;">(</span>abs <span style="color: #696969;">(</span>- fletcher cooper<span style="color: #696969;">))</span> 1<span style="color: #696969;">)))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">fletcher &#21644; cooper &#19981;&#20303;&#22312;&#30456;&#37051;&#30340;&#20004;&#23618;</span>
+    <span style="color: #696969;">(</span>list <span style="color: #696969;">(</span>list 'baker baker<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#36755;&#20986;&#32467;&#26524;</span>
+          <span style="color: #696969;">(</span>list 'cooper cooper<span style="color: #696969;">)</span>
+          <span style="color: #696969;">(</span>list 'fletcher fletcher<span style="color: #696969;">)</span>
+          <span style="color: #696969;">(</span>list 'miller miller<span style="color: #696969;">)</span>
+          <span style="color: #696969;">(</span>list 'smith smith<span style="color: #696969;">))))</span>
+</pre>
+</div>
+
+<p>
+测试：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span>multiple-dwelling<span style="color: #696969;">)</span> 
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">=&gt; ((baker 3) (cooper 2) (fletcher 4) (miller 5) (smith 1))</span>
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org289780a" class="outline-3">
+<h3 id="org289780a">corutine</h3>
 </div>
 </div>
 </div>

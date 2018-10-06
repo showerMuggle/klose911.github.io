@@ -262,11 +262,13 @@
 * 应用
 
 ** 实现amb 
-   _amb-fail_ 是最近一个失败的分支设置的函数。如果执行没有参数的 _(amb)_ 就会转到这个 _amb-fail_
+   用 *一组通过续延来连接的闭包链* 来实现回溯，这组链条使用一个全局续延变量 *amb-fail* 作为入口，每次调用 _amb-fail_ ， 都会把 _amb-fail_ 恢复成前一个续延
+*** 初始化 amb-fail 全局变量
+    _amb-fail_ 是最近一个失败的分支设置的函数。如果执行没有参数的 _(amb)_ 就会转到这个 _amb-fail_
 
-   这个例子里，把 _amb-fail_ 被初始化为打印 _amb tree exhausted_ ：
+    这里，把 _amb-fail_ 初始化成打印 “amb tree exhausted” ：
 
-   #+BEGIN_SRC scheme
+    #+BEGIN_SRC scheme
   (define amb-fail '*)
 
   (define initialize-amb-fail
@@ -276,40 +278,149 @@
 	  (error "amb tree exhausted")))))
 
   (initialize-amb-fail)
-   #+END_SRC
+    #+END_SRC
+*** choose 函数
+    定义 _choose_ 函数：
+    1. 如果没有选择：那调用 _amb-fail_ 续延打印失败消息
+    2. 如果还有选择：
+       1. 保存 _amb-fail_ 到一个局部变量 _prev-amb-fail_
+       2. 调用 _当前续延cc_ 
+	  1) 创建一个新的匿名函数并赋值给 _amb-fail_ ，这个匿名函数： 
+	     + 恢复 _amb-fail_ 为保存的 _prev-amb-fail_ 
+	     + 在保存的 _续延 cc_ 中递归求值 _余下的选择_ 
+	  2) 在 _当前续延cc_ 内求值 _第一个选择_ ，无论求值是否成功，都直接返回
 
-   利用 _宏_ 来定义 _amb_ 操作符：
-   #+BEGIN_SRC scheme
-  (define-syntax amb
-    (syntax-rules ()
-      ((_) (amb-fail))
-      ((_ a) a)
-      ((_ a b ...)
-       (let ((prev-amb-fail amb-fail)) ; 把全局变量 amb-fail 赋值给 prev-amb-fail 供回溯 ;; 这里是续延1 
-	 (call/cc ;调用下面的匿名函数 lambda (k) ...  
-	  (lambda (k) ; 续延1 作为参数 k 传入
-	    (set! amb-fail ; 设置全局变量 amb-fail 为下面匿名函数
-		  (lambda () ; 如果 (k a) 调用失败，会调用下面的函数
-		    (set! amb-fail prev-amb-fail) ; 恢复全局变量 amb-fail 为续延1时候的值
-		    (k (amb b ...)))) ; 在续延1 时候求值 b 表达式
-	    (k a))))))) ; 续延1 时候求值 a 表达式，如果求值失败，调用 amb-fail
-   #+END_SRC
+    #+BEGIN_SRC scheme 
+      (define (choose . ls) ; . 表示可变参数
+	(if (null? ls) ; 如果没有选择：那调用 amb-fail 续延打印失败消息
+	    (amb-fail) 
+	  (let ((prev-amb-fail amb-fail)) ;  保存 amb-fail 到一个局部变量 prev-amb-fail
+	    (call/cc ; 调用当前续延cc
+	     (lambda (cc) 
+		(set! amb-fail ; 创建一个新的匿名函数并赋值给 amb-fail
+		      (lambda ()
+			(set! amb-fail prev-amb-fail) ; 恢复 amb-fail 为保存的 prev-amb-fail
+			(cc (apply choose (cdr ls))))) ; 在保存的续延 cc 中递归求值余下的选择
+		(cc (car ls))))))) ; 在当前续延cc内求值第一个选择，无论求值是否成功，都直接返回
+    #+END_SRC
 
-   通过实例来理解这个宏：
+    计算一个满足勾股定律的结果：
+    #+BEGIN_SRC scheme
+  ;;; 平方
+  (define (sq x)
+    (* x x))
 
-   #+BEGIN_SRC scheme
-  (amb 1 2 3) ; => 1
-  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-  ;; 每调用一次 amb 都会触发 (amb-fail) 的调用，转而调用宏中的 (k (amb b) ...) ，这在保存的续延1中去求值下一个表达式 ;;
-  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-  (amb) ; => 2
-  (amb) ; => 3
-  (amb) ;amb tree exhausted
+  ;;; 勾股定律
+  (define (pythag a b c)
+    (if (= (+ (sq a) (sq b)) (sq c))
+	(list a b c)
+	(choose)))
 
-  (if (amb (> 1 2) (< 2 1) (> 5 1))
-       1
-       (amb)) 
-  ;; => 1
-   #+END_SRC
+  (pythag (choose 1 2 3) (choose 3 4 5) (choose  4 5 6)) ; => (3 4 5)
+    #+END_SRC
 
-*** 逻辑问题
+*** amb 宏
+    #+BEGIN_EXAMPLE
+      choose函数有一个问题是：可供选择的值必须是已经计算出来的，不能是S表达式 
+    #+END_EXAMPLE
+
+    需要把 _choose_ 函数改写成宏的形式，实际上这就是要实现的 _amb_ 操作符：
+
+    #+BEGIN_SRC scheme
+      (define-syntax amb
+	(syntax-rules ()
+	  ((_) (amb-fail))
+	  ((_ a) a)
+	  ((_ a b ...)
+	   (let ((prev-amb-fail amb-fail)) ; 把全局变量 amb-fail 赋值给 prev-amb-fail 供回溯 ;; 这里是续延1 
+	     (call/cc ;调用下面的匿名函数 lambda (k) ...  
+	      (lambda (k) ; 续延1 作为参数 k 传入
+		(set! amb-fail ; 设置全局变量 amb-fail 为下面匿名函数
+		      (lambda () ; 如果 (k a) 调用失败，会调用下面的函数
+			(set! amb-fail prev-amb-fail) ; 恢复全局变量 amb-fail 为续延1时候的值
+			(k (amb b ...)))) ; 在续延1 时候求值 b 表达式
+		(k a))))))) ; 续延1 时候求值 a 表达式，如果求值失败，调用 amb-fail
+    #+END_SRC
+
+    通过实例来理解这个宏：
+
+    #+BEGIN_SRC scheme
+      (amb 1 2 3) ; => 1
+      ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+      ;; 每调用一次 amb 都会触发 (amb-fail) 的调用，转而调用宏中的 (k (amb b) ...) ，这在保存的续延1中去求值下一个表达式 ;;
+      ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+      (amb) ; => 2
+      (amb) ; => 3
+      (amb) ;amb tree exhausted
+
+      (if (amb (> 1 2) (< 2 1) (> 5 1))
+	   1
+	   (amb)) 
+      ;; => 1
+    #+END_SRC
+
+**** 楼层问题
+     #+BEGIN_EXAMPLE
+       Baker、Cooper、Fletcher、Miller 和 Smith 住在五层公寓的不同层
+
+       Baker 没住顶层，Cooper 没住底层，Fletcher 没住顶层和底层
+
+       Miller 比 Cooper 高一层，Smith 没有住与 Fletcher 相邻的层
+
+       Fletcher 没有住与 Cooper 相邻的层
+
+       问：这些人各住在哪一层？
+     #+END_EXAMPLE
+
+     首先定义辅助逻辑函数：
+     #+BEGIN_SRC scheme 
+  ;;; 确保某个谓词必须为真
+  (define (require p)
+    (if (not p) (amb)))
+
+  ;;; 没有重复的元素
+  (define (distinct? . ls)
+    (let loop ((lst (car ls)))
+      (let ((first (car lst)) (rest (cdr lst)))
+	(cond 
+	 ((null? rest) #t)
+	 ((member first rest) #f)
+	 (else (loop rest))))))
+     #+END_SRC
+
+     现在只需要用 _amb_ 简单列举各种可能性，就可以得到这个问题的解：
+
+     #+BEGIN_SRC scheme
+  ;;; 初始化
+  (initialize-amb-fail)
+
+  ;;; 楼层问题
+  (define (multiple-dwelling)
+    (let ((baker (amb 1 2 3 4 5))
+	  (cooper (amb 1 2 3 4 5))
+	  (fletcher (amb 1 2 3 4 5))
+	  (miller (amb 1 2 3 4 5))
+	  (smith (amb 1 2 3 4 5)))
+      (require
+       (distinct? (list baker cooper fletcher miller smith))) ; 没有人住在同一层
+      (require (not (= baker 5))) ; baker 不住在 第5层
+      (require (not (= cooper 1))) ; cooper 不住在 第1层
+      (require (not (= fletcher 5))) ; fletcher 不住在 第5层
+      (require (not (= fletcher 1))) ; fletcher 不住在 第1层
+      (require (> miller cooper)) ; miller 比 cooper 住得高
+      (require (not (= (abs (- smith fletcher)) 1))) ; smith 和 fletcher 不住在相邻的两层
+      (require (not (= (abs (- fletcher cooper)) 1))) ; fletcher 和 cooper 不住在相邻的两层
+      (list (list 'baker baker) ; 输出结果
+	    (list 'cooper cooper)
+	    (list 'fletcher fletcher)
+	    (list 'miller miller)
+	    (list 'smith smith))))
+     #+END_SRC
+
+     测试：
+     #+BEGIN_SRC scheme
+  (multiple-dwelling) 
+  ;; => ((baker 3) (cooper 2) (fletcher 4) (miller 5) (smith 1))
+     #+END_SRC
+
+** corutine
