@@ -255,7 +255,22 @@ for the JavaScript code in this tag.
 </li>
 </ul>
 </li>
-<li><a href="#org289780a">corutine</a></li>
+<li><a href="#org289780a">corutine</a>
+<ul>
+<li><a href="#org8ea1f06">二叉树匹配</a>
+<ul>
+<li><a href="#orgde5613e">直观思路</a></li>
+<li><a href="#org90469c1">tree-generator 过程</a></li>
+</ul>
+</li>
+<li><a href="#orgb050fef">协程</a>
+<ul>
+<li><a href="#orgce31c79">函数实现</a></li>
+<li><a href="#org3d3d21d">coroutine宏</a></li>
+</ul>
+</li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -850,6 +865,323 @@ Fletcher 没有住与 Cooper 相邻的层
 
 <div id="outline-container-org289780a" class="outline-3">
 <h3 id="org289780a">corutine</h3>
+<div class="outline-text-3" id="text-org289780a">
+</div>
+<div id="outline-container-org8ea1f06" class="outline-4">
+<h4 id="org8ea1f06">二叉树匹配</h4>
+<div class="outline-text-4" id="text-org8ea1f06">
+<pre class="example">
+      现在有两棵二叉树，需要对它们进行比较，看这两棵树是否 “匹配”，也就是说它们在遍历时，途经的叶子结点是否相同
+
+      总是先访问左边的分支，再访问右边的分支
+</pre>
+
+<p>
+例如：
+</p>
+
+<ul class="org-ul">
+<li><span class="underline">(1 (2 3))</span> 和 <span class="underline">((1 2) 3)</span> 是 <b>匹配</b> 的。因为遍历时，经过的叶子依次都是 1, 2, 3</li>
+<li><span class="underline">(a (b c) d)</span> 和 <span class="underline">(a b (d e))</span> 是 <b>不匹配</b> 的。因为遍历时，经过的叶子依次是 <span class="underline">a, b, c, d</span> 和 <span class="underline">a, b, d, e</span></li>
+</ul>
+</div>
+
+
+<div id="outline-container-orgde5613e" class="outline-5">
+<h5 id="orgde5613e">直观思路</h5>
+<div class="outline-text-5" id="text-orgde5613e">
+<p>
+最直观的算法: 
+</p>
+<ol class="org-ol">
+<li><span class="underline">深度优先遍历</span> 两棵二叉树</li>
+<li>把途中遇到的叶子结点分别放到两个表里</li>
+<li>对这两个表的元素挨个进行比较</li>
+</ol>
+
+<p>
+深度优先遍历二叉树，并把遇到的叶子节点放到一个表里：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">flatten</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>tree<span style="color: #696969;">)</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">cond</span> <span style="color: #696969;">((</span>null? tree<span style="color: #696969;">)</span> '<span style="color: #696969;">())</span>
+          <span style="color: #696969;">((</span>pair? <span style="color: #696969;">(</span>car tree<span style="color: #696969;">))</span>
+           <span style="color: #696969;">(</span>append <span style="color: #696969;">(</span>flatten <span style="color: #696969;">(</span>car tree<span style="color: #696969;">))</span>
+                   <span style="color: #696969;">(</span>flatten <span style="color: #696969;">(</span>cdr tree<span style="color: #696969;">))))</span>
+          <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">else</span>
+           <span style="color: #696969;">(</span>cons <span style="color: #696969;">(</span>car tree<span style="color: #696969;">)</span>
+                 <span style="color: #696969;">(</span>flatten <span style="color: #696969;">(</span>cdr tree<span style="color: #696969;">)))))))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(flatten '(1 (2 3))) ; =&gt;  (1 2 3)</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(flatten '((1 2) 3)) ; =&gt;  (1 2 3)</span>
+</pre>
+</div>
+
+<p>
+对两个表进行比较：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">same-fringe?</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>tree1 tree2<span style="color: #696969;">)</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #daa520; font-weight: bold;">loop</span> <span style="color: #696969;">((</span>ftree1 <span style="color: #696969;">(</span>flatten tree1<span style="color: #696969;">))</span>
+               <span style="color: #696969;">(</span>ftree2 <span style="color: #696969;">(</span>flatten tree2<span style="color: #696969;">)))</span>
+      <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">cond</span> <span style="color: #696969;">((</span><span style="color: #00bfff; font-weight: bold;">and</span> <span style="color: #696969;">(</span>null? ftree1<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>null? ftree2<span style="color: #696969;">))</span> #t<span style="color: #696969;">)</span>
+            <span style="color: #696969;">((</span><span style="color: #00bfff; font-weight: bold;">or</span> <span style="color: #696969;">(</span>null? ftree1<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>null? ftree2<span style="color: #696969;">))</span> #f<span style="color: #696969;">)</span>
+            <span style="color: #696969;">((</span>eqv? <span style="color: #696969;">(</span>car ftree1<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>car ftree2<span style="color: #696969;">))</span>
+             <span style="color: #696969;">(</span>loop <span style="color: #696969;">(</span>cdr ftree1<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>cdr ftree2<span style="color: #696969;">)))</span>
+            <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">else</span> #f<span style="color: #696969;">)))))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(same-fringe? '(1 (2 3)) '((1 2) 3)) ; =&gt; #t </span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(same-fringe? '(a (b c) d) '(a b (d e))) ; =&gt; #f</span>
+</pre>
+</div>
+
+<p>
+这种做法的问题是：必须先用一个展开过程遍历所有的叶结点，然而在比较时，往往到了中间某个叶结点(比如：c和d)就发生了不匹配，实际上后面的叶子根本不需要去访问
+</p>
+
+<p>
+能不能在 <b>对两棵树进行遍历的同时就两两比较叶子是否相同？一旦发现途中有一对叶子不同，马上就可以断定这两棵树不匹配</b> 
+</p>
+
+<pre class="example">
+       这么自然的想法，实际上却不容易用普通的控制结构实现
+
+       在遇到一个叶子时，如何能够跳出遍历的过程，把这个叶子传递给一个比较过程？
+
+       比较之后，又如何回到刚才遍历的路径中？
+
+       如果要用 C 语言实现，该保存多少中间结果？是不是想用 longjump()，线程，甚至 server-client 结构，还要设计一套protocol？还是把递归展开，自己控制堆栈？
+
+       一个可行的办法是改变数据结构，不用普通的二叉树，而使用线索二叉树。可是这会给程序加上很多复杂度。而且万一遍历的不是二叉树而是图又怎么办？
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org90469c1" class="outline-5">
+<h5 id="org90469c1">tree-generator 过程</h5>
+<div class="outline-text-5" id="text-org90469c1">
+<p>
+现在用 <span class="underline">continuation</span> 来解决这个问题，就可以避免遍历，核心思路在于：
+</p>
+
+<pre class="example">
+构建一个 tree-&gt;genenator 的函数, 它接受一个 二叉树 作为参数，每次调用它时都 返回一个新构造的函数 generate-leaves
+
+generate-leaves 函数就像在这棵二叉树里的步行者，它每次被调用时都会返回要访问的下一个叶子结点 
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">tree-&gt;generator</span> tree<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#32493;&#24310; 0&#65292;&#36820;&#22238;&#32473;&#22806;&#23618;&#30340;&#27604;&#36739;&#20989;&#25968;</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>caller '*<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#21021;&#22987;&#21270;&#32493;&#24310;&#21464;&#37327;</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">letrec</span>
+        <span style="color: #696969;">((</span>generate-leaves <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#20869;&#37096;&#23450;&#20041;&#30340;&#20989;&#25968; generate-leaves // &#32493;&#24310; 1&#65292;&#36820;&#22238;&#32473; &#32493;&#24310; 0   </span>
+          <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">()</span>
+            <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #daa520; font-weight: bold;">loop</span> <span style="color: #696969;">((</span>node tree<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">named-let: &#21021;&#22987;&#21270; node &#20026; &#25972;&#35838;&#26641; tree, &#28982;&#21518;&#20570;&#36941;&#21382;</span>
+              <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">cond</span> <span style="color: #696969;">((</span>null? node<span style="color: #696969;">)</span> 'skip<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#21040;&#36798;&#24213;&#37096;&#65292;&#36820;&#22238; 'skip </span>
+                    <span style="color: #696969;">((</span>pair? node<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#33410;&#28857;&#36824;&#26159;&#20108;&#21449;&#26641;&#65292;&#39034;&#24207;&#36941;&#21382; car, cdr </span>
+                     <span style="color: #696969;">(</span>loop <span style="color: #696969;">(</span>car node<span style="color: #696969;">))</span>
+                     <span style="color: #696969;">(</span>loop <span style="color: #696969;">(</span>cdr node<span style="color: #696969;">)))</span>
+                    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">else</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#33410;&#28857;&#26159;&#21494;&#23376;</span>
+                     <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">call/cc</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#36820;&#22238;&#35813;&#21494;&#33410;&#28857;&#20316;&#20026;&#29983;&#25104;&#22120;&#30340;&#32467;&#26524;&#65292;&#20294;&#26159;&#23427;&#20250;&#35760;&#20303;&#21518;&#32493;&#30340;&#24490;&#29615;&#24182;&#20445;&#23384;&#21040; generate-leaves &#21464;&#37327;</span>
+                      <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>rest-of-tree<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#25226;&#32493;&#24310; 1 &#20316;&#20026;&#21442;&#25968; rest-of-tree &#20256;&#20837;</span>
+                        <span style="color: #696969;">(</span>set! generate-leaves <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#37325;&#26032;&#35774;&#32622; generate-leaves &#36807;&#31243;</span>
+                              <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">()</span>
+                                <span style="color: #696969;">(</span>rest-of-tree 'resume<span style="color: #696969;">)))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#35760;&#20303;&#32493;&#24310;1, &#65292;&#19979;&#27425;&#35843;&#29992; generate-leaves &#26102;&#20505;&#65292;&#29992;&#26469;&#36820;&#22238;&#19979;&#19968;&#20010;&#35775;&#38382;&#21040;&#30340;&#33410;&#28857;</span>
+                        <span style="color: #696969;">(</span>caller node<span style="color: #696969;">))))))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#36820;&#22238;&#24403;&#21069;&#33410;&#28857;</span>
+            <span style="color: #696969;">(</span>caller '<span style="color: #696969;">()))))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">=&gt; &#24490;&#29615;&#32467;&#26463;&#25165;&#20250;&#34987;&#35843;&#29992;&#65292;&#36820;&#22238;&#19968;&#20010;&#31354;&#21015;&#34920;&#32473;caller&#12290;&#30001;&#20110;&#31354;&#21015;&#34920;&#19981;&#26159;&#19968;&#20010;&#21512;&#27861;&#30340;&#21494;&#33410;&#28857;&#65292;&#29992;&#23427;&#26469;&#21578;&#35785;&#29983;&#25104;&#22120;&#27809;&#26377;&#21494;&#33410;&#28857;&#38656;&#35201;&#29983;&#25104;&#20102;</span>
+      <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">()</span>
+        <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">call/cc</span>
+         <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>k<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#35843;&#29992; tree-&gt;generator &#30340; &#32493;&#24310;0 &#34987;&#20316;&#20026;&#21442;&#25968; k &#20256;&#20837;</span>
+           <span style="color: #696969;">(</span>set! caller k<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#23616;&#37096;&#21464;&#37327; caller &#34987;&#21021;&#22987;&#21270;&#20026; &#32493;&#24310;0 </span>
+           <span style="color: #696969;">(</span>generate-leaves<span style="color: #696969;">)))))))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#21021;&#27425;&#35843;&#29992; generate-leaves &#36807;&#31243;</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define generator (tree-generator '(a (b c) d)))  ;</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(generator) ; =&gt; a </span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(generator) ; =&gt; b</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(generator) ; =&gt; c </span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(generator) ; =&gt; d </span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(generator) ; =&gt; () </span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(generator) ; =&gt; ()</span>
+</pre>
+</div>
+
+<ul class="org-ul">
+<li>当一个 <span class="underline">tree-&gt;generator</span> 创建的生成器被调用时，这个生成器会把调用的续延存在 <span class="underline">caller</span> 中，这样它就知道当找到叶节点时把它发送给谁</li>
+<li>它调用一个内部定义的函数 <span class="underline">generate-leaves</span> ，该函数会从左到右循环遍历这个树。当循环到一个叶节点时，该函数就使用 <span class="underline">caller</span> 来返回该叶节点作为生成器的结果，但是它会记住后续的循环（被 <span class="underline">call/cc</span> 捕获为一个续延）并保存到 <span class="underline">generate-leaves</span> 变量，下次生成器被调用时，循环从刚才终止的地方恢复，这样它可以寻找下一个叶节点</li>
+</ul>
+
+<pre class="example">
+       注意: generate-leaves 做的最后一件事情，在循环结束后，它返回一个空列表给 caller
+
+       由于空列表不是一个合法的叶节点，可以用它来告诉生成器没有叶节点需要生成了 
+</pre>
+
+<p>
+最后改写 <span class="underline">same-fringe?</span> ：把树作为参数来创建生成器，然后交替调用这两个生成器。只要一找到两个不同的叶节点就会返回失败：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">same-fringe?</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>tree1 tree2<span style="color: #696969;">)</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>gen1 <span style="color: #696969;">(</span>tree-&gt;generator tree1<span style="color: #696969;">))</span>
+          <span style="color: #696969;">(</span>gen2 <span style="color: #696969;">(</span>tree-&gt;generator tree2<span style="color: #696969;">)))</span>
+      <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #daa520; font-weight: bold;">loop</span> <span style="color: #696969;">()</span>
+        <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>leaf1 <span style="color: #696969;">(</span>gen1<span style="color: #696969;">))</span>
+              <span style="color: #696969;">(</span>leaf2 <span style="color: #696969;">(</span>gen2<span style="color: #696969;">)))</span>
+          <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>eqv? leaf1 leaf2<span style="color: #696969;">)</span>
+              <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>null? leaf1<span style="color: #696969;">)</span> #t <span style="color: #696969;">(</span>loop<span style="color: #696969;">))</span>
+              #f<span style="color: #696969;">))))))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define tree1 '(((a b) (y z)) (3 4)))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define tree2 '(((a b) (t z)) (3 4)))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define tree3 '(((a (b y) z)) (3 4)))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(same-fringe? tree1 tree2) ; =&gt; #f</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(same-fringe? tree1 tree3) ; =&gt; #t</span>
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgb050fef" class="outline-4">
+<h4 id="orgb050fef">协程</h4>
+<div class="outline-text-4" id="text-orgb050fef">
+<pre class="example">
+      上面用到的生成器有个有趣的特点：每次被调用时，它都恢复计算，而且当它返回前会把它的续延保存在一个内部变量中，使得这个生成器可以再次恢复
+</pre>
+
+<p>
+如果对生成器进行推广，这样他们 <b>可以相互恢复其他的生成器，并且互相传递结果</b> 。这样的过程就叫 <span class="underline">协程</span> 
+</p>
+</div>
+
+<div id="outline-container-orgce31c79" class="outline-5">
+<h5 id="orgce31c79">函数实现</h5>
+<div class="outline-text-5" id="text-orgce31c79">
+<p>
+首先定义一个数据结构队列：
+</p>
+<ul class="org-ul">
+<li>添加：把一个元素添加到队列的最后</li>
+<li>取出：从队列的最开始取出一个元素，并移除出队列</li>
+</ul>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">queue(FIFO) </span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">make-queue</span><span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>cons '<span style="color: #696969;">()</span> '<span style="color: #696969;">()))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#25226;&#19968;&#20010;&#20803;&#32032;&#21152;&#20837;&#21040;&#38431;&#21015;&#26368;&#21518;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">enqueue!</span> queue obj<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>lobj <span style="color: #696969;">(</span>list obj<span style="color: #696969;">)))</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>null? <span style="color: #696969;">(</span>car queue<span style="color: #696969;">))</span>
+        <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">begin</span>
+          <span style="color: #696969;">(</span>set-car! queue lobj<span style="color: #696969;">)</span>
+          <span style="color: #696969;">(</span>set-cdr! queue lobj<span style="color: #696969;">))</span>
+        <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">begin</span>
+          <span style="color: #696969;">(</span>set-cdr! <span style="color: #696969;">(</span>cdr queue<span style="color: #696969;">)</span> lobj<span style="color: #696969;">)</span>
+          <span style="color: #696969;">(</span>set-cdr! queue lobj<span style="color: #696969;">)))</span>
+    <span style="color: #696969;">(</span>car queue<span style="color: #696969;">)))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#20174;&#38431;&#21015;&#26368;&#21069;&#38754;&#21462;&#20986;&#19968;&#20010;&#20803;&#32032;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">dequeue!</span> queue<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>obj <span style="color: #696969;">(</span>car <span style="color: #696969;">(</span>car queue<span style="color: #696969;">))))</span>
+    <span style="color: #696969;">(</span>set-car! queue <span style="color: #696969;">(</span>cdr <span style="color: #696969;">(</span>car queue<span style="color: #696969;">)))</span>
+    obj<span style="color: #696969;">))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define test-queue (make-queue))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">test-queue ;=&gt;  (())</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(enqueue! test-queue 'a)</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">test-queue ;=&gt;   ((a) a)</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">enqueue! test-queue 'b)</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">test-queue ;=&gt;   ((a b) b) </span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(enqueue! test-queue 'c)</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">test-queue ;=&gt;   ((a b c) c)</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(dequeue! test-queue) ; =&gt; a </span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">test-queue ; =&gt; ((b c) c)</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(dequeue! test-queue) ; =&gt; b </span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">test-queue ; =&gt; ((c) c)</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(dequeue! test-queue) ; =&gt; a</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">test-queue ; =&gt; (() c) </span>
+</pre>
+</div>
+
+<p>
+下面使用队列来定义协程：
+</p>
+<ul class="org-ul">
+<li><span class="underline">process-queue</span> : 协程组成的队列</li>
+</ul>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">process-queue</span> <span style="color: #696969;">(</span>make-queue<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#21327;&#31243;&#38431;&#21015;</span>
+</pre>
+</div>
+<ul class="org-ul">
+<li><span class="underline">coroutine</span> ：把一个协程添加到队列最后</li>
+</ul>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#25226;&#19968;&#20010;&#21327;&#31243;&#28155;&#21152;&#21040;&#38431;&#21015;&#26368;&#21518;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">coroutine</span> thunk<span style="color: #696969;">)</span> 
+  <span style="color: #696969;">(</span>enqueue! process-queue thunk<span style="color: #696969;">))</span>
+</pre>
+</div>
+<ul class="org-ul">
+<li><span class="underline">start</span> : 获得队列中的第一个元素，并执行它</li>
+</ul>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#33719;&#24471;&#38431;&#21015;&#20013;&#30340;&#31532;&#19968;&#20010;&#20803;&#32032;&#65292;&#24182;&#25191;&#34892;&#23427; </span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">start</span><span style="color: #696969;">)</span>
+   <span style="color: #696969;">((</span>dequeue! process-queue<span style="color: #696969;">)))</span>
+</pre>
+</div>
+<ul class="org-ul">
+<li>pause: 把当前续延添加到队列的最后，并且执行当前队列的第一个元素。</li>
+</ul>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">pause</span><span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">call/cc</span>
+   <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>k<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#24403;&#21069;&#32493;&#24310;&#20316;&#20026;&#21442;&#25968; k &#20256;&#20837;</span>
+     <span style="color: #696969;">(</span>coroutine <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">()</span> <span style="color: #696969;">(</span>k #f<span style="color: #696969;">)))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#28155;&#21152;&#24403;&#21069;&#32493;&#24310;&#21040;&#26368;&#21518;</span>
+     <span style="color: #696969;">(</span>start<span style="color: #696969;">))))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#25191;&#34892;&#24403;&#21069;&#38431;&#21015;&#31532;&#19968;&#20010;&#20803;&#32032;</span>
+</pre>
+</div>
+
+<p>
+两个协程交替打印数字和字母：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme">  <span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">example</span>
+<span style="color: #696969;">(</span>coroutine <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">()</span>
+             <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #daa520; font-weight: bold;">loop</span> <span style="color: #696969;">((</span>i 0<span style="color: #696969;">))</span> 
+               <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>&lt; i 10<span style="color: #696969;">)</span>
+                   <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">begin</span>
+                     <span style="color: #696969;">(</span>display <span style="color: #696969;">(</span>1+ i<span style="color: #696969;">))</span> 
+                     <span style="color: #696969;">(</span>display <span style="color: #deb887;">" "</span><span style="color: #696969;">)</span>
+                     <span style="color: #696969;">(</span>pause<span style="color: #696969;">)</span> 
+                     <span style="color: #696969;">(</span>loop <span style="color: #696969;">(</span>1+ i<span style="color: #696969;">)))))))</span>
+
+<span style="color: #696969;">(</span>coroutine <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">()</span>
+             <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #daa520; font-weight: bold;">loop</span> <span style="color: #696969;">((</span>i 0<span style="color: #696969;">))</span> 
+               <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>&lt; i 10<span style="color: #696969;">)</span>
+                   <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">begin</span>
+                     <span style="color: #696969;">(</span>display <span style="color: #696969;">(</span>integer-&gt;char <span style="color: #696969;">(</span>+ i 97<span style="color: #696969;">)))</span>
+                     <span style="color: #696969;">(</span>display <span style="color: #deb887;">" "</span><span style="color: #696969;">)</span>
+                     <span style="color: #696969;">(</span>pause<span style="color: #696969;">)</span> 
+                     <span style="color: #696969;">(</span>loop <span style="color: #696969;">(</span>1+ i<span style="color: #696969;">)))))))</span>
+
+<span style="color: #696969;">(</span>newline<span style="color: #696969;">)</span>
+<span style="color: #696969;">(</span>start<span style="color: #696969;">)</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">1 a 2 b 3 c 4 d 5 e 6 f 7 g 8 h 9 i 10 j</span>
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org3d3d21d" class="outline-5">
+<h5 id="org3d3d21d">coroutine宏</h5>
+</div>
+</div>
 </div>
 </div>
 </div>
