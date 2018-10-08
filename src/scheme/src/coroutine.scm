@@ -155,133 +155,81 @@
      (start)))) ; 执行当前队列第一个元素
 
   ;;; example
-(coroutine (lambda ()
-             (let loop ((i 0)) 
-               (if (< i 10)
-		   (begin
-		     (display (1+ i)) 
-		     (display " ")
-		     (pause) 
-		     (loop (1+ i)))))))
+;; (coroutine (lambda ()
+;;              (let loop ((i 0)) 
+;;                (if (< i 10)
+;; 		   (begin
+;; 		     (display (1+ i)) 
+;; 		     (display " ")
+;; 		     (pause) 
+;; 		     (loop (1+ i)))))))
 
-(coroutine (lambda ()
-             (let loop ((i 0)) 
-               (if (< i 10)
-		   (begin
-		     (display (integer->char (+ i 97)))
-		     (display " ")
-		     (pause) 
-		     (loop (1+ i)))))))
+;; (coroutine (lambda ()
+;;              (let loop ((i 0)) 
+;;                (if (< i 10)
+;; 		   (begin
+;; 		     (display (integer->char (+ i 97)))
+;; 		     (display " ")
+;; 		     (pause) 
+;; 		     (loop (1+ i)))))))
 
-(newline)
-(start)
+;; (newline)
+;; (start)
 ;; 1 a 2 b 3 c 4 d 5 e 6 f 7 g 8 h 9 i 10 j
-
-;; (define-syntax coroutine
-;;   (syntax-rules ()
-;;     ((coroutine arg resume body ...)
-;;      (letrec ((local-control-state
-;;                (lambda (arg) body ...))
-;;               (resume
-;;                (lambda (c v)
-;;                  (call/cc
-;;                   (lambda (k)
-;;                     (set! local-control-state k)
-;;                     (c v))))))
-;;        (lambda (v)
-;;          (local-control-state v))))))
-
-;; (define make-matcher-coroutine
-;;   (lambda (tree-cor-1 tree-cor-2)
-;;     (coroutine dont-need-an-init-arg resume
-;;       (let loop ()
-;;         (let ((leaf1 (tree-cor-1 'get-a-leaf))
-;;               (leaf2 (tree-cor-2 'get-a-leaf)))
-;;           (if (eqv? leaf1 leaf2)
-;;               (if (null? leaf1) #t (loop))
-;;               #f))))))
-
-;; (define make-leaf-gen-coroutine
-;;   (lambda (tree matcher-cor)
-;;     (coroutine dont-need-an-init-arg resume
-;;       (let loop ((tree tree))
-;;         (cond ((null? tree) 'skip)
-;;               ((pair? tree)
-;;                (loop (car tree))
-;;                (loop (cdr tree)))
-;;               (else
-;;                (matcher-cor tree))))
-;;       (matcher-cor '()))))
-
-;; (define same-fringe?
-;;   (lambda (tree1 tree2)
-;;     (letrec ((tree-cor-1
-;;               (make-leaf-gen-coroutine
-;;                tree1
-;;                (lambda (v) (matcher-cor v))))
-;;              (tree-cor-2
-;;               (make-leaf-gen-coroutine
-;;                tree2
-;;                (lambda (v) (matcher-cor v))))
-;;              (matcher-cor
-;;               (make-matcher-coroutine
-;;                (lambda (v) (tree-cor-1 v))
-;;                (lambda (v) (tree-cor-2 v)))))
-;;       (matcher-cor 'start-ball-rolling))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; 创建协程宏：返回一个函数，一个变量名作为协程函数的初始参数，内容作为协程函数的内容 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(require compatibility/defmacro)
+;; (require compatibility/defmacro)
 
-(define-macro coroutine
-  (lambda (x . body) ; x ：协程A的初始参数，body：协程A的内容
-    `(letrec ((+local-control-state (lambda (,x) ,@body)) ; 运行协程
-              (resume ; 两个参数的函数，保存协程A的续延，转而执行协程B 
-               (lambda (c v) ; c: 另外一个协程B，v：执行用的参数
-                 (call/cc
-                  (lambda (k) ; 当前续延作为参数传入
-                    (set! +local-control-state k) ; 把当前续延保存到 +local-control-state 
-                    (c v)))))) ; 执行协程 B 
-       (lambda (v)
-         (+local-control-state v))))) ; 协程A恢复后，会从local-control-state变量里存放的续延开始
+;; (define-macro coroutine
+;;   (lambda (x . body) ; x ：协程A的初始参数，body：协程A的内容
+;;     `(letrec ((+local-control-state (lambda (,x) ,@body)) ; 运行协程
+;;               (resume ; 两个参数的函数，保存协程A的续延，转而执行协程B 
+;;                (lambda (c v) ; c: 另外一个协程B，v：执行用的参数
+;;                  (call/cc
+;;                   (lambda (k) ; 当前续延作为参数传入
+;;                     (set! +local-control-state k) ; 把当前续延保存到 +local-control-state 
+;;                     (c v)))))) ; 执行协程 B 
+;;        (lambda (v)
+;;          (+local-control-state v))))) ; 协程A恢复后，会从local-control-state变量里存放的续延开始
 
-;;; tree->generator 协程: tree遍历的树，matcher-cor 比较叶子节点的协程 
-(define (make-leaf-gen-coroutine tree matcher-cor) 
-  (coroutine dont-need-an-init-arg ; 任意参数
-	     (let loop ((node tree))
-	       (cond ((null? node) 'skip)
-		     ((pair? node)
-		      (loop (car node))
-		      (loop (cdr node)))
-		     (else
-		      (resume matcher-cor node)))) ; 转而执行 matcher-cor 协程做比较，传递给 matcher-cor 的参数是当前的叶子节点 node   
-	     (resume matcher-cor '()))) ; 转而执行 matcher-cor 协程，传递给 matcher-cor 的参数是空列表，通知 macher-cor 协程遍历完毕
+;; ;;; tree->generator 协程: tree遍历的树，matcher-cor 比较叶子节点的协程 
+;; (define (make-leaf-gen-coroutine tree matcher-cor) 
+;;   (coroutine dont-need-an-init-arg ; 任意参数
+;; 	     (let loop ((node tree))
+;; 	       (cond ((null? node) 'skip)
+;; 		     ((pair? node)
+;; 		      (loop (car node))
+;; 		      (loop (cdr node)))
+;; 		     (else
+;; 		      (resume matcher-cor node)))) ; 转而执行 matcher-cor 协程做比较，传递给 matcher-cor 的参数是当前的叶子节点 node   
+;; 	     (resume matcher-cor '()))) ; 转而执行 matcher-cor 协程，传递给 matcher-cor 的参数是空列表，通知 macher-cor 协程遍历完毕
 
-;;; 比较叶子节点的协程：tree-cor-1 遍历树1的协程， tree-cor-2 遍历树2的协程
-(define (make-matcher-coroutine tree-cor-1 tree-cor-2) 
-  (coroutine dont-need-an-init-arg ; 任意参数
-	     (let loop ()
-	       (let ((leaf1 (resume tree-cor-1 'get-1-a-leaf)) ; 转而执行 tree-cor-1 协程， 获取第一颗树的当前叶子节点，传递的参数可以任意
-		     (leaf2 (resume tree-cor-2 'get-2-a-leaf))) ; 转而执行 tree-cor-2 协程， 获取第二颗树的当前叶子节点，传递的参数可以任意
-		 (if (eqv? leaf1 leaf2)
-		     (if (null? leaf1) #t (loop))
-		     #f)))))
+;; ;;; 比较叶子节点的协程：tree-cor-1 遍历树1的协程， tree-cor-2 遍历树2的协程
+;; (define (make-matcher-coroutine tree-cor-1 tree-cor-2) 
+;;   (coroutine dont-need-an-init-arg ; 任意参数
+;; 	     (let loop ()
+;; 	       (let ((leaf1 (resume tree-cor-1 'get-1-a-leaf)) ; 转而执行 tree-cor-1 协程， 获取第一颗树的当前叶子节点，传递的参数可以任意
+;; 		     (leaf2 (resume tree-cor-2 'get-2-a-leaf))) ; 转而执行 tree-cor-2 协程， 获取第二颗树的当前叶子节点，传递的参数可以任意
+;; 		 (if (eqv? leaf1 leaf2)
+;; 		     (if (null? leaf1) #t (loop))
+;; 		     #f)))))
 
-(define (same-fringe? tree1 tree2) 
-  (letrec ((tree-cor-1 ; 创建 遍历第一颗树 协程
-            (make-leaf-gen-coroutine
-             tree1
-             (lambda (v) (matcher-cor v))))
-           (tree-cor-2 ; 创建 遍历第二颗树 协程
-            (make-leaf-gen-coroutine
-             tree2
-             (lambda (v) (matcher-cor v))))
-           (matcher-cor ; 创建 比较叶子节点 协程
-            (make-matcher-coroutine
-             (lambda (v) (tree-cor-1 v))
-             (lambda (v) (tree-cor-2 v)))))
-    (matcher-cor 'start-ball-rolling)))
+;; (define (same-fringe? tree1 tree2) 
+;;   (letrec ((tree-cor-1 ; 创建 遍历第一颗树 协程
+;;             (make-leaf-gen-coroutine
+;;              tree1
+;;              (lambda (v) (matcher-cor v))))
+;;            (tree-cor-2 ; 创建 遍历第二颗树 协程
+;;             (make-leaf-gen-coroutine
+;;              tree2
+;;              (lambda (v) (matcher-cor v))))
+;;            (matcher-cor ; 创建 比较叶子节点 协程
+;;             (make-matcher-coroutine
+;;              (lambda (v) (tree-cor-1 v))
+;;              (lambda (v) (tree-cor-2 v)))))
+;;     (matcher-cor 'start-ball-rolling)))
 
 ;; (define tree1 '(((a b) (y z)) (3 4)))
 ;; (define tree2 '(((a b) (t z)) (3 4)))
