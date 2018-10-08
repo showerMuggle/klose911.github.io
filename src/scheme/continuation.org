@@ -4,10 +4,6 @@
 
 *续延* 是在 *运行中被暂停了的程序* ：即含有 *计算状态* 的 *单个函数型对象* 。当这个对象被求值时，就会在它上次停下来的地方重新启动之前保存下来的计算
 
-对于求解特定类型的问题，能够保存程序的状态并在之后重启是非常有用的：
-+ 在多进程中，续延可以很方便地表示挂起的进程
-+ 在非确定性的搜索问题里，续延可以用来表示搜索树中的节点
-
 * 定义
   *续延* 是一个代表着 _计算的将来_ 的函数。不管是哪一个表达式被求值，总会有谁在翘首以待它将要返回的值：
   #+BEGIN_SRC scheme
@@ -260,10 +256,13 @@
    实际上CPS风格的最后一个参数，就可以被认为是当前的续延。所以一种通用的实现续延的方式就是 *通过遍历代码，把代码转换成CPS风格来得到当前续延*
 
 * 应用
+  对于求解特定类型的问题，能够保存程序的状态并在之后重启是非常有用的：
+  + 在非确定性的搜索问题里，续延可以用来表示搜索树中的节点
+  + 在多进程中，续延可以很方便地表示挂起的进程
 
 ** 实现amb 
    用 *一组通过续延来连接的闭包链* 来实现回溯，这组链条使用一个全局续延变量 *amb-fail* 作为入口，每次调用 _amb-fail_ ， 都会把 _amb-fail_ 恢复成前一个续延
-*** 初始化 amb-fail 全局变量
+*** amb-fail 全局变量
     _amb-fail_ 是最近一个失败的分支设置的函数。如果执行没有参数的 _(amb)_ 就会转到这个 _amb-fail_
 
     这里，把 _amb-fail_ 初始化成打印 “amb tree exhausted” ：
@@ -429,7 +428,7 @@
   ;; => ((baker 3) (cooper 2) (fletcher 4) (miller 5) (smith 1))
      #+END_SRC
 
-** corutine
+** 协程
 
 *** 二叉树匹配
     #+BEGIN_EXAMPLE
@@ -571,7 +570,7 @@
   ;; (same-fringe? tree1 tree3) ; => #t
      #+END_SRC
 
-*** 协程 
+*** coroutine 
     #+BEGIN_EXAMPLE
       上面用到的生成器有个有趣的特点：每次被调用时，它都恢复计算，而且当它返回前会把它的续延保存在一个内部变量中，使得这个生成器可以再次恢复
     #+END_EXAMPLE
@@ -673,4 +672,182 @@
   ;; 1 a 2 b 3 c 4 d 5 e 6 f 7 g 8 h 9 i 10 j
      #+END_SRC
 
-**** coroutine宏
+**** 宏实现
+     #+BEGIN_EXAMPLE
+       上面的代码的问题在于：
+       1. 停止当前协程, 只能执行队列中的首个元素，这意味着我们需要考虑协程队列的顺序性
+       2. 协程之间无法互相通信，传递计算值
+     #+END_EXAMPLE
+
+     接下来定义 _coroutine宏_ ：创建一个协程
+     + 参数：
+       + _x_ : *协程的初始参数*
+       + _body_ : *协程执行内容* 
+     + 返回:  *一个参数的匿名函数*  
+
+     其主体包含 _resume调用_ ：保存当前协程的续延，转而执行另外一个协程
+     + 参数：
+       + _c_ ： 另外一个协程
+       + _v_ : 另外一个协程执行用的需要的参数
+
+     #+BEGIN_SRC scheme
+  (require compatibility/defmacro)
+
+  (define-macro coroutine
+    (lambda (x . body) ; x ：协程A的初始参数，body：协程A的内容
+      `(letrec ((+local-control-state (lambda (,x) ,@body)) ; 运行协程
+		(resume ; 两个参数的函数，保存协程A的续延，转而执行协程B 
+		 (lambda (c v) ; c: 另外一个协程B，v：执行用的参数
+		   (call/cc
+		    (lambda (k) ; 当前续延作为参数传入
+		      (set! +local-control-state k) ; 把当前续延保存到 +local-control-state 
+		      (c v)))))) ; 执行协程 B 
+	 (lambda (v)
+	   (+local-control-state v))))) ; 协程A恢复后，会从local-control-state变量里存放的续延开始
+     #+END_SRC
+
+     1. 调用 _coroutine宏_ 可以创建一个协程 _A_ ，这个协程可以有一个参数
+     2. _A_ 有一个内部变量叫做 _+local-control-state_ 来 *保存任意时刻这个协程接下来的计算*
+     3. 当调用 _resume_ 时，也就是调用另一个协程 _B_ 时：
+	1. 当前协程 _A_ 会更新它的 _+local-control-state_ 变量为之后的计算
+	2. 然后停止
+	3. 然后执行恢复了的协程 _B_ 
+     4. 当协程 _A_ 之后恢复时，它的计算会从 _+local-control-state_ 变量里 *存放的续延* 开始 
+***** 简化二叉树匹配问题
+      叶生成器协程：记住把它的节点返回给谁：
+      #+BEGIN_SRC scheme
+  (define (make-leaf-gen-coroutine tree matcher-cor) 
+    (coroutine dont-need-an-init-arg ; 任意参数
+	       (let loop ((node tree))
+		 (cond ((null? node) 'skip)
+		       ((pair? node)
+			(loop (car node))
+			(loop (cdr node)))
+		       (else
+			(resume matcher-cor node)))) ; 转而执行 matcher-cor 协程做比较，传递给 matcher-cor 的参数是当前的叶子节点 node   
+	       (resume matcher-cor '()))) ; 转而执行 matcher-cor 协程，传递给 matcher-cor 的参数是空列表，通知 macher-cor 协程遍历完毕
+      #+END_SRC
+
+      _匹配叶子节点协程_ ： 依赖另外两个 _叶生成器协程_ 提供各自的叶节点
+      #+BEGIN_SRC scheme
+  (define (make-matcher-coroutine tree-cor-1 tree-cor-2) 
+    (coroutine dont-need-an-init-arg ; 任意参数
+	       (let loop ()
+		 (let ((leaf1 (resume tree-cor-1 'get-1-a-leaf)) ; 转而执行 tree-cor-1 协程， 获取第一颗树的当前叶子节点，传递的参数可以任意
+		       (leaf2 (resume tree-cor-2 'get-2-a-leaf))) ; 转而执行 tree-cor-2 协程， 获取第二颗树的当前叶子节点，传递的参数可以任意
+		   (if (eqv? leaf1 leaf2)
+		       (if (null? leaf1) #t (loop))
+		       #f)))))
+      #+END_SRC
+
+      最后改写 _same-fringe?_ 函数：
+      #+BEGIN_SRC scheme
+  (define (same-fringe? tree1 tree2) 
+    (letrec ((tree-cor-1 ; 创建 遍历第一颗树 协程
+	      (make-leaf-gen-coroutine
+	       tree1
+	       (lambda (v) (matcher-cor v))))
+	     (tree-cor-2 ; 创建 遍历第二颗树 协程
+	      (make-leaf-gen-coroutine
+	       tree2
+	       (lambda (v) (matcher-cor v))))
+	     (matcher-cor ; 创建 比较叶子节点 协程
+	      (make-matcher-coroutine
+	       (lambda (v) (tree-cor-1 v))
+	       (lambda (v) (tree-cor-2 v)))))
+      (matcher-cor 'start-ball-rolling)))
+
+  ;; (define tree1 '(((a b) (y z)) (3 4)))
+  ;; (define tree2 '(((a b) (t z)) (3 4)))
+  ;; (define tree3 '(((a (b y) z)) (3 4)))
+  ;; (same-fringe? tree1 tree2) ; => #f
+  ;; (same-fringe? tree1 tree3) ; => #t
+      #+END_SRC
+
+      #+BEGIN_EXAMPLE
+	在这个版本的same-fringe里已经完全没有调用call/cc的痕迹。宏coroutine管理了所有的协程
+      #+END_EXAMPLE
+
+***** define-syntax版本宏
+      #+BEGIN_EXAMPLE
+      上面的宏有变量捕捉，变量名称可能冲突等问题
+      #+END_EXAMPLE
+
+      使用 _syntax-rules_ 来定义一个卫生宏：
+      #+BEGIN_SRC scheme
+  (define-syntax coroutine
+    (syntax-rules ()
+      ((coroutine arg resume body ...) ; 故意把 resume 放到了 coroutine 宏的参数列表中。创建协程时候，必须使用一个符号作为局部函数resume的名字
+       (letrec ((local-control-state
+		 (lambda (arg) body ...))
+		(resume
+		 (lambda (c v)
+		   (call/cc
+		    (lambda (k)
+		      (set! local-control-state k)
+		      (c v))))))
+	 (lambda (v)
+	   (local-control-state v))))))
+      #+END_SRC
+
+      #+BEGIN_EXAMPLE
+	这里故意把 resume 放到了 coroutine 宏的参数列表中。以后创建协程的时候，必须使用一个符号作为第二个参数
+
+	实际上这是把一个名字作为 resume 参数传递给 coroutine 宏，让它把这个名字绑定到一个局部函数
+
+	因此在创建协程时， 可以随意更换局部函数的名字，而不是像前面固定死为 resume
+      #+END_EXAMPLE
+
+      叶生成器协程，除了使用 _go-on_ 作为局部函数名字，其他完全一样
+      #+BEGIN_SRC scheme
+  (define (make-leaf-gen-coroutine tree matcher-cor) 
+    (coroutine dont-need-an-init-arg
+	       go-on ; 任意给定一个名字， 但下面必须使用这个名字来执行宏中resume的
+	       (let loop ((node tree))
+		 (cond ((null? node) 'skip)
+		       ((pair? node)
+			(loop (car node))
+			(loop (cdr node)))
+		       (else
+			(go-on matcher-cor node))))
+	       (go-on matcher-cor '()))) 
+      #+END_SRC
+
+      叶子节点比较协程：
+      #+BEGIN_SRC scheme
+  (define (make-matcher-coroutine tree-cor-1 tree-cor-2) 
+    (coroutine dont-need-an-init-arg 
+	       go-on ; 任意给定一个名字, 但下面必须使用这个名字来执行宏中resume的
+	       (let loop ()
+		 (let ((leaf1 (go-on tree-cor-1 'get-1-a-leaf)) 
+		       (leaf2 (go-on tree-cor-2 'get-2-a-leaf))) 
+		   (if (eqv? leaf1 leaf2)
+		       (if (null? leaf1) #t (loop))
+		       #f)))))
+      #+END_SRC
+
+      匹配函数和 _define-macro_ 版本完全一样：
+      #+BEGIN_SRC scheme
+  (define (same-fringe? tree1 tree2) 
+    (letrec ((tree-cor-1 
+	      (make-leaf-gen-coroutine
+	       tree1
+	       (lambda (v) (matcher-cor v))))
+	     (tree-cor-2 
+	      (make-leaf-gen-coroutine
+	       tree2
+	       (lambda (v) (matcher-cor v))))
+	     (matcher-cor 
+	      (make-matcher-coroutine
+	       (lambda (v) (tree-cor-1 v))
+	       (lambda (v) (tree-cor-2 v)))))
+      (matcher-cor 'start-ball-rolling)))
+
+  ;; (define tree1 '(((a b) (y z)) (3 4)))
+  ;; (define tree2 '(((a b) (t z)) (3 4)))
+  ;; (define tree3 '(((a (b y) z)) (3 4)))
+  ;; (same-fringe? tree1 tree2) ; => #f
+  ;; (same-fringe? tree1 tree3) ; => #t
+      #+END_SRC
+
+
