@@ -1,0 +1,292 @@
+#+TITLE: 流式计算
+#+HTML_HEAD: <link rel="stylesheet" type="text/css" href="css/main.css" />
+#+OPTIONS: num:nil timestamp:nil 
+
+在用状态和赋值模拟的代码中，可以看到 _赋值带来的复杂性_ 。实际上，这里的复杂性的根源是 *现实世界中被模拟的现象* ：
++ 用有 _局部状态的计算对象_ 模拟 _真实中的状态可能变化的对象_ 
++ 用 _计算机里的系统随着时间的变化_ 模拟 _现实世界中的变化_ 
++ 通过对 _有局部状态的对象的赋值_ ，实现 _计算机系统里的状态变化_ 
+
+
+现在考虑另一种思路：把 *一个随时间变化的量表示为一个随时间变化的函数 x(t)* 。这样可得到两个层面的观察：
+1. 如果看 _x_ 在一系列具体时刻的值，它是一个 *随时间变化的变量*
+2. 如果看 _x_ 的整个历史，它就是一个 *时间的函数，并没有变化* 
+
+对于离散时间上的函数 _x(t)_ ，由于是离散时间的函数，可以用无穷长的序列模拟。这种序列称为 _流_ 。流被用来 *模拟状态的变化* ， *模拟一个系统随时间变化的历史* 
+
+* 流
+  为了做这种模拟，需要引进一种数据结构，也被称为 _stream_ ：
+  + *不能直接用表结构* 表示流，因为一般说流可能是 *无穷的* 
+  + 下面采用 _延时求值_ 技术，用流表示任意长的序列
+
+  #+BEGIN_EXAMPLE
+    流技术可用于模拟一些包含状态的系统，构造一些有趣模型：
+
+    不需要赋值和变动数据结构，因此可以避免赋值带来的问题
+    流不是万能灵药，使用上有本质性困难 
+  #+END_EXAMPLE
+** 延迟序列
+   如果用 _序列_ 作为组合程序的标准接口，可以构造了许多有用的序列操作抽象，如 _map_ , _filter_ ,  _accumulate_ 等。比如，用迭代风格计算一个区间中所有素数之和的过程：
+   #+BEGIN_SRC scheme
+  (define (sum-primes a b)
+    (define (iter count accum)
+      (cond ((> count b) accum)
+	    ((prime? count) (iter (+ count 1) (+ count accum)))
+	    (else (iter (+ count 1) accum))))
+    (iter a 0))
+   #+END_SRC
+
+   用序列操作的组合写同样程序：
+   #+BEGIN_SRC scheme
+  (define (sum-primes a b)
+    (accumulate +
+		0
+		(filter prime? (enumerate-interval a b))))
+   #+END_SRC
+
+   虽然这些抽象用起来很漂亮，但是在得到好结果的同时可能付出 *严重的效率代价* （空间和或时间），因为 _每步操作都可能构造出很大的数据结构_ ：
+
+   第一个程序在计算中 _只维持部分积累和_ ，而在第二个程序的计算中：
+   + _enumerate-interval_  构造出区间 _[a,b]_  中所有整数的表
+   + _filter_ 基于产生过滤后的表并将其送给 _accumulate_ 
+
+   实际上两个表都可能很大： 
+
+   #+BEGIN_EXAMPLE
+     清晰性和模块化的代价是效率和资源消耗
+   #+END_EXAMPLE
+
+   另一个极端的例子：求 10000 到 1000000 的区间里的第二个素数，显然效率是极其低效：
+
+   #+BEGIN_SRC scheme
+  (car (cdr (filter prime?
+		    (enumerate-interval 10000 1000000))))
+   #+END_SRC
+
+   流是一种有趣想法，其特点：
+   + 支持序列操作同时又能避免用表表示序列的额外代价
+   + 程序像操作表一样工作，又有递增计算的高效率
+
+   #+BEGIN_EXAMPLE
+     流的基本思想：
+
+     做好一种安排，工作中只构造出序列的一部分。仅当程序需要访问序列的尚未构造出来的部分时才去构造它
+
+     程序可以认为整个序列都存在，就像是处理和使用完整的序列
+   #+END_EXAMPLE
+
+   从表面看 *流* 就像 _表_ : 
+   + 构造函数： _cons-stream_
+   + 选择函数： _stream-car_ 和 _stream-cdr_ 
+   + _the-empty-stream_ :  生成一个特殊的空流，它不能是任何 cons-stream 产生的结果
+   + _stream-null?_ ： 用来判断是否为空
+
+   相关操作满足：
+   #+BEGIN_EXAMPLE
+     (stream-car (cons-stream x y)) = x
+     (stream-cdr (cons-stream x y)) = y
+   #+END_EXAMPLE
+
+   基于这些基本操作可定义各种序列操作：
+
+   #+BEGIN_SRC scheme
+  (define (stream-ref s n)
+    (if (= n 0)
+	(stream-car s)
+	(stream-ref (stream-cdr s) (- n 1))))
+
+  (define (stream-map proc s)
+    (if (stream-null? s)
+	the-empty-stream
+	(cons-stream (proc (stream-car s))
+		     (stream-map proc (stream-cdr s)))))
+
+  (define (stream-for-each proc s)
+    (if (stream-null? s)
+	'done
+	(begin (proc (stream-car s))
+	       (stream-for-each proc (stream-cdr s)))))
+   #+END_SRC
+
+   stream-for-each 可以用来检查流的每个元素：
+   #+BEGIN_SRC scheme
+  (define (display-stream s)
+    (stream-for-each display-line s))
+
+  (define (display-line x)
+    (newline)
+    (display x))
+   #+END_SRC
+
+   为了使流的 _构造_ 和 _使用_ 能自动而透明地交替进行，实现中需要适当安排：对其 _cdr_  部分的求值等到 *实际做 _stream-cdr_ 时* 再做，而不是在求值
+   _cons-stream_ 时做。作为数据抽象，流和常规表一样，不同点只是 *元素的求值时间* ：
+   + 表的两个成分都在构造时求值
+   + 而流的 _cdr_  部分推迟到使用时才求值
+
+*** delay形式
+    流的实现基于特殊形式 *delay* ：
+    #+BEGIN_EXAMPLE
+    求值(delay <e>)  时并不求值 <e>，而是返回一个延时对象
+    #+END_EXAMPLE
+
+    过程 *force* :  以 _延时对象_ 为参数，执行对 _<e>_ 的求值 
+
+    #+BEGIN_EXAMPLE
+      (cons-stream <a> <b>)  等价于表达式
+
+      (cons <a> (delay <b>))
+    #+END_EXAMPLE
+
+    两个选择函数定义为：
+    #+BEGIN_SRC scheme
+  define (stream-car stream)
+    (car stream))
+
+  (define (stream-cdr stream)
+    (force (cdr stream)))
+    #+END_SRC
+
+    + _stream-car_ : 直接返回 流 的 car
+    + _stream-cdr_ : 得到 流 的 cdr，然后求值这个延迟对象，再返回
+
+**** 流计算实例
+     为理解流计算，用流重写求第二个素数的例子，首先用cons-stream 构建 10000 ~ 1000000 的区间：
+     #+BEGIN_SRC scheme
+  (define (stream-enumerate-interval low high)
+    (if (> low high)
+	the-empty-stream
+	(cons-stream
+	 low
+	 (stream-enumerate-interval (+ low 1) high))))
+
+  ;; (stream-enumerate-interval 10000 1000000)
+  ;; (cons-stream 10000 (stream-enumerate-interval 10001 1000000))
+  ;; (cons 10000 (delay (stream-enumerate-interval 10001 1000000)) 
+     #+END_SRC
+
+     可以看到  _(stream-enumerate-interval 10000 1000000)_  等价于  _(cons 10000 (delay (stream-enumerate-interval 10001 1000000))_ 
+
+     过滤 _stream_ ：
+
+     #+BEGIN_SRC scheme
+  (define (stream-filter pred stream)
+    (cond ((stream-null? stream) the-empty-stream)
+	  ((pred (stream-car stream))
+	   (cons-stream (stream-car stream)
+			(stream-filter pred ; 这里并不求值，只是保存求值的表达式
+				       (stream-cdr stream))))
+	  (else (stream-filter pred (stream-cdr stream)))))
+     #+END_SRC
+
+     现在可以把求值第二个素数改写成：
+
+     #+BEGIN_SRC scheme
+  (stream-car
+   (stream-cdr
+    (stream-filter prime? (stream-enumerate-interval 10000 1000000)))) ; => 10009
+     #+END_SRC
+
+     + 对 _stream-enumerate-interval_  的调用返回 (cons 10000 (delay (stream-enumerate-interval 10001 1000000)))： 
+     #+BEGIN_SRC scheme
+  ;; (stream-enumerate-interval 10000 1000000)
+  ;; (cons-stream 10000 (stream-enumerate-interval 10001 1000000))
+  ;; (cons 10000 (delay (stream-enumerate-interval 10001 1000000)) 
+     #+END_SRC
+
+     + _stream-filter_ 检查 _car_ 后丢掉 _10000_ 并迫使流求出序列的下一元素：
+     #+BEGIN_SRC scheme
+  (stream-filter prime?  (cons 10000 (delay (stream-enumerate-interval 10001 1000000)))) 
+  (prime? (stream-car  (cons 10000 (delay (stream-enumerate-interval 10001 1000000))))) 
+  (prime? 10000) ; => #f
+
+  (stream-filter prime? (stream-cdr (stream-enumerate-interval 10001 1000000)))
+  (stream-filter prime? (force (delay (stream-enumerate-interval 10001 1000000))))
+  (stream-filter prime? (stream-enumerate-interval 10001 1000000))
+     #+END_SRC
+
+     + 这样丢掉一个一个数直到 stream-filter 最终返回   (cons 10007 (delay (stream-filter prime? (stream-cdr (stream-enumerate-interval 10007 1000000)))))
+
+     #+BEGIN_SRC scheme
+  (stream-filter prime? (stream-enumerate-interval 10007 1000000))
+  (prime? 10007) ; => #t
+  (cons-stream 10007 (stream-filter prime? stream-cdr (stream-enumerate-interval 10007 1000000)))
+  (cons 10007 (delay (stream-filter prime? (stream-cdr (stream-enumerate-interval 10007 1000000)))))
+     #+END_SRC
+     + 调用 stream-cdr 丢掉 10007, 继续求值：
+     #+BEGIN_SRC scheme
+  (stream-cdr (cons 10007 (delay (stream-filter prime? (stream-cdr (stream-enumerate-interval 10007 1000000))))))
+  (force (delay (stream-filter prime? (stream-cdr (stream-enumerate-interval 10007 1000000)))))
+  (stream-filter prime? (stream-cdr (stream-enumerate-interval 10007 1000000)))
+  (stream-filter prime? (stream-enumerate-interval 10008 1000000)) 
+  .....
+     #+END_SRC
+
+     + 在得到第二个素数 10009 之后，调用 stream-car 结束计算：
+
+     #+BEGIN_SRC scheme
+  (stream-filter prime? (stream-enumerate-interval 10009 1000000))
+  (prime 10009) ; => #t
+  (cons 10009 (delay (stream-filter prime? (stream-cdr (stream-enumerate-interval 10009 1000000)))))
+
+  (stream-car (cons 10009 (delay (stream-filter prime? (stream-cdr (stream-enumerate-interval 10009 1000000)))))) ; => 10009 
+     #+END_SRC
+
+     #+BEGIN_EXAMPLE
+       注意：整个序列只展开了前面几项
+     #+END_EXAMPLE
+
+*** 延迟求值
+    流实现中采用了 *延迟求值* （ _lazy evaluation_ ），直到不得不做的时候再做。与之对应的是主动求值。 _应用序_ 和 _正则序_ 的概念也是上述两个概念的实例。延迟求值可看作“按需计算”，其中 *流成员的计算只做到足够满足需要的那一步* 为止 
+
+    这种做法，解耦了计算过程中 *事件的实际发生顺序* 和 *过程表面结构* 之间的紧密对应关系，因此可能得到 _模块化_ 和 _效率_ 方面的双赢
+
+*** 基本操作实现
+    两个基本操作的实现很简单：
+    + _(delay <exp>)_  ： *(lambda () <exp>)* 的语法糖
+      + 可以改造求值器来支持
+      + 也可以通过宏来实现 
+    #+BEGIN_SRC scheme
+  (define-syntax delay
+    (syntax-rules ()
+      ((delay exp ...)
+       (lambda () exp ...))))  
+    #+END_SRC
+    + _force_ ：简单调用由 _delay_  产生的无参过程
+
+    #+BEGIN_SRC scheme
+  (define (force delayed-object)
+    (delayed-object)) 
+    #+END_SRC
+
+    + _cons-stream_ ： 也必须定义特殊形式，否则求值器会主动求值 cdr 
+    #+BEGIN_SRC scheme
+  (define-syntax cons-stream
+    (syntax-rules ()
+      ((_ a b) (cons a (delay b)))))
+    #+END_SRC
+
+**** 记忆器
+     实际计算中可能会 _多次强迫求值同一个延时对象_ 。每次都去重复求值会浪费很多资源（包括空间和时间）。解决办法是改造延时对象，让它在第一次求值时记录求出的值，再次求值时直接给出记录的值。这样的对象称为 *带记忆的延时对象* ：
+
+     #+BEGIN_SRC scheme
+  (define (memo-proc proc)
+    (let ((already-run? false)
+	  (result false))
+      (lambda ()
+	(if (not already-run?)
+	    (begin (set! result (proc))
+		   (set! already-run? true)
+		   result)
+	    result))))
+     #+END_SRC 
+
+     这样 _(delay <exp>)_  就变成了 *(memo-proc (lambda () <exp>))* 
+     #+BEGIN_SRC scheme
+  (define-syntax delay
+    (syntax-rules ()
+      ((delay exp ...)
+       (memo-proc (lambda () exp ...))))) 
+     #+END_SRC
+
+     _force_ 的实现和原来一致
+** 无穷流
