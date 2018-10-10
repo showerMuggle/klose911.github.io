@@ -28,7 +28,15 @@
          :publishing-function org-publish-attachment
          )
 
-        ("scheme" :components ("scheme-notes" "scheme-static"))
+	;; picture
+        ("scheme-pic"
+         :base-directory "~/Documents/programming/html/klose911.github.io/src/scheme/pic"  ;; Change this to your local dir
+         :base-extension "png\\|jpg\\|gif"
+         :publishing-directory "~/Documents/programming/html/klose911.github.io/html/scheme/pic"
+         :recursive t
+         :publishing-function org-publish-attachment
+         )
+        ("scheme" :components ("scheme-notes" "scheme-static" "scheme-pic"))
         )
       )
 

@@ -290,3 +290,359 @@
 
      _force_ 的实现和原来一致
 ** 无穷流
+   流技术的实质是给使用者造成一种 *假相* ：
+   + 以序列的一部分（已访问部分）扮演完整序列
+   + 利用这一技术来表示很长的序列，甚至 *无穷长的序列* 
+
+   例如用流来表示所有大于 n 的整数：
+   #+BEGIN_SRC scheme
+  (define (integers-starting-from n)
+    (cons-stream n (integers-starting-from (+ n 1))))
+
+  (define integers (integers-starting-from 1))
+
+  ;; (stream-car integers) ; => 1
+  ;; (stream-car (stream-cdr integers)) ; => 2 
+  ;; (stream-ref integers 100) ; => 101
+   #+END_SRC
+
+   _integers_ 流的 _car_  是 1， _cdr_  是 *生成从 2 开始的流的过程* ( _promise_ ) 
+
+   #+BEGIN_EXAMPLE
+     由于任何一个程序都只可能用到有限个整数，它们不会发现这里实际上并没有无穷序列
+   #+END_EXAMPLE
+
+   基于 _integers_  定义许多其他的无穷流：
+   + 所有不能被 7 整除的整数流：
+   #+BEGIN_SRC scheme
+  (define (divisible? x y) (= (remainder x y) 0))
+  (define no-sevens
+    (stream-filter (lambda (x) (not (divisible? x 7)))
+		   integers))
+
+  ;; (stream-ref no-sevens 100) ; => 117
+   #+END_SRC
+   + 所有斐波纳契数的流：
+   #+BEGIN_SRC scheme
+  (define (fibgen a b)
+    (cons-stream a (fibgen b (+ a b))))
+
+  (define fib (fibgen 0 1))
+
+  ;; (stream-car fib) ; => 0
+  ;; (stream-car (stream-cdr fib)) ; => 1
+  ;; (stream-ref fib 2) ; => 1 
+  ;; (stream-ref fib 20) ; => 6765  
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     fibs 的 car 是 0 ，其 cdr 是求值 (fibgen 1 1) 的承诺
+
+     对 (fibgen 1 1) 求值得到其car 为 1，其 cdr 是求值 (fibgen 1 2) 的允诺
+
+     .......
+   #+END_EXAMPLE
+
+   + 构造所有素数的无穷序列：
+   #+BEGIN_SRC scheme
+  (define (sieve stream)
+    (cons-stream
+     (stream-car stream) 
+     (sieve (stream-filter
+	     (lambda (x)
+	       (not (divisible? x (stream-car stream))))
+	     (stream-cdr stream)))))
+
+  (define primes (sieve (integers-starting-from 2)))
+  ;; primes
+  ;; => (2 . #<promise:stdin:130:21>)
+  ;; (cons-stream
+  ;;  (stream-car (integers-starting-from 2)) ; 2 
+  ;;  (sieve (stream-filter
+  ;;            (lambda (x)
+  ;;              (not (divisible? x (stream-car (integers-starting-from 2)))))) ; 2 
+  ;; 	(stream-cdr (integers-starting-from 2)))) ; (integers-starting-from 3) 
+
+  ;; (stream-cdr primes) 
+  ;; (sieve  (stream-filter
+  ;;          (lambda (x)
+  ;;            (not (divisible? x 2))))  
+  ;;         (integers-starting-from 3)) ; 过滤掉所有能被2整除的整数
+ 
+  ;; (stream-ref primes 100) ; => 547 
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     (stream-cdr primes) :
+		 stream-filter 从去掉 2 （当时的 car）的流中筛掉被 2 整除的数
+		 把生成的流 （所有不能被2整除的整数） 送给 sieve函数
+
+     (stream-cdr (stream-cdr primes)) ：
+		 stream-filter 从去掉 3 （当时car）的流中筛掉所有 被 3 整除的数
+		 把生成的流 （所有不能被2整除的整数中去掉所有不能被3整除的） 送给sieve函数
+
+     以此类推 ......
+   #+END_EXAMPLE
+*** 信号处理系统 
+    流可看作 *信号处理系统* 。下图是 _sieve_ 形成的信号处理系统图示：
+
+    #+ATTR_HTML: image :width 60% 
+    [[file:pic/sieve-stream.gif]] 
+
+    + _虚线_ 表示传输的是 *简单数据* ， _实线_ 表示传输的是 *流* 
+      + 流的 _car_ 部分用于 *构造过滤器* ，且作为 *结果流的 car*
+      + 信号处理系统 _sieve_ 内嵌一个同样的信号处理系统 _sieve_
+
+    这实际上是一个 *无穷递归* 定义的系统
+*** 用流运算定义流
+    元素均为1的无穷流：
+    #+BEGIN_SRC scheme
+  (define ones
+    (cons-stream 1 ones))
+
+  ;; ones ; => (1 . #<promise:stdin:130:21>)
+  ;; (stream-car ones) ; => 1 
+  ;; (stream-cdr ones) ; #0=(1 . #<promise!#0#>)
+  ;; (stream-car (stream-cdr ones)) ; => 1
+  ;; (stream-cdr (stream-cdr ones)) ; => #0=(1 . #<promise!#0#>)
+  ;; (stream-car (stream-cdr (stream-cdr ones))) ; => 1
+    #+END_SRC
+
+    通过流运算，可以方便地构造出各种流。如 _加法运算_ 和 _整数流_ ： 
+    #+BEGIN_SRC scheme
+  (define (add-streams s1 s2)
+    (stream-map + s1 s2))
+
+  (define integers (cons-stream
+		    1
+		    (add-streams ones integers))) 
+
+  ;; integers ; => (1 . #<promise:stdin:130:21>)
+  ;; (stream-car integers) ; => 1
+  ;; (stream-cdr integers) ; =>  (2 . #<promise:stdin:130:21>)
+  ;; (stream-car (stream-cdr integers)) ; => 2
+  ;; (stream-cdr (stream-cdr integers)) ; => (3 . #<promise:stdin:130:21>)
+  ;; (stream-car (stream-cdr (stream-cdr integers))) ; => 3 
+    #+END_SRC
+
+    缩放流中的各个数值：
+    #+BEGIN_SRC scheme
+  (define (scale-stream stream factor)
+    (stream-map (lambda (x) (* x factor)) stream))
+
+  (define double (scale-stream integers 2))
+
+  ;; (stream-car double) ; => 2
+  ;; (stream-ref double 10) ; => 22 
+    #+END_SRC
+
+    也可以这样来定义斐波纳契数的流：
+    #+BEGIN_SRC scheme
+  (define fibs
+    (cons-stream 0
+		 (cons-stream 1
+			      (add-streams (stream-cdr fibs)
+					   fibs))))
+
+  ;; fibs ; => (0 . #<promise:stdin:130:21>) 
+  ;; (stream-car fibs) ; => 0
+  ;; (stream-cdr fibs) ; =>  (1 . #<promise:stdin:130:21>)
+  ;; (stream-car (stream-cdr fibs)) ; => 1
+  ;; (stream-cdr (stream-cdr fibs)) ; =>  (1 . #<promise:stdin:130:21>)
+  ;; (stream-cdr (stream-cdr (stream-cdr fibs))) ; => (2 . #<promise:stdin:130:21>)
+  ;; (stream-cdr (stream-cdr (stream-cdr (stream-cdr fibs)))) ; =>  (3 . #<promise:stdin:130:21>)
+  ;; (stream-cdr (stream-cdr (stream-cdr (stream-cdr (stream-cdr fibs))))) ; => (5 . #<promise:stdin:130:21>)
+  ;; ......
+  ;; (stream-ref fibs 20) ; => 6765 
+    #+END_SRC
+
+    从斐波纳契序列的前两个数出发求序列 _fibs_  和 _(stream-cdr fibs)_  的逐项和。构造出的部分序列再用于随后的构造
+
+    #+BEGIN_EXAMPLE
+		      1 	1 	2 	3 	5 	8 	13 	21 	... = (stream-cdr fibs)
+		      0 	1 	1 	2 	3 	5 	8 	13 	... = fibs
+      0 	1 	1 	2 	3 	5 	8 	13 	21 	34 	... = fibs
+    #+END_EXAMPLE
+
+    素数流也可以这样来定义：
+    #+BEGIN_SRC scheme
+  (define (square x)
+    (* x x))
+
+  (define (prime? n)
+    (define (iter ps)
+      (cond ((> (square (stream-car ps)) n) true)
+	    ((divisible? n (stream-car ps)) false)
+	    (else (iter (stream-cdr ps)))))
+    (iter primes))
+
+  (define primes
+    (cons-stream
+     2
+     (stream-filter prime? (integers-starting-from 3))))
+
+  ;; (stream-car primes) ; => 2
+  ;; (stream-cdr primes) ; =>  (3 . #<promise:stdin:130:21>)
+  ;; (stream-car (stream-cdr primes)) ; => 3 
+  ;; (stream-cdr (stream-cdr primes)) ; => (5 . #<promise:stdin:130:21>)
+  ;; (stream-car (stream-cdr (stream-cdr primes))) ; => 5
+  ;; ......
+  ;; (stream-ref primes 100) ; => 547 
+    #+END_SRC
+
+    + *prime?* : 用来 _prime流_ 来判断一个整数是否为素数
+    + *primes* : 用 _prime?_ 做流的过滤，删除不是素数的元素 
+
+    _primes_ 和 _prime?_  *相互递归引用* 
+** 应用
+   基于延时求值的流也是很强大的模拟工具，可以在许多问题上 *代替局部状态和赋值* ，与此同时 *避免引入状态和赋值* 带来的麻烦。在模拟实际系统时采用流技术，所支持的 _模块划分_ 方式和基于赋值的 _局部状态_ 的方式不同：
+   + 可以把 _整个时间序列_ 或 _信号序列_ （而不是各时刻的值）作为关注的目标，这样做更 *容易组合来自不同时刻的状态* 成分
+
+*** 迭代
+    *迭代* 就是 _不断更新一些状态变量_ ，例如，求平方根过程中生成一系列逐步改善的猜测值：
+    #+BEGIN_SRC scheme
+  (define (average x y)
+    (/ (+ x y) 2))
+
+  (define (sqrt-improve guess x)
+    (average guess (/ x guess)))
+    #+END_SRC
+
+    换种方式，可以生成这种猜测值的无穷序列：
+
+    #+BEGIN_SRC scheme
+  (define (sqrt-stream x)
+    (define guesses
+      (cons-stream 1.0
+		   (stream-map (lambda (guess)
+				 (sqrt-improve guess x))
+			       guesses)))
+    guesses) 
+
+  ;; (define 2-root-stream (sqrt-stream 2))
+  ;; (stream-car 2-root-stream) ; => 1.0
+  ;; (stream-ref 2-root-stream 1) ; => 1.5
+  ;; (stream-ref 2-root-stream 2) ; =>  1.4166666666666665
+  ;; (stream-ref 2-root-stream 3) ; =>1.4142156862745097
+  ;; (stream-ref 2-root-stream 4) ; => 1.4142135623746899
+  ;; (stream-ref 2-root-stream 5) ; => 1.414213562373095
+  ;; (stream-ref 2-root-stream 6) ; => 1.414213562373095 
+    #+END_SRC
+
+    #+BEGIN_EXAMPLE
+      可以基于 sqrt-stream 定义一个过程，让它不断生成猜测值，直到得到足够好的答案为止
+    #+END_EXAMPLE
+
+    基于_交错级数_ 生成 π 的近似值的过程：
+
+    #+ATTR_HTML: image :width 40% 
+    [[file:pic/tailor-series.gif]] 
+
+_partial-sums_ ：求流的前缀段之和的流：
+#+BEGIN_SRC scheme
+  (define (partial-sums s)
+    (add-streams  s
+		  (cons-stream
+		   0
+		   (partial-sums s))))
+
+  ;; (stream-car (partial-sums integers)) ; => 1 
+  ;; (stream-ref (partial-sums integers) 4) ; => 15 
+#+END_SRC
+
+_pi-stream_ ：π 的级数流
+#+BEGIN_SRC scheme
+  (define (pi-summands n)
+    (cons-stream (/ 1.0 n)
+		 (stream-map - (pi-summands (+ n 2)))))
+
+  (define pi-stream
+    (scale-stream (partial-sums (pi-summands 1)) 4))
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  (stream-car pi-stream) ; => 4.0 
+  (stream-ref pi-stream 1) ; => 2.666666666666667
+  (stream-ref pi-stream 2) ; => 3.466666666666667
+  (stream-ref pi-stream 3) ; => 2.8952380952380956
+  (stream-ref pi-stream 4) ; => 3.3396825396825403
+  (stream-ref pi-stream 5) ; => 2.9760461760461765
+  (stream-ref pi-stream 6) ; =>3.2837384837384844
+  (stream-ref pi-stream 7) ; => 3.017071817071818
+
+  这个流确实能收敛到 π ，但收敛太慢
+#+END_EXAMPLE
+
+**** 加速收敛
+欧拉提出了一种加速技术，特别适合用于交错级数。对于项为 Sn 的级数，加速序列的项是：
+
+    #+ATTR_HTML: image :width 40% 
+    [[file:pic/euler-acceleration.gif]] 
+
+#+BEGIN_SRC scheme
+  (define (euler-transform s)
+    (let ((s0 (stream-ref s 0))           ; Sn-1
+	  (s1 (stream-ref s 1))           ; Sn
+	  (s2 (stream-ref s 2)))          ; Sn+1
+      (cons-stream (- s2 (/ (square (- s2 s1))
+			    (+ s0 (* -2 s1) s2)))
+		   (euler-transform (stream-cdr s)))))
+
+  (define euler-transform-pi-stream (euler-transform pi-stream))
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  (stream-car euler-transform-pi-stream) ; => 3.166666666666667 
+  (stream-ref euler-transform-pi-stream 1) ; => 3.1333333333333337
+  (stream-ref euler-transform-pi-stream 2) ; => 3.1452380952380956
+  (stream-ref euler-transform-pi-stream 3) ; => 3.13968253968254
+  (stream-ref euler-transform-pi-stream 4) ; => 3.1427128427128435
+  (stream-ref euler-transform-pi-stream 5) ; => 3.1408813408813416 
+  (stream-ref euler-transform-pi-stream 6) ; => 3.142071817071818
+  (stream-ref euler-transform-pi-stream 7) ; => 3.1412548236077655
+#+END_EXAMPLE
+
+甚至可以递归地加速下去，得到一个流的流 （下面称为表列），其中每个流是前一个流的加速结果：
+    #+ATTR_HTML: image :width 40% 
+    [[file:pic/tableau.gif]] 
+
+#+BEGIN_SRC scheme
+  (define (make-tableau transform s)
+    (cons-stream s
+		 (make-tableau transform
+			       (transform s))))
+#+END_SRC
+
+取出表列中每个序列的第一项，就得到了所需的序列：
+
+#+BEGIN_SRC scheme
+  (define (accelerated-sequence transform s)
+    (stream-map stream-car
+		(make-tableau transform s)))
+#+END_SRC
+
+加速实验：
+#+BEGIN_SRC scheme
+  (define accelerated-pi-stream (accelerated-sequence euler-transform pi-stream))
+
+  ;; (stream-car accelerated-pi-stream) ; => 4.0 
+  ;; (stream-ref accelerated-pi-stream 1) ; => 3.166666666666667
+  ;; (stream-ref accelerated-pi-stream 2) ; => 3.142105263157895
+  ;; (stream-ref accelerated-pi-stream 3) ; => 3.141599357319005
+  ;; (stream-ref accelerated-pi-stream 4) ; => 3.1415927140337785
+  ;; (stream-ref accelerated-pi-stream 5) ; => 3.1415926539752927
+  ;; (stream-ref accelerated-pi-stream 6) ; => 3.1415926535911765
+  ;; (stream-ref accelerated-pi-stream 7) ; => 3.141592653589778 
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  虽然不用流模型也能实现这种加速，但在这里整个的流可以像序列一样使用，描述这种加速技术特别方便
+#+END_EXAMPLE
+
+*** 序对的无穷流
+
+*** 信号处理
+
+* 正则序求值器
+
+* 函数式编程和对象模块化

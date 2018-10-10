@@ -251,9 +251,27 @@ for the JavaScript code in this tag.
 </li>
 </ul>
 </li>
-<li><a href="#orgb08a513">无穷流</a></li>
+<li><a href="#orgb08a513">无穷流</a>
+<ul>
+<li><a href="#org1533226">信号处理系统</a></li>
+<li><a href="#org96efdbc">用流运算定义流</a></li>
 </ul>
 </li>
+<li><a href="#orgc64e509">应用</a>
+<ul>
+<li><a href="#org5361dde">迭代</a>
+<ul>
+<li><a href="#org8dfeec9">加速收敛</a></li>
+</ul>
+</li>
+<li><a href="#org192d4cb">序对的无穷流</a></li>
+<li><a href="#org152cf7f">信号处理</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#org85360e1">正则序求值器</a></li>
+<li><a href="#org9d02d25">函数式编程和对象模块化</a></li>
 </ul>
 </div>
 </div>
@@ -684,7 +702,484 @@ stream-for-each 可以用来检查流的每个元素：
 </div>
 <div id="outline-container-orgb08a513" class="outline-3">
 <h3 id="orgb08a513">无穷流</h3>
+<div class="outline-text-3" id="text-orgb08a513">
+<p>
+流技术的实质是给使用者造成一种 <b>假相</b> ：
+</p>
+<ul class="org-ul">
+<li>以序列的一部分（已访问部分）扮演完整序列</li>
+<li>利用这一技术来表示很长的序列，甚至 <b>无穷长的序列</b></li>
+</ul>
+
+<p>
+例如用流来表示所有大于 n 的整数：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">integers-starting-from</span> n<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>cons-stream n <span style="color: #696969;">(</span>integers-starting-from <span style="color: #696969;">(</span>+ n 1<span style="color: #696969;">))))</span>
+
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">integers</span> <span style="color: #696969;">(</span>integers-starting-from 1<span style="color: #696969;">))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-car integers) ; =&gt; 1</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-car (stream-cdr integers)) ; =&gt; 2 </span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-ref integers 100) ; =&gt; 101</span>
+</pre>
 </div>
+
+<p>
+<span class="underline">integers</span> 流的 <span class="underline">car</span>  是 1， <span class="underline">cdr</span>  是 <b>生成从 2 开始的流的过程</b> ( <span class="underline">promise</span> ) 
+</p>
+
+<pre class="example">
+     由于任何一个程序都只可能用到有限个整数，它们不会发现这里实际上并没有无穷序列
+</pre>
+
+<p>
+基于 <span class="underline">integers</span>  定义许多其他的无穷流：
+</p>
+<ul class="org-ul">
+<li>所有不能被 7 整除的整数流：</li>
+</ul>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">divisible?</span> x y<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>= <span style="color: #696969;">(</span>remainder x y<span style="color: #696969;">)</span> 0<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">no-sevens</span>
+  <span style="color: #696969;">(</span>stream-filter <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>x<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>not <span style="color: #696969;">(</span>divisible? x 7<span style="color: #696969;">)))</span>
+                 integers<span style="color: #696969;">))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-ref no-sevens 100) ; =&gt; 117</span>
+</pre>
+</div>
+<ul class="org-ul">
+<li>所有斐波纳契数的流：</li>
+</ul>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">fibgen</span> a b<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>cons-stream a <span style="color: #696969;">(</span>fibgen b <span style="color: #696969;">(</span>+ a b<span style="color: #696969;">))))</span>
+
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">fib</span> <span style="color: #696969;">(</span>fibgen 0 1<span style="color: #696969;">))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-car fib) ; =&gt; 0</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-car (stream-cdr fib)) ; =&gt; 1</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-ref fib 2) ; =&gt; 1 </span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-ref fib 20) ; =&gt; 6765  </span>
+</pre>
+</div>
+
+<pre class="example">
+fibs 的 car 是 0 ，其 cdr 是求值 (fibgen 1 1) 的承诺
+
+对 (fibgen 1 1) 求值得到其car 为 1，其 cdr 是求值 (fibgen 1 2) 的允诺
+
+.......
+</pre>
+
+<ul class="org-ul">
+<li>构造所有素数的无穷序列：</li>
+</ul>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">sieve</span> stream<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>cons-stream
+   <span style="color: #696969;">(</span>stream-car stream<span style="color: #696969;">)</span> 
+   <span style="color: #696969;">(</span>sieve <span style="color: #696969;">(</span>stream-filter
+           <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>x<span style="color: #696969;">)</span>
+             <span style="color: #696969;">(</span>not <span style="color: #696969;">(</span>divisible? x <span style="color: #696969;">(</span>stream-car stream<span style="color: #696969;">))))</span>
+           <span style="color: #696969;">(</span>stream-cdr stream<span style="color: #696969;">)))))</span>
+
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">primes</span> <span style="color: #696969;">(</span>sieve <span style="color: #696969;">(</span>integers-starting-from 2<span style="color: #696969;">)))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">primes</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">=&gt; (2 . #&lt;promise:stdin:130:21&gt;)</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(cons-stream</span>
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">(stream-car (integers-starting-from 2)) ; 2 </span>
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">(sieve (stream-filter</span>
+<span style="color: #5f9ea0; font-style: italic;">;;            </span><span style="color: #5f9ea0; font-style: italic;">(lambda (x)</span>
+<span style="color: #5f9ea0; font-style: italic;">;;              </span><span style="color: #5f9ea0; font-style: italic;">(not (divisible? x (stream-car (integers-starting-from 2)))))) ; 2 </span>
+<span style="color: #5f9ea0; font-style: italic;">;;      </span><span style="color: #5f9ea0; font-style: italic;">(stream-cdr (integers-starting-from 2)))) ; (integers-starting-from 3) </span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-cdr primes) </span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(sieve  (stream-filter</span>
+<span style="color: #5f9ea0; font-style: italic;">;;          </span><span style="color: #5f9ea0; font-style: italic;">(lambda (x)</span>
+<span style="color: #5f9ea0; font-style: italic;">;;            </span><span style="color: #5f9ea0; font-style: italic;">(not (divisible? x 2))))  </span>
+<span style="color: #5f9ea0; font-style: italic;">;;         </span><span style="color: #5f9ea0; font-style: italic;">(integers-starting-from 3)) ; &#36807;&#28388;&#25481;&#25152;&#26377;&#33021;&#34987;2&#25972;&#38500;&#30340;&#25972;&#25968;</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-ref primes 100) ; =&gt; 547 </span>
+</pre>
+</div>
+
+<pre class="example">
+(stream-cdr primes) :
+	    stream-filter 从去掉 2 （当时的 car）的流中筛掉被 2 整除的数
+	    把生成的流 （所有不能被2整除的整数） 送给 sieve函数
+
+(stream-cdr (stream-cdr primes)) ：
+	    stream-filter 从去掉 3 （当时car）的流中筛掉所有 被 3 整除的数
+	    把生成的流 （所有不能被2整除的整数中去掉所有不能被3整除的） 送给sieve函数
+
+以此类推 ......
+</pre>
+</div>
+<div id="outline-container-org1533226" class="outline-4">
+<h4 id="org1533226">信号处理系统</h4>
+<div class="outline-text-4" id="text-org1533226">
+<p>
+流可看作 <b>信号处理系统</b> 。下图是 <span class="underline">sieve</span> 形成的信号处理系统图示：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/sieve-stream.gif" alt="sieve-stream.gif" width="60%" /> 
+</p>
+</div>
+
+<ul class="org-ul">
+<li><span class="underline">虚线</span> 表示传输的是 <b>简单数据</b> ， <span class="underline">实线</span> 表示传输的是 <b>流</b> 
+<ul class="org-ul">
+<li>流的 <span class="underline">car</span> 部分用于 <b>构造过滤器</b> ，且作为 <b>结果流的 car</b></li>
+<li>信号处理系统 <span class="underline">sieve</span> 内嵌一个同样的信号处理系统 <span class="underline">sieve</span></li>
+</ul></li>
+</ul>
+
+<p>
+这实际上是一个 <b>无穷递归</b> 定义的系统
+</p>
+</div>
+</div>
+<div id="outline-container-org96efdbc" class="outline-4">
+<h4 id="org96efdbc">用流运算定义流</h4>
+<div class="outline-text-4" id="text-org96efdbc">
+<p>
+元素均为1的无穷流：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">ones</span>
+  <span style="color: #696969;">(</span>cons-stream 1 ones<span style="color: #696969;">))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">ones ; =&gt; (1 . #&lt;promise:stdin:130:21&gt;)</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-car ones) ; =&gt; 1 </span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-cdr ones) ; #0=(1 . #&lt;promise!#0#&gt;)</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-car (stream-cdr ones)) ; =&gt; 1</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-cdr (stream-cdr ones)) ; =&gt; #0=(1 . #&lt;promise!#0#&gt;)</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-car (stream-cdr (stream-cdr ones))) ; =&gt; 1</span>
+</pre>
+</div>
+
+<p>
+通过流运算，可以方便地构造出各种流。如 <span class="underline">加法运算</span> 和 <span class="underline">整数流</span> ： 
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">add-streams</span> s1 s2<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>stream-map + s1 s2<span style="color: #696969;">))</span>
+
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">integers</span> <span style="color: #696969;">(</span>cons-stream
+                  1
+                  <span style="color: #696969;">(</span>add-streams ones integers<span style="color: #696969;">)))</span> 
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">integers ; =&gt; (1 . #&lt;promise:stdin:130:21&gt;)</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-car integers) ; =&gt; 1</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-cdr integers) ; =&gt;  (2 . #&lt;promise:stdin:130:21&gt;)</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-car (stream-cdr integers)) ; =&gt; 2</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-cdr (stream-cdr integers)) ; =&gt; (3 . #&lt;promise:stdin:130:21&gt;)</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-car (stream-cdr (stream-cdr integers))) ; =&gt; 3 </span>
+</pre>
+</div>
+
+<p>
+缩放流中的各个数值：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">scale-stream</span> stream factor<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>stream-map <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>x<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>* x factor<span style="color: #696969;">))</span> stream<span style="color: #696969;">))</span>
+
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">double</span> <span style="color: #696969;">(</span>scale-stream integers 2<span style="color: #696969;">))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-car double) ; =&gt; 2</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-ref double 10) ; =&gt; 22 </span>
+</pre>
+</div>
+
+<p>
+也可以这样来定义斐波纳契数的流：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">fibs</span>
+  <span style="color: #696969;">(</span>cons-stream 0
+               <span style="color: #696969;">(</span>cons-stream 1
+                            <span style="color: #696969;">(</span>add-streams <span style="color: #696969;">(</span>stream-cdr fibs<span style="color: #696969;">)</span>
+                                         fibs<span style="color: #696969;">))))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">fibs ; =&gt; (0 . #&lt;promise:stdin:130:21&gt;) </span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-car fibs) ; =&gt; 0</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-cdr fibs) ; =&gt;  (1 . #&lt;promise:stdin:130:21&gt;)</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-car (stream-cdr fibs)) ; =&gt; 1</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-cdr (stream-cdr fibs)) ; =&gt;  (1 . #&lt;promise:stdin:130:21&gt;)</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-cdr (stream-cdr (stream-cdr fibs))) ; =&gt; (2 . #&lt;promise:stdin:130:21&gt;)</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-cdr (stream-cdr (stream-cdr (stream-cdr fibs)))) ; =&gt;  (3 . #&lt;promise:stdin:130:21&gt;)</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-cdr (stream-cdr (stream-cdr (stream-cdr (stream-cdr fibs))))) ; =&gt; (5 . #&lt;promise:stdin:130:21&gt;)</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">......</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-ref fibs 20) ; =&gt; 6765 </span>
+</pre>
+</div>
+
+<p>
+从斐波纳契序列的前两个数出发求序列 <span class="underline">fibs</span>  和 <span class="underline">(stream-cdr fibs)</span>  的逐项和。构造出的部分序列再用于随后的构造
+</p>
+
+<pre class="example">
+		1 	1 	2 	3 	5 	8 	13 	21 	... = (stream-cdr fibs)
+		0 	1 	1 	2 	3 	5 	8 	13 	... = fibs
+0 	1 	1 	2 	3 	5 	8 	13 	21 	34 	... = fibs
+</pre>
+
+<p>
+素数流也可以这样来定义：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">square</span> x<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>* x x<span style="color: #696969;">))</span>
+
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">prime?</span> n<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">iter</span> ps<span style="color: #696969;">)</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">cond</span> <span style="color: #696969;">((</span>&gt; <span style="color: #696969;">(</span>square <span style="color: #696969;">(</span>stream-car ps<span style="color: #696969;">))</span> n<span style="color: #696969;">)</span> true<span style="color: #696969;">)</span>
+          <span style="color: #696969;">((</span>divisible? n <span style="color: #696969;">(</span>stream-car ps<span style="color: #696969;">))</span> false<span style="color: #696969;">)</span>
+          <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">else</span> <span style="color: #696969;">(</span>iter <span style="color: #696969;">(</span>stream-cdr ps<span style="color: #696969;">)))))</span>
+  <span style="color: #696969;">(</span>iter primes<span style="color: #696969;">))</span>
+
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">primes</span>
+  <span style="color: #696969;">(</span>cons-stream
+   2
+   <span style="color: #696969;">(</span>stream-filter prime? <span style="color: #696969;">(</span>integers-starting-from 3<span style="color: #696969;">))))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-car primes) ; =&gt; 2</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-cdr primes) ; =&gt;  (3 . #&lt;promise:stdin:130:21&gt;)</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-car (stream-cdr primes)) ; =&gt; 3 </span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-cdr (stream-cdr primes)) ; =&gt; (5 . #&lt;promise:stdin:130:21&gt;)</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-car (stream-cdr (stream-cdr primes))) ; =&gt; 5</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">......</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-ref primes 100) ; =&gt; 547 </span>
+</pre>
+</div>
+
+<ul class="org-ul">
+<li><b>prime?</b> : 用来 <span class="underline">prime流</span> 来判断一个整数是否为素数</li>
+<li><b>primes</b> : 用 <span class="underline">prime?</span> 做流的过滤，删除不是素数的元素</li>
+</ul>
+
+<p>
+<span class="underline">primes</span> 和 <span class="underline">prime?</span>  <b>相互递归引用</b> 
+</p>
+</div>
+</div>
+</div>
+<div id="outline-container-orgc64e509" class="outline-3">
+<h3 id="orgc64e509">应用</h3>
+<div class="outline-text-3" id="text-orgc64e509">
+<p>
+基于延时求值的流也是很强大的模拟工具，可以在许多问题上 <b>代替局部状态和赋值</b> ，与此同时 <b>避免引入状态和赋值</b> 带来的麻烦。在模拟实际系统时采用流技术，所支持的 <span class="underline">模块划分</span> 方式和基于赋值的 <span class="underline">局部状态</span> 的方式不同：
+</p>
+<ul class="org-ul">
+<li>可以把 <span class="underline">整个时间序列</span> 或 <span class="underline">信号序列</span> （而不是各时刻的值）作为关注的目标，这样做更 <b>容易组合来自不同时刻的状态</b> 成分</li>
+</ul>
+</div>
+
+<div id="outline-container-org5361dde" class="outline-4">
+<h4 id="org5361dde">迭代</h4>
+<div class="outline-text-4" id="text-org5361dde">
+<p>
+<b>迭代</b> 就是 <span class="underline">不断更新一些状态变量</span> ，例如，求平方根过程中生成一系列逐步改善的猜测值：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">average</span> x y<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>/ <span style="color: #696969;">(</span>+ x y<span style="color: #696969;">)</span> 2<span style="color: #696969;">))</span>
+
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">sqrt-improve</span> guess x<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>average guess <span style="color: #696969;">(</span>/ x guess<span style="color: #696969;">)))</span>
+</pre>
+</div>
+
+<p>
+换种方式，可以生成这种猜测值的无穷序列：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">sqrt-stream</span> x<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">guesses</span>
+    <span style="color: #696969;">(</span>cons-stream 1.0
+                 <span style="color: #696969;">(</span>stream-map <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>guess<span style="color: #696969;">)</span>
+                               <span style="color: #696969;">(</span>sqrt-improve guess x<span style="color: #696969;">))</span>
+                             guesses<span style="color: #696969;">)))</span>
+  guesses<span style="color: #696969;">)</span> 
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define 2-root-stream (sqrt-stream 2))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-car 2-root-stream) ; =&gt; 1.0</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-ref 2-root-stream 1) ; =&gt; 1.5</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-ref 2-root-stream 2) ; =&gt;  1.4166666666666665</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-ref 2-root-stream 3) ; =&gt;1.4142156862745097</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-ref 2-root-stream 4) ; =&gt; 1.4142135623746899</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-ref 2-root-stream 5) ; =&gt; 1.414213562373095</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-ref 2-root-stream 6) ; =&gt; 1.414213562373095 </span>
+</pre>
+</div>
+
+<pre class="example">
+      可以基于 sqrt-stream 定义一个过程，让它不断生成猜测值，直到得到足够好的答案为止
+</pre>
+
+<p>
+基于<sub>交错级数</sub>_ 生成 π 的近似值的过程：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/tailor-series.gif" alt="tailor-series.gif" width="40%" /> 
+</p>
+</div>
+
+<p>
+<span class="underline">partial-sums</span> ：求流的前缀段之和的流：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">partial-sums</span> s<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>add-streams  s
+                <span style="color: #696969;">(</span>cons-stream
+                 0
+                 <span style="color: #696969;">(</span>partial-sums s<span style="color: #696969;">))))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-car (partial-sums integers)) ; =&gt; 1 </span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-ref (partial-sums integers) 4) ; =&gt; 15 </span>
+</pre>
+</div>
+
+<p>
+<span class="underline">pi-stream</span> ：π 的级数流
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">pi-summands</span> n<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>cons-stream <span style="color: #696969;">(</span>/ 1.0 n<span style="color: #696969;">)</span>
+               <span style="color: #696969;">(</span>stream-map - <span style="color: #696969;">(</span>pi-summands <span style="color: #696969;">(</span>+ n 2<span style="color: #696969;">)))))</span>
+
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">pi-stream</span>
+  <span style="color: #696969;">(</span>scale-stream <span style="color: #696969;">(</span>partial-sums <span style="color: #696969;">(</span>pi-summands 1<span style="color: #696969;">))</span> 4<span style="color: #696969;">))</span>
+</pre>
+</div>
+
+<pre class="example">
+(stream-car pi-stream) ; =&gt; 4.0 
+(stream-ref pi-stream 1) ; =&gt; 2.666666666666667
+(stream-ref pi-stream 2) ; =&gt; 3.466666666666667
+(stream-ref pi-stream 3) ; =&gt; 2.8952380952380956
+(stream-ref pi-stream 4) ; =&gt; 3.3396825396825403
+(stream-ref pi-stream 5) ; =&gt; 2.9760461760461765
+(stream-ref pi-stream 6) ; =&gt;3.2837384837384844
+(stream-ref pi-stream 7) ; =&gt; 3.017071817071818
+
+这个流确实能收敛到 π ，但收敛太慢
+</pre>
+</div>
+
+<div id="outline-container-org8dfeec9" class="outline-5">
+<h5 id="org8dfeec9">加速收敛</h5>
+<div class="outline-text-5" id="text-org8dfeec9">
+<p>
+欧拉提出了一种加速技术，特别适合用于交错级数。对于项为 Sn 的级数，加速序列的项是：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/euler-acceleration.gif" alt="euler-acceleration.gif" width="40%" /> 
+</p>
+</div>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">euler-transform</span> s<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>s0 <span style="color: #696969;">(</span>stream-ref s 0<span style="color: #696969;">))</span>           <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">Sn-1</span>
+        <span style="color: #696969;">(</span>s1 <span style="color: #696969;">(</span>stream-ref s 1<span style="color: #696969;">))</span>           <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">Sn</span>
+        <span style="color: #696969;">(</span>s2 <span style="color: #696969;">(</span>stream-ref s 2<span style="color: #696969;">)))</span>          <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">Sn+1</span>
+    <span style="color: #696969;">(</span>cons-stream <span style="color: #696969;">(</span>- s2 <span style="color: #696969;">(</span>/ <span style="color: #696969;">(</span>square <span style="color: #696969;">(</span>- s2 s1<span style="color: #696969;">))</span>
+                          <span style="color: #696969;">(</span>+ s0 <span style="color: #696969;">(</span>* -2 s1<span style="color: #696969;">)</span> s2<span style="color: #696969;">)))</span>
+                 <span style="color: #696969;">(</span>euler-transform <span style="color: #696969;">(</span>stream-cdr s<span style="color: #696969;">)))))</span>
+
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">euler-transform-pi-stream</span> <span style="color: #696969;">(</span>euler-transform pi-stream<span style="color: #696969;">))</span>
+</pre>
+</div>
+
+<pre class="example">
+(stream-car euler-transform-pi-stream) ; =&gt; 3.166666666666667 
+(stream-ref euler-transform-pi-stream 1) ; =&gt; 3.1333333333333337
+(stream-ref euler-transform-pi-stream 2) ; =&gt; 3.1452380952380956
+(stream-ref euler-transform-pi-stream 3) ; =&gt; 3.13968253968254
+(stream-ref euler-transform-pi-stream 4) ; =&gt; 3.1427128427128435
+(stream-ref euler-transform-pi-stream 5) ; =&gt; 3.1408813408813416 
+(stream-ref euler-transform-pi-stream 6) ; =&gt; 3.142071817071818
+(stream-ref euler-transform-pi-stream 7) ; =&gt; 3.1412548236077655
+</pre>
+
+<p>
+甚至可以递归地加速下去，得到一个流的流 （下面称为表列），其中每个流是前一个流的加速结果：
+</p>
+
+<div class="figure">
+<p><img src="pic/tableau.gif" alt="tableau.gif" width="40%" /> 
+</p>
+</div>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">make-tableau</span> transform s<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>cons-stream s
+               <span style="color: #696969;">(</span>make-tableau transform
+                             <span style="color: #696969;">(</span>transform s<span style="color: #696969;">))))</span>
+</pre>
+</div>
+
+<p>
+取出表列中每个序列的第一项，就得到了所需的序列：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">accelerated-sequence</span> transform s<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>stream-map stream-car
+              <span style="color: #696969;">(</span>make-tableau transform s<span style="color: #696969;">)))</span>
+</pre>
+</div>
+
+<p>
+加速实验：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">accelerated-pi-stream</span> <span style="color: #696969;">(</span>accelerated-sequence euler-transform pi-stream<span style="color: #696969;">))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-car accelerated-pi-stream) ; =&gt; 4.0 </span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-ref accelerated-pi-stream 1) ; =&gt; 3.166666666666667</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-ref accelerated-pi-stream 2) ; =&gt; 3.142105263157895</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-ref accelerated-pi-stream 3) ; =&gt; 3.141599357319005</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-ref accelerated-pi-stream 4) ; =&gt; 3.1415927140337785</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-ref accelerated-pi-stream 5) ; =&gt; 3.1415926539752927</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-ref accelerated-pi-stream 6) ; =&gt; 3.1415926535911765</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-ref accelerated-pi-stream 7) ; =&gt; 3.141592653589778 </span>
+</pre>
+</div>
+
+<pre class="example">
+  虽然不用流模型也能实现这种加速，但在这里整个的流可以像序列一样使用，描述这种加速技术特别方便
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org192d4cb" class="outline-4">
+<h4 id="org192d4cb">序对的无穷流</h4>
+</div>
+
+<div id="outline-container-org152cf7f" class="outline-4">
+<h4 id="org152cf7f">信号处理</h4>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org85360e1" class="outline-2">
+<h2 id="org85360e1">正则序求值器</h2>
+</div>
+
+<div id="outline-container-org9d02d25" class="outline-2">
+<h2 id="org9d02d25">函数式编程和对象模块化</h2>
 </div>
 </div>
 <div id="postamble" class="status">
