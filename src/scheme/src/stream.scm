@@ -137,7 +137,7 @@
 ;; (stream-car (cons 10009 (delay (stream-filter prime? (stream-cdr (stream-enumerate-interval 10009 1000000)))))) ; => 10009 
 
 ;;;;;;;;;;;;
-;; ÎŞÇîÁ÷ ;;
+;; æ— ç©·æµ ;;
 ;;;;;;;;;;;;
 (define (integers-starting-from n)
   (cons-stream n (integers-starting-from (+ n 1))))
@@ -186,12 +186,12 @@
 ;; (sieve  (stream-filter
 ;;          (lambda (x)
 ;;            (not (divisible? x 2))))  
-;;         (integers-starting-from 3)) ; ¹ıÂËµôËùÓĞÄÜ±»2Õû³ıµÄÕûÊı
+;;         (integers-starting-from 3)) ; è¿‡æ»¤æ‰æ‰€æœ‰èƒ½è¢«2æ•´é™¤çš„æ•´æ•°
 
 (stream-ref primes 100) ; => 547 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; »ùÓÚÁ÷ÔËËã¶¨ÒåÎŞÇîÁ÷ ;;
+;; åŸºäºæµè¿ç®—å®šä¹‰æ— ç©·æµ ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
 (define ones (cons-stream 1 ones))
 
@@ -263,7 +263,7 @@
 ;; (stream-ref primes 100) ; => 547
 
 ;;;;;;;;;;;;;;;;;;
-;; Á÷À´±íÊ¾µü´ú ;;
+;; æµæ¥è¡¨ç¤ºè¿­ä»£ ;;
 ;;;;;;;;;;;;;;;;;;
 (define (average x y)
   (/ (+ x y) 2))
