@@ -187,7 +187,7 @@
 ;;          (lambda (x)
 ;;            (not (divisible? x 2))))  
 ;;         (integers-starting-from 3)) ; 过滤掉所有能被2整除的整数
- 
+
 (stream-ref primes 100) ; => 547 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
