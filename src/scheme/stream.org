@@ -538,8 +538,8 @@
     #+ATTR_HTML: image :width 40% 
     [[file:pic/tailor-series.gif]] 
 
-_partial-sums_ ：求流的前缀段之和的流：
-#+BEGIN_SRC scheme
+    _partial-sums_ ：求流的前缀段之和的流：
+    #+BEGIN_SRC scheme
   (define (partial-sums s)
     (add-streams  s
 		  (cons-stream
@@ -548,38 +548,38 @@ _partial-sums_ ：求流的前缀段之和的流：
 
   ;; (stream-car (partial-sums integers)) ; => 1 
   ;; (stream-ref (partial-sums integers) 4) ; => 15 
-#+END_SRC
+    #+END_SRC
 
-_pi-stream_ ：π 的级数流
-#+BEGIN_SRC scheme
+    _pi-stream_ ：π 的级数流
+    #+BEGIN_SRC scheme
   (define (pi-summands n)
     (cons-stream (/ 1.0 n)
 		 (stream-map - (pi-summands (+ n 2)))))
 
   (define pi-stream
     (scale-stream (partial-sums (pi-summands 1)) 4))
-#+END_SRC
+    #+END_SRC
 
-#+BEGIN_EXAMPLE
-  (stream-car pi-stream) ; => 4.0 
-  (stream-ref pi-stream 1) ; => 2.666666666666667
-  (stream-ref pi-stream 2) ; => 3.466666666666667
-  (stream-ref pi-stream 3) ; => 2.8952380952380956
-  (stream-ref pi-stream 4) ; => 3.3396825396825403
-  (stream-ref pi-stream 5) ; => 2.9760461760461765
-  (stream-ref pi-stream 6) ; =>3.2837384837384844
-  (stream-ref pi-stream 7) ; => 3.017071817071818
+    #+BEGIN_EXAMPLE
+      (stream-car pi-stream) ; => 4.0 
+      (stream-ref pi-stream 1) ; => 2.666666666666667
+      (stream-ref pi-stream 2) ; => 3.466666666666667
+      (stream-ref pi-stream 3) ; => 2.8952380952380956
+      (stream-ref pi-stream 4) ; => 3.3396825396825403
+      (stream-ref pi-stream 5) ; => 2.9760461760461765
+      (stream-ref pi-stream 6) ; =>3.2837384837384844
+      (stream-ref pi-stream 7) ; => 3.017071817071818
 
-  这个流确实能收敛到 π ，但收敛太慢
-#+END_EXAMPLE
+      这个流确实能收敛到 π ，但收敛太慢
+    #+END_EXAMPLE
 
 **** 加速收敛
-欧拉提出了一种加速技术，特别适合用于交错级数。对于项为 Sn 的级数，加速序列的项是：
+     欧拉提出了一种加速技术，特别适合用于交错级数。对于项为 Sn 的级数，加速序列的项是：
 
-    #+ATTR_HTML: image :width 40% 
-    [[file:pic/euler-acceleration.gif]] 
+     #+ATTR_HTML: image :width 40% 
+     [[file:pic/euler-acceleration.gif]] 
 
-#+BEGIN_SRC scheme
+     #+BEGIN_SRC scheme
   (define (euler-transform s)
     (let ((s0 (stream-ref s 0))           ; Sn-1
 	  (s1 (stream-ref s 1))           ; Sn
@@ -589,55 +589,55 @@ _pi-stream_ ：π 的级数流
 		   (euler-transform (stream-cdr s)))))
 
   (define euler-transform-pi-stream (euler-transform pi-stream))
-#+END_SRC
+     #+END_SRC
 
-#+BEGIN_EXAMPLE
-  (stream-car euler-transform-pi-stream) ; => 3.166666666666667 
-  (stream-ref euler-transform-pi-stream 1) ; => 3.1333333333333337
-  (stream-ref euler-transform-pi-stream 2) ; => 3.1452380952380956
-  (stream-ref euler-transform-pi-stream 3) ; => 3.13968253968254
-  (stream-ref euler-transform-pi-stream 4) ; => 3.1427128427128435
-  (stream-ref euler-transform-pi-stream 5) ; => 3.1408813408813416 
-  (stream-ref euler-transform-pi-stream 6) ; => 3.142071817071818
-  (stream-ref euler-transform-pi-stream 7) ; => 3.1412548236077655
-#+END_EXAMPLE
+     #+BEGIN_EXAMPLE
+       (stream-car euler-transform-pi-stream) ; => 3.166666666666667 
+       (stream-ref euler-transform-pi-stream 1) ; => 3.1333333333333337
+       (stream-ref euler-transform-pi-stream 2) ; => 3.1452380952380956
+       (stream-ref euler-transform-pi-stream 3) ; => 3.13968253968254
+       (stream-ref euler-transform-pi-stream 4) ; => 3.1427128427128435
+       (stream-ref euler-transform-pi-stream 5) ; => 3.1408813408813416 
+       (stream-ref euler-transform-pi-stream 6) ; => 3.142071817071818
+       (stream-ref euler-transform-pi-stream 7) ; => 3.1412548236077655
+     #+END_EXAMPLE
 
-甚至可以递归地加速下去，得到一个流的流 （下面称为表列），其中每个流是前一个流的加速结果：
-    #+ATTR_HTML: image :width 40% 
-    [[file:pic/tableau.gif]] 
+     甚至可以递归地加速下去，得到一个流的流 （下面称为表列），其中每个流是前一个流的加速结果：
+     #+ATTR_HTML: image :width 40% 
+     [[file:pic/tableau.gif]] 
 
-#+BEGIN_SRC scheme
+     #+BEGIN_SRC scheme
   (define (make-tableau transform s)
     (cons-stream s
 		 (make-tableau transform
 			       (transform s))))
-#+END_SRC
+     #+END_SRC
 
-取出表列中每个序列的第一项，就得到了所需的序列：
+     取出表列中每个序列的第一项，就得到了所需的序列：
 
-#+BEGIN_SRC scheme
+     #+BEGIN_SRC scheme
   (define (accelerated-sequence transform s)
     (stream-map stream-car
 		(make-tableau transform s)))
-#+END_SRC
+     #+END_SRC
 
-加速实验：
-#+BEGIN_SRC scheme
+     加速实验：
+     #+BEGIN_SRC scheme
   (define accelerated-pi-stream (accelerated-sequence euler-transform pi-stream))
+     #+END_SRC
 
-  ;; (stream-car accelerated-pi-stream) ; => 4.0 
-  ;; (stream-ref accelerated-pi-stream 1) ; => 3.166666666666667
-  ;; (stream-ref accelerated-pi-stream 2) ; => 3.142105263157895
-  ;; (stream-ref accelerated-pi-stream 3) ; => 3.141599357319005
-  ;; (stream-ref accelerated-pi-stream 4) ; => 3.1415927140337785
-  ;; (stream-ref accelerated-pi-stream 5) ; => 3.1415926539752927
-  ;; (stream-ref accelerated-pi-stream 6) ; => 3.1415926535911765
-  ;; (stream-ref accelerated-pi-stream 7) ; => 3.141592653589778 
-#+END_SRC
+     #+BEGIN_EXAMPLE
+       (stream-car accelerated-pi-stream) ; => 4.0 
+       (stream-ref accelerated-pi-stream 1) ; => 3.166666666666667
+       (stream-ref accelerated-pi-stream 2) ; => 3.142105263157895
+       (stream-ref accelerated-pi-stream 3) ; => 3.141599357319005
+       (stream-ref accelerated-pi-stream 4) ; => 3.1415927140337785
+       (stream-ref accelerated-pi-stream 5) ; => 3.1415926539752927
+       (stream-ref accelerated-pi-stream 6) ; => 3.1415926535911765
+       (stream-ref accelerated-pi-stream 7) ; => 3.141592653589778 
 
-#+BEGIN_EXAMPLE
-  虽然不用流模型也能实现这种加速，但在这里整个的流可以像序列一样使用，描述这种加速技术特别方便
-#+END_EXAMPLE
+       虽然不用流模型也能实现这种加速，但在这里整个的流可以像序列一样使用，描述这种加速技术特别方便
+     #+END_EXAMPLE
 
 *** 序对的无穷流
 
