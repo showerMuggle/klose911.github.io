@@ -877,3 +877,179 @@
      + 正则序将参数求值延迟到使用时， _延时期间发生的赋值可能改变相关对象状态_ ，影响参数的值，这一情况可能使程序的 *语义变得很不清晰* 
 
 * 函数式编程和对象模块化
++ 引进 _赋值_ 得到了新的模块化手段，可以把系统状态的一些部分封装起来，隐藏到局部变量里
++ _流模型_ 可以提供类似的模块化方式,而且 *不需要赋值* 
+
+用 _蒙特卡罗模拟_ 作为例子，这里最关键的模块化需要是： *隐藏随机数生成器内部状态，使之与使用随机数的程序隔离* 。使用基于 _赋值_ 的技术：利用过程 _rand-update_  实现一个随机数生成器，在这个过程内部封装一个局部状态
+
+#+BEGIN_SRC scheme
+  (define rand
+    (let ((x random-init))
+      (lambda ()
+	(set! x (rand-update x))
+	x))) 
+#+END_SRC
+
+用 _流技术_ 可以实现类似的模块化，描述中只看到 *一个随机数的流* :
+
+#+BEGIN_SRC scheme
+  (define random-numbers
+    (cons-stream random-init
+		 (stream-map rand-update random-numbers)))
+
+  ;; (stream-car random-numbers) ; => 7
+  ;; (rand-update 7) ; => 88 
+  ;; (stream-ref random-numbers 1) ; => 88
+  ;; (rand-update 88) ; => 116
+  ;; (stream-ref random-numbers 2) ; => 116 
+#+END_SRC
+
+对一个流的相邻的元素进行运算：
+#+BEGIN_SRC scheme
+  ;; 对一个流的相邻的元素进行运算
+  ;; f: 运算函数
+  ;; s: 流
+  (define (map-successive-pairs f s)
+    (cons-stream
+     (f (stream-car s) (stream-car (stream-cdr s)))
+     (map-successive-pairs f (stream-cdr (stream-cdr s)))))
+
+  ;; (define successive-sum-stream (map-successive-pairs + integers))
+  ;; (stream-car successive-sum-stream) ; => 1 + 2 = 3 
+  ;; (stream-ref successive-sum-stream 1) ; => 3 + 4 = 7
+  ;; (stream-ref successive-sum-stream 2) ; => 5 + 6 = 11 
+#+END_SRC
+
+基于 _random-numbers_ 做蒙特卡罗模拟的数对流 _cecaro-stream_ ：这是个布尔值流，流中真假值表示实验的成功与失败
+#+BEGIN_SRC scheme
+  (define cesaro-stream
+    (map-successive-pairs (lambda (r1 r2) (= (gcd r1 r2) 1))
+			  random-numbers))
+
+  ;; (stream-car cesaro-stream) ; => #t 
+  ;;  (= (gcd 7 88) 1) ; => #t 
+  ;; (stream-ref cesaro-stream 1) ; => #f
+  ;; (= (gcd 116 110) 1) ; => #f
+#+END_SRC
+
+做这个实验，只需把 _cecaro-stream_ 导入过程 _monte-carlo_ ，该过程生成顺序的一系列 π 估计值的流：
+
+#+BEGIN_SRC scheme
+  (define (monte-carlo experiment-stream passed failed)
+    (define (next passed failed) ;; 每次都基于已经求值的结果，算出一个新的估计值
+      (cons-stream
+       (/ passed (+ passed failed)) ;; 计算新的估计值
+       (monte-carlo
+	(stream-cdr experiment-stream) passed failed))) ;; 延迟计算，只是保存操作
+    (if (stream-car experiment-stream)
+	(next (+ passed 1) failed)
+	(next passed (+ failed 1))))
+#+END_SRC
+
+两个随机数互素的概率是 6/(π ^ 2)，由此可以计算：
+#+BEGIN_SRC scheme
+  (define monte-carlo-stream (stream-map (lambda (p) (sqrt (/ 6 p)))
+		(monte-carlo cesaro-stream 0 0)))
+
+  ;; (stream-car monte-carlo-stream) ; =>  2.449489742783178
+  ;; (stream-ref monte-carlo-stream 1) ; =>  3.4641016151377544 
+  ;; (stream-ref monte-carlo-stream 2) ; => 3 
+  ;; (stream-ref monte-carlo-stream 3) ; => 2.8284271247461903 
+  ;; (stream-ref monte-carlo-stream 4) ; => 3.1622776601683795
+  ;; (stream-ref monte-carlo-stream 5) ; => 3 
+  ;; (stream-ref monte-carlo-stream 100) ; =>  3.232379288089343
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  这个程序同样模块结构良好，概念清晰
+
+  可以支持任何蒙特卡罗试验，换一个试验，只需要定义好相应的流和可能的结果处理
+
+  并且这个程序里没有状态，也没有赋值
+#+END_EXAMPLE
+
+** 函数式编程的时间观点
+换个角度去看时间：
++ _赋值_ 是一种模块化手段，基于它们模拟复杂系统的方式是：构造有局部状态的对象，用 _赋值改变状态_ ，用这种对象在执行中的变化去 *模拟现实世界中各种对象的行为* 
++ _流_ 也可以做类似的模拟，其中模拟的是 _变化的量随时间的变化史_ 。通过直接表现时间， *解耦了模型中的事件和被模拟世界的时间的联系。delay 使事件的发生顺序与被模拟世界里的时间脱钩* 
+
+考虑取款处理器的例子：
+#+BEGIN_SRC scheme
+  (define (make-simplified-withdraw balance)
+    (lambda (amount)
+      (set! balance (- balance amount))
+      balance))
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  这样生成的处理器实例有局部状态，每次调用减少 balance 值
+
+  一系列调用就是送给它一个提款额序列，解释器显示一个余额序列
+#+END_EXAMPLE
+
+如果用流来模拟，以初始余额和提款流作为参数，生成余额流：
+#+BEGIN_SRC scheme
+  (define (stream-withdraw balance amount-stream)
+    (cons-stream
+     balance
+     (stream-withdraw (- balance (stream-car amount-stream))
+		      (stream-cdr amount-stream))))
+
+  ;; (define balance-stream (stream-withdraw 100 ones)) 
+  ;; 时刻0，余额是100块
+  ;; (stream-car balance-stream) 
+  ;; 时刻1， 取1块，余额是99块
+  ;; (stream-ref amount-stream-withdrew 1) ; => 99
+  ;; 时刻2，再取1块，余额是98块
+  ;; (stream-ref amount-stream-withdrew 2) ; => 98
+  ;; ...
+  ;; (stream-ref amount-stream-withdrew 100) ; => 0
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  这个过程是一个良好定义的数学函数，其输出完全由输入确定
+
+  从输入提款额并观看余额的角度，这个流的行为就像前面的对象
+
+  但这里没有内部状态和变动，因此没有赋值带来的各种麻烦
+#+END_EXAMPLE
+
+这里好像有悖论：stream-withdraw 是一个数学函数，其行为不变，而用户却像是在与一个状态不断变化的系统打交道
+
+这是 *用户行为的时态特性赋予系统时态性质* 。如果用户只看到交互流(amount-stream)和余额流(balance-stream)，而不看具体交互，他们就看不到系统的状态特征
+
+*** 局部状态
+一个复杂的系统有许多部分：
++ 从一个部分可以看到其余部分都在随时间变化,具有变化的状态
++ 如果要写程序去模拟真实世界的这种分解，最自然的方式就是定义一批有状态的对象，让它们根据需要变化（对象和状态途径）
++ 这是用 *计算机执行的时间去模拟真实世界的时间* ，把真实世界的对象 _塞进_ 计算机
+
+#+BEGIN_EXAMPLE
+  有局部状态的对象很有用，也很直观，比较符合人对所处并与之交流的世界的看法（看成一些不断变化的对象）
+
+  但是这种模型本质地依赖于事件发生的顺序，带来并发同步等很麻烦的问题
+#+END_EXAMPLE
+
+*** 流模拟
+纯函数式语言里没有赋值和变动对象，所有过程实现的都是定义良好的数学函数，其行为永远不变，因此特别适合描述 *并发系统* 。但是特别麻烦的情况是 *设计交互式程序* ，模拟独立对象之间的交互。考虑共享账户问题。在常见系统里 Peter 和 Paul 的共享账户是用状态和赋值模拟的，他们的请求被送到这个计算对象：
++ 按照流的观点，这里没有变化的对象
++ 要想模拟 Peter 和 Paul 的共享账户,就需要把两人的 *交易请求流合并* 后送给表示他们的共享账户的过程：
+
+     #+ATTR_HTML: image :width 40% 
+     [[file:pic/stream-merge.gif]] 
+
+#+BEGIN_EXAMPLE
+  这里的归并有很难处理的问题：怎么反映真实世界里两人的行为效果
+
+  两人碰头时应看到以前所有交易的效果
+  不能用交替（两人交替操作不合理）
+  要解决这个问题，实际上必须引入显式同步（这是一直希望避免）
+#+END_EXAMPLE
+
+
+*** 总结
+可以用两种不同的思路来模拟不断变化的世界：
++ 用一组相互分离、受时间约束、有内部状态且相互交流的对象
++ 用一个没有时间也没有状态的统一体
+
+两种途径各有优势和劣势，但都不能完全令人满意

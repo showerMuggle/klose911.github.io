@@ -414,8 +414,8 @@
 
 (define int-pairs (pairs integers integers))
 (define sum-prime-pair-stream (stream-filter (lambda (pair)
-                 (prime? (+ (car pair) (cadr pair))))
-               int-pairs)) 
+					       (prime? (+ (car pair) (cadr pair))))
+					     int-pairs)) 
 
 ;; (stream-car sum-prime-pair-stream) ; => (1 1)
 ;; (stream-ref sum-prime-pair-stream 1) ; => (1 2)
@@ -439,10 +439,10 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; 本过程无法工作：定义y 用到 dy ，而当时 dy 还没有定义 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(define (solve f y0 dt)
-  (define y (integral dy y0 dt))
-  (define dy (stream-map f y))
-  y)
+;; (define (solve f y0 dt)
+;;   (define y (integral dy y0 dt))
+;;   (define dy (stream-map f y))
+;;   y)
 
 (define (integral delayed-integrand initial-value dt)
   (define int
@@ -461,3 +461,108 @@
 ;; y = e ^ t
 ;; y(1000) = e ^ (0.0001 * 1000) = e 
 (stream-ref (solve (lambda (y) y) 1 0.001) 1000) ; => 2.716923932235896 
+
+;;;;;;;;;;;;;;;;;;
+;; 蒙特卡罗模拟 ;;
+;;;;;;;;;;;;;;;;;;
+(define (rand-update x)
+  (let ((a 27) (b 26) (m 127))
+    (modulo (+ (* a x) b) m)))
+
+(define random-init 7) 
+(define rand
+  (let ((x random-init))
+    (lambda ()
+      (set! x (rand-update x))
+      x)))
+
+(define (monte-carlo trials experiment)
+  (define (iter trials-remaining trials-passed)
+    (cond ((= trials-remaining 0)
+           (/ trials-passed trials))
+          ((experiment)
+           (iter (- trials-remaining 1) (+ trials-passed 1)))
+          (else
+           (iter (- trials-remaining 1) trials-passed))))
+  (iter trials 0))
+
+(define (cesaro-test)
+  (= (gcd (rand) (rand)) 1))
+
+(define (estimate-pi trials)
+  (sqrt (/ 6 (monte-carlo trials cesaro-test))))
+
+;; (estimate-pi 100) 
+
+;;; random stream 
+(define random-numbers
+  (cons-stream random-init
+               (stream-map rand-update random-numbers)))
+
+;; (stream-car random-numbers) ; => 7
+;; (rand-update 7) ; => 88 
+;; (stream-ref random-numbers 1) ; => 88
+;; (rand-update 88) ; => 116
+;; (stream-ref random-numbers 2) ; => 116 
+;; (stream-ref random-numbers 3) ; => 110
+
+;; 对一个流的相邻的元素进行运算
+;; f: 运算函数
+;; s: 流
+(define (map-successive-pairs f s)
+  (cons-stream
+   (f (stream-car s) (stream-car (stream-cdr s)))
+   (map-successive-pairs f (stream-cdr (stream-cdr s)))))
+
+;; (define successive-sum-stream (map-successive-pairs + integers))
+;; (stream-car successive-sum-stream) ; => 1 + 2 = 3 
+;; (stream-ref successive-sum-stream 1) ; => 3 + 4 = 7
+;; (stream-ref successive-sum-stream 2) ; => 5 + 6 = 11 
+
+(define cesaro-stream
+  (map-successive-pairs (lambda (r1 r2) (= (gcd r1 r2) 1))
+                        random-numbers))
+
+;; (stream-car cesaro-stream) ; => #t 
+;;  (= (gcd 7 88) 1) ; => #t 
+;; (stream-ref cesaro-stream 1) ; => #f
+;; (= (gcd 116 110) 1) ; => #f
+
+(define (monte-carlo experiment-stream passed failed)
+  (define (next passed failed) ;; 每次都基于已经求值的结果，算出一个新的估计值
+    (cons-stream
+     (/ passed (+ passed failed)) ;; 计算新的估计值
+     (monte-carlo
+      (stream-cdr experiment-stream) passed failed))) ;; 延迟计算，只是保存操作
+  (if (stream-car experiment-stream)
+      (next (+ passed 1) failed)
+      (next passed (+ failed 1))))
+
+(define monte-carlo-stream (stream-map (lambda (p) (sqrt (/ 6 p)))
+				       (monte-carlo cesaro-stream 0 0)))
+
+;; (stream-car monte-carlo-stream) ; =>  2.449489742783178
+;; (stream-ref monte-carlo-stream 1) ; =>  3.4641016151377544 
+;; (stream-ref monte-carlo-stream 2) ; => 3 
+;; (stream-ref monte-carlo-stream 3) ; => 2.8284271247461903 
+;; (stream-ref monte-carlo-stream 4) ; => 3.1622776601683795
+;; (stream-ref monte-carlo-stream 5) ; => 3 
+;; (stream-ref monte-carlo-stream 100) ; =>  3.232379288089343
+
+
+(define (stream-withdraw balance amount-stream)
+  (cons-stream
+   balance
+   (stream-withdraw (- balance (stream-car amount-stream))
+                    (stream-cdr amount-stream))))
+
+
+;; (define balance-stream (stream-withdraw 100 ones)) 
+;; 时刻0，余额是100块
+;; (stream-car balance-stream) 
+;; 时刻1， 取1块，余额是99块
+;; (stream-ref amount-stream-withdrew 1) ; => 99
+;; 时刻2，再取1块，余额是98块
+;; (stream-ref amount-stream-withdrew 2) ; => 98
+;; ...
+;; (stream-ref amount-stream-withdrew 100) ; => 0
