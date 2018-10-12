@@ -188,7 +188,7 @@
 ;;            (not (divisible? x 2))))  
 ;;         (integers-starting-from 3)) ; 过滤掉所有能被2整除的整数
 
-(stream-ref primes 100) ; => 547 
+;; (stream-ref primes 100) ; => 547 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; 基于流运算定义无穷流 ;;
@@ -351,3 +351,113 @@
 ;; (stream-ref accelerated-pi-stream 5) ; => 3.1415926539752927
 ;; (stream-ref accelerated-pi-stream 6) ; => 3.1415926535911765
 ;; (stream-ref accelerated-pi-stream 7) ; => 3.141592653589778 
+
+;;;;;;;;;;;;;;;;
+;; 无穷序对流 ;;
+;;;;;;;;;;;;;;;;
+
+(define nil '()) 
+(define (enumerate-interval low high)
+  (if (> low high)
+      nil
+      (cons low (enumerate-interval (+ low 1) high)))) 
+;; (define (flatmap proc seq)
+;;   (accumulate append nil (map proc seq)))
+
+;; (define (prime-sum? pair)
+;;   (prime? (+ (car pair) (cadr pair))))
+
+;; (define (make-pair-sum pair)
+;;   (list (car pair) (cadr pair) (+ (car pair) (cadr pair))))
+
+;; (define (prime-sum-pairs n)
+;;   (map make-pair-sum
+;;        (filter prime-sum?
+;;                (flatmap
+;;                 (lambda (i)
+;;                   (map (lambda (j) (list i j))
+;;                        (enumerate-interval 1 (- i 1))))
+;;                 (enumerate-interval 1 n)))))
+
+
+;; (flatmap
+;;  (lambda (i)
+;;    (map (lambda (j) (list i j))
+;; 	(enumerate-interval 1 (- i 1)))) 
+;;  (enumerate-interval 1 10)) 
+
+;; (map (lambda (j) (list 3 j))
+;;      (enumerate-interval 1 (- 3 1))) ; => ((3 1) (3 2))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; 这样做不行！因为第一个流无穷长，第二个流的元素永远不出现 ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(define (stream-append s1 s2)
+  (if (stream-null? s1)
+      s2
+      (cons-stream (stream-car s1)
+                   (stream-append (stream-cdr s1) s2))))
+
+(define (interleave s1 s2)
+  (if (stream-null? s1)
+      s2
+      (cons-stream (stream-car s1)
+                   (interleave s2 (stream-cdr s1))))) ;; 交错执行 s1, s2 流的 stream-car 和 stream-cdr 
+
+(define (pairs s t)
+  (cons-stream
+   (list (stream-car s) (stream-car t))
+   (interleave
+    (stream-map (lambda (x) (list (stream-car s) x))
+                (stream-cdr t))
+    (pairs (stream-cdr s) (stream-cdr t)))))
+
+(define int-pairs (pairs integers integers))
+(define sum-prime-pair-stream (stream-filter (lambda (pair)
+                 (prime? (+ (car pair) (cadr pair))))
+               int-pairs)) 
+
+;; (stream-car sum-prime-pair-stream) ; => (1 1)
+;; (stream-ref sum-prime-pair-stream 1) ; => (1 2)
+;; (stream-ref sum-prime-pair-stream 2) ; => (2 3)
+;; (stream-ref sum-prime-pair-stream 3) ; => (1 4)
+;; ....
+;; (stream-ref sum-prime-pair-stream 10) ; => (1 16)
+
+;;; integrand： 被积分函数
+;;; initial-value： 初始值
+;;; dt：时间增量
+;;; 输入流 integrand 经 dt 缩放送入加法器， 加法器输出反馈回来 送入同一个加法器，形成一个反馈循环
+(define (integral integrand initial-value dt)
+  (define int
+    (cons-stream initial-value
+                 (add-streams (scale-stream integrand dt) 
+                              int)))
+  int)
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; 本过程无法工作：定义y 用到 dy ，而当时 dy 还没有定义 ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(define (solve f y0 dt)
+  (define y (integral dy y0 dt))
+  (define dy (stream-map f y))
+  y)
+
+(define (integral delayed-integrand initial-value dt)
+  (define int
+    (cons-stream initial-value
+                 (let ((integrand (force delayed-integrand))) ;; 手动求值积分对象 
+                   (add-streams (scale-stream integrand dt)
+                                int))))
+  int)
+
+(define (solve f y0 dt)
+  (define y (integral (delay dy) y0 dt)) ;; 延迟求值 dy 
+  (define dy (stream-map f y))
+  y)
+
+;; dy / dt = y , y(0) = 1
+;; y = e ^ t
+;; y(1000) = e ^ (0.0001 * 1000) = e 
+(stream-ref (solve (lambda (y) y) 1 0.001) 1000) ; => 2.716923932235896 

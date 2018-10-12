@@ -640,9 +640,240 @@
      #+END_EXAMPLE
 
 *** 序对的无穷流
+    可以用序列把常规程序里用嵌套循环处理的问题表示为序列操作。该技术可推广到无穷流，写出一些不容易用循环表示的程序（直接做时，需要对无穷集合做循环） 
 
-*** 信号处理
+    生成所有满足条件的 _整数序对 (i,j)_  ，其中 _i <= j_ 且  _i+j  是素数_ ， 以前的实现是：
+    #+BEGIN_SRC scheme
+  (define (prime-sum-pairs n)
+    (map make-pair-sum
+	 (filter prime-sum?
+		 (flatmap
+		  (lambda (i)
+		    (map (lambda (j) (list i j))
+			 (enumerate-interval 1 (- i 1)))) 
+		  (enumerate-interval 1 n))))) ;; 生成所有序对的组合
+    #+END_SRC
+
+    若 _int-pairs_  是所有满足 _i <= j_  的序对 _(i,j)_  的流，立刻可得
+
+    #+BEGIN_SRC scheme
+  (stream-filter (lambda (pair)
+		   (prime? (+ (car pair) (cadr pair))))
+		 int-pairs)
+    #+END_SRC
+
+    考虑 _int-pairs_ 的生成。一般而言，假定有流 *S = {Si}* 和 *T = {Tj}* ，从它们可以得到无穷阵列：
+    #+ATTR_HTML: image :width 30% 
+    [[file:pic/pairs-stream-1.gif]] 
+
+    #+BEGIN_EXAMPLE
+	假设S 和 T 都是 整数流，实际上所有对角线上半部分的集合就是想要的 int-pairs
+    #+END_EXAMPLE
+    #+ATTR_HTML: image :width 30% 
+    [[file:pic/pairs-stream-3.gif]] 
+
+    这一无穷流为 *(pairs S T)* ：
+    #+ATTR_HTML: image :width 30% 
+    [[file:pic/pairs-stream-4.gif]] 
+
+    它由三个部分构成：
+    + _(S0,T0)_ 序对
+    + _第一行_ 的 _其他序对_ ： _(stream-map (lambda (x) (list (stream-car s) x)) (stream-cdr t))_ 
+    + _其他序对_ ：由 _(stream-cdr S)_ 和 _(stream-cdr T)_ *递归构造的序对* 
+
+    因此所需的序对流很简单：
+    #+BEGIN_SRC scheme
+  (define (pairs s t)
+    (cons-stream
+     (list (stream-car s) (stream-car t))
+     (<combine-in-some-way>
+	 (stream-map (lambda (x) (list (stream-car s) x))
+		     (stream-cdr t))
+	 (pairs (stream-cdr s) (stream-cdr t)))))
+    #+END_SRC
+
+    最简单的想法是模仿表的组合操作 _append_ ：
+    #+BEGIN_SRC scheme
+  (define (stream-append s1 s2)
+    (if (stream-null? s1)
+	s2
+	(cons-stream (stream-car s1)
+		     (stream-append (stream-cdr s1) s2))))
+    #+END_SRC
+
+    #+BEGIN_EXAMPLE
+      这样做不行！因为第一个流无穷长， (stream-null? s1) 事实上永远为 false ，所以一直不会有机会出现 s2 
+    #+END_EXAMPLE
+
+    要考虑更巧妙的组合方法，如 *交错* 组合：
+    #+BEGIN_SRC scheme
+  (define (interleave s1 s2)
+    (if (stream-null? s1)
+	s2
+	(cons-stream (stream-car s1)
+		     (interleave s2 (stream-cdr s1))))) ;; 交错执行 s1, s2 流的 stream-car 和 stream-cdr 
+    #+END_SRC
+
+    最终得到生成所需的流的过程：
+    #+BEGIN_SRC scheme
+  (define (pairs s t)
+    (cons-stream
+     (list (stream-car s) (stream-car t))
+     (interleave
+      (stream-map (lambda (x) (list (stream-car s) x))
+		  (stream-cdr t))
+      (pairs (stream-cdr s) (stream-cdr t)))))
+    #+END_SRC
+
+    实现 _prime-sum-pairs-stream_ ：
+    #+BEGIN_SRC scheme
+  (define int-pairs (pairs integers integers))
+  (define sum-prime-pair-stream (stream-filter (lambda (pair)
+		   (prime? (+ (car pair) (cadr pair))))
+		 int-pairs)) 
+
+  ;; (stream-car sum-prime-pair-stream) ; => (1 1)
+  ;; (stream-ref sum-prime-pair-stream 1) ; => (1 2)
+  ;; (stream-ref sum-prime-pair-stream 2) ; => (2 3)
+  ;; (stream-ref sum-prime-pair-stream 3) ; => (1 4)
+  ;; ....
+  ;; (stream-ref sum-prime-pair-stream 10) ; => (1 16)
+    #+END_SRC
+
+    #+BEGIN_EXAMPLE
+      交错是研究并发系统行为的一种重要工具，这里用的交错是确定性的交错（一边一个）
+
+      在计算机科学技术的研究和应用中，也有一些时候需要考虑非确定性的交错
+    #+END_EXAMPLE
+
 
 * 正则序求值器
+** 积分器
+   可以用流建模 *信号处理过程*  ，用流的 _元素_ 表示一个 *信号在顺序的一系列时间点上的值* 
+   #+BEGIN_EXAMPLE
+     考虑一个例子：积分器（或称求和器）。对输入流 x= (xi)，初始值 C 和一个小增量dt，它累积和Si并返回 S= (Si)： 
+   #+END_EXAMPLE
+
+   #+ATTR_HTML: image :width 20% 
+   [[file:pic/integrals.gif]] 
+
+   _integral流_ 可以用类似于 _整数流_ 的方式来定义：
+
+   #+BEGIN_SRC scheme
+  ;;; integrand： 被积分函数
+  ;;; initial-value： 初始值
+  ;;; dt：时间增量
+  ;;; 输入流 integrand 经 dt 缩放送入加法器， 加法器输出反馈回来 送入同一个加法器，形成一个反馈循环
+  (define (integral integrand initial-value dt)
+    (define int
+      (cons-stream initial-value
+		   (add-streams (scale-stream integrand dt) 
+				int)))
+    int)
+   #+END_SRC
+
+   用信号处理模型来表示：
+   #+ATTR_HTML: image :width 60% 
+   [[file:pic/integrals-stream.gif]] 
+
+   #+BEGIN_EXAMPLE
+     输入流 integrand 经 dt 缩放送入加法器， 加法器输出反馈回来 送入同一个加法器，形成一个反馈循环
+   #+END_EXAMPLE
+
+** 求解微分方程
+   上面 integral 可以被定义，是因为在 _cons-stream_  里实际上有 *delay* ，其第二个参数并不立即求值。如果没有这种 _delay_  机制，那么就需要用先构造出 _cons-stream_  的参数，而后用它去定义 _int_ 
+   #+BEGIN_EXAMPLE
+     没有 delay 无法构造带有反馈循环的系统，因为构造 int时用到它自身
+
+     构造带有反馈循环的处理系统时，其中反馈流的定义都是递归的
+
+     必须有 delay，才能用还没有构造好的流去定义它自身
+   #+END_EXAMPLE
+
+   对更复杂的情况，仅有隐藏在 _cons-stream_  里的 _delay_  可能不够用，可能需要 *显式地明确使用* delay 
+
+   #+BEGIN_EXAMPLE
+     假定需要定义一个求解微分方程 dy / dx = f(x) 的信号处理系统
+
+     其中 f 是给定的函数
+   #+END_EXAMPLE
+
+   #+ATTR_HTML: image :width 40% 
+   [[file:pic/differential-equataion.gif]] 
+
+   模拟计算机用这样的电路求解这种微分方程，这个系统的结构：
+   + 用一个部件实现 _应用 f 的映射_ 
+   + 处理中存在一个 _反馈循环_ 
+   + 循环中还包括一个 _积分器_ 
+
+   如果用下面过程模拟这个信号处理系统：
+   #+BEGIN_SRC scheme
+  (define (solve f y0 dt)
+    (define y (integral dy y0 dt))
+    (define dy (stream-map f y))
+    y)
+   #+END_SRC
+
+   注意：上面过程无法工作，因为 *定义y 用到 dy ，而当时 dy 还没有定义* 
+
+   #+BEGIN_EXAMPLE
+     必须在还不知道 dy 的情况下开始生成 y
+
+     integral 要在知道流的部分信息（第一个元素）的情况下开始使用
+   #+END_EXAMPLE
+
+   + 对 integral，流 _int_ 的第一个元素由 _initial-value(y0)_ 给出
+   + 流 _y_ 的第一个元素是参数 _y0_，这时候还不需要获得 _dy_
+   + 有了 _y_ 的第一个元素就可以开始构造 _dy_ 了后就可以用 _dy的元素_ 去构造流 _y 的元素_ 
+
+     为此需要修改 integral，让它把被 *积分流看作延时参数* 。integral 里需要用 _force 去强迫对积分对象的求值_ 
+   #+BEGIN_SRC scheme
+  (define (integral delayed-integrand initial-value dt)
+    (define int
+      (cons-stream initial-value
+		   (let ((integrand (force delayed-integrand))) ;; 手动求值积分对象 
+		     (add-streams (scale-stream integrand dt)
+				  int))))
+    int)
+   #+END_SRC
+
+   在 solve 过程中定义 _y_ 的时候，把  *dy 作为延时求值参数* 传递 
+
+   #+BEGIN_SRC scheme
+  (define (solve f y0 dt)
+    (define y (integral (delay dy) y0 dt)) ;; 延迟求值 dy 
+    (define dy (stream-map f y))
+    y)
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     调用这个 integral 的过程时需要 delay 被积参数
+   #+END_EXAMPLE
+
+   例如，假设 _dy/dt = y_ ，初始条件为 _y(0) = 1_ ，求 _t = 1_ 时候 _y_ 的值 ：
+
+   #+BEGIN_SRC scheme
+  ;; dy / dt = y , y(0) = 1
+  ;; y = e ^ t
+  ;; y(1000) = e ^ (0.0001 * 1000) = e 
+  (stream-ref (solve (lambda (y) y) 1 0.001) 1000) ; => 2.716923932235896 
+   #+END_SRC
+
+** 正则序
+   显式使用 _delay_ 和 _force_  扩大了流技术的应用范围，也使工作变复杂：
+   + 新的 _integral_  能模拟更多信号处理系统
+   + 但要求用延时流作为被积对象，使用时也必须显式描述那些参数需要延时求值
+
+   #+BEGIN_EXAMPLE
+     这里为解决同一个问题定义了两个 integral：
+
+     一个采用常规参数，处理简单的规范的情况
+     一个采用延时参数，可以适应更多问题，使用比较麻烦
+   #+END_EXAMPLE
+
+   要避免写两个过程的一个办法是 *让所有参数都是延时的* 。例如换一种求值模型，其中所有的参数都不求值，也就是说，采用 _正则序求值_ 。正则序的优缺点：
+   + 优点：可以得到统一的参数使用方式，很适合流处理的需要
+   + 缺点：它与局部状态的变动不兼容
+     + 正则序将参数求值延迟到使用时， _延时期间发生的赋值可能改变相关对象状态_ ，影响参数的值，这一情况可能使程序的 *语义变得很不清晰* 
 
 * 函数式编程和对象模块化

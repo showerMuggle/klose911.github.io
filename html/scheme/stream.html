@@ -265,12 +265,17 @@ for the JavaScript code in this tag.
 </ul>
 </li>
 <li><a href="#org192d4cb">序对的无穷流</a></li>
-<li><a href="#org152cf7f">信号处理</a></li>
 </ul>
 </li>
 </ul>
 </li>
-<li><a href="#org85360e1">正则序求值器</a></li>
+<li><a href="#org85360e1">正则序求值器</a>
+<ul>
+<li><a href="#orga35e833">积分器</a></li>
+<li><a href="#org17016a1">求解微分方程</a></li>
+<li><a href="#orgd61e4bd">正则序</a></li>
+</ul>
+</li>
 <li><a href="#org9d02d25">函数式编程和对象模块化</a></li>
 </ul>
 </div>
@@ -1166,16 +1171,353 @@ fibs 的 car 是 0 ，其 cdr 是求值 (fibgen 1 1) 的承诺
 
 <div id="outline-container-org192d4cb" class="outline-4">
 <h4 id="org192d4cb">序对的无穷流</h4>
+<div class="outline-text-4" id="text-org192d4cb">
+<p>
+可以用序列把常规程序里用嵌套循环处理的问题表示为序列操作。该技术可推广到无穷流，写出一些不容易用循环表示的程序（直接做时，需要对无穷集合做循环） 
+</p>
+
+<p>
+生成所有满足条件的 <span class="underline">整数序对 (i,j)</span>  ，其中 <span class="underline">i &lt;= j</span> 且  <span class="underline">i+j  是素数</span> ， 以前的实现是：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">prime-sum-pairs</span> n<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">map</span> make-pair-sum
+       <span style="color: #696969;">(</span>filter prime-sum?
+               <span style="color: #696969;">(</span>flatmap
+                <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>i<span style="color: #696969;">)</span>
+                  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">map</span> <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>j<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>list i j<span style="color: #696969;">))</span>
+                       <span style="color: #696969;">(</span>enumerate-interval 1 <span style="color: #696969;">(</span>- i 1<span style="color: #696969;">))))</span> 
+                <span style="color: #696969;">(</span>enumerate-interval 1 n<span style="color: #696969;">)))))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#29983;&#25104;&#25152;&#26377;&#24207;&#23545;&#30340;&#32452;&#21512;</span>
+</pre>
 </div>
 
-<div id="outline-container-org152cf7f" class="outline-4">
-<h4 id="org152cf7f">信号处理</h4>
+<p>
+若 <span class="underline">int-pairs</span>  是所有满足 <span class="underline">i &lt;= j</span>  的序对 <span class="underline">(i,j)</span>  的流，立刻可得
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span>stream-filter <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>pair<span style="color: #696969;">)</span>
+                 <span style="color: #696969;">(</span>prime? <span style="color: #696969;">(</span>+ <span style="color: #696969;">(</span>car pair<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>cadr pair<span style="color: #696969;">))))</span>
+               int-pairs<span style="color: #696969;">)</span>
+</pre>
+</div>
+
+<p>
+考虑 <span class="underline">int-pairs</span> 的生成。一般而言，假定有流 <b>S = {Si}</b> 和 <b>T = {Tj}</b> ，从它们可以得到无穷阵列：
+</p>
+
+<div class="figure">
+<p><img src="pic/pairs-stream-1.gif" alt="pairs-stream-1.gif" width="30%" /> 
+</p>
+</div>
+
+<pre class="example">
+	假设S 和 T 都是 整数流，实际上所有对角线上半部分的集合就是想要的 int-pairs
+</pre>
+
+<div class="figure">
+<p><img src="pic/pairs-stream-3.gif" alt="pairs-stream-3.gif" width="30%" /> 
+</p>
+</div>
+
+<p>
+这一无穷流为 <b>(pairs S T)</b> ：
+</p>
+
+<div class="figure">
+<p><img src="pic/pairs-stream-4.gif" alt="pairs-stream-4.gif" width="30%" /> 
+</p>
+</div>
+
+<p>
+它由三个部分构成：
+</p>
+<ul class="org-ul">
+<li><span class="underline">(S0,T0)</span> 序对</li>
+<li><span class="underline">第一行</span> 的 <span class="underline">其他序对</span> ： <span class="underline">(stream-map (lambda (x) (list (stream-car s) x)) (stream-cdr t))</span></li>
+<li><span class="underline">其他序对</span> ：由 <span class="underline">(stream-cdr S)</span> 和 <span class="underline">(stream-cdr T)</span> <b>递归构造的序对</b></li>
+</ul>
+
+<p>
+因此所需的序对流很简单：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">pairs</span> s t<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>cons-stream
+   <span style="color: #696969;">(</span>list <span style="color: #696969;">(</span>stream-car s<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>stream-car t<span style="color: #696969;">))</span>
+   <span style="color: #696969;">(</span><span style="color: #98f5ff;">&lt;combine-in-some-way&gt;</span>
+       <span style="color: #696969;">(</span>stream-map <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>x<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>list <span style="color: #696969;">(</span>stream-car s<span style="color: #696969;">)</span> x<span style="color: #696969;">))</span>
+                   <span style="color: #696969;">(</span>stream-cdr t<span style="color: #696969;">))</span>
+       <span style="color: #696969;">(</span>pairs <span style="color: #696969;">(</span>stream-cdr s<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>stream-cdr t<span style="color: #696969;">)))))</span>
+</pre>
+</div>
+
+<p>
+最简单的想法是模仿表的组合操作 <span class="underline">append</span> ：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">stream-append</span> s1 s2<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>stream-null? s1<span style="color: #696969;">)</span>
+      s2
+      <span style="color: #696969;">(</span>cons-stream <span style="color: #696969;">(</span>stream-car s1<span style="color: #696969;">)</span>
+                   <span style="color: #696969;">(</span>stream-append <span style="color: #696969;">(</span>stream-cdr s1<span style="color: #696969;">)</span> s2<span style="color: #696969;">))))</span>
+</pre>
+</div>
+
+<pre class="example">
+      这样做不行！因为第一个流无穷长， (stream-null? s1) 事实上永远为 false ，所以一直不会有机会出现 s2 
+</pre>
+
+<p>
+要考虑更巧妙的组合方法，如 <b>交错</b> 组合：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">interleave</span> s1 s2<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>stream-null? s1<span style="color: #696969;">)</span>
+      s2
+      <span style="color: #696969;">(</span>cons-stream <span style="color: #696969;">(</span>stream-car s1<span style="color: #696969;">)</span>
+                   <span style="color: #696969;">(</span>interleave s2 <span style="color: #696969;">(</span>stream-cdr s1<span style="color: #696969;">)))))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#20132;&#38169;&#25191;&#34892; s1, s2 &#27969;&#30340; stream-car &#21644; stream-cdr </span>
+</pre>
+</div>
+
+<p>
+最终得到生成所需的流的过程：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">pairs</span> s t<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>cons-stream
+   <span style="color: #696969;">(</span>list <span style="color: #696969;">(</span>stream-car s<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>stream-car t<span style="color: #696969;">))</span>
+   <span style="color: #696969;">(</span>interleave
+    <span style="color: #696969;">(</span>stream-map <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>x<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>list <span style="color: #696969;">(</span>stream-car s<span style="color: #696969;">)</span> x<span style="color: #696969;">))</span>
+                <span style="color: #696969;">(</span>stream-cdr t<span style="color: #696969;">))</span>
+    <span style="color: #696969;">(</span>pairs <span style="color: #696969;">(</span>stream-cdr s<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>stream-cdr t<span style="color: #696969;">)))))</span>
+</pre>
+</div>
+
+<p>
+实现 <span class="underline">prime-sum-pairs-stream</span> ：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">int-pairs</span> <span style="color: #696969;">(</span>pairs integers integers<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">sum-prime-pair-stream</span> <span style="color: #696969;">(</span>stream-filter <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>pair<span style="color: #696969;">)</span>
+                 <span style="color: #696969;">(</span>prime? <span style="color: #696969;">(</span>+ <span style="color: #696969;">(</span>car pair<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>cadr pair<span style="color: #696969;">))))</span>
+               int-pairs<span style="color: #696969;">))</span> 
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-car sum-prime-pair-stream) ; =&gt; (1 1)</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-ref sum-prime-pair-stream 1) ; =&gt; (1 2)</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-ref sum-prime-pair-stream 2) ; =&gt; (2 3)</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-ref sum-prime-pair-stream 3) ; =&gt; (1 4)</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">....</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(stream-ref sum-prime-pair-stream 10) ; =&gt; (1 16)</span>
+</pre>
+</div>
+
+<pre class="example">
+      交错是研究并发系统行为的一种重要工具，这里用的交错是确定性的交错（一边一个）
+
+      在计算机科学技术的研究和应用中，也有一些时候需要考虑非确定性的交错
+</pre>
 </div>
 </div>
 </div>
+</div>
+
 
 <div id="outline-container-org85360e1" class="outline-2">
 <h2 id="org85360e1">正则序求值器</h2>
+<div class="outline-text-2" id="text-org85360e1">
+</div>
+<div id="outline-container-orga35e833" class="outline-3">
+<h3 id="orga35e833">积分器</h3>
+<div class="outline-text-3" id="text-orga35e833">
+<p>
+可以用流建模 <b>信号处理过程</b>  ，用流的 <span class="underline">元素</span> 表示一个 <b>信号在顺序的一系列时间点上的值</b> 
+</p>
+<pre class="example">
+     考虑一个例子：积分器（或称求和器）。对输入流 x= (xi)，初始值 C 和一个小增量dt，它累积和Si并返回 S= (Si)： 
+</pre>
+
+
+<div class="figure">
+<p><img src="pic/integrals.gif" alt="integrals.gif" width="20%" /> 
+</p>
+</div>
+
+<p>
+<span class="underline">integral流</span> 可以用类似于 <span class="underline">整数流</span> 的方式来定义：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">integrand&#65306; &#34987;&#31215;&#20998;&#20989;&#25968;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">initial-value&#65306; &#21021;&#22987;&#20540;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">dt&#65306;&#26102;&#38388;&#22686;&#37327;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#36755;&#20837;&#27969; integrand &#32463; dt &#32553;&#25918;&#36865;&#20837;&#21152;&#27861;&#22120;&#65292; &#21152;&#27861;&#22120;&#36755;&#20986;&#21453;&#39304;&#22238;&#26469; &#36865;&#20837;&#21516;&#19968;&#20010;&#21152;&#27861;&#22120;&#65292;&#24418;&#25104;&#19968;&#20010;&#21453;&#39304;&#24490;&#29615;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">integral</span> integrand initial-value dt<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">int</span>
+    <span style="color: #696969;">(</span>cons-stream initial-value
+                 <span style="color: #696969;">(</span>add-streams <span style="color: #696969;">(</span>scale-stream integrand dt<span style="color: #696969;">)</span> 
+                              int<span style="color: #696969;">)))</span>
+  int<span style="color: #696969;">)</span>
+</pre>
+</div>
+
+<p>
+用信号处理模型来表示：
+</p>
+
+<div class="figure">
+<p><img src="pic/integrals-stream.gif" alt="integrals-stream.gif" width="60%" /> 
+</p>
+</div>
+
+<pre class="example">
+     输入流 integrand 经 dt 缩放送入加法器， 加法器输出反馈回来 送入同一个加法器，形成一个反馈循环
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org17016a1" class="outline-3">
+<h3 id="org17016a1">求解微分方程</h3>
+<div class="outline-text-3" id="text-org17016a1">
+<p>
+上面 integral 可以被定义，是因为在 <span class="underline">cons-stream</span>  里实际上有 <b>delay</b> ，其第二个参数并不立即求值。如果没有这种 <span class="underline">delay</span>  机制，那么就需要用先构造出 <span class="underline">cons-stream</span>  的参数，而后用它去定义 <span class="underline">int</span> 
+</p>
+<pre class="example">
+     没有 delay 无法构造带有反馈循环的系统，因为构造 int时用到它自身
+
+     构造带有反馈循环的处理系统时，其中反馈流的定义都是递归的
+
+     必须有 delay，才能用还没有构造好的流去定义它自身
+</pre>
+
+<p>
+对更复杂的情况，仅有隐藏在 <span class="underline">cons-stream</span>  里的 <span class="underline">delay</span>  可能不够用，可能需要 <b>显式地明确使用</b> delay 
+</p>
+
+<pre class="example">
+     假定需要定义一个求解微分方程 dy / dx = f(x) 的信号处理系统
+
+     其中 f 是给定的函数
+</pre>
+
+
+<div class="figure">
+<p><img src="pic/differential-equataion.gif" alt="differential-equataion.gif" width="40%" /> 
+</p>
+</div>
+
+<p>
+模拟计算机用这样的电路求解这种微分方程，这个系统的结构：
+</p>
+<ul class="org-ul">
+<li>用一个部件实现 <span class="underline">应用 f 的映射</span></li>
+<li>处理中存在一个 <span class="underline">反馈循环</span></li>
+<li>循环中还包括一个 <span class="underline">积分器</span></li>
+</ul>
+
+<p>
+如果用下面过程模拟这个信号处理系统：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">solve</span> f y0 dt<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">y</span> <span style="color: #696969;">(</span>integral dy y0 dt<span style="color: #696969;">))</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">dy</span> <span style="color: #696969;">(</span>stream-map f y<span style="color: #696969;">))</span>
+  y<span style="color: #696969;">)</span>
+</pre>
+</div>
+
+<p>
+注意：上面过程无法工作，因为 <b>定义y 用到 dy ，而当时 dy 还没有定义</b> 
+</p>
+
+<pre class="example">
+必须在还不知道 dy 的情况下开始生成 y
+
+integral 要在知道流的部分信息（第一个元素）的情况下开始使用
+</pre>
+
+<ul class="org-ul">
+<li>对 integral，流 <span class="underline">int</span> 的第一个元素由 <span class="underline">initial-value(y0)</span> 给出</li>
+<li>流 <span class="underline">y</span> 的第一个元素是参数 <span class="underline">y0_，这时候还不需要获得 _dy</span></li>
+<li><p>
+有了 <span class="underline">y</span> 的第一个元素就可以开始构造 <span class="underline">dy</span> 了后就可以用 <span class="underline">dy的元素</span> 去构造流 <span class="underline">y 的元素</span> 
+</p>
+
+<p>
+为此需要修改 integral，让它把被 <b>积分流看作延时参数</b> 。integral 里需要用 <span class="underline">force 去强迫对积分对象的求值</span> 
+</p></li>
+</ul>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">integral</span> delayed-integrand initial-value dt<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">int</span>
+    <span style="color: #696969;">(</span>cons-stream initial-value
+                 <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>integrand <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">force</span> delayed-integrand<span style="color: #696969;">)))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#25163;&#21160;&#27714;&#20540;&#31215;&#20998;&#23545;&#35937; </span>
+                   <span style="color: #696969;">(</span>add-streams <span style="color: #696969;">(</span>scale-stream integrand dt<span style="color: #696969;">)</span>
+                                int<span style="color: #696969;">))))</span>
+  int<span style="color: #696969;">)</span>
+</pre>
+</div>
+
+<p>
+在 solve 过程中定义 <span class="underline">y</span> 的时候，把  <b>dy 作为延时求值参数</b> 传递 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">solve</span> f y0 dt<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">y</span> <span style="color: #696969;">(</span>integral <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">delay</span> dy<span style="color: #696969;">)</span> y0 dt<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#24310;&#36831;&#27714;&#20540; dy </span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">dy</span> <span style="color: #696969;">(</span>stream-map f y<span style="color: #696969;">))</span>
+  y<span style="color: #696969;">)</span>
+</pre>
+</div>
+
+<pre class="example">
+     调用这个 integral 的过程时需要 delay 被积参数
+</pre>
+
+<p>
+例如，假设 <span class="underline">dy/dt = y</span> ，初始条件为 <span class="underline">y(0) = 1</span> ，求 <span class="underline">t = 1</span> 时候 <span class="underline">y</span> 的值 ：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">dy / dt = y , y(0) = 1</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">y = e ^ t</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">y(1000) = e ^ (0.0001 * 1000) = e </span>
+<span style="color: #696969;">(</span>stream-ref <span style="color: #696969;">(</span>solve <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>y<span style="color: #696969;">)</span> y<span style="color: #696969;">)</span> 1 0.001<span style="color: #696969;">)</span> 1000<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">=&gt; 2.716923932235896 </span>
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgd61e4bd" class="outline-3">
+<h3 id="orgd61e4bd">正则序</h3>
+<div class="outline-text-3" id="text-orgd61e4bd">
+<p>
+显式使用 <span class="underline">delay</span> 和 <span class="underline">force</span>  扩大了流技术的应用范围，也使工作变复杂：
+</p>
+<ul class="org-ul">
+<li>新的 <span class="underline">integral</span>  能模拟更多信号处理系统</li>
+<li>但要求用延时流作为被积对象，使用时也必须显式描述那些参数需要延时求值</li>
+</ul>
+
+<pre class="example">
+     这里为解决同一个问题定义了两个 integral：
+
+     一个采用常规参数，处理简单的规范的情况
+     一个采用延时参数，可以适应更多问题，使用比较麻烦
+</pre>
+
+<p>
+要避免写两个过程的一个办法是 <b>让所有参数都是延时的</b> 。例如换一种求值模型，其中所有的参数都不求值，也就是说，采用 <span class="underline">正则序求值</span> 。正则序的优缺点：
+</p>
+<ul class="org-ul">
+<li>优点：可以得到统一的参数使用方式，很适合流处理的需要</li>
+<li>缺点：它与局部状态的变动不兼容
+<ul class="org-ul">
+<li>正则序将参数求值延迟到使用时， <span class="underline">延时期间发生的赋值可能改变相关对象状态</span> ，影响参数的值，这一情况可能使程序的 <b>语义变得很不清晰</b></li>
+</ul></li>
+</ul>
+</div>
+</div>
 </div>
 
 <div id="outline-container-org9d02d25" class="outline-2">
