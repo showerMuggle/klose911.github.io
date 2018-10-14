@@ -255,7 +255,7 @@ for the JavaScript code in this tag.
 </li>
 <li><a href="#org60738da">应用</a>
 <ul>
-<li><a href="#orgb362c22">惰性序列</a></li>
+<li><a href="#orgb4f901e">流</a></li>
 </ul>
 </li>
 </ul>
@@ -324,11 +324,11 @@ Scheme 采用的是 <span class="underline">应用序</span> 求值，过程应�
 能将过程的某些参数定义为非严格的也很有用。比如：cons（或任何数据结构的构造函数）。非严格参数可以在不知道数据结构某些部分的情况下使用该数据结构， <span class="underline">流模型</span> 就是这样的结构
 </p>
 <pre class="example">
-  在纯的应用序语言里：每个过程对它的每个参数都是严格的
+     在纯的应用序语言里：每个过程对它的每个参数都是严格的
 
-  在纯的正则序语言里：每个复合过程对其每个参数都是非严格的，基本过程对其参数可以是严格的或者非严格的
+     在纯的正则序语言里：每个复合过程对其每个参数都是非严格的，基本过程对其参数可以是严格的或者非严格的
 
-  存在这样的语言，其中程序员可以控制所定义过程对各参数的严格性
+     存在这样的语言，其中程序员可以控制所定义过程对各参数的严格性
 </pre>
 
 <p>
@@ -361,7 +361,7 @@ Scheme 采用的是 <span class="underline">应用序</span> 求值，过程应�
 </ul>
 
 <pre class="example">
-  考虑是否将槽定义为带记忆的，第一次求值记录得到的值，这是一个设计选择！！！
+     考虑是否将槽定义为带记忆的，第一次求值记录得到的值，这是一个设计选择！！！
 </pre>
 
 <p>
@@ -402,7 +402,7 @@ Scheme 采用的是 <span class="underline">应用序</span> 求值，过程应�
 <li>直接把未求值的运算对象表达式送给 apply（前面实现中，是把求值之后的实际参数送给 apply）</li>
 </ul>
 <pre class="example">
-  这里把当前环境送给 apply，是因为它可能需要构造参数槽，而参数槽需要携带表达式的求值环境
+      这里把当前环境送给 apply，是因为它可能需要构造参数槽，而参数槽需要携带表达式的求值环境
 
 </pre>
 <p>
@@ -604,7 +604,7 @@ Scheme 采用的是 <span class="underline">应用序</span> 求值，过程应�
 </div>
 
 <pre class="example">
-  无论有没有记忆，前面修改过的求值器都能工作
+       无论有没有记忆，前面修改过的求值器都能工作
 </pre>
 </div>
 </div>
@@ -639,8 +639,130 @@ ok
 <h2 id="org60738da">应用</h2>
 <div class="outline-text-2" id="text-org60738da">
 </div>
-<div id="outline-container-orgb362c22" class="outline-3">
-<h3 id="orgb362c22">惰性序列</h3>
+<div id="outline-container-orgb4f901e" class="outline-3">
+<h3 id="orgb4f901e">流</h3>
+<div class="outline-text-3" id="text-orgb4f901e">
+<pre class="example">
+研究流计算的时候，流被实现为一种延时的表，其中用了特殊形式 delay 和 cons-stream。该方式的缺点：
+
+1. 需要用特殊形式，特殊形式不是一级对象，无法与高阶函数协作
+2. 流被做为与表类似但又不同的另一类对象，因此需要为流重新实现各种表操作，而且这些操作只能用于流
+</pre>
+
+<p>
+现在采用惰性求值，流和表就一样了，不再需要任何的特殊形式。只需 <b>要求 cons 为非严格</b> 的。做这件事有多种可能方式：
+</p>
+<ul class="org-ul">
+<li>修改求值器 <span class="underline">允许非严格的基本过程</span> ，将 cons 实现为非严格过程</li>
+<li>把 cons 实现为 <span class="underline">复合过程</span></li>
+</ul>
+
+<p>
+最简单的方式是用 <b>过程的方式表示序对</b> ：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">cons</span> x y<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>m<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>m x y<span style="color: #696969;">)))</span>
+
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">car</span> z<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>z <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>p q<span style="color: #696969;">)</span> p<span style="color: #696969;">)))</span>
+
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">cdr</span> z<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>z <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>p q<span style="color: #696969;">)</span> q<span style="color: #696969;">)))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define cons-procedure (cons 1 2))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">cons-procedure ; =&gt; #[compound-procedure 13]</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(car cons-procedure) ; =&gt; 1 </span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">((lambda (m) (m 1 2)) (lambda (p q) p)) ; =&gt; 1</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">((lambda (p q) p) 1 2) ; =&gt; 1</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(cdr cons-procedure) ; =&gt; 2 </span>
+</pre>
+</div>
+
+<p>
+基于这些基本操作，各种 <span class="underline">表操作的标准定义</span> 不仅可以用于 <span class="underline">有穷的表</span> ，也能自然地适用于 <b>无穷的惰性表</b> （ <span class="underline">流</span> ）：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">list-ref</span> items n<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>= n 0<span style="color: #696969;">)</span>
+      <span style="color: #696969;">(</span>car items<span style="color: #696969;">)</span>
+      <span style="color: #696969;">(</span>list-ref <span style="color: #696969;">(</span>cdr items<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>- n 1<span style="color: #696969;">))))</span>
+
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">map</span> proc items<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>null? items<span style="color: #696969;">)</span>
+      '<span style="color: #696969;">()</span>
+      <span style="color: #696969;">(</span>cons <span style="color: #696969;">(</span>proc <span style="color: #696969;">(</span>car items<span style="color: #696969;">))</span>
+            <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">map</span> proc <span style="color: #696969;">(</span>cdr items<span style="color: #696969;">)))))</span>
+
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">scale-list</span> items factor<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">map</span> <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>x<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>* x factor<span style="color: #696969;">))</span>
+       items<span style="color: #696969;">))</span>
+
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">add-lists</span> list1 list2<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">cond</span> <span style="color: #696969;">((</span>null? list1<span style="color: #696969;">)</span> list2<span style="color: #696969;">)</span>
+        <span style="color: #696969;">((</span>null? list2<span style="color: #696969;">)</span> list1<span style="color: #696969;">)</span>
+        <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">else</span> <span style="color: #696969;">(</span>cons <span style="color: #696969;">(</span>+ <span style="color: #696969;">(</span>car list1<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>car list2<span style="color: #696969;">))</span>
+                    <span style="color: #696969;">(</span>add-lists <span style="color: #696969;">(</span>cdr list1<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>cdr list2<span style="color: #696969;">))))))</span>
+</pre>
+</div>
+
+<p>
+定义整数流：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">ones</span> <span style="color: #696969;">(</span>cons 1 ones<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">integers</span> <span style="color: #696969;">(</span>cons 1 <span style="color: #696969;">(</span>add-lists ones integers<span style="color: #696969;">)))</span>
+</pre>
+</div>
+<pre class="example">
+L-Eval input:
+(list-ref integers 17) 
+L-Eval value:
+ 18
+
+</pre>
+
+<p>
+现在的表比前面的流更惰性：
+</p>
+<ul class="org-ul">
+<li>现在表的 car 部分也是延时的，同样直到需要用时才真正求值</li>
+<li>取序对的 car 或 cdr 时都不求值，其求值将延时到真正需要时：
+<ul class="org-ul">
+<li>用作基本过程的参数</li>
+<li>需要打印输出</li>
+</ul></li>
+</ul>
+
+<p>
+惰性序对还能解决流引起的其他问题，讨论流的时候，处理包含了信息反馈的流时，需要显式使用 <span class="underline">delay</span> 操作。而现在一切参数都是延时的，上述情况也不需要特殊处理了
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">integral</span> integrand initial-value dt<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">int</span>
+    <span style="color: #696969;">(</span>cons initial-value
+          <span style="color: #696969;">(</span>add-lists <span style="color: #696969;">(</span>scale-list integrand dt<span style="color: #696969;">)</span>
+                     int<span style="color: #696969;">)))</span>
+  int<span style="color: #696969;">)</span>
+
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">solve</span> f y0 dt<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">y</span> <span style="color: #696969;">(</span>integral dy y0 dt<span style="color: #696969;">))</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">dy</span> <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">map</span> f y<span style="color: #696969;">))</span>
+  y<span style="color: #696969;">)</span>
+</pre>
+</div>
+
+<pre class="example">
+L-Eval input:
+(list-ref (solve (lambda (x) x) 1 0.001) 1000)
+L-Eval value:
+2.716923932235896
+
+</pre>
+</div>
 </div>
 </div>
 </div>

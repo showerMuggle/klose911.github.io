@@ -313,12 +313,17 @@
 ;; set up environment ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;
 (define primitive-procedures
-  (list (list 'car car)
-        (list 'cdr cdr)
-        (list 'cons cons)
-        (list 'null? null?)
+  (list (list 'null? null?)
 	(list '+ +)
+	(list '- -)
+	(list '* *)
+	(list '/ /)
 	(list '> >)
+	(list '< <)
+	(list '= =)
+	;; (list 'car car)
+        ;; (list 'cdr cdr)
+	;; (list 'cons cons) 
 	;;      more primitives
         ))
 
@@ -553,3 +558,72 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 'LAZY-METACIRCULAR-EVALUATOR-LOADED
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; stream implementation ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(define (cons x y)
+  (lambda (m) (m x y)))
+
+(define (car z)
+  (z (lambda (p q) p)))
+
+(define (cdr z)
+  (z (lambda (p q) q)))
+
+;; (define cons-procedure (cons 1 2))
+;; cons-procedure ; => #[compound-procedure 13]
+
+;; (car cons-procedure) ; => 1 
+;; ((lambda (m) (m 1 2)) (lambda (p q) p)) ; => 1
+;; ((lambda (p q) p) 1 2) ; => 1
+
+;; (cdr cons-procedure) ; => 2 
+
+;;; stream test 
+(define (list-ref items n)
+  (if (= n 0)
+      (car items)
+      (list-ref (cdr items) (- n 1))))
+
+(define (map proc items)
+  (if (null? items)
+      '()
+      (cons (proc (car items))
+            (map proc (cdr items)))))
+
+(define (scale-list items factor)
+  (map (lambda (x) (* x factor))
+       items))
+
+(define (add-lists list1 list2)
+  (cond ((null? list1) list2)
+        ((null? list2) list1)
+        (else (cons (+ (car list1) (car list2))
+                    (add-lists (cdr list1) (cdr list2))))))
+
+;; (define ones (cons 1 ones))
+;; (define integers (cons 1 (add-lists ones integers)))
+
+;;; L-Eval input:
+;; (list-ref integers 17) 
+;;; L-Eval value:
+;;  18
+
+;;; integral test 
+;; (define (integral integrand initial-value dt)
+;;   (define int
+;;     (cons initial-value
+;;           (add-lists (scale-list integrand dt)
+;;                      int)))
+;;   int)
+
+;; (define (solve f y0 dt)
+;;   (define y (integral dy y0 dt))
+;;   (define dy (map f y))
+;;   y)
+
+;;; L-Eval input:
+;; (list-ref (solve (lambda (x) x) 1 0.001) 1000)
+;;; L-Eval value:
+;; 2.716923932235896
