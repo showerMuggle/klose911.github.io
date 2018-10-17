@@ -1,0 +1,405 @@
+#+TITLE: 逻辑求值器
+#+HTML_HEAD: <link rel="stylesheet" type="text/css" href="css/main.css" />
+#+OPTIONS: num:nil timestamp:nil 
+
+*数学* 处理 _说明式_ 知识， *计算机* 科学处理 _命令式_ 知识：
++ 程序语言要求用 _算法的方式_ 描述解决问题过程
++ 实际上程序语言也常提供一些 _说明性描述_ 方式：
+  + 用户可以省去计算过程的很多细节描述，例如输出函数的格式描述
+
+#+BEGIN_EXAMPLE
+  多数程序语言要求用定义数学函数的方式组织程序：
+
+  程序描述的是“怎么做”
+  所描述的计算有明确方向，从输入到输出
+  描述函数关系的表达式，也给出了计算出结果的方法
+  定义的过程完成从参数到结果的计算
+#+END_EXAMPLE
+
+同样也有些例外。比如：
++ _约束传递_ 系统中的计算对象是约束关系，没有明确的计算方向和顺序，其基础系统要做很多工作来支持计算
++ _非确定性_ 程序求值器里的表达式可有多个值，求值器设法根据表达式描述的关系找出满足要求的
+
+* 逻辑式程序设计
+  *逻辑程序设计* 可看作上面想法的一种推广，它基于 _关系模型_ 和称为 _合一_ 的重要操作，其编程就是用 *逻辑公式描述事物之间的约束关系* （属于“是什么”的范畴），支持 *多重结果和无确定方向* 的计算
+
+  #+BEGIN_EXAMPLE
+    逻辑程序设计特别适合一些应用领域的需要
+
+    如数据库查询语言 Datalog ，支持查询基于已有事实的隐含事实
+  #+END_EXAMPLE
+
+  一个“是什么”的描述可能蕴涵许多“怎样做”的过程，比如：
+
+  #+BEGIN_SRC scheme
+  (define (append x y)
+    (if (null? x)
+	y
+	(cons (car x) (append (cdr x) y))))
+  #+END_SRC
+
+  可以认为，这个程序表达的是两条规则：
+  1. 对任何一个表 y，空表与其拼接得到的表就是 y 本身
+  2. 对任何表 u, v, y, z： _(cons u v)_  与 _y_ 拼接得到 _(cons u z)_ 的条件是 *v 与 y  的 _append_  是 z* 
+
+
+
+  - append _过程_ 定义和两条 _规则_ 都可以回答下面问题：
+    + 找出 (a b) 和 (c d) 的 append
+  - 然而这两条 *规则* 还可以回答下面问题（但 append  _过程_ 不行）：
+    + 找出一个表 y 使 (a b) 与它的拼接能得到 (a b c d)
+    + 找出所有拼接起来能得到 (a b c d) 的表 x 和 y
+
+  在逻辑式程序语言里，可以写出与上面两条规则直接对应的表达式，求值器可以基于它得到上述几个问题的解
+
+  #+BEGIN_EXAMPLE
+    各种逻辑语言（包括下面介绍的）都有缺陷，简单提供“做什么”知识
+
+    有时会使求值器陷入无穷循环或产生非用户希望的行为
+  #+END_EXAMPLE
+
+** 演绎信息检索
+   逻辑式编程语言特别适合用作 _数据库接口_ ，完成 *复杂的信息检索* 。 _查询语言_ 就是为此设计的，先用一个实例展示逻辑式编程的使用：
+
+*** 简单数据库
+    设 Microshaft 公司（位于波士顿的高科技公司）需要人事数据库，逻辑式语言不仅能做数据导向的信息访问，还能基于已有数据做推理
+
+    数据库内容是有关公司人事的断言，有许多描述各种事实的断言。Ben 是公司的计算机专家，关于他的断言如下：
+
+    #+BEGIN_SRC scheme
+  (address (Bitdiddle Ben) (Slumerville (Ridge Road) 10))
+
+  (job (Bitdiddle Ben) (computer wizard))
+
+  (salary (Bitdiddle Ben) 60000)
+    #+END_SRC
+
+    + 在形式上，每个断言是一个表，其元素还可以是表
+    + 一个断言描述一个客观事实
+
+    Ben 管理公司的计算机分部，管理两个程序员和一个计算机技师：
+
+    #+BEGIN_SRC scheme
+  (address (Hacker Alyssa P) (Cambridge (Mass Ave) 78))
+  (job (Hacker Alyssa P) (computer programmer))
+  (salary (Hacker Alyssa P) 40000)
+  (supervisor (Hacker Alyssa P) (Bitdiddle Ben))
+
+  (address (Fect Cy D) (Cambridge (Ames Street) 3))
+  (job (Fect Cy D) (computer programmer))
+  (salary (Fect Cy D) 35000)
+  (supervisor (Fect Cy D) (Bitdiddle Ben))
+
+  (address (Tweakit Lem E) (Boston (Bay State Road) 22))
+  (job (Tweakit Lem E) (computer technician))
+  (salary (Tweakit Lem E) 25000)
+  (supervisor (Tweakit Lem E) (Bitdiddle Ben))
+    #+END_SRC
+
+    Hacker Alyssa 管着一个实习程序员：
+    #+BEGIN_SRC scheme
+  (address (Reasoner Louis) (Slumerville (Pine Tree Road) 80))
+  (job (Reasoner Louis) (computer programmer trainee))
+  (salary (Reasoner Louis) 30000)
+  (supervisor (Reasoner Louis) (Hacker Alyssa P))
+    #+END_SRC
+
+    #+BEGIN_EXAMPLE
+      计算机分部所有人员的职务的第一个符号都是 computer
+    #+END_EXAMPLE
+
+    Ben 是公司的高级雇员，其上司是公司大老板 Oliver：
+    #+BEGIN_SRC scheme
+  (supervisor (Bitdiddle Ben) (Warbucks Oliver))
+  (address (Warbucks Oliver) (Swellesley (Top Heap Road)))
+  (job (Warbucks Oliver) (administration big wheel))
+  (salary (Warbucks Oliver) 150000)
+    #+END_SRC
+
+    公司有一个财务分部，人员包括一个主管会计和一个助手：
+    #+BEGIN_SRC scheme
+  (address (Scrooge Eben) (Weston (Shady Lane) 10))
+  (job (Scrooge Eben) (accounting chief accountant))
+  (salary (Scrooge Eben) 75000)
+  (supervisor (Scrooge Eben) (Warbucks Oliver))
+
+  (address (Cratchet Robert) (Allston (N Harvard Street) 16))
+  (job (Cratchet Robert) (accounting scrivener))
+  (salary (Cratchet Robert) 18000)
+  (supervisor (Cratchet Robert) (Scrooge Eben))
+    #+END_SRC
+
+    老板有一个秘书：
+    #+BEGIN_SRC scheme
+  (address (Aull DeWitt) (Slumerville (Onion Square) 5))
+  (job (Aull DeWitt) (administration secretary))
+  (salary (Aull DeWitt) 25000)
+  (supervisor (Aull DeWitt) (Warbucks Oliver))
+    #+END_SRC
+
+    还有一些断言说明各种人能从事的工作之间的关系：
+    + 计算机专家可以做程序员和技师的工作：
+    #+BEGIN_SRC scheme
+  (can-do-job (computer wizard) (computer programmer))
+  (can-do-job (computer wizard) (computer technician))
+    #+END_SRC
+    + 程序员可以做实习程序员的工作：
+    #+BEGIN_SRC scheme
+  (can-do-job (computer programmer)
+	      (computer programmer trainee))
+    #+END_SRC
+    + 秘书可以做老板的工作：
+    #+BEGIN_SRC scheme
+  (can-do-job (administration secretary)
+	      (administration big wheel))
+    #+END_SRC
+
+*** 简单查询
+    要查询数据库里的信息，只需在提示符下输入查询。如：
+    #+BEGIN_EXAMPLE
+      ;;; Query input:
+      (job ?x (computer programmer))
+
+      ;;; Query results:
+      (job (Hacker Alyssa P) (computer programmer))
+      (job (Fect Cy D) (computer programmer))
+    #+END_EXAMPLE
+
+    + 查询语句描述要 *查询信息的模式* ，其中有些项是 _具体信息_ ： 
+      + _问号开头的模式变量_ 项（上面 ?x ）可与任何东西匹配
+    + 系统响应查询时，给出 *数据库里与查询模式 _匹配的所有_ 条目* 
+
+    + 需要区分 _多个匹配_ 和 _同一匹配的多次_ 出现，因此 *模式变量需要名字* ： 
+    #+BEGIN_EXAMPLE
+      (address ?x ?y) : 系统列出所有雇员的地址条目
+    #+END_EXAMPLE
+
+    + 如果查询中没有变量，就相当于问相应事实是否存在
+    + 同一模式变量可在一个查询里出现多次，表示需要 _同一匹配_ ：
+    #+BEGIN_EXAMPLE
+      (supervisor ?x ?x) ：要求给出所有自己管自己的雇员的条目
+    #+END_EXAMPLE
+
+    列出所有从事计算机工作的雇员：
+    #+BEGIN_SRC scheme
+  (job ?x (computer ?type))
+    #+END_SRC
+
+    系统响应是：
+    #+BEGIN_EXAMPLE
+      (job (Bitdiddle Ben) (computer wizard))
+      (job (Hacker Alyssa P) (computer programmer))
+      (job (Fect Cy D) (computer programmer))
+      (job (Tweakit Lem E) (computer technician))
+    #+END_EXAMPLE
+
+    由于 _?type_ 只能匹配一个项，他不匹配：
+    #+BEGIN_EXAMPLE
+      (job (Reasoner Louis) (computer programmer trainee))
+    #+END_EXAMPLE
+
+    如果希望匹配第一个元素是 _computer_  的 *所有条目* ，应写：
+    #+BEGIN_SRC scheme
+  (job ?x (computer . ?type))
+    #+END_SRC
+
+    *(computer . ?type)* 能匹配 _(computer programmer trainee)_ ，也能匹配 _(computer technician)_ 和 _(computer)_  
+
+**** 总结
+     + 设法找出使查询语句中的模式变量满足查询模式的所有赋值，即找出这些变量的所有可能指派（具体表达式），使得把模式中的变量代换为具体表达式后得到的条目在数据库里
+     + 对查询的响应是列出数据库里所有满足模式的条目，用找到的所有可能赋值对查询模式实例化，显示得到的结果
+     + 如果查询模式里无变量，就简化为对该查询是否出现在数据库里的检验。相应的赋值是空赋值
+
+*** 复合查询
+    简单查询是基本操作，可以在其基础上构造 *复合查询* 。查询语言的组合手段是连接词 _and_ ,  _or_ 和 _not_ 
+    #+BEGIN_EXAMPLE
+    注意：这些组合手段不是 Scheme 内部操作
+    #+END_EXAMPLE
+    对复合查询，系统也是 *设法找出所有能满足它的赋值* ，并显示用这些赋值实例化查询模式得到的结果
+
+**** and 查询
+     and 复合的一般形式：
+
+     #+BEGIN_EXAMPLE
+       (and <query1><query2> ... <queryn>)
+     #+END_EXAMPLE
+
+     要求找到的变量赋值满足 _(and <query1><query2> ... <queryn>)_ 中的 *每个* 查询。比如找出所有程序员的住址：
+     #+BEGIN_SRC scheme
+  (and (job ?person (computer programmer))
+       (address ?person ?where))
+     #+END_SRC
+
+     返回的响应是：
+     #+BEGIN_EXAMPLE
+       (and (job (Hacker Alyssa P) (computer programmer))
+	    (address (Hacker Alyssa P) (Cambridge (Mass Ave) 78)))
+       (and (job (Fect Cy D) (computer programmer))
+	    (address (Fect Cy D) (Cambridge (Ames Street) 3)))
+     #+END_EXAMPLE
+
+**** or 查询
+     or 复合的一般形式：
+     #+BEGIN_EXAMPLE
+       (or <query1><query2> ... <queryn>)
+     #+END_EXAMPLE
+
+     要求找出所有能满足 _(or <query1><query2> ... <queryn>)_  *之一* 的赋值，给出用这些赋值实例化的结果。比如：得到由Ben Bitdiddle 或 Alyssa P. Hacker 管理的雇员名单：
+
+     #+BEGIN_SRC scheme
+  (or (supervisor ?x (Bitdiddle Ben))
+      (supervisor ?x (Hacker Alyssa P)))
+     #+END_SRC
+
+     查询结果：
+     #+BEGIN_EXAMPLE
+       (or (supervisor (Hacker Alyssa P) (Bitdiddle Ben))
+	   (supervisor (Hacker Alyssa P) (Hacker Alyssa P)))
+       (or (supervisor (Fect Cy D) (Bitdiddle Ben))
+	   (supervisor (Fect Cy D) (Hacker Alyssa P)))
+       (or (supervisor (Tweakit Lem E) (Bitdiddle Ben))
+	   (supervisor (Tweakit Lem E) (Hacker Alyssa P)))
+       (or (supervisor (Reasoner Louis) (Bitdiddle Ben))
+	   (supervisor (Reasoner Louis) (Hacker Alyssa P)))
+     #+END_EXAMPLE
+
+**** not 查询
+     not 查询的一般形式为：
+     #+BEGIN_EXAMPLE
+       (not <query>)
+     #+END_EXAMPLE
+
+     要求得到所有使 _<query>_   *不成立* 的赋值。比如，要求找出 Ben 管的所有人中的非程序员：
+
+     #+BEGIN_SRC scheme
+  (and (supervisor ?x (Bitdiddle Ben))
+       (not (job ?x (computer programmer))))
+     #+END_SRC
+
+**** lisp-value
+     _lisp-value_ 的一般形式：
+     #+BEGIN_EXAMPLE
+       (lisp-value <predicate><arg1> ... <argn>)
+     #+END_EXAMPLE
+
+     第一参数 _<predicate>_ 是一个Lisp 谓词。要求将 *谓词作用于后面的参数* （ _赋值后得到的值_ ）， 选出使 *谓词为真* 的所有赋值。比如：选出所有工资高于 30000 的人
+
+     #+BEGIN_SRC scheme
+  (and (salary ?person ?amount)
+       (lisp-value > ?amount 30000))
+     #+END_SRC
+
+     利用 _lisp-value_  可以很灵活地描述各种查询
+
+*** 规则
+    查询语言的 *抽象手段* 是 _建立规则_ ，比如， _两个不同的人住得很近_ 的规则就是：  _他们住在同一个town_ 
+    #+BEGIN_SRC scheme
+  (rule (lives-near ?person-1 ?person-2)
+	(and (address ?person-1 (?town . ?rest-1))
+	     (address ?person-2 (?town . ?rest-2))
+	     (not (same ?person-1 ?person-2))))
+    #+END_SRC
+
+    _同一个_ 表达成规则：
+    #+BEGIN_SRC scheme
+  (rule (same ?x ?x))
+    #+END_SRC
+
+    组织里的大人物：如果被其管理的人还管别人 
+    #+BEGIN_SRC scheme
+  (rule (wheel ?person)
+	(and (supervisor ?middle-manager ?person)
+	     (supervisor ?x ?middle-manager)))
+    #+END_SRC
+
+    规则的一般形式是：
+    #+BEGIN_EXAMPLE
+      (rule <conclusion> <body>)
+    #+END_EXAMPLE
+
+    其中 _<conclusion>_ 是 *模式* ， _<body>_ 是任何形式的 *查询* 。可以认为一条规则表示了很大（甚至无穷大）的一个断言集，其元素是 *由 <conclusion>求出的所有满足<body> 的赋值* 
+
+    简单查询：
+    + 如果其中变量的某个赋值 *满足某查询模式* ，那么用这个赋值实例化模式得到的断言一定在数据库里
+    + 但满足规则的断言不一定实际存在在数据库里，有可能是推导出的事实
+
+    比如，找出所有住在 Bitdiddle Ben 附近的雇员：
+    #+BEGIN_SRC scheme
+  (lives-near ?x (Bitdiddle Ben))
+    #+END_SRC
+
+    返回结果：
+    #+BEGIN_EXAMPLE
+      (lives-near (Reasoner Louis) (Bitdiddle Ben))
+      (lives-near (Aull DeWitt) (Bitdiddle Ben))
+    #+END_EXAMPLE
+
+    找出所有住在 Bitdiddle Ben 附近的程序员：
+    #+BEGIN_SRC scheme
+  (and (job ?x (computer programmer))
+       (lives-near ?x (Bitdiddle Ben)))
+    #+END_SRC
+
+    与复合过程类似， *已定义的规则可以用于定义新规则* 。例如：
+    #+BEGIN_SRC scheme
+  (rule (outranked-by ?staff-person ?boss)
+	(or (supervisor ?staff-person ?boss)
+	    (and (supervisor ?staff-person ?middle-manager)
+		 (outranked-by ?middle-manager ?boss))))
+    #+END_SRC
+
+    这是一条递归定义的规则： 
+    + _一个职员是某老板的下级_
+    + _如果该老板是其主管，或者（递归的）其主管是该老板的下级_ 
+
+*** 逻辑程序
+    规则可看作 _逻辑蕴涵式_ ： 若对 _所有模式变量的赋值能满足一条规则的身体_ ，那么它就满足其结论。查询语言就是 *基于规则做逻辑推理* 
+
+    考虑 append 的例子，描述它的规则说：
+    + 对任何表 y，空表与它 append 得到的就是 y 本身
+    + 对任何表 u, v, y, z，(cons u v) 与 y 的 append 是 (cons u z) 的条件：v 与 y 的 append 是 z
+
+    用查询语言描述，需要 *描述关系*  (append-to-form x y z) ，直观解释是 “x 和 y 的拼接得到 z”。用规则定义是：
+
+    #+BEGIN_SRC scheme
+  (rule (append-to-form () ?y ?y))
+
+  (rule (append-to-form (?u . ?v) ?y (?u . ?z))
+	(append-to-form ?v ?y ?z))
+    #+END_SRC
+
+    1. 第一条规则 _没有体_ ，说明它 *对任何 y 成立* 
+    2. 第二条规是 *递归定义* 的
+       + 注意：这里用了表的 _点号_ 形式
+
+    有了上面有关 _append-to-form_   的规则，可以做许多查询：
+
+    '(a b) 和 '(c d) 做 append 的结果
+    #+BEGIN_SRC scheme
+  ;;; Query input:
+  (append-to-form (a b) (c d) ?z)
+  ;;; Query results:
+  (append-to-form (a b) (c d) (a b c d))
+    #+END_SRC
+
+    什么和 '(a b) 做 append 会返回 '(a b c d)
+    #+BEGIN_SRC scheme
+  ;;; Query input:
+  (append-to-form (a b) ?y (a b c d))
+  ;;; Query results:
+  (append-to-form (a b) (c d) (a b c d))
+    #+END_SRC
+
+    x 和 y 做 append 会返回 '(a b c d)， x, y 的值是什么：
+    #+BEGIN_SRC scheme
+  ;;; Query input:
+  (append-to-form ?x ?y (a b c d))
+  ;;; Query results:
+  (append-to-form () (a b c d) (a b c d))
+  (append-to-form (a) (b c d) (a b c d))
+  (append-to-form (a b) (c d) (a b c d))
+  (append-to-form (a b c) (d) (a b c d))
+  (append-to-form (a b c d) () (a b c d))
+    #+END_SRC
+
+* 实现
