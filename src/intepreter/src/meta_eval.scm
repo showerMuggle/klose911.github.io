@@ -781,3 +781,14 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 'METACIRCULAR-EVALUATOR-LOADED
+
+;; (define (inc1 x0)
+;;   (begin (define x x0)
+;; 	 (lambda ()
+;; 	   (begin (set! x (+ x 1)) 
+;; 		  x))))
+
+;; (define inc1-init-10 (inc1 10))
+
+;; (inc1-init-10) ; => 11
+;; (inc1-init-10) ; => 12
