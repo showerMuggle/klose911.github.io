@@ -953,9 +953,83 @@
 		    (fetch-assertions pattern frame))) ; 从数据库获取断言的流
 #+END_SRC
 
+_check-an-assertion_ : 对一个 _断言_ 调用 *匹配过程*
++ 成功时：返回包含 _一个扩充框架的流_
++ 不成功：返回 _空流_ 
+
+#+BEGIN_SRC scheme
+  (define (check-an-assertion assertion query-pat query-frame)
+    (let ((match-result
+	   (pattern-match query-pat assertion query-frame))) ; 调用匹配器
+      (if (eq? match-result 'failed) 
+	  the-empty-stream ; 失败返回空流
+	  (singleton-stream match-result)))) ; 成功包含 一个扩充框架的流
+#+END_SRC
+***  基本匹配器
+_pattern-match_ 是 *基本匹配器* ：
++ 匹配失败：返回符号 _failed_
++ 成功返回： *扩充的框架* 
+
+这里按 *结构递归地匹配* ：
+#+BEGIN_SRC scheme
+  (define (pattern-match pat dat frame) 
+    (cond ((eq? frame 'failed) 'failed)
+	  ((equal? pat dat) frame) ; 相同时，匹配成功，直接返回原框架
+	  ((var? pat) (extend-if-consistent pat dat frame)) ; 模式是个变量，基于 frame 和新约束做扩充，检查是否协调
+	  ((and (pair? pat) (pair? dat)) 
+	   (pattern-match (cdr pat) ; 递归匹配模式和数据的cdr 部分
+			  (cdr dat)
+			  (pattern-match (car pat)
+					 (car dat)
+					 frame))) ; 以匹配 car 部分得到的可能，扩充的框架作为框架
+	  (else 'failed)))
+#+END_SRC
+
++ _extend-if-consistent_ 
+#+BEGIN_SRC scheme
+  (define (extend-if-consistent var dat frame)
+    (let ((binding (binding-in-frame var frame))) ; 找出 var 在 frame 里的约束
+      (if binding
+	  (pattern-match (binding-value binding) dat frame) ; 检查是否匹配 
+	  (extend var dat frame)))) ; var 无约束，把新约束加入frame
+#+END_SRC
+
++ 在 _var_  和 _dat_ 的 _约束_ 与 _frame_ 里的 _约束_ *兼容* 时产生扩充的框架
++ 如果 _var_ 在 _frame_ 里已有约束，只有 *这一 _约束_ 和现数据 _dat_ 匹配* 时，整个匹配才成功
+   + _(binding-value binding)_ ： *取出的已有匹配里还可能有变量* （由 _合一得到的约束_ ） 
+
+#+BEGIN_EXAMPLE
+  目前框架里 ?x 约束到 (f ?y) 而 ?y 无约束，现在想加入 ?x 与 (f b) 的约束来扩大框架
+
+  这一过程在框架里查找 ?x ，并发现它已约束到 (f ?y)
+
+  这导致要在同一框架里做(f ?y) 与新值 (f b) 的匹配，最终将 ?y 到 b 的约束加入框架
+
+  变量 ?x 仍约束到 (f ?y)
+#+END_EXAMPLE
+
+匹配中已有的约束绝不改变，也不会出现一个变量有多个约束的情况
 
 *** 点号模式
+如果模式中有 *圆点* ，圆点后面应是一个模式变量，该变量将与数据表的 *剩下部分* 匹配（而不是与 _下一元素_ 匹配）
+#+BEGIN_EXAMPLE
+  虽然在模式匹配器没专门处理圆点，但却能正确工作
+
+  因为模式和数据都用 Scheme 的表表示，圆点自然有合适意义
+#+END_EXAMPLE
+
+read 读查询时遇到圆点就把下一个项作为所构造表达式的 cdr。例如：
++ 读入模式 _(computer ?type)_ ，read产生的表结构相当于对表达式 _(cons 'computer (cons '?type '()))_ 求值产生的结构
++ 读入模式 _(computer . ?type)_ 时，产生的结构相当于对表达式 _(cons 'computer '?type)_ 求值产生出的结构
+
+#+BEGIN_EXAMPLE
+  如果匹配器用模式 (computer . ?type) 去匹配，它将用 ?type 与数据的 cdr 部分匹配
+
+  例如与 (computer programmer trainee) 匹配时，?type 将约束到 (programmer trainee)
+#+END_EXAMPLE
+
 ** 规则合一
+
 ** 数据库操作
 ** 流操作
 ** 语法过程

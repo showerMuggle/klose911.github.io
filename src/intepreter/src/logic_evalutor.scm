@@ -93,6 +93,31 @@
                     (check-an-assertion datum pattern frame)) ; 丢掉不可能匹配的断言
                   (fetch-assertions pattern frame))) ; 从数据库获取断言的流
 
+(define (check-an-assertion assertion query-pat query-frame)
+  (let ((match-result
+         (pattern-match query-pat assertion query-frame))) ; 调用匹配器
+    (if (eq? match-result 'failed) 
+        the-empty-stream ; 失败返回空流
+        (singleton-stream match-result)))) ; 成功包含 一个扩充框架的流
+
+(define (pattern-match pat dat frame) 
+  (cond ((eq? frame 'failed) 'failed)
+        ((equal? pat dat) frame) ; 相同时，匹配成功，直接返回原框架
+        ((var? pat) (extend-if-consistent pat dat frame)) ; 模式是个变量，基于 frame 和新约束做扩充，检查是否协调
+        ((and (pair? pat) (pair? dat)) 
+         (pattern-match (cdr pat) ; 递归匹配模式和数据的cdr 部分
+                        (cdr dat)
+                        (pattern-match (car pat)
+                                       (car dat)
+                                       frame))) ; 以匹配 car 部分得到的可能，扩充的框架作为框架
+        (else 'failed)))
+
+(define (extend-if-consistent var dat frame)
+  (let ((binding (binding-in-frame var frame))) ; 找出 var 在 frame 里的约束
+    (if binding
+        (pattern-match (binding-value binding) dat frame) ; 检查是否匹配 
+        (extend var dat frame)))) ; var 无约束，把新约束加入frame
+
 (define (qeval query frame-stream)
   (let ((qproc (get (type query) 'qeval)))
     (if qproc 
