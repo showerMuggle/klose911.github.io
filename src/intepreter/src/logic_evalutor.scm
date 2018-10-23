@@ -85,6 +85,14 @@
 (put 'always-true 'qeval always-true)
 
 
+;;;;;;;;;;;;;;;;;;;
+;; Pattern match ;;
+;;;;;;;;;;;;;;;;;;;
+(define (find-assertions pattern frame)
+  (stream-flatmap (lambda (datum)
+                    (check-an-assertion datum pattern frame)) ; 丢掉不可能匹配的断言
+                  (fetch-assertions pattern frame))) ; 从数据库获取断言的流
+
 (define (qeval query frame-stream)
   (let ((qproc (get (type query) 'qeval)))
     (if qproc 
