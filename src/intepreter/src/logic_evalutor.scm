@@ -118,6 +118,80 @@
         (pattern-match (binding-value binding) dat frame) ; 检查是否匹配 
         (extend var dat frame)))) ; var 无约束，把新约束加入frame
 
+;;;;;;;;;;;
+;; rules ;;
+;;;;;;;;;;;
+(define (apply-a-rule rule query-pattern query-frame)
+  (let ((clean-rule (rename-variables-in rule))) ; 规则里的变量统一改名，使之不会与其他规则冲突
+    (let ((unify-result
+           (unify-match query-pattern
+                        (conclusion clean-rule)
+                        query-frame))) ; 做查询模式和规则结论做合一匹配
+      (if (eq? unify-result 'failed)
+          the-empty-stream
+          (qeval (rule-body clean-rule)
+                 (singleton-stream unify-result)))))) ; 基于得到的 新框架流 做 规则体 的匹配
+
+(define (rename-variables-in rule)
+  (let ((rule-application-id (new-rule-application-id)))
+    (define (tree-walk exp)
+      (cond ((var? exp)
+             (make-new-variable exp rule-application-id))
+            ((pair? exp)
+             (cons (tree-walk (car exp))
+                   (tree-walk (cdr exp))))
+            (else exp)))
+    (tree-walk rule)))
+
+;;;;;;;;;;;;;;;;;;
+;; Unifications ;;
+;;;;;;;;;;;;;;;;;;
+(define (unify-match p1 p2 frame)
+  (cond ((eq? frame 'failed) 'failed)
+        ((equal? p1 p2) frame)
+        ((var? p1) (extend-if-possible p1 p2 frame)) ; 两边都可能是变量
+        ((var? p2) (extend-if-possible p2 p1 frame))  
+        ((and (pair? p1) (pair? p2))
+         (unify-match (cdr p1)
+                      (cdr p2)
+                      (unify-match (car p1)
+                                   (car p2)
+                                   frame)))
+        (else 'failed)))
+
+(define (extend-if-possible var val frame)
+  (let ((binding (binding-in-frame var frame)))
+    (cond (binding 
+           (unify-match
+            (binding-value binding) val frame)) ; 若var 已有约束，要求其约束值可与 val 合一    
+          ((var? val)   ; 匹配的另一方也是变量。如果该变量有约束，则要求 var 可与该变量的约束值合一
+           (let ((binding (binding-in-frame val frame)))
+             (if binding
+                 (unify-match
+                  var (binding-value binding) frame)
+                 (extend var val frame))))
+          ((depends-on? val var frame)     ; val 依赖于 var 时匹配失败
+           'failed)
+          (else (extend var val frame)))))
+
+;;; exp : 模式
+;;; var: 变量
+;;; frame: 框架
+(define (depends-on? exp var frame)
+  (define (tree-walk e)
+    (cond ((var? e) ; 是变量
+           (if (equal? var e)  ; 和 var 相同
+               true
+               (let ((b (binding-in-frame e frame))) ; b 是 e 在 frame 里的约束 
+                 (if b
+                     (tree-walk (binding-value b)) ; 检查约束值 是否有依赖
+                     false))))
+          ((pair? e) ; 递归检查每个序对的 car 和 cdr 
+           (or (tree-walk (car e))
+               (tree-walk (cdr e))))
+          (else false)))
+  (tree-walk exp))
+
 (define (qeval query frame-stream)
   (let ((qproc (get (type query) 'qeval)))
     (if qproc 

@@ -1030,6 +1030,114 @@ read 读查询时遇到圆点就把下一个项作为所构造表达式的 cdr�
 
 ** 规则合一
 
+*** 应用规则
+_apply-a-rule_ : 应用一条规则
+
+#+BEGIN_SRC scheme
+  (define (apply-a-rule rule query-pattern query-frame)
+    (let ((clean-rule (rename-variables-in rule))) ; 规则里的变量统一改名，使之不会与其他规则冲突
+      (let ((unify-result
+	     (unify-match query-pattern
+			  (conclusion clean-rule)
+			  query-frame))) ; 做查询模式和规则结论做合一匹配
+	(if (eq? unify-result 'failed)
+	    the-empty-stream
+	    (qeval (rule-body clean-rule)
+		   (singleton-stream unify-result)))))) ; 基于得到的 新框架流 做 规则体 的匹配
+#+END_SRC
+
+_rename-variables-in rule_ : 构造新的“干净”规则
+#+BEGIN_SRC scheme
+  (define (rename-variables-in rule)
+    (let ((rule-application-id (new-rule-application-id)))
+      (define (tree-walk exp)
+	(cond ((var? exp)
+	       (make-new-variable exp rule-application-id))
+	      ((pair? exp)
+	       (cons (tree-walk (car exp))
+		     (tree-walk (cdr exp))))
+	      (else exp)))
+      (tree-walk rule)))
+#+END_SRC
+递归遍历该规则，重命名所有变量（加唯一编号后缀） 
+
+#+BEGIN_EXAMPLE
+  每次应用规则前重新构造一个“干净”规则，比较耗时
+#+END_EXAMPLE
+
+
+*** 合一操作
+合一的不同点就在于 *匹配的两边都可能有变量* ，因此都可能建立约束。与简单匹配的仅有差异在对变量的处理：
+
+#+BEGIN_SRC scheme
+  (define (unify-match p1 p2 frame)
+    (cond ((eq? frame 'failed) 'failed)
+	  ((equal? p1 p2) frame)
+	  ((var? p1) (extend-if-possible p1 p2 frame)) ; 两边都可能是变量
+	  ((var? p2) (extend-if-possible p2 p1 frame))  
+	  ((and (pair? p1) (pair? p2))
+	   (unify-match (cdr p1)
+			(cdr p2)
+			(unify-match (car p1)
+				     (car p2)
+				     frame)))
+	  (else 'failed)))
+#+END_SRC
+
+遇变量时要考虑两种情况，由 _extend-if-possible_ 完成
++ 如果 _另一方也是变量_ ，则需考虑它 *是否已有约束* 
+  + 如果有，就让 *被处理变量取相同约束* 
+  + 否则就直接将其 *约束于另一方变量* 
++ 如果要将 _变量约束于一个模式_ ，而 _模式里有这个变量_ 。那么 *任何赋值都不可能实现这一匹配* ，应作为匹配失败
+
+#+BEGIN_EXAMPLE
+  两模式里都有重复变量，可能出现第二种情况
+
+  匹配 (?x ?x) 和 (?y (a ?y))。先得到了 ?x 约束于 ?y 
+
+  下面要用 ?x 匹配 (a ?y)
+
+  由于 ?x 约束于 ?y，因此要匹配 ?y 和 (a ?y)
+
+  显然这一匹配不可能成功
+#+END_EXAMPLE
+
+#+BEGIN_SRC scheme
+  (define (extend-if-possible var val frame)
+    (let ((binding (binding-in-frame var frame)))
+      (cond (binding 
+	     (unify-match
+	      (binding-value binding) val frame)) ; 若var 已有约束，要求其约束值可与 val 合一    
+	    ((var? val)   ; 匹配的另一方也是变量。如果该变量有约束，则要求 var 可与该变量的约束值合一
+	     (let ((binding (binding-in-frame val frame)))
+	       (if binding
+		   (unify-match
+		    var (binding-value binding) frame)
+		   (extend var val frame))))
+	    ((depends-on? val var frame)     ; val 依赖于 var 时匹配失败
+	     'failed)
+	    (else (extend var val frame)))))
+#+END_SRC
+
+_depends-on?_ 检查一个 _表达式_  *是否依赖* 于一个变量 _?x_ 。这一检查也需要相对于一个 _frame_ 进行，因为可能在模式里出现另一变量 _?y_ ，而 _?y_  在 _frame_ 里的 _约束_ *依赖* 于 _?x_ （还可能继续传递）
+
+#+BEGIN_SRC scheme
+  (define (depends-on? exp var frame)
+    (define (tree-walk e)
+      (cond ((var? e) ; 是变量
+	     (if (equal? var e)  ; 和 var 相同
+		 true
+		 (let ((b (binding-in-frame e frame))) ; b 是 e 在 frame 里的约束 
+		   (if b
+		       (tree-walk (binding-value b)) ; 检查约束值 是否有依赖
+		       false))))
+	    ((pair? e) ; 递归检查每个序对的 car 和 cdr 
+	     (or (tree-walk (car e))
+		 (tree-walk (cdr e))))
+	    (else false)))
+    (tree-walk exp))
+#+END_SRC
+这一检查基本是按结构递归
 ** 数据库操作
 ** 流操作
 ** 语法过程
