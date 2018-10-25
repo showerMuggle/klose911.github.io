@@ -309,6 +309,99 @@
 (define (singleton-stream x)
   (cons-stream x the-empty-stream))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Query Syntax Procedure  ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(define (type exp)
+  (if (pair? exp)
+      (car exp)
+      (error "Unknown expression TYPE" exp)))
+
+(define (contents exp)
+  (if (pair? exp)
+      (cdr exp)
+      (error "Unknown expression CONTENTS" exp)))
+
+(define (assertion-to-be-added? exp)
+  (eq? (type exp) 'assert!))
+
+(define (add-assertion-body exp)
+  (car (contents exp)))
+
+;;; and 
+(define (empty-conjunction? exps) (null? exps))
+(define (first-conjunct exps) (car exps))
+(define (rest-conjuncts exps) (cdr exps))
+;;; or
+(define (empty-disjunction? exps) (null? exps))
+(define (first-disjunct exps) (car exps))
+(define (rest-disjuncts exps) (cdr exps))
+;;; not 
+(define (negated-query exps) (car exps))
+;;; lisp-value
+(define (predicate exps) (car exps))
+(define (args exps) (cdr exps))
+
+(define (rule? statement)
+  (tagged-list? statement 'rule))
+(define (conclusion rule) (cadr rule)) ; 结论
+(define (rule-body rule)
+  (if (null? (cddr rule))
+      '(always-true)
+      (caddr rule))) ; 规则的体
+
+(define (query-syntax-process exp)
+  (map-over-symbols expand-question-mark exp))
+
+(define (map-over-symbols proc exp)
+  (cond ((pair? exp)
+         (cons (map-over-symbols proc (car exp))
+               (map-over-symbols proc (cdr exp))))
+        ((symbol? exp) (proc exp))
+        (else exp)))
+
+(define (expand-question-mark symbol)
+  (let ((chars (symbol->string symbol))) ; 取得 symbol 的名字字符串
+    (if (string=? (substring chars 0 1) "?") ; 名字的第一个字符是否 '?
+        (list '?
+              (string->symbol
+               (substring chars 1 (string-length chars)))) ; 取得 symbol 的名字除去 '? 后的字符串
+        symbol)))
+
+
+(define (var? exp)
+  (tagged-list? exp '?))
+
+(define (constant-symbol? exp) (symbol? exp))
+
+(define rule-counter 0)
+(define (new-rule-application-id)
+  (set! rule-counter (+ 1 rule-counter))
+  rule-counter)
+(define (make-new-variable var rule-application-id)
+  (cons '? (cons rule-application-id (cdr var))))
+
+(define (contract-question-mark variable)
+  (string->symbol
+   (string-append "?" 
+		  (if (number? (cadr variable)) ; 换名变量的特点是表里的第二个元素是数
+		      (string-append (symbol->string (caddr variable))
+				     "-"
+				     (number->string (cadr variable)))
+		      (symbol->string (cadr variable))))))
+
+(define (make-binding variable value)
+  (cons variable value))
+(define (binding-variable binding)
+  (car binding))
+(define (binding-value binding)
+  (cdr binding))
+(define (binding-in-frame variable frame)
+  (assoc variable frame))
+(define (extend variable value frame)
+  (cons (make-binding variable value) frame))
+
 (define (qeval query frame-stream)
   (let ((qproc (get (type query) 'qeval)))
     (if qproc 
