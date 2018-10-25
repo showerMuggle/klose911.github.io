@@ -942,36 +942,36 @@
 
      与 not 和 lisp-value 有关的语法过程（ _选择函数_ ）在后面定义
 ** 模式匹配
-简单查询调用 _find-assertion_ ，返回将参数 _frame_  与 _数据_ 匹配得到的 *框架形成的流* 。其中：
-1. _fetch-assertions_ 返回数据库中断言的流
-2. 用 _pattern_ 和 _frame_ 做  _简单检查_ ， *丢掉明显不可能匹配的断言* 
+   简单查询调用 _find-assertion_ ，返回将参数 _frame_  与 _数据_ 匹配得到的 *框架形成的流* 。其中：
+   1. _fetch-assertions_ 返回数据库中断言的流
+   2. 用 _pattern_ 和 _frame_ 做  _简单检查_ ， *丢掉明显不可能匹配的断言* 
 
-#+BEGIN_SRC scheme
+   #+BEGIN_SRC scheme
   (define (find-assertions pattern frame)
     (stream-flatmap (lambda (datum)
 		      (check-an-assertion datum pattern frame)) ; 丢掉不可能匹配的断言
 		    (fetch-assertions pattern frame))) ; 从数据库获取断言的流
-#+END_SRC
+   #+END_SRC
 
-_check-an-assertion_ : 对一个 _断言_ 调用 *匹配过程*
-+ 成功时：返回包含 _一个扩充框架的流_
-+ 不成功：返回 _空流_ 
+   _check-an-assertion_ : 对一个 _断言_ 调用 *匹配过程*
+   + 成功时：返回包含 _一个扩充框架的流_
+   + 不成功：返回 _空流_ 
 
-#+BEGIN_SRC scheme
+   #+BEGIN_SRC scheme
   (define (check-an-assertion assertion query-pat query-frame)
     (let ((match-result
 	   (pattern-match query-pat assertion query-frame))) ; 调用匹配器
       (if (eq? match-result 'failed) 
 	  the-empty-stream ; 失败返回空流
 	  (singleton-stream match-result)))) ; 成功包含 一个扩充框架的流
-#+END_SRC
+   #+END_SRC
 ***  基本匹配器
-_pattern-match_ 是 *基本匹配器* ：
-+ 匹配失败：返回符号 _failed_
-+ 成功返回： *扩充的框架* 
+    _pattern-match_ 是 *基本匹配器* ：
+    + 匹配失败：返回符号 _failed_
+    + 成功返回： *扩充的框架* 
 
-这里按 *结构递归地匹配* ：
-#+BEGIN_SRC scheme
+    这里按 *结构递归地匹配* ：
+    #+BEGIN_SRC scheme
   (define (pattern-match pat dat frame) 
     (cond ((eq? frame 'failed) 'failed)
 	  ((equal? pat dat) frame) ; 相同时，匹配成功，直接返回原框架
@@ -983,57 +983,57 @@ _pattern-match_ 是 *基本匹配器* ：
 					 (car dat)
 					 frame))) ; 以匹配 car 部分得到的可能，扩充的框架作为框架
 	  (else 'failed)))
-#+END_SRC
+    #+END_SRC
 
-+ _extend-if-consistent_ 
-#+BEGIN_SRC scheme
+    + _extend-if-consistent_ 
+    #+BEGIN_SRC scheme
   (define (extend-if-consistent var dat frame)
     (let ((binding (binding-in-frame var frame))) ; 找出 var 在 frame 里的约束
       (if binding
 	  (pattern-match (binding-value binding) dat frame) ; 检查是否匹配 
 	  (extend var dat frame)))) ; var 无约束，把新约束加入frame
-#+END_SRC
+    #+END_SRC
 
-+ 在 _var_  和 _dat_ 的 _约束_ 与 _frame_ 里的 _约束_ *兼容* 时产生扩充的框架
-+ 如果 _var_ 在 _frame_ 里已有约束，只有 *这一 _约束_ 和现数据 _dat_ 匹配* 时，整个匹配才成功
-   + _(binding-value binding)_ ： *取出的已有匹配里还可能有变量* （由 _合一得到的约束_ ） 
+    + 在 _var_  和 _dat_ 的 _约束_ 与 _frame_ 里的 _约束_ *兼容* 时产生扩充的框架
+    + 如果 _var_ 在 _frame_ 里已有约束，只有 *这一 _约束_ 和现数据 _dat_ 匹配* 时，整个匹配才成功
+      + _(binding-value binding)_ ： *取出的已有匹配里还可能有变量* （由 _合一得到的约束_ ） 
 
-#+BEGIN_EXAMPLE
-  目前框架里 ?x 约束到 (f ?y) 而 ?y 无约束，现在想加入 ?x 与 (f b) 的约束来扩大框架
+    #+BEGIN_EXAMPLE
+      目前框架里 ?x 约束到 (f ?y) 而 ?y 无约束，现在想加入 ?x 与 (f b) 的约束来扩大框架
 
-  这一过程在框架里查找 ?x ，并发现它已约束到 (f ?y)
+      这一过程在框架里查找 ?x ，并发现它已约束到 (f ?y)
 
-  这导致要在同一框架里做(f ?y) 与新值 (f b) 的匹配，最终将 ?y 到 b 的约束加入框架
+      这导致要在同一框架里做(f ?y) 与新值 (f b) 的匹配，最终将 ?y 到 b 的约束加入框架
 
-  变量 ?x 仍约束到 (f ?y)
-#+END_EXAMPLE
+      变量 ?x 仍约束到 (f ?y)
+    #+END_EXAMPLE
 
-匹配中已有的约束绝不改变，也不会出现一个变量有多个约束的情况
+    匹配中已有的约束绝不改变，也不会出现一个变量有多个约束的情况
 
 *** 点号模式
-如果模式中有 *圆点* ，圆点后面应是一个模式变量，该变量将与数据表的 *剩下部分* 匹配（而不是与 _下一元素_ 匹配）
-#+BEGIN_EXAMPLE
-  虽然在模式匹配器没专门处理圆点，但却能正确工作
+    如果模式中有 *圆点* ，圆点后面应是一个模式变量，该变量将与数据表的 *剩下部分* 匹配（而不是与 _下一元素_ 匹配）
+    #+BEGIN_EXAMPLE
+      虽然在模式匹配器没专门处理圆点，但却能正确工作
 
-  因为模式和数据都用 Scheme 的表表示，圆点自然有合适意义
-#+END_EXAMPLE
+      因为模式和数据都用 Scheme 的表表示，圆点自然有合适意义
+    #+END_EXAMPLE
 
-read 读查询时遇到圆点就把下一个项作为所构造表达式的 cdr。例如：
-+ 读入模式 _(computer ?type)_ ，read产生的表结构相当于对表达式 _(cons 'computer (cons '?type '()))_ 求值产生的结构
-+ 读入模式 _(computer . ?type)_ 时，产生的结构相当于对表达式 _(cons 'computer '?type)_ 求值产生出的结构
+    read 读查询时遇到圆点就把下一个项作为所构造表达式的 cdr。例如：
+    + 读入模式 _(computer ?type)_ ，read产生的表结构相当于对表达式 _(cons 'computer (cons '?type '()))_ 求值产生的结构
+    + 读入模式 _(computer . ?type)_ 时，产生的结构相当于对表达式 _(cons 'computer '?type)_ 求值产生出的结构
 
-#+BEGIN_EXAMPLE
-  如果匹配器用模式 (computer . ?type) 去匹配，它将用 ?type 与数据的 cdr 部分匹配
+    #+BEGIN_EXAMPLE
+      如果匹配器用模式 (computer . ?type) 去匹配，它将用 ?type 与数据的 cdr 部分匹配
 
-  例如与 (computer programmer trainee) 匹配时，?type 将约束到 (programmer trainee)
-#+END_EXAMPLE
+      例如与 (computer programmer trainee) 匹配时，?type 将约束到 (programmer trainee)
+    #+END_EXAMPLE
 
 ** 规则合一
 
 *** 应用规则
-_apply-a-rule_ : 应用一条规则
+    _apply-a-rule_ : 应用一条规则
 
-#+BEGIN_SRC scheme
+    #+BEGIN_SRC scheme
   (define (apply-a-rule rule query-pattern query-frame)
     (let ((clean-rule (rename-variables-in rule))) ; 规则里的变量统一改名，使之不会与其他规则冲突
       (let ((unify-result
@@ -1044,10 +1044,10 @@ _apply-a-rule_ : 应用一条规则
 	    the-empty-stream
 	    (qeval (rule-body clean-rule)
 		   (singleton-stream unify-result)))))) ; 基于得到的 新框架流 做 规则体 的匹配
-#+END_SRC
+    #+END_SRC
 
-_rename-variables-in rule_ : 构造新的“干净”规则
-#+BEGIN_SRC scheme
+    _rename-variables-in rule_ : 构造新的“干净”规则
+    #+BEGIN_SRC scheme
   (define (rename-variables-in rule)
     (let ((rule-application-id (new-rule-application-id)))
       (define (tree-walk exp)
@@ -1058,18 +1058,18 @@ _rename-variables-in rule_ : 构造新的“干净”规则
 		     (tree-walk (cdr exp))))
 	      (else exp)))
       (tree-walk rule)))
-#+END_SRC
-递归遍历该规则，重命名所有变量（加唯一编号后缀） 
+    #+END_SRC
+    递归遍历该规则，重命名所有变量（加唯一编号后缀） 
 
-#+BEGIN_EXAMPLE
-  每次应用规则前重新构造一个“干净”规则，比较耗时
-#+END_EXAMPLE
+    #+BEGIN_EXAMPLE
+      每次应用规则前重新构造一个“干净”规则，比较耗时
+    #+END_EXAMPLE
 
 
 *** 合一操作
-合一的不同点就在于 *匹配的两边都可能有变量* ，因此都可能建立约束。与简单匹配的仅有差异在对变量的处理：
+    合一的不同点就在于 *匹配的两边都可能有变量* ，因此都可能建立约束。与简单匹配的仅有差异在对变量的处理：
 
-#+BEGIN_SRC scheme
+    #+BEGIN_SRC scheme
   (define (unify-match p1 p2 frame)
     (cond ((eq? frame 'failed) 'failed)
 	  ((equal? p1 p2) frame)
@@ -1082,27 +1082,27 @@ _rename-variables-in rule_ : 构造新的“干净”规则
 				     (car p2)
 				     frame)))
 	  (else 'failed)))
-#+END_SRC
+    #+END_SRC
 
-遇变量时要考虑两种情况，由 _extend-if-possible_ 完成
-+ 如果 _另一方也是变量_ ，则需考虑它 *是否已有约束* 
-  + 如果有，就让 *被处理变量取相同约束* 
-  + 否则就直接将其 *约束于另一方变量* 
-+ 如果要将 _变量约束于一个模式_ ，而 _模式里有这个变量_ 。那么 *任何赋值都不可能实现这一匹配* ，应作为匹配失败
+    遇变量时要考虑两种情况，由 _extend-if-possible_ 完成
+    + 如果 _另一方也是变量_ ，则需考虑它 *是否已有约束* 
+      + 如果有，就让 *被处理变量取相同约束* 
+      + 否则就直接将其 *约束于另一方变量* 
+    + 如果要将 _变量约束于一个模式_ ，而 _模式里有这个变量_ 。那么 *任何赋值都不可能实现这一匹配* ，应作为匹配失败
 
-#+BEGIN_EXAMPLE
-  两模式里都有重复变量，可能出现第二种情况
+    #+BEGIN_EXAMPLE
+      两模式里都有重复变量，可能出现第二种情况
 
-  匹配 (?x ?x) 和 (?y (a ?y))。先得到了 ?x 约束于 ?y 
+      匹配 (?x ?x) 和 (?y (a ?y))。先得到了 ?x 约束于 ?y 
 
-  下面要用 ?x 匹配 (a ?y)
+      下面要用 ?x 匹配 (a ?y)
 
-  由于 ?x 约束于 ?y，因此要匹配 ?y 和 (a ?y)
+      由于 ?x 约束于 ?y，因此要匹配 ?y 和 (a ?y)
 
-  显然这一匹配不可能成功
-#+END_EXAMPLE
+      显然这一匹配不可能成功
+    #+END_EXAMPLE
 
-#+BEGIN_SRC scheme
+    #+BEGIN_SRC scheme
   (define (extend-if-possible var val frame)
     (let ((binding (binding-in-frame var frame)))
       (cond (binding 
@@ -1117,11 +1117,11 @@ _rename-variables-in rule_ : 构造新的“干净”规则
 	    ((depends-on? val var frame)     ; val 依赖于 var 时匹配失败
 	     'failed)
 	    (else (extend var val frame)))))
-#+END_SRC
+    #+END_SRC
 
-_depends-on?_ 检查一个 _表达式_  *是否依赖* 于一个变量 _?x_ 。这一检查也需要相对于一个 _frame_ 进行，因为可能在模式里出现另一变量 _?y_ ，而 _?y_  在 _frame_ 里的 _约束_ *依赖* 于 _?x_ （还可能继续传递）
+    _depends-on?_ 检查一个 _表达式_  *是否依赖* 于一个变量 _?x_ 。这一检查也需要相对于一个 _frame_ 进行，因为可能在模式里出现另一变量 _?y_ ，而 _?y_  在 _frame_ 里的 _约束_ *依赖* 于 _?x_ （还可能继续传递）
 
-#+BEGIN_SRC scheme
+    #+BEGIN_SRC scheme
   (define (depends-on? exp var frame)
     (define (tree-walk e)
       (cond ((var? e) ; 是变量
@@ -1136,9 +1136,172 @@ _depends-on?_ 检查一个 _表达式_  *是否依赖* 于一个变量 _?x_ 。�
 		 (tree-walk (cdr e))))
 	    (else false)))
     (tree-walk exp))
-#+END_SRC
-这一检查基本是按结构递归
+    #+END_SRC
+    这一检查基本是按结构递归
 ** 数据库操作
+*** 断言表示
+    数据库维护的关键是尽可能 *减少检索时需考察的断言* ：
+    1. 先把 _所有断言_ 存入一个大流
+    2. 把 _car 部分是相同常量的断言_ 存入同一个流，以 _该 car 为索引_ 把流存入一个表格（另一关键码用 _assertion-stream_ ）
+    #+BEGIN_SRC scheme
+  (define THE-ASSERTIONS the-empty-stream)
+
+  (define (fetch-assertions pattern frame)
+    (if (use-index? pattern) ; pattern 的 car 是常量
+	(get-indexed-assertions pattern) ; 到特定的流里去检索
+	(get-all-assertions)))
+
+  (define (get-all-assertions) THE-ASSERTIONS)
+
+  (define (get-indexed-assertions pattern)
+    (get-stream (index-key-of pattern) 'assertion-stream)) 
+    #+END_SRC
+    _get-stream_ : 按 _key1_  和 _key2_  到表格里找相应流，找不到时返回空流
+
+    #+BEGIN_SRC scheme
+  (define (get-stream key1 key2)
+    (let ((s (get key1 key2)))
+      (if s s the-empty-stream)))
+    #+END_SRC
+*** 规则表示
+    规则管理的方式类似，以规则中 _结论部分的car 为索引_ ，将结论的 car 相同的规则的流存入表格（另一关键码是 _rule-stream_ ） 
+
+    #+BEGIN_SRC scheme
+  (define THE-RULES the-empty-stream)
+
+  (define (fetch-rules pattern frame)
+    (if (use-index? pattern)
+	(get-indexed-rules pattern)
+	(get-all-rules)))
+
+  (define (get-all-rules) THE-RULES)
+    #+END_SRC
+
+    _car 是常量的模式_ 可与 _结论的 car 相同的规则_ 匹配，也与 _结论的 car 是变量的规则_ 匹配。为方便处理， *所有结论的 car 是变量的规则存入 _?索引_ 的流* 。与 car 部分是常量的模式匹配的流可能由两个流组成：
+
+    #+BEGIN_SRC scheme
+  (define (get-indexed-rules pattern)
+    (stream-append
+     (get-stream (index-key-of pattern) 'rule-stream)
+     (get-stream '? 'rule-stream))) ; 所有结论的 car 是变量的规则存入 ?索引 的流
+    #+END_SRC
+*** 添加操作
+    加入断言或规则的请求分情况处理：
+    + 不但将它加入 *包含所有断言或规则的主流* 
+    + 还根据其（或结论）的 car 加入 *表格里的支流*
+
+    #+BEGIN_SRC scheme
+  (define (add-rule-or-assertion! assertion)
+    (if (rule? assertion)
+	(add-rule! assertion)
+	(add-assertion! assertion)))
+
+  (define (add-assertion! assertion)
+    (store-assertion-in-index assertion)
+    (let ((old-assertions THE-ASSERTIONS))
+      (set! THE-ASSERTIONS
+	    (cons-stream assertion old-assertions))
+      'ok))
+
+  (define (add-rule! rule)
+    (store-rule-in-index rule)
+    (let ((old-rules THE-RULES))
+      (set! THE-RULES (cons-stream rule old-rules))
+      'ok))
+    #+END_SRC
+
+    加入支流的工作由两个专门过程完成：
+    #+BEGIN_SRC scheme
+  (define (store-assertion-in-index assertion)
+    (if (indexable? assertion)
+	(let ((key (index-key-of assertion)))
+	  (let ((current-assertion-stream
+		 (get-stream key 'assertion-stream)))
+	    (put key
+		 'assertion-stream
+		 (cons-stream assertion
+			      current-assertion-stream))))))
+    #+END_SRC
+
+    #+BEGIN_SRC scheme
+  (define (store-rule-in-index rule)
+    (let ((pattern (conclusion rule)))
+      (if (indexable? pattern)
+	  (let ((key (index-key-of pattern)))
+	    (let ((current-rule-stream
+		   (get-stream key 'rule-stream)))
+	      (put key
+		   'rule-stream
+		   (cons-stream rule
+				current-rule-stream)))))))
+    #+END_SRC
+
+    可以加入某个支流的 _条件_ ：
+    +  *模式的 car 是常量符号* 
+    + 对于 _规则_ ，还有其 *结论（模式）的 car 是模式变量* 的情况：
+
+    #+BEGIN_SRC scheme
+  (define (indexable? pat)
+    (or (constant-symbol? (car pat)) ; 模式的 car 是常量符号
+	(var? (car pat)))) ; 模式（结论）的 car 是模式变量
+    #+END_SRC
+
+    + 模式存入表格用的 _关键码_ 就是 *其 car*
+    + 对于规则的结论模式，如果 _其 car 是模式变量_ ，关键码用 *?* ：
+
+    #+BEGIN_SRC scheme
+  (define (index-key-of pat)
+    (let ((key (car pat)))
+      (if (var? key) '? key))) 
+    #+END_SRC
+
+    如 _模式的 car 是常量符号_ ，就用 *它作为索引* 去提取相应的流用于检索：
+    #+BEGIN_SRC scheme
+  (define (use-index? pat)
+    (constant-symbol? (car pat)))
+    #+END_SRC
+
 ** 流操作
+   查询系统用了几个前面没定义的流操作：
+   + append
+   #+BEGIN_SRC scheme
+  (define (stream-append-delayed s1 delayed-s2)
+    (if (stream-null? s1)
+	(force delayed-s2)
+	(cons-stream
+	 (stream-car s1)
+	 (stream-append-delayed (stream-cdr s1) delayed-s2))))
+   #+END_SRC
+
+   + 交错归并：
+   #+BEGIN_SRC scheme
+  (define (interleave-delayed s1 delayed-s2)
+    (if (stream-null? s1)
+	(force delayed-s2)
+	(cons-stream
+	 (stream-car s1)
+	 (interleave-delayed (force delayed-s2)
+			     (delay (stream-cdr s1)))))) 
+
+   #+END_SRC
+
+   + 把过程 proc 用于 s 的每个元素后将得到的流 *平坦化* ：
+   #+BEGIN_SRC scheme
+  (define (stream-flatmap proc s)
+    (flatten-stream (stream-map proc s)))
+
+  (define (flatten-stream stream)
+    (if (stream-null? stream)
+	the-empty-stream
+	(interleave-delayed
+	 (stream-car stream)
+	 (delay (flatten-stream (stream-cdr stream))))))
+   #+END_SRC
+   + 构造只包含一个元素的流：
+   #+BEGIN_SRC scheme
+  (define (singleton-stream x)
+    (cons-stream x the-empty-stream))
+   #+END_SRC
+
 ** 语法过程
 ** 框架和约束
