@@ -1,21 +1,204 @@
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; LOGIC METACIRCULAR EVALUATOR 					        ;;
-;; 								        ;;
-;; This file can be loaded into Scheme as a whole.		        ;;
-;; Then you can initialize and start the evaluator by evaluating        ;;
-;; the two commented-out lines at the end of the file (setting up the   ;;
-;; global environment and starting the driver loop).		        ;;
-;; 								        ;;
-;; **WARNING: Don't load this file twice (or you'll lose the primitives ;;
-;;  interface, due to renamings of apply).			        ;;
-;; 								        ;;
-;; must precede def of metacircular apply			        ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; LOGIC METACIRCULAR EVALUATOR ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(load "stream.scm")
+(load "operation_table.scm")
 
-;;;;;;;;;;;;;;;;;;
-;; simple query ;;
-;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Query Syntax Procedure  ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(define (type exp)
+  (if (pair? exp)
+      (car exp)
+      (error "Unknown expression TYPE" exp)))
 
+(define (contents exp)
+  (if (pair? exp)
+      (cdr exp)
+      (error "Unknown expression CONTENTS" exp)))
+
+(define (assertion-to-be-added? exp)
+  (eq? (type exp) 'assert!))
+
+(define (add-assertion-body exp)
+  (car (contents exp)))
+
+;;; and 
+(define (empty-conjunction? exps) (null? exps))
+(define (first-conjunct exps) (car exps))
+(define (rest-conjuncts exps) (cdr exps))
+;;; or
+(define (empty-disjunction? exps) (null? exps))
+(define (first-disjunct exps) (car exps))
+(define (rest-disjuncts exps) (cdr exps))
+;;; not 
+(define (negated-query exps) (car exps))
+;;; lisp-value
+(define (predicate exps) (car exps))
+(define (args exps) (cdr exps))
+
+
+;;; rule syntax 
+(define (tagged-list? exp tag)
+  (if (pair? exp)
+      (eq? (car exp) tag)
+      false))
+
+(define (var? exp)
+  (tagged-list? exp '?))
+
+(define (constant-symbol? exp) (symbol? exp))
+
+(define (rule? statement)
+  (tagged-list? statement 'rule))
+(define (conclusion rule) (cadr rule)) ; 结论
+(define (rule-body rule)
+  (if (null? (cddr rule))
+      '(always-true)
+      (caddr rule))) ; 规则的体
+
+(define (query-syntax-process exp)
+  (map-over-symbols expand-question-mark exp))
+
+(define (map-over-symbols proc exp)
+  (cond ((pair? exp)
+         (cons (map-over-symbols proc (car exp))
+               (map-over-symbols proc (cdr exp))))
+        ((symbol? exp) (proc exp))
+        (else exp)))
+
+(define (expand-question-mark symbol)
+  (let ((chars (symbol->string symbol))) ; 取得 symbol 的名字字符串
+    (if (string=? (substring chars 0 1) "?") ; 名字的第一个字符是否 '?
+        (list '?
+              (string->symbol
+               (substring chars 1 (string-length chars)))) ; 取得 symbol 的名字除去 '? 后的字符串
+        symbol)))
+
+(define rule-counter 0)
+(define (new-rule-application-id)
+  (set! rule-counter (+ 1 rule-counter))
+  rule-counter)
+(define (make-new-variable var rule-application-id)
+  (cons '? (cons rule-application-id (cdr var))))
+
+(define (contract-question-mark variable)
+  (string->symbol
+   (string-append "?" 
+		  (if (number? (cadr variable)) ; 换名变量的特点是表里的第二个元素是数
+		      (string-append (symbol->string (caddr variable))
+				     "-"
+				     (number->string (cadr variable)))
+		      (symbol->string (cadr variable))))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;
+;; Mantain Database ;;
+;;;;;;;;;;;;;;;;;;;;;;;
+;;; assertions
+(define THE-ASSERTIONS the-empty-stream)
+
+(define (fetch-assertions pattern frame)
+  (if (use-index? pattern) ; pattern 的 car 是常量
+      (get-indexed-assertions pattern) ; 到特定的流里去检索
+      (get-all-assertions)))
+
+(define (get-all-assertions) THE-ASSERTIONS)
+
+(define (get-indexed-assertions pattern)
+  (get-stream (index-key-of pattern) 'assertion-stream)) 
+
+(define (get-stream key1 key2)
+  (let ((s (get key1 key2)))
+    (if s s the-empty-stream)))
+
+;;; rules
+(define THE-RULES the-empty-stream)
+
+(define (fetch-rules pattern frame)
+  (if (use-index? pattern)
+      (get-indexed-rules pattern)
+      (get-all-rules)))
+
+(define (get-all-rules) THE-RULES)
+
+(define (get-indexed-rules pattern)
+  (stream-append
+   (get-stream (index-key-of pattern) 'rule-stream)
+   (get-stream '? 'rule-stream))) ; 所有结论的 car 是变量的规则存入 ?索引 的流
+
+(define (add-rule-or-assertion! assertion)
+  (if (rule? assertion)
+      (add-rule! assertion)
+      (add-assertion! assertion)))
+
+(define (add-assertion! assertion)
+  (store-assertion-in-index assertion)
+  (let ((old-assertions THE-ASSERTIONS))
+    (set! THE-ASSERTIONS
+          (cons-stream assertion old-assertions))
+    'ok))
+
+(define (add-rule! rule)
+  (store-rule-in-index rule)
+  (let ((old-rules THE-RULES))
+    (set! THE-RULES (cons-stream rule old-rules))
+    'ok))
+
+(define (store-assertion-in-index assertion)
+  (if (indexable? assertion)
+      (let ((key (index-key-of assertion)))
+        (let ((current-assertion-stream
+               (get-stream key 'assertion-stream)))
+          (put key
+               'assertion-stream
+               (cons-stream assertion
+                            current-assertion-stream))))))
+
+(define (store-rule-in-index rule)
+  (let ((pattern (conclusion rule)))
+    (if (indexable? pattern)
+        (let ((key (index-key-of pattern)))
+          (let ((current-rule-stream
+                 (get-stream key 'rule-stream)))
+            (put key
+                 'rule-stream
+                 (cons-stream rule
+                              current-rule-stream)))))))
+
+(define (use-index? pat)
+  (constant-symbol? (car pat)))
+
+(define (indexable? pat)
+  (or (constant-symbol? (car pat)) ; 模式的 car 是常量符号
+      (var? (car pat)))) ; 模式（结论）的 car 是模式变量
+
+(define (index-key-of pat)
+  (let ((key (car pat)))
+    (if (var? key) '? key))) 
+
+;;;;;;;;;;;;;;;;;;;;;;;
+;; binding and frame ;;
+;;;;;;;;;;;;;;;;;;;;;;;
+(define (make-binding variable value)
+  (cons variable value))
+
+(define (binding-variable binding)
+  (car binding))
+
+(define (binding-value binding)
+  (cdr binding))
+
+(define (binding-in-frame variable frame)
+  (assoc variable frame))
+
+(define (extend variable value frame)
+  (cons (make-binding variable value) frame))
+
+;;;;;;;;;;;
+;; Query ;;
+;;;;;;;;;;;
+;;; simple query 
 (define (simple-query query-pattern frame-stream)
   (stream-flatmap ; 把处理各框架得到的流合并为一个流 
    (lambda (frame) 
@@ -121,6 +304,11 @@
 ;;;;;;;;;;;
 ;; rules ;;
 ;;;;;;;;;;;
+(define (apply-rules pattern frame)
+  (stream-flatmap (lambda (rule)
+                    (apply-a-rule rule pattern frame))
+                  (fetch-rules pattern frame)))
+
 (define (apply-a-rule rule query-pattern query-frame)
   (let ((clean-rule (rename-variables-in rule))) ; 规则里的变量统一改名，使之不会与其他规则冲突
     (let ((unify-result
@@ -192,222 +380,14 @@
           (else false)))
   (tree-walk exp))
 
-;;;;;;;;;;;;;;;;;;;;;;;
-;; Mantain Database ;;
-;;;;;;;;;;;;;;;;;;;;;;;
-;;; assertions
-(define THE-ASSERTIONS the-empty-stream)
-
-(define (fetch-assertions pattern frame)
-  (if (use-index? pattern) ; pattern 的 car 是常量
-      (get-indexed-assertions pattern) ; 到特定的流里去检索
-      (get-all-assertions)))
-
-(define (get-all-assertions) THE-ASSERTIONS)
-
-(define (get-indexed-assertions pattern)
-  (get-stream (index-key-of pattern) 'assertion-stream)) 
-
-(define (get-stream key1 key2)
-  (let ((s (get key1 key2)))
-    (if s s the-empty-stream)))
-
-;;; rules
-(define THE-RULES the-empty-stream)
-
-(define (fetch-rules pattern frame)
-  (if (use-index? pattern)
-      (get-indexed-rules pattern)
-      (get-all-rules)))
-
-(define (get-all-rules) THE-RULES)
-
-(define (get-indexed-rules pattern)
-  (stream-append
-   (get-stream (index-key-of pattern) 'rule-stream)
-   (get-stream '? 'rule-stream))) ; 所有结论的 car 是变量的规则存入 ?索引 的流
-
-(define (add-rule-or-assertion! assertion)
-  (if (rule? assertion)
-      (add-rule! assertion)
-      (add-assertion! assertion)))
-
-(define (add-assertion! assertion)
-  (store-assertion-in-index assertion)
-  (let ((old-assertions THE-ASSERTIONS))
-    (set! THE-ASSERTIONS
-          (cons-stream assertion old-assertions))
-    'ok))
-
-(define (add-rule! rule)
-  (store-rule-in-index rule)
-  (let ((old-rules THE-RULES))
-    (set! THE-RULES (cons-stream rule old-rules))
-    'ok))
-
-(define (store-assertion-in-index assertion)
-  (if (indexable? assertion)
-      (let ((key (index-key-of assertion)))
-        (let ((current-assertion-stream
-               (get-stream key 'assertion-stream)))
-          (put key
-               'assertion-stream
-               (cons-stream assertion
-                            current-assertion-stream))))))
-
-(define (store-rule-in-index rule)
-  (let ((pattern (conclusion rule)))
-    (if (indexable? pattern)
-        (let ((key (index-key-of pattern)))
-          (let ((current-rule-stream
-                 (get-stream key 'rule-stream)))
-            (put key
-                 'rule-stream
-                 (cons-stream rule
-                              current-rule-stream)))))))
-
-(define (indexable? pat)
-  (or (constant-symbol? (car pat)) ; 模式的 car 是常量符号
-      (var? (car pat)))) ; 模式（结论）的 car 是模式变量
-
-(define (index-key-of pat)
-  (let ((key (car pat)))
-    (if (var? key) '? key))) 
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; other stream operations  ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(define (stream-append-delayed s1 delayed-s2)
-  (if (stream-null? s1)
-      (force delayed-s2)
-      (cons-stream
-       (stream-car s1)
-       (stream-append-delayed (stream-cdr s1) delayed-s2))))
-
-(define (interleave-delayed s1 delayed-s2)
-  (if (stream-null? s1)
-      (force delayed-s2)
-      (cons-stream
-       (stream-car s1)
-       (interleave-delayed (force delayed-s2)
-                           (delay (stream-cdr s1)))))) 
-
-(define (use-index? pat)
-  (constant-symbol? (car pat)))
-
-(define (stream-flatmap proc s)
-  (flatten-stream (stream-map proc s)))
-
-(define (flatten-stream stream)
-  (if (stream-null? stream)
-      the-empty-stream
-      (interleave-delayed
-       (stream-car stream)
-       (delay (flatten-stream (stream-cdr stream))))))
-
-(define (singleton-stream x)
-  (cons-stream x the-empty-stream))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Query Syntax Procedure  ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(define (type exp)
-  (if (pair? exp)
-      (car exp)
-      (error "Unknown expression TYPE" exp)))
-
-(define (contents exp)
-  (if (pair? exp)
-      (cdr exp)
-      (error "Unknown expression CONTENTS" exp)))
-
-(define (assertion-to-be-added? exp)
-  (eq? (type exp) 'assert!))
-
-(define (add-assertion-body exp)
-  (car (contents exp)))
-
-;;; and 
-(define (empty-conjunction? exps) (null? exps))
-(define (first-conjunct exps) (car exps))
-(define (rest-conjuncts exps) (cdr exps))
-;;; or
-(define (empty-disjunction? exps) (null? exps))
-(define (first-disjunct exps) (car exps))
-(define (rest-disjuncts exps) (cdr exps))
-;;; not 
-(define (negated-query exps) (car exps))
-;;; lisp-value
-(define (predicate exps) (car exps))
-(define (args exps) (cdr exps))
-
-(define (rule? statement)
-  (tagged-list? statement 'rule))
-(define (conclusion rule) (cadr rule)) ; 结论
-(define (rule-body rule)
-  (if (null? (cddr rule))
-      '(always-true)
-      (caddr rule))) ; 规则的体
-
-(define (query-syntax-process exp)
-  (map-over-symbols expand-question-mark exp))
-
-(define (map-over-symbols proc exp)
-  (cond ((pair? exp)
-         (cons (map-over-symbols proc (car exp))
-               (map-over-symbols proc (cdr exp))))
-        ((symbol? exp) (proc exp))
-        (else exp)))
-
-(define (expand-question-mark symbol)
-  (let ((chars (symbol->string symbol))) ; 取得 symbol 的名字字符串
-    (if (string=? (substring chars 0 1) "?") ; 名字的第一个字符是否 '?
-        (list '?
-              (string->symbol
-               (substring chars 1 (string-length chars)))) ; 取得 symbol 的名字除去 '? 后的字符串
-        symbol)))
-
-
-(define (var? exp)
-  (tagged-list? exp '?))
-
-(define (constant-symbol? exp) (symbol? exp))
-
-(define rule-counter 0)
-(define (new-rule-application-id)
-  (set! rule-counter (+ 1 rule-counter))
-  rule-counter)
-(define (make-new-variable var rule-application-id)
-  (cons '? (cons rule-application-id (cdr var))))
-
-(define (contract-question-mark variable)
-  (string->symbol
-   (string-append "?" 
-		  (if (number? (cadr variable)) ; 换名变量的特点是表里的第二个元素是数
-		      (string-append (symbol->string (caddr variable))
-				     "-"
-				     (number->string (cadr variable)))
-		      (symbol->string (cadr variable))))))
-
-(define (make-binding variable value)
-  (cons variable value))
-(define (binding-variable binding)
-  (car binding))
-(define (binding-value binding)
-  (cdr binding))
-(define (binding-in-frame variable frame)
-  (assoc variable frame))
-(define (extend variable value frame)
-  (cons (make-binding variable value) frame))
-
+;;;;;;;;;;;;;;;;;;;;;
+;; query evalutor  ;;
+;;;;;;;;;;;;;;;;;;;;;
 (define (qeval query frame-stream)
   (let ((qproc (get (type query) 'qeval)))
     (if qproc 
         (qproc (contents query) frame-stream) ; 如果是特殊处理过程，就用该过程处理
         (simple-query query frame-stream)))) ; 非特殊形式的表达式都当作简单查询
-
 
 (define (instantiate exp frame unbound-var-handler)
   (define (copy exp) ; 使用 frame 里的约束构造 exp 的实例化副本
@@ -421,9 +401,14 @@
           (else exp)))
   (copy exp))
 
-
+;;;;;;;;;;;;;;;;;;
+;; driver loop  ;;
+;;;;;;;;;;;;;;;;;;
 (define input-prompt ";;; Query input:")
 (define output-prompt ";;; Query results:")
+
+(define (prompt-for-input string)
+  (newline) (newline) (display string) (newline))
 
 (define (query-driver-loop)
   (prompt-for-input input-prompt)
@@ -450,159 +435,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Following are commented out so as not to be evaluated when ;;
 ;; the file is loaded.					      ;;
-;; (define the-global-environment (setup-environment))	      ;;
-;; (driver-loop)					      ;;
+;; (query-driver-loop)					      ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-'LAZY-METACIRCULAR-EVALUATOR-LOADED
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; stream implementation ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; (define (cons x y)
-;;   (lambda (m) (m x y)))
-
-;; (define (car z)
-;;   (z (lambda (p q) p)))
-
-;; (define (cdr z)
-;;   (z (lambda (p q) q)))
-
-;;;;;;;;;;;;;;;;;;;;;;;
-;; Logic Programming ;;
-;;;;;;;;;;;;;;;;;;;;;;;
-;; (define (append x y)
-;;   (if (null? x)
-;;       y
-;;       (cons (car x) (append (cdr x) y)))) 
-
-;; (address (Bitdiddle Ben) (Slumerville (Ridge Road) 10))
-;; (job (Bitdiddle Ben) (computer wizard))
-;; (salary (Bitdiddle Ben) 60000)
-
-;; (address (Hacker Alyssa P) (Cambridge (Mass Ave) 78))
-;; (job (Hacker Alyssa P) (computer programmer))
-;; (salary (Hacker Alyssa P) 40000)
-;; (supervisor (Hacker Alyssa P) (Bitdiddle Ben))
-
-;; (address (Fect Cy D) (Cambridge (Ames Street) 3))
-;; (job (Fect Cy D) (computer programmer))
-;; (salary (Fect Cy D) 35000)
-;; (supervisor (Fect Cy D) (Bitdiddle Ben))
-
-;; (address (Tweakit Lem E) (Boston (Bay State Road) 22))
-;; (job (Tweakit Lem E) (computer technician))
-;; (salary (Tweakit Lem E) 25000)
-;; (supervisor (Tweakit Lem E) (Bitdiddle Ben))
-
-;; (address (Reasoner Louis) (Slumerville (Pine Tree Road) 80))
-;; (job (Reasoner Louis) (computer programmer trainee))
-;; (salary (Reasoner Louis) 30000)
-;; (supervisor (Reasoner Louis) (Hacker Alyssa P))
-
-;; (supervisor (Bitdiddle Ben) (Warbucks Oliver))
-;; (address (Warbucks Oliver) (Swellesley (Top Heap Road)))
-;; (job (Warbucks Oliver) (administration big wheel))
-;; (salary (Warbucks Oliver) 150000)
-
-;; (address (Scrooge Eben) (Weston (Shady Lane) 10))
-;; (job (Scrooge Eben) (accounting chief accountant))
-;; (salary (Scrooge Eben) 75000)
-;; (supervisor (Scrooge Eben) (Warbucks Oliver))
-
-;; (address (Cratchet Robert) (Allston (N Harvard Street) 16))
-;; (job (Cratchet Robert) (accounting scrivener))
-;; (salary (Cratchet Robert) 18000)
-;; (supervisor (Cratchet Robert) (Scrooge Eben))
-
-;; (address (Aull DeWitt) (Slumerville (Onion Square) 5))
-;; (job (Aull DeWitt) (administration secretary))
-;; (salary (Aull DeWitt) 25000)
-;; (supervisor (Aull DeWitt) (Warbucks Oliver))
-
-;; (can-do-job (computer wizard) (computer programmer))
-;; (can-do-job (computer wizard) (computer technician))
-
-;; (can-do-job (computer programmer)
-;;             (computer programmer trainee))
-
-;; (and (job ?person (computer programmer))
-;;      (address ?person ?where))
-
-;; ;; (and (job (Hacker Alyssa P) (computer programmer))
-;; ;;      (address (Hacker Alyssa P) (Cambridge (Mass Ave) 78)))
-;; ;; (and (job (Fect Cy D) (computer programmer))
-;; ;;      (address (Fect Cy D) (Cambridge (Ames Street) 3)))
-
-;; (or (supervisor ?x (Bitdiddle Ben))
-;;     (supervisor ?x (Hacker Alyssa P)))
-
-;; ;; (or (supervisor (Hacker Alyssa P) (Bitdiddle Ben))
-;; ;;     (supervisor (Hacker Alyssa P) (Hacker Alyssa P)))
-;; ;; (or (supervisor (Fect Cy D) (Bitdiddle Ben))
-;; ;;     (supervisor (Fect Cy D) (Hacker Alyssa P)))
-;; ;; (or (supervisor (Tweakit Lem E) (Bitdiddle Ben))
-;; ;;     (supervisor (Tweakit Lem E) (Hacker Alyssa P)))
-;; ;; (or (supervisor (Reasoner Louis) (Bitdiddle Ben))
-;; ;;     (supervisor (Reasoner Louis) (Hacker Alyssa P))) 
-
-;; (and (supervisor ?x (Bitdiddle Ben))
-;;      (not (job ?x (computer programmer))))
-
-;; (and (salary ?person ?amount)
-;;      (lisp-value > ?amount 30000))
-
-;;;;;;;;;;
-;; rule ;;
-;;;;;;;;;;
-;; (rule (lives-near ?person-1 ?person-2)
-;;       (and (address ?person-1 (?town . ?rest-1))
-;; 	   (address ?person-2 (?town . ?rest-2))
-;; 	   (not (same ?person-1 ?person-2))))
-
-;; (rule (same ?x ?x))
-
-;; (rule (wheel ?person)
-;;       (and (supervisor ?middle-manager ?person)
-;;            (supervisor ?x ?middle-manager)))
-
-;; (lives-near ?x (Bitdiddle Ben))
-
-;; ;; (lives-near (Reasoner Louis) (Bitdiddle Ben))
-;; ;; (lives-near (Aull DeWitt) (Bitdiddle Ben)) 
-
-;; (and (job ?x (computer programmer))
-;;      (lives-near ?x (Bitdiddle Ben)))
-
-;; (rule (outranked-by ?staff-person ?boss)
-;;       (or (supervisor ?staff-person ?boss)
-;;           (and (supervisor ?staff-person ?middle-manager)
-;;                (outranked-by ?middle-manager ?boss))))
-
-;;;;;;;;;;;
-;; query ;;
-;;;;;;;;;;;
-
-;; (rule (append-to-form () ?y ?y))
-
-;; (rule (append-to-form (?u . ?v) ?y (?u . ?z))
-;;       (append-to-form ?v ?y ?z))
-
-;;; Query input:
-;; (append-to-form (a b) (c d) ?z)
-;;; Query results:
-;; (append-to-form (a b) (c d) (a b c d))
-
-;;; Query input:
-;; (append-to-form (a b) ?y (a b c d))
-;;; Query results:
-;; (append-to-form (a b) (c d) (a b c d))
-
-;;; Query input:
-;; (append-to-form ?x ?y (a b c d))
-;;; Query results:
-;; (append-to-form () (a b c d) (a b c d))
-;; (append-to-form (a) (b c d) (a b c d))
-;; (append-to-form (a b) (c d) (a b c d))
-;; (append-to-form (a b c) (d) (a b c d))
-;; (append-to-form (a b c d) () (a b c d))
+'LOGIC-METACIRCULAR-EVALUATOR-LOADED

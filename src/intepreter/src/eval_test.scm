@@ -38,21 +38,13 @@
 ((Y A) 5)
 ((A (Y A)) 5)
 
-;; amb 
+;; Closure
+(define (incr x)
+  (let ((i x))
+    (lambda ()
+      (set! i (+ 1 i))
+      i)))  
 
-(define (require p)
-  (if (not p) (amb)))
-
-(define (an-element-of items)
-  (require (not (null? items))) 
-  (amb (car items) (an-element-of (cdr items)))) 
-
-
-
-(define (prime-sum-pair list1 list2)
-  (begin 
-    (define a (an-element-of list1))
-    (define b (an-element-of list2))
-    (require (prime? (+ a b)))
-    (list a b)))
-(prime-sum-pair '(1 3 5 8) '(20 35 110))
+(define incr-10 (incr 10))
+(incr-10)
+(incr-10) 
