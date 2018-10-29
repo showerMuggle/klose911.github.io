@@ -234,6 +234,166 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="slt.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">局部变量</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#org0045798">let 表达式</a></li>
+<li><a href="#org94fd2b6">词法闭包</a></li>
+</ul>
+</div>
+</div>
+<p>
+在本节中将介绍局部变量，这将会使 <b>定义函数变得更加容易</b> 
+</p>
+<div id="outline-container-org0045798" class="outline-2">
+<h2 id="org0045798">let 表达式</h2>
+<div class="outline-text-2" id="text-org0045798">
+<p>
+使用 <span class="underline">let 表达式</span> 可以 <b>定义局部变量</b> 。格式如下：
+</p>
+<pre class="example">
+(let binds body)
+</pre>
+
+<ul class="org-ul">
+<li><span class="underline">变量</span> ：在 <span class="underline">binds定义的形式</span> 中被 <b>声明并初始化</b></li>
+<li><span class="underline">body</span> ：由 <span class="underline">任意多个 S-表达式</span> 构成</li>
+</ul>
+
+<p>
+binds的格式如下：
+</p>
+<pre class="example">
+[binds] → ((p1 v1)
+	   (p2 v2) ...)
+
+声明了变量 p1 、 p2 ，并分别为它们赋初值 v1 、 v2 ...... 
+</pre>
+
+<pre class="example">
+    声明局部变量 i 和 j，将它们与1、2绑定，然后求二者的和
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>i 1<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>j 2<span style="color: #696969;">))</span>
+  <span style="color: #696969;">(</span>+ i j<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">3 </span>
+</pre>
+</div>
+
+<p>
+let 表达式 可以 <b>嵌套使用</b> ：
+</p>
+<pre class="example">
+    例如：声明局部变量 i 和 j ，并将分别将它们与 1 和 i+2 绑定，然后求它们的乘积
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>i 1<span style="color: #696969;">))</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>j <span style="color: #696969;">(</span>+ i 2<span style="color: #696969;">)))</span>
+    <span style="color: #696969;">(</span>* i j<span style="color: #696969;">)))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">3</span>
+</pre>
+</div>
+
+<p>
+变量的 <b>作用域（Scope）为body体</b> ，也就是说 <span class="underline">变量只在body中有效</span>
+。下列代码会产生错误，因为 <b>在变量 j 的作用域中没有变量 i 的定义</b> ：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>i 1<span style="color: #696969;">)</span>
+      <span style="color: #696969;">(</span>j <span style="color: #696969;">(</span>+ i 2<span style="color: #696969;">)))</span>
+  <span style="color: #696969;">(</span>* i j<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;  </span><span style="color: #5f9ea0; font-style: italic;">i: undefined</span>
+</pre>
+</div>
+
+<p>
+<span class="underline">let* 表达式</span> 可以用于 <b>引用定义在同一个绑定中的变量</b> 。实际上， <span class="underline">let*</span> 只是 <b>嵌套的 let表达式 的语法糖</b> 而已
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let*</span> <span style="color: #696969;">((</span>i 1<span style="color: #696969;">)</span>
+       <span style="color: #696969;">(</span>j <span style="color: #696969;">(</span>+ i 2<span style="color: #696969;">)))</span>
+  <span style="color: #696969;">(</span>* i j<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;  </span><span style="color: #5f9ea0; font-style: italic;">3</span>
+</pre>
+</div>
+
+<pre class="example">
+    函数 quadric-equation 用于计算二次方程
+
+    它需要三个代表系数的参数：a、b、c （ax^2 + bx + c = 0）
+
+    返回一个存放答案的实数表
+
+    通过逐步地使用let表达式，可以避免不必要的计算
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;;</span><span style="color: #5f9ea0; font-style: italic;">The scopes of variables d,e, and f are the regions with the same background colors.</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">quadric-equation</span> a b c<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>zero? a<span style="color: #696969;">)</span>      
+      'error                                      <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">1</span>
+      <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>d <span style="color: #696969;">(</span>- <span style="color: #696969;">(</span>* b b<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>* 4 a c<span style="color: #696969;">))))</span>            <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">2</span>
+        <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>negative? d<span style="color: #696969;">)</span>
+            '<span style="color: #696969;">()</span>                                      <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">3</span>
+            <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>e <span style="color: #696969;">(</span>/ b a -2<span style="color: #696969;">)))</span>                    <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">4</span>
+              <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>zero? d<span style="color: #696969;">)</span>
+              <span style="color: #696969;">(</span>list e<span style="color: #696969;">)</span>
+              <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>f <span style="color: #696969;">(</span>/ <span style="color: #696969;">(</span>sqrt d<span style="color: #696969;">)</span> a 2<span style="color: #696969;">)))</span>        <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">5</span>
+                <span style="color: #696969;">(</span>list <span style="color: #696969;">(</span>+ e f<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>- e f<span style="color: #696969;">)))))))))</span>
+
+<span style="color: #696969;">(</span>quadric-equation 3 5 2<span style="color: #696969;">)</span>  <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">(-2/3 -1) </span>
+</pre>
+</div>
+<p>
+这个函数的行为如下：
+</p>
+<ol class="org-ol">
+<li>如果二次项系数 a 为0，函数返回 'error</li>
+<li>如果a ≠ 0，则将变量 d 与判别式 (b<sup>2</sup> - 4ac) 的值绑定</li>
+<li>如果 d 为 负数，则返回 '()</li>
+<li>如果 d 不为 负数，则将变量 e 与 -b/2a 绑定</li>
+<li>如果 d 为 0，则返回一个包含 e 的表</li>
+<li>如果 d 是正数，则将变量 f 与 √(d/2a) 绑定，并返回由 (+ e f) 和 (- e f) 构成的表</li>
+</ol>
+</div>
+</div>
+
+<div id="outline-container-org94fd2b6" class="outline-2">
+<h2 id="org94fd2b6">词法闭包</h2>
+<div class="outline-text-2" id="text-org94fd2b6">
+<p>
+实际上， <span class="underline">let 表达式</span> 只是 <b>lambda 表达式的一个语法糖</b> ：
+</p>
+<pre class="example">
+(let ((p1 v1) (p2 v2) ...) exp1 exp2 ...)
+
+=&gt;
+
+((lambda (p1 p2 ...)
+    exp1 exp2 ...) v1 v2)
+</pre>
+
+<p>
+<span class="underline">lambda表达式</span> 用于 <b>定义函数</b> ，它为 <b>变量建立了一个作用域</b> 
+</p>
+
+<p>
+在 Scheme 中，这个有效域由源代码的编写决定，这叫做 <b>词法闭包</b> ( <span class="underline">lexical closure</span> )
+</p>
+
+<p>
+<a href="loop.html">Next：重复</a>
+</p>
+
+<p>
+<a href="branch.html">Previous：分支</a> 
+</p>
+
+<p>
+<a href="slt.html">Home：目录</a>
+</p>
+</div>
+</div>
 </div>
 <div id="postamble" class="status">
 
