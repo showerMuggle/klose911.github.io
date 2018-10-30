@@ -234,6 +234,320 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="slt.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">赋值</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#org538f5f8">set!</a></li>
+<li><a href="#org7b44037">内部状态</a>
+<ul>
+<li><a href="#org2cc0463">静态作用域</a></li>
+<li><a href="#org46d3c7b">赋值和闭包来实现内部状态</a></li>
+<li><a href="#org89cb358">副作用</a></li>
+</ul>
+</li>
+<li><a href="#orgddaa2f2">表的破坏性操作</a>
+<ul>
+<li><a href="#orgaaa5502">队列</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<p>
+因为 Scheme 是函数式语言，通常来说，可以编写不使用赋值的语句。  然而，如果使用赋值的话，有些算法就可以轻易实现了，尤其是 内部状态 和 续延 需要赋值
+</p>
+
+<pre class="example">
+  尽管赋值非常常见，并且易于理解，但它有一些本质上的缺陷！！！
+</pre>
+
+<p>
+R5RS中规定的用于赋值的特殊形式是 <span class="underline">set!</span> 、 <span class="underline">set-car!</span> 、 <span class="underline">set-cdr!</span> 、 <span class="underline">string-set!</span> 、 <span class="underline">vector-set!</span> 等
+</p>
+<pre class="example">
+由于赋值改变了参数的值，因此它具有破坏性
+
+Scheme中，具有破坏性的方法都以 ! 结尾，以警示程序员
+</pre>
+<div id="outline-container-org538f5f8" class="outline-2">
+<h2 id="org538f5f8">set!</h2>
+<div class="outline-text-2" id="text-org538f5f8">
+<p>
+<span class="underline">set!</span> 可以为一个参数 <b>赋值</b> ，赋值前参数应 <b>被定义</b> 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">var</span> 1<span style="color: #696969;">)</span>
+<span style="color: #696969;">(</span>set! var <span style="color: #696969;">(</span>* var 10<span style="color: #696969;">))</span>
+var <span style="color: #5f9ea0; font-style: italic;">;  </span><span style="color: #5f9ea0; font-style: italic;">10</span>
+
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>i 1<span style="color: #696969;">))</span>
+  <span style="color: #696969;">(</span>set! i <span style="color: #696969;">(</span>+ i 3<span style="color: #696969;">))</span>
+  i<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">4 </span>
+</pre>
+</div>
+
+<pre class="example">
+    与 Common Lisp 不同，set! 无法给一个 S-表达式 赋值
+</pre>
+</div>
+</div>
+<div id="outline-container-org7b44037" class="outline-2">
+<h2 id="org7b44037">内部状态</h2>
+<div class="outline-text-2" id="text-org7b44037">
+</div>
+<div id="outline-container-org2cc0463" class="outline-3">
+<h3 id="org2cc0463">静态作用域</h3>
+<div class="outline-text-3" id="text-org2cc0463">
+<p>
+Scheme 中 <span class="underline">变量的作用域</span> 被 <b>限定</b> 在了 <span class="underline">源码中定义其的那个括号里</span> 。 <b>作用域与源代码书写方式一致</b> 的作用域称为 <b>词法闭包</b> (  <span class="underline">Lexical closure</span> ) 或 <b>静态作用域</b> ( <span class="underline">Static scope</span> )。采用静态作用域减轻了程序员的负担，因为它已经在代码中体现了，因此可以很容易理解
+</p>
+
+<pre class="example">
+     另一方面，还有一种被称为“动态作用域 (Dynamic scope)”的作用域，这种作用域仅在程序运行时确定
+
+     由于会在调试时带来种种问题，这种作用域现在已经不再使用
+</pre>
+
+<p>
+特殊形式 <span class="underline">let</span> 、 <span class="underline">lambda</span> 、 <span class="underline">letrec</span> <b>生成闭包</b> ：
+</p>
+<ul class="org-ul">
+<li>lambda 表达式 的参数仅在函数定义内部有效</li>
+<li>let 只是 lambda 的语法糖，因此二者无异</li>
+</ul>
+</div>
+</div>
+<div id="outline-container-org46d3c7b" class="outline-3">
+<h3 id="org46d3c7b">赋值和闭包来实现内部状态</h3>
+<div class="outline-text-3" id="text-org46d3c7b">
+<p>
+可以使用 <span class="underline">词法闭包</span> 来实现 <b>带有内部状态</b> 的 <span class="underline">过程</span> 
+</p>
+<pre class="example">
+     例如，用于模拟银行账户的过程可以按如下的方式编写：
+
+     初始资金是10美元
+
+     函数接收一个整形参数。正数表示存入，负数表示取出
+
+     为了简单起见，这里允许存款为负数
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">bank-account</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>balance 10<span style="color: #696969;">))</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>n<span style="color: #696969;">)</span>
+      <span style="color: #696969;">(</span>set! balance <span style="color: #696969;">(</span>+ balance n<span style="color: #696969;">))</span>
+      balance<span style="color: #696969;">)))</span>
+</pre>
+</div>
+
+<p>
+该过程将 存款 赋值 为 <span class="underline">(+ balance n)</span> 。下面是调用这个过程的结果：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span>bank-account 20<span style="color: #696969;">)</span>     <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">donating 20 dollars </span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">=&gt;  30</span>
+
+<span style="color: #696969;">(</span>bank-account -25<span style="color: #696969;">)</span>     <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">withdrawing 25 dollars</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">=&gt; 5</span>
+</pre>
+</div>
+
+<p>
+因为在Scheme中，可以 <b>编写 <span class="underline">返回过程</span> 的过程</b> ，因此可以编写一个 <span class="underline">创建银行账户</span> 的函数：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">make-bank-account</span> balance<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>n<span style="color: #696969;">)</span>
+    <span style="color: #696969;">(</span>set! balance <span style="color: #696969;">(</span>+ balance n<span style="color: #696969;">))</span>
+    balance<span style="color: #696969;">))</span>
+</pre>
+</div>
+
+<p>
+分别创建两个不同的银行账户，并进行各自的操作：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">gates-bank-account</span> <span style="color: #696969;">(</span>make-bank-account 10<span style="color: #696969;">))</span>   <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">Gates makes a bank account by donating  10 dollars</span>
+<span style="color: #696969;">(</span>gates-bank-account 50<span style="color: #696969;">)</span>                              <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">donating 50 dollars</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">60</span>
+<span style="color: #696969;">(</span>gates-bank-account -55<span style="color: #696969;">)</span>                             <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">withdrawing 55 dollars</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">5</span>
+
+
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">torvalds-bank-account</span> <span style="color: #696969;">(</span>make-bank-account 100<span style="color: #696969;">))</span>  <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">Torvalds makes a bank account by donating 100 dollars</span>
+<span style="color: #696969;">(</span>torvalds-bank-account -70<span style="color: #696969;">)</span>                             <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">withdrawing 70 dollars</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">30</span>
+<span style="color: #696969;">(</span>torvalds-bank-account 300<span style="color: #696969;">)</span>                             <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">donating 300 dollars</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">330</span>
+</pre>
+</div>
+
+<pre class="example">
+     这个例子喻示着使用函数式程序设计语言可以很容易实现面向对象程序设计语言
+
+     实际上，只需要在这个基础上再加一点东西就可以实现一门面向对象程序设计语言了
+</pre>
+</div>
+</div>
+<div id="outline-container-org89cb358" class="outline-3">
+<h3 id="org89cb358">副作用</h3>
+<div class="outline-text-3" id="text-org89cb358">
+<p>
+Scheme过程的主要目的是：
+</p>
+<ul class="org-ul">
+<li>返回一个 <span class="underline">值</span></li>
+<li><b>副作用</b> ( <span class="underline">Side Effect</span> )： <span class="underline">赋值</span> 和 <span class="underline">IO操作</span> 就是副作用</li>
+</ul>
+</div>
+</div>
+</div>
+<div id="outline-container-orgddaa2f2" class="outline-2">
+<h2 id="orgddaa2f2">表的破坏性操作</h2>
+<div class="outline-text-2" id="text-orgddaa2f2">
+<ul class="org-ul">
+<li><span class="underline">set-car!</span> : 为一个 <span class="underline">cons单元</span> 的 <b>car部分</b> 赋新值</li>
+<li><span class="underline">set-cdr!</span> : 为一个 <span class="underline">cons单元</span> 的 <b>cdr部分</b> 赋新值</li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">tree</span> '<span style="color: #696969;">((</span>1 2<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>3 4 5<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>6 7 8 9<span style="color: #696969;">)))</span> 
+<span style="color: #696969;">(</span>set-car! <span style="color: #696969;">(</span>car tree<span style="color: #696969;">)</span> 100<span style="color: #696969;">)</span>  <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">changing 1 to 100 </span>
+tree <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">=&gt; ((100 2) (3 4 5) (6 7 8 9))</span>
+
+<span style="color: #696969;">(</span>set-cdr! <span style="color: #696969;">(</span>third tree<span style="color: #696969;">)</span> '<span style="color: #696969;">(</span>a b c<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">changing  '(7 8 9) to '(a b c) </span>
+tree <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">=&gt;  ((100 2) (3 4 5) (6 a b c))</span>
+</pre>
+</div>
+
+<pre class="example">
+    和 set! 不同，这两个操作可以为 S-表达式 赋值
+</pre>
+</div>
+<div id="outline-container-orgaaa5502" class="outline-3">
+<h3 id="orgaaa5502">队列</h3>
+<div class="outline-text-3" id="text-orgaaa5502">
+<p>
+<b>队列</b> 可以用 <span class="underline">set-car!</span> 和 <span class="underline">set-cdr!</span> 实现。队列是一种 <b>先进先出</b> 的数据结构，下图展示了队列的结构：
+</p>
+<ul class="org-ul">
+<li><span class="underline">cons-cell-top</span> 的 <b>car</b> 部分指向 <span class="underline">表头的cons单元</span></li>
+<li><p>
+<span class="underline">cons-cell-top</span> 的 <b>cdr</b> 部分指向 <span class="underline">表末的cons单元</span> 
+</p>
+
+
+<div class="figure">
+<p><img src="pic/queue1a.png" alt="queue1a.png" width="60%" /> 
+</p>
+</div></li>
+</ul>
+
+<p>
+<b>入队</b> 操作按如下步骤进行：
+</p>
+<ol class="org-ol">
+<li>将 <span class="underline">当前最末的cons单元</span> （通过 <span class="underline">cons-cell-top</span> 取得）的 <span class="underline">cdr部分</span> 重定向到 <span class="underline">新的元素</span></li>
+<li><p>
+将 <span class="underline">cons-cell-top</span> 的 <span class="underline">cdr部分</span> 重定向到 <span class="underline">新的元素</span> 
+</p>
+
+
+<div class="figure">
+<p><img src="pic/queue2a_e.png" alt="queue2a_e.png" width="60%" /> 
+</p>
+</div></li>
+</ol>
+
+<p>
+<b>出队</b> 操作按如下步骤进行：
+</p>
+<ol class="org-ol">
+<li>将 <span class="underline">队首元素</span> 存放在一个 <span class="underline">局部变量</span> 里</li>
+<li><p>
+将 <span class="underline">cons-cell-top</span> 的 <span class="underline">car部分</span> 重定向到 <span class="underline">表的第二个元素</span> 
+</p>
+
+
+<div class="figure">
+<p><img src="pic/queue3a_e.png" alt="queue3a_e.png" width="60%" /> 
+</p>
+</div></li>
+</ol>
+
+<p>
+下面代码展示了如何实现队列：
+</p>
+<ul class="org-ul">
+<li><span class="underline">enqueue!</span> : 返回将元素 <span class="underline">obj</span> 添加进队列 <span class="underline">queue</span> 后的队列</li>
+<li><span class="underline">dequeue!</span> : 将 <span class="underline">队列的首元素</span> 移出队列，将 <span class="underline">该元素的值</span> 作为返回值</li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">make-queue</span><span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>cons '<span style="color: #696969;">()</span> '<span style="color: #696969;">()))</span>
+
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">enqueue!</span> queue obj<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>lobj <span style="color: #696969;">(</span>cons obj '<span style="color: #696969;">())))</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>null? <span style="color: #696969;">(</span>car queue<span style="color: #696969;">))</span>
+        <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">begin</span>
+          <span style="color: #696969;">(</span>set-car! queue lobj<span style="color: #696969;">)</span>
+          <span style="color: #696969;">(</span>set-cdr! queue lobj<span style="color: #696969;">))</span>
+        <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">begin</span>
+          <span style="color: #696969;">(</span>set-cdr! <span style="color: #696969;">(</span>cdr queue<span style="color: #696969;">)</span> lobj<span style="color: #696969;">)</span>
+          <span style="color: #696969;">(</span>set-cdr! queue lobj<span style="color: #696969;">)))</span>
+    <span style="color: #696969;">(</span>car queue<span style="color: #696969;">)))</span>
+
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">dequeue!</span> queue<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>obj <span style="color: #696969;">(</span>car <span style="color: #696969;">(</span>car queue<span style="color: #696969;">))))</span>
+    <span style="color: #696969;">(</span>set-car! queue <span style="color: #696969;">(</span>cdr <span style="color: #696969;">(</span>car queue<span style="color: #696969;">)))</span>
+    obj<span style="color: #696969;">))</span>
+</pre>
+</div>
+
+<p>
+测试队列：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">q</span> <span style="color: #696969;">(</span>make-queue<span style="color: #696969;">))</span>
+q <span style="color: #5f9ea0; font-style: italic;">;  </span><span style="color: #5f9ea0; font-style: italic;">(()) </span>
+
+<span style="color: #696969;">(</span>enqueue! q 'a<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;  </span><span style="color: #5f9ea0; font-style: italic;">(a)</span>
+<span style="color: #696969;">(</span>enqueue! q 'b<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;  </span><span style="color: #5f9ea0; font-style: italic;">(a b)</span>
+<span style="color: #696969;">(</span>enqueue! q 'c<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">(a b c)</span>
+
+<span style="color: #696969;">(</span>dequeue! q<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">a</span>
+
+q <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">((b c) c)</span>
+</pre>
+</div>
+
+<pre class="example">
+     队列是先进先出的
+
+     表/栈是先进后出的
+</pre>
+
+<p>
+<a href="string.html">Next：字符串</a>
+</p>
+
+<p>
+<a href="io.html">Previous：输入/输出</a> 
+</p>
+
+<p>
+<a href="slt.html">Home：目录</a>
+</p>
+</div>
+</div>
+</div>
 </div>
 <div id="postamble" class="status">
 
