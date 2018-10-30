@@ -226,6 +226,28 @@ for the JavaScript code in this tag.
  }
 /*]]>*///-->
 </script>
+<script type="text/x-mathjax-config">
+    MathJax.Hub.Config({
+        displayAlign: "center",
+        displayIndent: "0em",
+
+        "HTML-CSS": { scale: 100,
+                        linebreaks: { automatic: "false" },
+                        webFont: "TeX"
+                       },
+        SVG: {scale: 100,
+              linebreaks: { automatic: "false" },
+              font: "TeX"},
+        NativeMML: {scale: 100},
+        TeX: { equationNumbers: {autoNumber: "AMS"},
+               MultLineWidth: "85%",
+               TagSide: "right",
+               TagIndent: ".8em"
+             }
+});
+</script>
+<script type="text/javascript"
+        src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.0/MathJax.js?config=TeX-AMS_HTML"></script>
 </head>
 <body>
 <div id="org-div-home-and-up">
@@ -234,6 +256,262 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="slt.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">输入/输出</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#orge933feb">从文件输入</a>
+<ul>
+<li><a href="#orgd173285">open-input-file，read-char 和 eof-object?</a></li>
+<li><a href="#org3f0a831">call-with-input-file 和 with-input-from-file</a></li>
+<li><a href="#orgfea41ef">read</a></li>
+</ul>
+</li>
+<li><a href="#org7508fe1">输出到文件</a>
+<ul>
+<li><a href="#orge9289ab">打开一个用于输出的port</a></li>
+<li><a href="#orgb1d9cd5">输出的函数</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<p>
+通过前面章节的学习，已经可以在 Scheme 的交互式前端中编写并执行程序了。在本章中，将介绍如何 <b>输入</b> 和 <b>输出</b> 
+</p>
+
+<pre class="example">
+  使用输入输出，可以从文件中读取数据或向文件中写入数据
+</pre>
+<div id="outline-container-orge933feb" class="outline-2">
+<h2 id="orge933feb">从文件输入</h2>
+<div class="outline-text-2" id="text-orge933feb">
+</div>
+<div id="outline-container-orgd173285" class="outline-3">
+<h3 id="orgd173285">open-input-file，read-char 和 eof-object?</h3>
+<div class="outline-text-3" id="text-orgd173285">
+<ul class="org-ul">
+<li><span class="underline">(open-input-file filename)</span> ： <b>打开</b> 一个 <span class="underline">文件</span> 
+<ul class="org-ul">
+<li>返回一个 <b>用于输入</b> 的 <span class="underline">端口</span></li>
+</ul></li>
+<li><span class="underline">(read-char port)_：从 _端口</span> 中 <b>读取</b> 一个 <span class="underline">字符</span> 
+<ul class="org-ul">
+<li>当读取到 <b>文件结尾</b> （ <span class="underline">EOF</span> ）时，此函数返回 <span class="underline">eof-object</span></li>
+</ul></li>
+<li><span class="underline">eof-object?</span> ：检查是否已经到文件结尾</li>
+<li><span class="underline">(close-input-port  port)</span> ： <b>关闭</b> 输入 <span class="underline">端口</span></li>
+</ul>
+
+<p>
+下面展示了以字符串形式返回了文件内容：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">read-file</span> file-name<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>p <span style="color: #696969;">(</span>open-input-file file-name<span style="color: #696969;">)))</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #daa520; font-weight: bold;">loop</span><span style="color: #696969;">((</span>ls1 '<span style="color: #696969;">())</span> <span style="color: #696969;">(</span>c <span style="color: #696969;">(</span>read-char p<span style="color: #696969;">)))</span>
+      <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>eof-object? c<span style="color: #696969;">)</span>
+          <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">begin</span>
+            <span style="color: #696969;">(</span>close-input-port p<span style="color: #696969;">)</span>
+            <span style="color: #696969;">(</span>list-&gt;string <span style="color: #696969;">(</span>reverse ls1<span style="color: #696969;">)))</span>
+          <span style="color: #696969;">(</span>loop <span style="color: #696969;">(</span>cons c ls1<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>read-char p<span style="color: #696969;">))))))</span>
+</pre>
+</div>
+
+<pre class="example">
+hello.txt文件的内容如下：
+
+  Hello world!
+  Scheme is an elegant programming language.
+</pre>
+
+<p>
+测试读取 "hello.txt"文件： 
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span>read-file <span style="color: #deb887;">"hello.txt"</span><span style="color: #696969;">)</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">"Hello world!\r\nScheme is an elegant programming language.\r\n"</span>
+</pre>
+</div>
+
+<p>
+发现 <span class="underline">'\r\n'</span>  这样的字符也被打印出来。也可使用 <span class="underline">display</span> 函数做 <b>格式化输出</b> ：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span>display <span style="color: #696969;">(</span>read-file <span style="color: #deb887;">"hello.txt"</span><span style="color: #696969;">))</span> 
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">Hello world!</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">Scheme is an elegant programming language.</span>
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org3f0a831" class="outline-3">
+<h3 id="org3f0a831">call-with-input-file 和 with-input-from-file</h3>
+<div class="outline-text-3" id="text-org3f0a831">
+<pre class="example">
+   上面的代码并没有处理输入错误！！！
+
+   下面的函数或语法打开文件的同时并处理错误
+</pre>
+<p>
+<span class="underline">(call-with-input-file filename procedure)</span> ：
+</p>
+<ul class="org-ul">
+<li>将名为 <span class="underline">filename</span> 的文件 <b>打开</b> 以供读取输入</li>
+<li>函数 <span class="underline">procedure</span> 接受一个 <b>输入端口</b> 作为参数
+<ul class="org-ul">
+<li>文件有可能再次使用，因此当 procedure 结束时 <b>文件不会自动关闭</b></li>
+<li>文件应该 <b>显式地关闭</b></li>
+</ul></li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">read-file</span> file-name<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">call-with-input-file</span> file-name
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>p<span style="color: #696969;">)</span>
+      <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #daa520; font-weight: bold;">loop</span><span style="color: #696969;">((</span>ls1 '<span style="color: #696969;">())</span> <span style="color: #696969;">(</span>c <span style="color: #696969;">(</span>read-char p<span style="color: #696969;">)))</span>
+        <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>eof-object? c<span style="color: #696969;">)</span>
+            <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">begin</span>
+              <span style="color: #696969;">(</span>close-input-port p<span style="color: #696969;">)</span>
+              <span style="color: #696969;">(</span>list-&gt;string <span style="color: #696969;">(</span>reverse ls1<span style="color: #696969;">)))</span>
+            <span style="color: #696969;">(</span>loop <span style="color: #696969;">(</span>cons c ls1<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>read-char p<span style="color: #696969;">)))))))</span>
+
+<span style="color: #696969;">(</span>display <span style="color: #696969;">(</span>read-file <span style="color: #deb887;">"hello.txt"</span><span style="color: #696969;">))</span> 
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">Hello world!</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">Scheme is an elegant programming language.</span>
+</pre>
+</div>
+
+<p>
+<span class="underline">(with-input-from-file filename procedure)</span>  : 
+</p>
+<ul class="org-ul">
+<li>将名为 <span class="underline">filename</span> 的文件 <b>打开</b> 以供读取输入</li>
+<li>函数 <span class="underline">procedure</span> 没有任何参数
+<ul class="org-ul">
+<li>当 procedure 结束时 <b>文件自动关闭</b></li>
+</ul></li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">read-file</span> file-name<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>with-input-from-file file-name
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">()</span>
+      <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #daa520; font-weight: bold;">loop</span><span style="color: #696969;">((</span>ls1 '<span style="color: #696969;">())</span> <span style="color: #696969;">(</span>c <span style="color: #696969;">(</span>read-char<span style="color: #696969;">)))</span>
+        <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>eof-object? c<span style="color: #696969;">)</span>
+            <span style="color: #696969;">(</span>list-&gt;string <span style="color: #696969;">(</span>reverse ls1<span style="color: #696969;">))</span>
+            <span style="color: #696969;">(</span>loop <span style="color: #696969;">(</span>cons c ls1<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>read-char<span style="color: #696969;">)))))))</span>
+
+<span style="color: #696969;">(</span>display <span style="color: #696969;">(</span>read-file <span style="color: #deb887;">"hello.txt"</span><span style="color: #696969;">))</span> 
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">Hello world!</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">Scheme is an elegant programming language.</span>
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-orgfea41ef" class="outline-3">
+<h3 id="orgfea41ef">read</h3>
+<div class="outline-text-3" id="text-orgfea41ef">
+<p>
+<span class="underline">(read port)</span> ： 从端口 <span class="underline">port</span> 中 <b>读入</b> 一个 <span class="underline">S-表达式</span> 
+</p>
+
+<pre class="example">
+用它来读诸如“paren.txt”中带括号的内容就很方便
+
+'(Hello world!
+Scheme is an elegant programming language.)
+
+'(Lisp is a programming language ready to evolve.)
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">s-read</span> file-name<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>with-input-from-file file-name
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">()</span>
+      <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #daa520; font-weight: bold;">loop</span> <span style="color: #696969;">((</span>ls1 '<span style="color: #696969;">())</span> <span style="color: #696969;">(</span>s <span style="color: #696969;">(</span>read<span style="color: #696969;">)))</span>
+        <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>eof-object? s<span style="color: #696969;">)</span>
+            <span style="color: #696969;">(</span>reverse ls1<span style="color: #696969;">)</span>
+            <span style="color: #696969;">(</span>loop <span style="color: #696969;">(</span>cons s ls1<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>read<span style="color: #696969;">)))))))</span>
+
+<span style="color: #696969;">(</span>s-read <span style="color: #deb887;">"paren.txt"</span><span style="color: #696969;">)</span>
+<span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">=&gt;  ('(Hello world! Scheme is an elegant programming language.)</span>
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">'(Lisp is a programming language ready to evolve.))</span>
+</pre>
+</div>
+</div>
+</div>
+</div>
+<div id="outline-container-org7508fe1" class="outline-2">
+<h2 id="org7508fe1">输出到文件</h2>
+<div class="outline-text-2" id="text-org7508fe1">
+</div>
+<div id="outline-container-orge9289ab" class="outline-3">
+<h3 id="orge9289ab">打开一个用于输出的port</h3>
+<div class="outline-text-3" id="text-orge9289ab">
+<p>
+输出有和输入类似的函数，比如：
+</p>
+<ul class="org-ul">
+<li><span class="underline">(open-output-file filename)</span> :  <b>打开</b> 一个 <span class="underline">文件</span> 用作输出，返回该 <span class="underline">输出端口</span></li>
+<li><span class="underline">(close-output-port port)</span> :  <b>关闭</b> 用于输出的 <span class="underline">端口</span></li>
+<li><span class="underline">(call-with-output-file filename procedure)</span> : 
+<ul class="org-ul">
+<li>打开文件 <span class="underline">filename</span> 用于输出</li>
+<li><b>调用</b> 过程 <span class="underline">procedure</span> 
+<ul class="org-ul">
+<li>该函数以 <span class="underline">输出端口</span> 为参数</li>
+<li><b>不会自动关闭</b> 输出文件</li>
+</ul></li>
+</ul></li>
+<li><span class="underline">(with-output-to-file filename procedure)</span> ：
+<ul class="org-ul">
+<li>打开文件 <span class="underline">filename</span> 作为 <span class="underline">标准输出</span></li>
+<li>并调用过程 <span class="underline">procedure</span> 
+<ul class="org-ul">
+<li>该过程 <span class="underline">没有参数</span></li>
+<li>过程 procedure 中返回时，文件被 <b>自动关闭</b></li>
+</ul></li>
+</ul></li>
+</ul>
+</div>
+</div>
+<div id="outline-container-orgb1d9cd5" class="outline-3">
+<h3 id="orgb1d9cd5">输出的函数</h3>
+<div class="outline-text-3" id="text-orgb1d9cd5">
+<p>
+下面的函数可用于输出。如果参数 <span class="underline">port</span> 被 <b>省略</b> 的话，则输出至 <span class="underline">标准输出</span> ：
+</p>
+<ul class="org-ul">
+<li><span class="underline">(write obj port)</span> : 将 <span class="underline">obj</span> 输出至 <span class="underline">port</span> 
+<ul class="org-ul">
+<li><span class="underline">字符串</span> 被 <span class="underline">双引号</span> 括起</li>
+<li><span class="underline">字符</span> 具有前缀 <span class="underline">#\</span></li>
+</ul></li>
+<li><span class="underline">(display obj port)</span> : 将 <span class="underline">obj</span> 输出至 <span class="underline">port</span> 
+<ul class="org-ul">
+<li><span class="underline">字符串</span> <b>不</b> 被 <span class="underline">双引号</span> 括起</li>
+<li><span class="underline">字符</span> <b>不</b> 具有前缀 <span class="underline">#\</span></li>
+</ul></li>
+<li><span class="underline">(newline port)</span>  :  开始 <span class="underline">新行</span></li>
+<li><span class="underline">(write-char char port)</span> ：向 <span class="underline">port</span> <b>写入</b> 一个 <span class="underline">字符</span></li>
+</ul>
+
+<p>
+<a href="assign.html">Next：赋值</a>
+</p>
+
+<p>
+<a href="high_order_function.html">Previous：高阶函数</a>
+</p>
+
+<p>
+<a href="slt.html">Home：目录</a>
+</p>
+</div>
+</div>
+</div>
 </div>
 <div id="postamble" class="status">
 
