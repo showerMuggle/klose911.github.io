@@ -234,6 +234,219 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="slt.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">结构体</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#orgd3008f3">向量</a>
+<ul>
+<li><a href="#orgbaa620d">字面值</a></li>
+<li><a href="#org7df0b8e">向量函数</a></li>
+</ul>
+</li>
+<li><a href="#orgb4f6361">结构体</a>
+<ul>
+<li><a href="#org833381f">MIT-Scheme中的结构体</a></li>
+</ul>
+</li>
+<li><a href="#org876ac6e">实例：简单的密码破解游戏</a></li>
+</ul>
+</div>
+</div>
+<p>
+本章中，将讲解 <span class="underline">向量</span> 和 <span class="underline">结构体</span> 
+</p>
+
+<p>
+<span class="underline">向量</span> 是一组通过 <b>整数索引</b> 的数据：
+</p>
+<ul class="org-ul">
+<li>与表相比，向量更加 <b>紧凑</b> 且 <b>存取时间更短</b></li>
+<li>但从另外一方面来说，向量是通过 <b>副作用</b> 来操作的</li>
+</ul>
+
+<pre class="example">
+  与C语言中的数组不同，一个向量可以储存不同类型的数据
+</pre>
+
+<p>
+Scheme中的 <span class="underline">结构体</span> 与C语言中的 <span class="underline">结构体</span> 类似。但Scheme中的结构体更 <b>容易使用</b> ，因为Scheme为结构体 <b>自动创建</b> 了 <span class="underline">读取</span> 函数和 <span class="underline">写入</span> 函数
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme">  &#36825;&#21463;&#30410;&#20110; Lisp/Scheme &#20013;&#30340;&#23439;
+</pre>
+</div>
+<div id="outline-container-orgd3008f3" class="outline-2">
+<h2 id="orgd3008f3">向量</h2>
+<div class="outline-text-2" id="text-orgd3008f3">
+</div>
+<div id="outline-container-orgbaa620d" class="outline-3">
+<h3 id="orgbaa620d">字面值</h3>
+<div class="outline-text-3" id="text-orgbaa620d">
+<p>
+<span class="underline">向量</span> 通过 <b>闭合</b> 的 <span class="underline">#(</span> 和 <span class="underline">)</span> 表示，作为 <span class="underline">字面值</span> 时，它们应该 <b>被引用</b> ，例如：
+</p>
+
+<pre class="example">
+'#(1 2 3)               ; 整数向量
+'#(a 0 #\a)           ; 由符号、整数和字符构成的向量
+</pre>
+</div>
+</div>
+<div id="outline-container-org7df0b8e" class="outline-3">
+<h3 id="org7df0b8e">向量函数</h3>
+<div class="outline-text-3" id="text-org7df0b8e">
+<p>
+下面的函数都是R5RS规定的函数：
+</p>
+<ul class="org-ul">
+<li>(vector? obj) : 如果 <span class="underline">obj</span> 是一个 <b>向量</b> 则返回 <span class="underline">#t</span></li>
+<li>(make-vector k fill) : 返回有 <span class="underline">k个元素</span> 的向量
+<ul class="org-ul">
+<li>如果指定了第二个参数 <span class="underline">fill</span> ，那么所有的元素都会被 <b>初始化</b> 为 <span class="underline">fill</span></li>
+</ul></li>
+<li>(vector obj …) : 返回由 <span class="underline">参数列表</span> 构成的 <b>向量</b></li>
+<li>(vector-length vector): 返回向量 <span class="underline">vector</span> 的 <b>长度</b></li>
+<li>(vector-ref vector k) : 返回向量 <span class="underline">vector</span> 的 <b>索引</b> 为 <span class="underline">k</span> 的 <b>元素</b> （向量从 <span class="underline">0</span> 开始索引）</li>
+<li>(vector-set! vector k obj): 将向量 <span class="underline">vector</span> 的索引为 <span class="underline">k</span> 的 <b>元素</b> 修改为 <span class="underline">obj</span></li>
+<li>(vector-&gt;list vector) : 将 <span class="underline">vector</span> 转换为 <b>表</b></li>
+<li>(list-&gt;vector list) 将表 <span class="underline">list</span> 转换为 <b>向量</b></li>
+<li>(vector-fill! vector fill) : 将向量 <span class="underline">vector</span> 的 <b>所有元素</b> 设置为 <span class="underline">fill</span></li>
+</ul>
+
+<p>
+例如，对两个向量中元素求和：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">vector-add</span> v1 v2<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>lenv1 <span style="color: #696969;">(</span>vector-length v1<span style="color: #696969;">))</span>
+        <span style="color: #696969;">(</span>lenv2 <span style="color: #696969;">(</span>vector-length v2<span style="color: #696969;">)))</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>= lenv1 lenv2<span style="color: #696969;">)</span>
+        <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>v <span style="color: #696969;">(</span>make-vector lenv1<span style="color: #696969;">)))</span>
+          <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #daa520; font-weight: bold;">loop</span> <span style="color: #696969;">((</span>i 0<span style="color: #696969;">))</span>
+            <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>= i lenv1<span style="color: #696969;">)</span>
+                v
+                <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">begin</span>
+                  <span style="color: #696969;">(</span>vector-set! v i <span style="color: #696969;">(</span>+ <span style="color: #696969;">(</span>vector-ref v1 i<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>vector-ref v2 i<span style="color: #696969;">)))</span>
+                  <span style="color: #696969;">(</span>loop <span style="color: #696969;">(</span>+ 1 i<span style="color: #696969;">))))))</span>
+        <span style="color: #696969;">(</span>error <span style="color: #deb887;">"different dimensions."</span><span style="color: #696969;">))))</span>
+</pre>
+</div>
+</div>
+</div>
+</div>
+<div id="outline-container-orgb4f6361" class="outline-2">
+<h2 id="orgb4f6361">结构体</h2>
+<div class="outline-text-2" id="text-orgb4f6361">
+<pre class="example">
+    虽然 R5RS 中没有定义结构体，但是在很多Scheme实现中，都实现了类似于 Common Lisp 中的结构体
+</pre>
+<p>
+这些结构体本质上来说都是向量。每一个 <b>槽</b> ( <span class="underline">slot</span> )都通过使用一个 <span class="underline">宏</span> 来命名。结构体 <b>通过不同的属性</b> 清楚地 <b>表示数据</b> 
+</p>
+<pre class="example">
+    定义结构体的宏 自动为 结构体 创建 取值器 (accessor) 和赋值器 (setter) 
+</pre>
+</div>
+<div id="outline-container-org833381f" class="outline-3">
+<h3 id="org833381f">MIT-Scheme中的结构体</h3>
+<div class="outline-text-3" id="text-org833381f">
+<p>
+在MIT-Scheme中，结构体通过函数 <b>define-structure</b> 来定义。请考虑书籍。书籍都有下列属性：
+</p>
+<ul class="org-ul">
+<li>标题</li>
+<li>作者</li>
+<li>出版商</li>
+<li>出版年份</li>
+<li>ISBN号</li>
+</ul>
+
+<p>
+因此结构体 <span class="underline">book</span> 就可以像下面这样定义：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span>define-structure book title authors publisher year isbn<span style="color: #696969;">)</span>
+
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">bazaar</span> 
+  <span style="color: #696969;">(</span>make-book 
+   <span style="color: #deb887;">"The Cathedral and the Bazaar"</span>
+   <span style="color: #deb887;">"Eric S. Raymond"</span>
+   <span style="color: #deb887;">"O'Reilly"</span>
+   1999
+   0596001088<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">bazaar</span>
+</pre>
+</div>
+
+<p>
+然而，这样做多少有点不便，因为属性与值的关联并不清楚：
+</p>
+<ul class="org-ul">
+<li>参量 <span class="underline">keyword-constructor</span> 可以用于解决这个问题
+<ul class="org-ul">
+<li>属性与值的 <b>关联</b> 就非常清楚了</li>
+<li>参数的 <b>顺序</b> 就不重要了</li>
+</ul></li>
+<li>参量 <span class="underline">copier</span> 可用于为结构体创建一个 <b>拷贝</b> 函数</li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span>define-structure <span style="color: #696969;">(</span>book keyword-constructor copier<span style="color: #696969;">)</span> 
+  title authors publisher year isbn<span style="color: #696969;">)</span>
+
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">bazaar</span> 
+  <span style="color: #696969;">(</span>make-book 
+   'title <span style="color: #deb887;">"The Cathedral and the Bazaar"</span>
+   'authors <span style="color: #deb887;">"Eric S. Raymond"</span>
+   'publisher <span style="color: #deb887;">"O'Reilly"</span>
+   'year 1999    
+   'isbn 0596001088<span style="color: #696969;">))</span>
+</pre>
+</div>
+
+<ul class="org-ul">
+<li><b>[the name of structure]?</b> : 检查某对象是否为 <b>特定结构体</b> 。例如，可使用函数 <span class="underline">book?</span> 来检查 <span class="underline">bazaar</span> 是否为 <span class="underline">book结构体</span> 的 <b>一个实例</b> ：</li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span>book? bazaar<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">#t </span>
+</pre>
+</div>
+
+<ul class="org-ul">
+<li><b>copy-[structure name]</b> : <b>拷贝</b> 结构体。例如，下面的代码演示了将 <span class="underline">bazaar</span> 拷贝 到 <span class="underline">cathedral</span> ：</li>
+</ul>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">cathedral</span> <span style="color: #696969;">(</span>copy-book bazaar<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">cathedral </span>
+</pre>
+</div>
+
+<ul class="org-ul">
+<li><b>[structure name]-[attribute name]</b> : 读取结构体某 <b>属性的值</b> 。例如，下面的代码演示了如何读取 <span class="underline">bazaar</span> 的 <span class="underline">title属性</span> ：</li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span>book-title bazaar<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">"The Cathedral and the Bazaar"</span>
+</pre>
+</div>
+
+<ul class="org-ul">
+<li><b>set-[structure name]]-[attribute name]]!</b> :  将某 <b>属性设定</b> 为特定值。下面的代码演示了如何将 <span class="underline">bazaar</span> 的 <span class="underline">year字段</span> 更新到 <span class="underline">2001</span> ：</li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span>book-year bazaar<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">1999   </span>
+<span style="color: #696969;">(</span>set-book-year! bazaar 2001<span style="color: #696969;">)</span>
+<span style="color: #696969;">(</span>book-year bazaar<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">2001</span>
+</pre>
+</div>
+</div>
+</div>
+</div>
+<div id="outline-container-org876ac6e" class="outline-2">
+<h2 id="org876ac6e">实例：简单的密码破解游戏</h2>
+</div>
 </div>
 <div id="postamble" class="status">
 

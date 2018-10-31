@@ -3,3 +3,128 @@
 #+HTML_LINK_UP: hashtable.html   
 #+HTML_LINK_HOME: slt.html
 #+OPTIONS: num:nil timestamp:nil
+
+本章中，将讲解 _向量_ 和 _结构体_ 
+
+_向量_ 是一组通过 *整数索引* 的数据：
++ 与表相比，向量更加 *紧凑* 且 *存取时间更短*
++ 但从另外一方面来说，向量是通过 *副作用* 来操作的
+
+#+BEGIN_EXAMPLE
+  与C语言中的数组不同，一个向量可以储存不同类型的数据
+#+END_EXAMPLE
+
+Scheme中的 _结构体_ 与C语言中的 _结构体_ 类似。但Scheme中的结构体更 *容易使用* ，因为Scheme为结构体 *自动创建* 了 _读取_ 函数和 _写入_ 函数
+#+BEGIN_SRC scheme
+  这受益于 Lisp/Scheme 中的宏
+#+END_SRC
+* 向量
+** 字面值 
+   _向量_ 通过 *闭合* 的 _#(_ 和 _)_ 表示，作为 _字面值_ 时，它们应该 *被引用* ，例如：
+
+   #+BEGIN_EXAMPLE
+     '#(1 2 3)               ; 整数向量
+     '#(a 0 #\a)           ; 由符号、整数和字符构成的向量
+   #+END_EXAMPLE 
+** 向量函数
+   下面的函数都是R5RS规定的函数：
+   + (vector? obj) : 如果 _obj_ 是一个 *向量* 则返回 _#t_
+   + (make-vector k fill) : 返回有 _k个元素_ 的向量
+     + 如果指定了第二个参数 _fill_ ，那么所有的元素都会被 *初始化* 为 _fill_ 
+   + (vector obj …) : 返回由 _参数列表_ 构成的 *向量*
+   + (vector-length vector): 返回向量 _vector_ 的 *长度*
+   + (vector-ref vector k) : 返回向量 _vector_ 的 *索引* 为 _k_ 的 *元素* （向量从 _0_ 开始索引）
+   + (vector-set! vector k obj): 将向量 _vector_ 的索引为 _k_ 的 *元素* 修改为 _obj_
+   + (vector->list vector) : 将 _vector_ 转换为 *表*
+   + (list->vector list) 将表 _list_ 转换为 *向量*
+   + (vector-fill! vector fill) : 将向量 _vector_ 的 *所有元素* 设置为 _fill_ 
+
+   例如，对两个向量中元素求和：
+   #+BEGIN_SRC scheme
+  (define (vector-add v1 v2)
+    (let ((lenv1 (vector-length v1))
+	  (lenv2 (vector-length v2)))
+      (if (= lenv1 lenv2)
+	  (let ((v (make-vector lenv1)))
+	    (let loop ((i 0))
+	      (if (= i lenv1)
+		  v
+		  (begin
+		    (vector-set! v i (+ (vector-ref v1 i) (vector-ref v2 i)))
+		    (loop (+ 1 i))))))
+	  (error "different dimensions."))))
+   #+END_SRC
+* 结构体
+  #+BEGIN_EXAMPLE
+    虽然 R5RS 中没有定义结构体，但是在很多Scheme实现中，都实现了类似于 Common Lisp 中的结构体
+  #+END_EXAMPLE
+  这些结构体本质上来说都是向量。每一个 *槽* ( _slot_ )都通过使用一个 _宏_ 来命名。结构体 *通过不同的属性* 清楚地 *表示数据* 
+  #+BEGIN_EXAMPLE
+    定义结构体的宏 自动为 结构体 创建 取值器 (accessor) 和赋值器 (setter) 
+  #+END_EXAMPLE
+** MIT-Scheme中的结构体 
+   在MIT-Scheme中，结构体通过函数 *define-structure* 来定义。请考虑书籍。书籍都有下列属性：
+   + 标题
+   + 作者
+   + 出版商
+   + 出版年份
+   + ISBN号
+
+   因此结构体 _book_ 就可以像下面这样定义：
+
+   #+BEGIN_SRC scheme
+     (define-structure book title authors publisher year isbn)
+
+     (define bazaar 
+       (make-book 
+	"The Cathedral and the Bazaar"
+	"Eric S. Raymond"
+	"O'Reilly"
+	1999
+	0596001088)) ; bazaar
+   #+END_SRC
+
+   然而，这样做多少有点不便，因为属性与值的关联并不清楚：
+   + 参量 _keyword-constructor_ 可以用于解决这个问题
+     + 属性与值的 *关联* 就非常清楚了
+     + 参数的 *顺序* 就不重要了
+   + 参量 _copier_ 可用于为结构体创建一个 *拷贝* 函数
+
+   #+BEGIN_SRC scheme
+  (define-structure (book keyword-constructor copier) 
+    title authors publisher year isbn)
+
+  (define bazaar 
+    (make-book 
+     'title "The Cathedral and the Bazaar"
+     'authors "Eric S. Raymond"
+     'publisher "O'Reilly"
+     'year 1999    
+     'isbn 0596001088))
+   #+END_SRC
+
+   + *[the name of structure]?* : 检查某对象是否为 *特定结构体* 。例如，可使用函数 _book?_ 来检查 _bazaar_ 是否为 _book结构体_ 的 *一个实例* ：
+
+   #+BEGIN_SRC scheme
+  (book? bazaar) ; #t 
+   #+END_SRC
+
+   + *copy-[structure name]* : *拷贝* 结构体。例如，下面的代码演示了将 _bazaar_ 拷贝 到 _cathedral_ ：
+   #+BEGIN_SRC scheme
+  (define cathedral (copy-book bazaar)) ; cathedral 
+   #+END_SRC
+
+   + *[structure name]-[attribute name]* : 读取结构体某 *属性的值* 。例如，下面的代码演示了如何读取 _bazaar_ 的 _title属性_ ：
+
+   #+BEGIN_SRC scheme
+  (book-title bazaar) ; "The Cathedral and the Bazaar"
+   #+END_SRC
+
+   + *set-[structure name]]-[attribute name]]!* :  将某 *属性设定* 为特定值。下面的代码演示了如何将 _bazaar_ 的 _year字段_ 更新到 _2001_ ：
+
+   #+BEGIN_SRC scheme
+  (book-year bazaar) ; 1999   
+  (set-book-year! bazaar 2001)
+  (book-year bazaar) ; 2001
+   #+END_SRC
+* 实例：简单的密码破解游戏
