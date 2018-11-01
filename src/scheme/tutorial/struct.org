@@ -128,3 +128,256 @@ Scheme中的 _结构体_ 与C语言中的 _结构体_ 类似。但Scheme中的�
   (book-year bazaar) ; 2001
    #+END_SRC
 * 实例：简单的密码破解游戏
+  作为向量的示例，我们演示一个简单的密码破解游戏。这是一个猜对手密码的游戏。密码是由 0到 9中四个不同的数组成的四位数。对手要通过使用 bulls和 cows 的数量告知猜谜者猜测的准确程度
+  + bull 的数量 (Nbull) 是指值和位置都正确的数字的数量
+  + cow的数量 (Ncow) 是指值正确但位置错误的数字的数量。
+
+  #+BEGIN_EXAMPLE
+    例如，密码是5601，猜测是1685
+
+    那么 bull 和 cow 和数分别是 1 和 2
+  #+END_EXAMPLE
+
+  计算机和用户相互猜测对方的密码。更少尝试次数的选手为胜利者。如果用户和电脑在相同的尝试次数中破解了密码就是平局
+** 数据结构 
+   四位数字可以通过向量和计算 bull 以及 cow 的数量高效地表示。这种表达方法需要 *构成密码的数字都不相同* ：
+
+   创建长度为10的向量：
+   + 每个 _索引_  k 的 _值_ 被设为k在密码中的 _数位_
+   + 四个数位从低到高被计为 1，2，3和4
+   + 如果数字没有出现，索引的值为0
+   #+BEGIN_EXAMPLE
+     例如，5601和1685可以表示如下：
+
+     5601 → #(2 1 0 0 0 4 3 0 0 0)
+     1685 → #(0 4 0 0 0 1 3 0 2 0)
+
+     5601这个例子中，数字0，1，5，和6分别出现在第2，第1，第4和第3位
+
+     那么在这个密码的向量表达式里索引0，1，5，6的值分别2是2，1，4和3，其他索引位都是0
+   #+END_EXAMPLE
+
+   这种表达可以快速比较两个数字，如果两个向量的相同索引位的值都是正数情况下：
+   + 如果值相等，就计为bull
+   + 如果值不相等，就计为cow
+   #+BEGIN_EXAMPLE
+     5601和1685这个例子的情况下
+
+     索引位6的值都为3，索引位1和索引位5的值都是正数
+
+     bull和cow的值为1和2
+   #+END_EXAMPLE
+** 设计
+   程序的设计如下：
+   1. 程序生成一个表，该表包含了所有不同四位数的向量表示
+   2. 程序从表中随机选取一个数字
+   3. 重洗步骤（1）产生的表
+   4. 程序首次猜用户的密码，用户给出 bull 和 cow 的数量。然后用户猜程序的密码，程序给出 Nnull 和 Ncow
+   5. 重复步骤（3）直到电脑或者程序的bull数量变为 4 为止。如果在同一次双方的数量都变为4，就是平局
+** 实现
+   (char2int c) : 将字符c ( _#\0_ ~ _#\9_ )转换为整数（0 ~ 9）
+   #+BEGIN_SRC scheme
+  (define (1- x) (- x 1))
+
+  (define (char2int c)
+    (- (char->integer c) (char->integer #\0)))
+   #+END_SRC
+
+   (ls2nvec ls) : 将四个数字的 _表_ ls 转换为 *向量表达式* 
+
+   #+BEGIN_SRC scheme 
+  (define (ls2nvec ls)
+    (let ((vec (make-vector 10 0)))
+      (let loop ((i (length ls)) (ls ls))
+	(if (> i 0)
+	    (begin
+	      (vector-set! vec (car ls) i)
+	      (loop (1- i) (cdr ls)))
+	    vec))))
+
+  (ls2nvec '(5 3 6 0)) ; => #(1 0 0 3 0 4 2 0 0 0)
+   #+END_SRC
+
+   (nvec2int vec) : 将 _向量表达式_ vec转换为普通 _整数_ 
+
+   #+BEGIN_SRC scheme
+  (define (nvec2int vec)
+    (let loop ((i 0) (n 0))
+      (if (= i 10)
+	  n
+	  (let ((j (vector-ref vec i)))
+	    (loop (1+ i) (+ n (if (> j 0)
+				  (* i (expt 10 (1- j)))
+				  0)))))))
+   #+END_SRC
+
+   (int2str i) : 将一个四位数i转换为字符串。如果i小于1000，'0'被置于高位 
+
+   #+BEGIN_SRC scheme
+  (define (int2str i)
+    (string-append
+     (if (< i 1000) "0" "")
+     (number->string i)))
+   #+END_SRC
+
+   (read-from-stdin str) : 将 str 显示于 _标准输出_ ，并返回用户从 _标准输入_ 输入的字符串 
+
+   #+BEGIN_SRC scheme
+  (define (read-integer str)
+    (string->number (read-from-stdin str)))
+
+  (define (read-from-stdin str)
+    (display str)
+    (newline)
+    (read-line))
+   #+END_SRC
+
+   (write-to-stdout . ls) : 将ls的每个元素都输出到 _标准输出_ ，并在 _行尾_ 插入 _行结束符_ 
+
+   #+BEGIN_SRC scheme
+  (define (write-to-stdout . ls)
+    (for-each (lambda (obj) (display obj)) ls)
+    (newline))
+   #+END_SRC
+
+   (str2nvec str) : 将用户输入的表示四位数的 _字符串_ str转换为 _向量表达式_ 
+   #+BEGIN_SRC scheme
+  (define (str2nvec str)
+    (let ((vec (make-vector 10 0)))
+      (let loop ((i (string-length str)) (ls (string->list str)))
+	(if (pair? ls)
+	    (begin
+	      (vector-set! vec (char2int (car ls)) i)
+	      (loop (1- i) (cdr ls)))
+	    vec))))
+   #+END_SRC
+
+   (scoring vec0 vec1) : 以 ( _5*Nbull + Ncow_ ) 计算两个整数（向量表达式）vec0 和 vec1的 *相似程度* 
+   #+BEGIN_SRC scheme
+  (define (scoring vec0 vec1)
+    (let ((n (vector-length vec0)))
+      (let loop ((i 0) (score 0))
+	(if (< i n)
+	    (let ((d0 (vector-ref vec0 i))
+		  (d1 (vector-ref vec1 i)))
+	      (loop (1+ i)
+		    (+ score (if (and (< 0 d0) (< 0 d1))
+				 (if (= d0 d1) 5 1)
+				 0))))
+	    score))))
+   #+END_SRC
+
+   (show-user-score score) : 通过 _相似度score_ 计算 Nbull 和Ncow，并将它们显示在 _标准输出_ ：
+
+   #+BEGIN_SRC scheme
+  (define (show-user-score score)
+    (write-to-stdout "Number of bulls and cows in your guess:" )
+    (write-to-stdout "bulls: " (quotient score 5))
+    (write-to-stdout "cows: " (modulo score 5))
+    (newline))
+   #+END_SRC
+
+   (read-my-score gu0) : 显示 _计算机的猜测_  (gu0) ，让用户输入 _Nbull_ 和 _Ncow_ ，返回 *相似度* score
+   #+BEGIN_SRC scheme
+  (define (read-my-score gu0)
+    (write-to-stdout "My guess is: " (int2str (nvec2int gu0)))
+    (write-to-stdout "Give number of bulls and cows in my guess." )
+    (let ((na5 (* 5 (read-integer "bulls: "))))
+      (+ na5 (read-integer "cows: ")))) ; the score is calculated by (5 * bull + cow)
+   #+END_SRC
+   (read-user-guess)   : 返回 _用户猜测_ 的 _向量表达式_ 
+   #+BEGIN_SRC scheme
+  (define (read-user-guess)
+    (newline)
+    (str2nvec (read-from-stdin "Give your guess.")))
+   #+END_SRC
+
+   (shuffle-numbers ls0)  :  *随机排序* ls0。由于有 随机读取的需求，将 ls0转换为 _向量_ ，然后随机读取向量的元素，以创建一个重排过的表
+   #+BEGIN_SRC scheme
+  (define (shuffle-numbers ls0)
+    (let ((vec (list->vector ls0)))
+      (let loop ((n (vector-length vec)) (ls1 '()))
+	(if (= n 0)
+	    ls1
+	    (let* ((r (random n))
+		   (v (vector-ref vec r)))
+	      (vector-set! vec r (vector-ref vec (1- n)))
+	      (loop (1- n) (cons v ls1)))))))
+   #+END_SRC
+
+   (make-numbers)  : 返回由所有不同四位数构成的表
+   #+BEGIN_SRC scheme
+  (define (make-numbers)
+    (let ((ls1 '()))
+      (letrec ((rec (lambda (i num ls)
+		      (if (= i 4)
+			  (set! ls1 (cons (ls2nvec ls) ls1))
+			  (for-each 
+			   (lambda (n)
+			     (rec (1+ i) (delv n num) (cons n ls)))
+			   num)))))
+	(rec 0 '(0 1 2 3 4 5 6 7 8 9) '()))
+      ls1))
+   #+END_SRC
+   (game-over sc0 sc1)  :  通过比较计算机的得分 (sc0) 和用户的得分 (sc1) 确定胜利者 
+   #+BEGIN_SRC scheme
+  (define (game-over sc0 sc1)
+    (write-to-stdout
+     (cond
+      ((= sc0 sc1) "Draw")
+      ((> sc0 sc1) "I won.")
+      (else "You won.")))
+    'game-over)
+   #+END_SRC
+
+   (scoring-user-guess an0 gu1) : 计算计算机的密码  an0 和用户的猜测 gu1 的相似度，使用 show-uuser-score 输出 Nbull 和 Ncow
+   #+BEGIN_SRC scheme
+  (define (scoring-user-guess an0 gu1)
+    (let ((sc1 (scoring an0 gu1)))
+      (show-user-score sc1)
+      sc1))
+   #+END_SRC
+
+   (mastermind-rec an0 candidates)  : 主程序，它有两个参数
+   + 计算机密码 an0
+   + 猜测的表 candidate 
+
+   主要逻辑：
+   1. 它计算计算机的得分 sc0 和用户的得分 sc1
+   2. 如果 sc0 或者 sc1 为20
+      + 调用 (game-over sc0 sc1)
+      + 如果没有值为20，它根据 sc0 过滤猜测的表 candidate，并继续游戏
+
+   #+BEGIN_SRC scheme
+  (define (mastermind-rec an0 candidates)
+    (if (null? candidates)
+	(error "Error. You gave wrong score for my guess, probably.")
+	(let ((gu0 (car candidates)))
+	  (let ((sc1 (scoring-user-guess an0 (read-user-guess)))
+		(sc0 (read-my-score gu0)))
+	    (if (or (= sc0 20) (= sc1 20))
+		(game-over sc0 sc1)
+		(mastermind-rec an0 
+				(keep-matching-items 
+				 (cdr candidates)
+				 (lambda (x) (= (scoring gu0 x) sc0)))))))))
+   #+END_SRC
+   (mastermind) : 在控制台调用该函数以开始游戏
+
+   #+BEGIN_SRC scheme
+  (define (mastermind)
+    (let ((ls0 (make-numbers)))
+      (mastermind-rec (list-ref ls0 (random (length ls0))) (shuffle-numbers ls0))))
+   #+END_SRC
+
+   测试：
+   #+BEGIN_SRC scheme
+  (compile-file "mastermind.scm")
+  (load "mastermind")
+  (mastermind)
+   #+END_SRC
+
+   [[file:hashtable.org][Previous：哈希表]]
+
+   [[file:slt.org][Home：目录]]
+
