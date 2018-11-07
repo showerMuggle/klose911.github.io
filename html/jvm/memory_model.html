@@ -238,9 +238,19 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orge589ece">硬件的效率与一致性</a></li>
-<li><a href="#orgd7aa3f8">JVM内存模型</a></li>
-<li><a href="#org69abc7b">JVM线程实现</a></li>
+<li><a href="#org3a66ffb">硬件的效率与一致性</a></li>
+<li><a href="#orgfbe8f2d">JVM内存模型</a>
+<ul>
+<li><a href="#org6a3923d">主内存与工作内存</a></li>
+<li><a href="#orgd5c32f5">内存间交互操作</a>
+<ul>
+<li><a href="#orgeefc6d9">执行顺序</a></li>
+</ul>
+</li>
+<li><a href="#org2953955">volatile型变量的特殊规则</a></li>
+</ul>
+</li>
+<li><a href="#org74dec75">JVM线程实现</a></li>
 </ul>
 </div>
 </div>
@@ -268,9 +278,9 @@ Amdahl定律通过系统中并行化与串行化的比重来描述多处理器�
 
 这两个定律的更替代表了近年来硬件发展从追求处理器频率到追求多核心并行处理的发展过程
 </pre>
-<div id="outline-container-orge589ece" class="outline-2">
-<h2 id="orge589ece">硬件的效率与一致性</h2>
-<div class="outline-text-2" id="text-orge589ece">
+<div id="outline-container-org3a66ffb" class="outline-2">
+<h2 id="org3a66ffb">硬件的效率与一致性</h2>
+<div class="outline-text-2" id="text-org3a66ffb">
 <p>
 先花费一点时间去了解一下物理计算机中的 <b>并发</b> 问题
 </p>
@@ -294,7 +304,7 @@ Amdahl定律通过系统中并行化与串行化的比重来描述多处理器�
 
 
 <div class="figure">
-<p><img src="pic/cache_coherence.jpg" alt="cache_coherence.jpg" width="50%" /> 
+<p><img src="pic/cache_coherence.png" alt="cache_coherence.png" width="50%" /> 
 </p>
 </div>
 
@@ -321,12 +331,168 @@ Amdahl定律通过系统中并行化与串行化的比重来描述多处理器�
 </p>
 </div>
 </div>
-<div id="outline-container-orgd7aa3f8" class="outline-2">
-<h2 id="orgd7aa3f8">JVM内存模型</h2>
+<div id="outline-container-orgfbe8f2d" class="outline-2">
+<h2 id="orgfbe8f2d">JVM内存模型</h2>
+<div class="outline-text-2" id="text-orgfbe8f2d">
+<p>
+Java虚拟机规范中试图定义一种 <span class="underline">Java内存模型</span> (JMM)来 <b>屏蔽掉各种硬件和操作系统的内存访问差异</b> ，以实现让Java程序在各种平台下都能达到一致的内存访问效果
+</p>
+<pre class="example">
+    在此之前，主流程序语言（如C/C++等）直接使用物理硬件和操作系统的内存模型
+
+    由于不同平台上内存模型的差异，有可能导致程序在一套平台上并发完全正常，而在另外一套平台上并发访问却经常出错
+
+    因此在某些场景就必须针对不同的平台来编写程序
+</pre>
+
+<p>
+定义Java内存模型并非一件容易的事情：
+</p>
+<ul class="org-ul">
+<li>这个模型必须定义得 <b>足够严谨</b> ，才能让Java的并发内存访问操作不会产生歧义</li>
+<li>也必须定义得 <b>足够宽松</b> ，使得虚拟机的实现有足够的自由空间去利用硬件的各种特性（寄存器、高速缓存和指令集中某些特有的指令）来获取更好的执行速度</li>
+</ul>
+
+<p>
+经过长时间的验证和修补，在 JDK 1.5（实现了 <span class="underline">JSR-133[2]</span> ）发布后，Java内存模型已经成熟和完善起来了
+</p>
+</div>
+<div id="outline-container-org6a3923d" class="outline-3">
+<h3 id="org6a3923d">主内存与工作内存</h3>
+<div class="outline-text-3" id="text-org6a3923d">
+<p>
+Java内存模型的主要目标是 <b>定义程序中各个变量的访问规则</b> ，即在虚拟机中将变量存储到内存和从内存中取出变量这样的底层细节。此处的 <span class="underline">变量</span> 与 <span class="underline">Java编程中所说的变量</span> 有所区别，它包括了 <span class="underline">实例字段</span> 、 <span class="underline">静态字段</span> 和 <span class="underline">构成数组对象的元素</span> ，但不包括 <b>局部变量</b> 与 <b>方法参数</b> ，因为后者是 <b>线程私有的</b> ，不会被共享，自然就不会存在竞争问题
+</p>
+<pre class="example">
+为了获得较好的执行效能
+
+Java内存模型并没有限制执行引擎使用处理器的特定寄存器或缓存来和主内存进行交互
+
+也没有限制即时编译器进行调整代码执行顺序这类优化措施
+</pre>
+
+<p>
+Java内存模型规定了 <b>所有的变量都存储在主内存</b> 中
+</p>
+<pre class="example">
+     此处的主内存与介绍物理硬件时的主内存名字一样，两者也可以互相类比，但此处仅是虚拟机内存的一部分
+</pre>
+
+<p>
+每条 <b>线程</b> 还有自己的 <b>工作内存</b> ：
+</p>
+<ul class="org-ul">
+<li>线程的工作内存中保存了被该线程使用到的 <b>变量的主内存副本拷贝</b></li>
+<li>线程对变量的所有操作（ <span class="underline">读取</span> 、 <span class="underline">赋值</span> 等）都必须在 <b>工作内存</b> 中进行，而不能 <b>直接读写主内存中的变量</b></li>
+<li><b>不同的线程</b> 之间也 <b>无法直接访问对方工作内存中的变量</b> ，线程间变量值的 <b>传递</b> 均需要通过 <span class="underline">主内存</span> 来完成</li>
+</ul>
+<pre class="example">
+     可与前面讲的处理器高速缓存类比
+</pre>
+
+<p>
+线程、主内存、工作内存三者的交互关系如下图所示：
+</p>
+
+<div class="figure">
+<p><img src="pic/working_memory.png" alt="working_memory.png" width="50%" /> 
+</p>
 </div>
 
-<div id="outline-container-org69abc7b" class="outline-2">
-<h2 id="org69abc7b">JVM线程实现</h2>
+
+<p>
+注意：
+</p>
+<ul class="org-ul">
+<li>如果局部变量是一个 <span class="underline">reference</span> 类型，它引用的对象在 <b>Java堆中可被各个线程共享</b> ，但是reference本身在 <b>Java栈的局部变量表</b> 中，它是 <b>线程私有的</b></li>
+<li>拷贝副本，假设线程中访问一个10MB的对象，也会把这10MB的内存复制一份拷贝出来吗？ 事实上并不会如此， 这个 <span class="underline">对象的引用</span> 、对象中 <span class="underline">某个在线程访问到的字段</span> 是 <b>有可能存在拷贝</b> 的，但不会有虚拟机实现成把整个对象拷贝一次</li>
+<li><b>volatile</b> 变量依然有 <b>工作内存的拷贝</b> ，但是由于它 <b>特殊的操作顺序性</b> 规定，所以看起来如同直接在主内存中读写访问一般，因此这里的描述对于volatile也并不存在例外</li>
+<li>除了实例数据，Java堆还保存了对象的其他信息，对于HotSpot虚拟机来讲 
+<ul class="org-ul">
+<li>有Mark Word
+<ul class="org-ul">
+<li>存储对象哈希码</li>
+<li>GC标志</li>
+<li>GC年龄</li>
+<li>同步锁等信息）</li>
+</ul></li>
+<li>Klass Point : 指向存储类型元数据的指针</li>
+<li>字节对齐补白的填充数据 ： 如果实例数据刚好满足8字节对齐的话，则可以不存在补白</li>
+</ul></li>
+</ul>
+</div>
+</div>
+<div id="outline-container-orgd5c32f5" class="outline-3">
+<h3 id="orgd5c32f5">内存间交互操作</h3>
+<div class="outline-text-3" id="text-orgd5c32f5">
+<p>
+关于主内存与工作内存之间具体的交互协议，即一个变量如何从主内存拷贝到工作内存、如何从工作内存同步回主内存之类的实现细节，Java内存模型中定义了以下 <b>8种操作</b> 来完成，虚拟机实现时必须保证下面提及的 <b>每一种操作都是原子的、不可再分的</b> 
+</p>
+<pre class="example">
+     对于double和long类型的变量来说，load、store、read和write操作在某些平台上允许有例外
+</pre>
+<ul class="org-ul">
+<li><b>lock</b> （锁定）：作用于 <span class="underline">主内存</span> 的变量，它把一个变量 <b>标识为一条线程独占</b> 的状态</li>
+<li><b>unlock</b> （解锁）：作用于 <span class="underline">主内存</span> 的变量，它把一个处于 <b>锁定状态的变量释放</b> 出来，释放后的变量才可以被 <span class="underline">其他线程</span> 锁定</li>
+<li><b>read</b> （读取）：作用于 <span class="underline">主内存</span> 的变量，它把一个变量的值从 <b>主内存传输到线程的工作内存</b> 中，以便随后的 <span class="underline">load</span> 动作使用</li>
+<li><b>load</b> （载入）：作用于 <span class="underline">工作内存</span> 的变量，它把 <span class="underline">read</span> 操作从主内存中得到的 <b>变量值放入工作内存的变量副本</b> 中</li>
+<li><b>use*（使用）：作用于 <span class="underline">工作内存</span> 的变量，它把工作内存中一个 *变量的值传递给执行引擎</b> ，每当虚拟机遇到一个 <span class="underline">需要使用到变量的值</span> 的字节码指令时将会执行这个操作</li>
+<li><b>assign*（赋值）：作用于 <span class="underline">工作内存</span> 的变量，它把一个 *从执行引擎接收到的值赋给工作内存的变量</b> ，每当虚拟机遇到一个给 <span class="underline">变量赋值</span> 的字节码指令时执行这个操作</li>
+<li><b>store*（存储）：作用于 <span class="underline">工作内存</span> 的变量，它把工作内存中一个 *变量的值传送到主内存</b> 中，以便随后的 <span class="underline">write</span> 操作使用</li>
+<li><b>write*（写入）：作用于 <span class="underline">主内存</span> 的变量，它把 <span class="underline">store</span> 操作从 *工作内存中得到的变量的值放入主内存的变量</b> 中</li>
+</ul>
+</div>
+
+<div id="outline-container-orgeefc6d9" class="outline-4">
+<h4 id="orgeefc6d9">执行顺序</h4>
+<div class="outline-text-4" id="text-orgeefc6d9">
+<ul class="org-ul">
+<li>如果要把一个变量从 <b>主内存复制到工作内存</b> ，那就要 <b>顺序地执行 <span class="underline">read</span> 和 <span class="underline">load</span> 操作</b></li>
+<li>如果要把变量从 <b>工作内存同步回主内存</b> ，就要 <b>顺序地执行 <span class="underline">store</span> 和 <span class="underline">write</span> 操作</b></li>
+</ul>
+
+<pre class="example">
+      注意，Java内存模型只要求上述两个操作必须按顺序执行，而没有保证是连续执行
+
+      也就是说，read与load之间、store与write之间是可插入其他指令的
+
+      如对主内存中的变量a、b进行访问时，一种可能出现顺序是read a、read b、load b、load a
+</pre>
+
+<p>
+除此之外，Java内存模型还规定了在执行上述8种基本操作时必须满足如下规则：
+</p>
+<ul class="org-ul">
+<li>不允许 <span class="underline">read</span> 和 <span class="underline">load</span> 、 <span class="underline">store</span> 和 <span class="underline">write</span> 操作之一 <b>单独出现</b> ，即不允许一个变量从主内存读取了但工作内存不接受，或者从工作内存发起回写了但主内存不接受的情况出现</li>
+<li>不允许一个线程丢弃它的最近的assign操作，即变量在 <b>工作内存中改变了之后必须把该变化同步回主内存</b></li>
+<li>不允许一个线程无原因地， <b>没有发生过任何 <span class="underline">assign</span> 操作</b> ，把数据从线程的 <b>工作内存同步回主内存中</b></li>
+<li>一个 <b>新的变量只能在主内存中诞生</b> ，不允许在工作内存中直接使用一个 <b>未被初始化</b> （ <span class="underline">load</span> 或 <span class="underline">assign</span> ）的变量，换句话说，就是 <b>对一个变量实施 <span class="underline">use</span> 、 <span class="underline">store</span> 操作之前，必须先执行过了 <span class="underline">assign</span> 和 <span class="underline">load</span> 操作</b></li>
+<li>一个变量在 <b>同一个时刻只允许 <span class="underline">一条线程</span> 对其进行 <span class="underline">lock</span> 操作</b> 
+<ul class="org-ul">
+<li>但 <span class="underline">lock</span> 操作可以被 <span class="underline">同一条线程</span>  <b>重复执行多次</b> ，多次执行 lock 后，只有 <b>执行相同次数的 <span class="underline">unlock</span> 操作</b> ，变量才会被解锁</li>
+<li>如果对一个变量执行 <span class="underline">lock</span> 操作，那将会 <b>清空工作内存中此变量的值</b> ，在 <span class="underline">执行引擎</span> 使用这个变量前，需要 <b>重新执行 <span class="underline">load</span> 或 <span class="underline">assign</span> 操作</b> 初始化变量的值</li>
+</ul></li>
+<li>如果一个变量 <b>事先没有被 <span class="underline">lock</span> 操作锁定</b> ，那就 <b>不允许对它执行 <span class="underline">unlock</span> 操作</b> ，也 <b>不允许去 unlock 一个 <span class="underline">被其他线程</span> 锁定</b> 住的变量
+<ul class="org-ul">
+<li>对一个变量执行 <span class="underline">unlock</span> 操作之前，必须 <b>先把此变量同步回主内存中</b> ，也就是执行 <span class="underline">store</span> 、 <span class="underline">write</span> 操作</li>
+</ul></li>
+</ul>
+
+<pre class="example">
+       基于理解难度和严谨性考虑，最新的JSR-133文档中，已经放弃采用这8种操作去定义Java内存模型的访问协议了
+
+      仅是描述方式改变了，Java内存模型并没有改变
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org2953955" class="outline-3">
+<h3 id="org2953955">volatile型变量的特殊规则</h3>
+</div>
+</div>
+<div id="outline-container-org74dec75" class="outline-2">
+<h2 id="org74dec75">JVM线程实现</h2>
 </div>
 </div>
 <div id="postamble" class="status">
