@@ -243,8 +243,39 @@ for the JavaScript code in this tag.
 <li><a href="#org0b9a724">Java语言中的线程安全</a>
 <ul>
 <li><a href="#org67f225c">不可变</a></li>
+<li><a href="#orgb30ff6f">绝对线程安全</a></li>
+<li><a href="#org73fefcb">相对线程安全</a></li>
+<li><a href="#org2d30ee0">线程兼容</a></li>
+<li><a href="#orgfa23b51">线程对立</a></li>
 </ul>
 </li>
+<li><a href="#org5fb3184">实现方法</a>
+<ul>
+<li><a href="#orgea7ecb8">互斥同步</a>
+<ul>
+<li><a href="#org2cda805">synchronized</a></li>
+<li><a href="#org012edf4">ReentrantLock</a></li>
+<li><a href="#org76523b3">性能比较</a></li>
+</ul>
+</li>
+<li><a href="#orgecdaed9">非阻塞同步</a>
+<ul>
+<li><a href="#orgb3c7bb1">CAS 指令</a></li>
+</ul>
+</li>
+<li><a href="#org024b7e1">无同步方案</a>
+<ul>
+<li><a href="#org88745d3">可重入代码</a></li>
+<li><a href="#orgcd139ed">线程本地存储</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#orgb9392d0">锁优化</a>
+<ul>
+<li><a href="#org955e84b">自旋锁与自适应自旋</a></li>
 </ul>
 </li>
 </ul>
@@ -270,9 +301,9 @@ for the JavaScript code in this tag.
 <span class="underline">线程安全</span> 这个名称，相信稍有经验的程序员都会听说过，甚至在代码编写和走查的时候可能还会经常挂在嘴边，但是如何找到一个不太拗口的概念来定义线程安全却不是一件容易的事情
 </p>
 <pre class="example">
-  在Google中搜索它的概念，找到的是类似于 ：如果一个对象可以安全地被多个线程同时使用，那它就是线程安全的
+    在Google中搜索它的概念，找到的是类似于 ：如果一个对象可以安全地被多个线程同时使用，那它就是线程安全的
 
-  这样的定义并不能说它不正确，但是人们无法从中获取到任何有用的信息
+    这样的定义并不能说它不正确，但是人们无法从中获取到任何有用的信息
 </pre>
 
 <p>
@@ -283,10 +314,10 @@ for the JavaScript code in this tag.
 这个定义比较严谨，它要求线程安全的代码都必须具备一个特征：代码本身 <b>封装了所有必要的正确性保障手段</b> （如 <span class="underline">互斥同步</span> 等），令 <b>调用者无须关心多线程</b> 的问题，更 <b>无须自己采取任何措施</b> 来保证多线程的正确调用
 </p>
 <pre class="example">
-  这点听起来简单，但其实并不容易做到
+    这点听起来简单，但其实并不容易做到
 
-  在大多数场景中，我们都会将这个定义弱化一些，如果把“调用这个对象的行为”限定为“单次调用”
-  这个定义的其他描述也能够成立的话，就可以称它是线程安全了
+    在大多数场景中，我们都会将这个定义弱化一些，如果把“调用这个对象的行为”限定为“单次调用”
+    这个定义的其他描述也能够成立的话，就可以称它是线程安全了
 </pre>
 </div>
 <div id="outline-container-org0b9a724" class="outline-3">
@@ -297,9 +328,9 @@ for the JavaScript code in this tag.
 </p>
 
 <pre class="example">
-  这里讨论的线程安全，就限定于多个线程之间存在共享数据访问这个前提
+     这里讨论的线程安全，就限定于多个线程之间存在共享数据访问这个前提
 
-  因为如果一段代码根本不会与其他线程共享数据，那么从线程安全的角度来看，程序是串行执行还是多线程执行对它来说是完全没有区别的
+     因为如果一段代码根本不会与其他线程共享数据，那么从线程安全的角度来看，程序是串行执行还是多线程执行对它来说是完全没有区别的
 </pre>
 
 <p>
@@ -315,7 +346,630 @@ for the JavaScript code in this tag.
 </div>
 <div id="outline-container-org67f225c" class="outline-4">
 <h4 id="org67f225c">不可变</h4>
+<div class="outline-text-4" id="text-org67f225c">
+<p>
+在Java语言中（特指JDK 1.5以后，即Java内存模型被修正之后的Java语言）， <b>不可变</b> ( <span class="underline">Immutable</span> )的对象一定是 <b>线程安全</b> 的，无论是对象的方法实现还是方法的调用者，都不需要再采取任何的线程安全保障措施， <b>只要一个不可变的对象被正确地构建出来</b> （没有发生 <span class="underline">this引用逃逸</span> 的情况），那其外部的 <span class="underline">可见状态</span> 永远也不会改变，永远也不会看到它在多个线程之中处于不一致的状态
+</p>
+<pre class="example">
+      “不可变”带来的安全性是最简单和最纯粹的
+</pre>
+
+<p>
+Java语言中，如果共享数据：
+</p>
+<ul class="org-ul">
+<li><span class="underline">基本数据类型</span> ：只要在定义时使用 <span class="underline">final</span> 关键字修饰它就可以保证它是不可变的</li>
+<li><span class="underline">对象</span> ：需要保证 <b>对象的行为不会对其状态产生任何影响</b> 才行
+<ul class="org-ul">
+<li>java.lang.String类的对象，它是一个典型的不可变对象，调用它的 <span class="underline">substring()</span> 、 <span class="underline">replace()</span> 和 <span class="underline">concat()</span> 这些方法都不会影响它原来的值，只会 <b>返回一个新构造</b> 的字符串对象</li>
+</ul></li>
+</ul>
+
+<p>
+保证对象行为不影响自己状态的途径有很多种，其中最简单的就是把对象中 <b>带有状态的变量都声明为final</b> ，这样在构造函数结束之后，它就是不可变的，例如代码中中java.lang.Integer构造函数所示的，它通过将内部状态变量 value 定义为 final 来保障状态不变：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-java"><span style="color: #ffebcd;">/**</span>
+<span style="color: #ffebcd;"> *The value of the&#65308;code&#65310;Integer&#65308;/code&#65310;.</span>
+<span style="color: #ffebcd;"> *</span><span style="color: #ffd700;">@serial</span>
+<span style="color: #ffebcd;"> */</span>
+<span style="color: #00bfff; font-weight: bold;">private</span> <span style="color: #00bfff; font-weight: bold;">final</span> <span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">value</span>;
+<span style="color: #ffebcd;">/**</span>
+<span style="color: #ffebcd;"> *Constructs a newly allocated&#65308;code&#65310;Integer&#65308;/code&#65310;object that</span>
+<span style="color: #ffebcd;"> *represents the specified&#65308;code&#65310;int&#65308;/code&#65310;value.</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> *</span><span style="color: #ffd700;">@param</span><span style="color: #ffebcd;"> value the value to be represented by the</span>
+<span style="color: #ffebcd;"> *&#65308;code&#65310;Integer&#65308;/code&#65310;object.</span>
+<span style="color: #ffebcd;"> */</span>
+<span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #daa520; font-weight: bold;">Integer</span>(<span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">value</span>) {
+    <span style="color: #00bfff; font-weight: bold;">this</span>.value=value;        
+}
+</pre>
 </div>
+<pre class="example">
+      在Java API中符合不可变要求的类型，除了上面提到的String之外，常用的还有 枚举类型
+      以及java.lang.Number的部分子类，如 Long 和 Double 等数值包装类型，BigInteger 和 BigDecimal 等大数据类型
+
+      但同为Number的子类型的原子类 AtomicInteger 和 AtomicLong 则并非不可变的
+</pre>
+</div>
+</div>
+<div id="outline-container-orgb30ff6f" class="outline-4">
+<h4 id="orgb30ff6f">绝对线程安全</h4>
+<div class="outline-text-4" id="text-orgb30ff6f">
+<p>
+绝对的线程安全完全满足Brian Goetz给出的线程安全的定义，这个定义其实是很严格的，一个类要达到“不管运行时环境如何，调用者都不需要任何额外的同步措施”通常需要付出很大的，甚至有时候是不切实际的代价
+</p>
+<pre class="example">
+      在Java API中标注自己是线程安全的类，大多数都不是绝对的线程安全
+
+      可以通过Java API中一个不是“绝对线程安全”的线程安全类来看看这里的“绝对”是什么意思
+
+
+</pre>
+<p>
+如果说 <span class="underline">java.util.Vector</span> 是一个线程安全的容器，相信所有的Java程序员对此都不会有异议，因为它的 <span class="underline">add()</span> 、 <span class="underline">get()</span> 和 <span class="underline">size()</span> 这类方法都是被 <b>synchronized</b> 修饰的，尽管这样效率很低，但确实是安全的。但是，即使它所有的方法都被修饰成同步，也不意味着 <b>调用它的时候永远都不再需要同步</b> 手段了，请看一下中的测试代码：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">private</span> <span style="color: #00bfff; font-weight: bold;">static</span> <span style="color: #98f5ff;">Vector</span>&lt;<span style="color: #98f5ff;">Integer</span>&gt; <span style="color: #4eee94;">vector</span> = <span style="color: #00bfff; font-weight: bold;">new</span> <span style="color: #98f5ff;">Vector</span>&lt;<span style="color: #98f5ff;">Integer</span>&gt;();
+
+<span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">static</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">main</span>(<span style="color: #98f5ff;">String</span>[] <span style="color: #4eee94;">args</span>) {
+    <span style="color: #00bfff; font-weight: bold;">while</span> (<span style="color: #ffd700;">true</span>) {
+        <span style="color: #00bfff; font-weight: bold;">for</span> (<span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">i</span> = 0; i &lt; 10; i++) {
+            vector.add(i);
+        }
+
+        <span style="color: #98f5ff;">Thread</span> <span style="color: #4eee94;">removeThread</span> = <span style="color: #00bfff; font-weight: bold;">new</span> <span style="color: #98f5ff;">Thread</span>(<span style="color: #00bfff; font-weight: bold;">new</span> <span style="color: #98f5ff;">Runnable</span>() {
+                <span style="color: #ffd700;">@Override</span>
+                <span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">run</span>() {
+                    <span style="color: #00bfff; font-weight: bold;">for</span> (<span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">i</span> = 0; i &lt; vector.<span style="color: #98f5ff;">size</span>(); i++) {
+                        vector.remove(i);
+                    }
+                }
+            });
+
+        <span style="color: #98f5ff;">Thread</span> <span style="color: #4eee94;">printThread</span> = <span style="color: #00bfff; font-weight: bold;">new</span> <span style="color: #98f5ff;">Thread</span>(<span style="color: #00bfff; font-weight: bold;">new</span> <span style="color: #98f5ff;">Runnable</span>() {
+                <span style="color: #ffd700;">@Override</span>
+                <span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">run</span>() {
+                    <span style="color: #00bfff; font-weight: bold;">for</span> (<span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">i</span> = 0; i &lt; vector.<span style="color: #98f5ff;">size</span>(); i++) {
+                        System.out.println((vector.get(i)));
+                    }
+                }
+            });
+
+        removeThread.start();
+        printThread.start();
+
+        <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">&#19981;&#35201;&#21516;&#26102;&#20135;&#29983;&#36807;&#22810;&#30340;&#32447;&#31243;&#65292;&#21542;&#21017;&#20250;&#23548;&#33268;&#25805;&#20316;&#31995;&#32479;&#20551;&#27515;</span>
+        <span style="color: #00bfff; font-weight: bold;">while</span> (Thread.activeCount() &gt; 20);
+    }
+}
+</pre>
+</div>
+
+<pre class="example">
+Exception in thread"Thread-132"java.lang.ArrayIndexOutOfBoundsException：
+Array index out of range：17
+at java.util.Vector.remove（Vector.java：777）
+at org.klose.mulithread.VectorTest$1.run（VectorTest.java：21）
+at java.lang.Thread.run（Thread.java：662）
+
+</pre>
+
+<p>
+很明显，尽管这里使用到的 <span class="underline">Vector</span> 的 <span class="underline">get()</span> 、 <span class="underline">remove()</span> 和 <span class="underline">size()</span> 方法都是 <b>同步</b> 的，但是在多线程的环境中，如果不在 <b>方法调用端做额外的同步措施</b> 的话，使用这段代码仍然是不安全的，因为如果另一个线程恰好在错误的时间里删除了一个元素，导致序号 i 已经不再可用的话，再用 i 访问数组就会抛出一个 <span class="underline">ArrayIndexOutOfBoundsException</span> 。如果要保证这段代码能正确执行下去，不得不把 <span class="underline">removeThread</span> 和 <span class="underline">printThread</span> 的定义改成：
+</p>
+<div class="org-src-container">
+<pre class="src src-java"><span style="color: #98f5ff;">Thread</span> <span style="color: #4eee94;">removeThread</span> = <span style="color: #00bfff; font-weight: bold;">new</span> <span style="color: #98f5ff;">Thread</span>(<span style="color: #00bfff; font-weight: bold;">new</span> <span style="color: #98f5ff;">Runnable</span>() {
+        <span style="color: #ffd700;">@Override</span>
+        <span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">run</span>() {
+            <span style="color: #00bfff; font-weight: bold;">synchronized</span> (vector) {
+                <span style="color: #00bfff; font-weight: bold;">for</span> (<span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">i</span> = 0; i &lt; vector.<span style="color: #98f5ff;">size</span>(); i++) {
+                    vector.remove(i);
+                }
+            }
+        }
+    });
+
+<span style="color: #98f5ff;">Thread</span> <span style="color: #4eee94;">printThread</span> = <span style="color: #00bfff; font-weight: bold;">new</span> <span style="color: #98f5ff;">Thread</span>(<span style="color: #00bfff; font-weight: bold;">new</span> <span style="color: #98f5ff;">Runnable</span>() {
+        <span style="color: #ffd700;">@Override</span>
+        <span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">run</span>() {
+            <span style="color: #00bfff; font-weight: bold;">synchronized</span> (vector) {
+                <span style="color: #00bfff; font-weight: bold;">for</span> (<span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">i</span> = 0; i &lt; vector.<span style="color: #98f5ff;">size</span>(); i++) {
+                    System.out.println((vector.get(i)));
+                }
+            }
+        }
+    });
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org73fefcb" class="outline-4">
+<h4 id="org73fefcb">相对线程安全</h4>
+<div class="outline-text-4" id="text-org73fefcb">
+<p>
+<span class="underline">相对的线程安全</span> 就是通常意义上所讲的线程安全，它需要保证对这个对象单独的操作是线程安全的，在调用的时候不需要做额外的保障措施，但是对于一些 <span class="underline">特定顺序的连续调用</span> ，就可能 <b>需要在调用端</b> 使用 <b>额外的同步手段</b> 来保证调用的正确性。上面代码就是相对线程安全的明显的案例
+</p>
+
+<pre class="example">
+      在Java语言中，大部分的线程安全类都属于这种类型
+
+      例如 Vector、HashTable、Collections的synchronizedCollection()方法包装的集合等
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org2d30ee0" class="outline-4">
+<h4 id="org2d30ee0">线程兼容</h4>
+<div class="outline-text-4" id="text-org2d30ee0">
+<p>
+<span class="underline">线程兼容</span> 是指 <b>对象本身并不是线程安全的</b> ，但是可以 <b>通过在 <span class="underline">调用端</span> 正确地使用 <span class="underline">同步</span> 手段</b> 来 <b>保证对象在并发环境中可以安全地使用</b> ，平常说一个类不是线程安全的，绝大多数时候指的是这一种情况
+</p>
+<pre class="example">
+Java API中大部分的类都是属于线程兼容的
+
+如与前面的Vector和HashTable相对应的集合类ArrayList和HashMap等
+</pre>
+</div>
+</div>
+<div id="outline-container-orgfa23b51" class="outline-4">
+<h4 id="orgfa23b51">线程对立</h4>
+<div class="outline-text-4" id="text-orgfa23b51">
+<p>
+<span class="underline">线程对立</span> 是指 <b>无论调用端是否采取了同步措施，都无法在多线程环境中并发使用</b> 的代码。由于Java语言天生就具备多线程特性，线程对立这种 <span class="underline">排斥多线程</span> 的代码是很少出现的，而且通常都是 <b>有害的</b> ，应当 <b>尽量避免</b> 
+</p>
+
+<p>
+一个线程对立的例子是 <span class="underline">Thread</span> 类的 <span class="underline">suspend()</span> 和 <span class="underline">resume()</span> 方法，如果有 <span class="underline">两个线程</span> 同时持有 <span class="underline">一个线程对象</span> ，一个 <span class="underline">尝试去中断</span> 线程，另一个 <span class="underline">尝试去恢复</span> 线程，而且并发进行的话，无论调用时 <b>是否进行了同步</b> ，目标线程都是 <b>存在死锁</b> 风险的：如果 suspend() 中断的线程就是即将要执行 resume() 的那个线程，那就肯定要产生死锁了
+</p>
+
+<pre class="example">
+      也正是由于这个原因，suspend() 和 resume() 方法已经被 JDK 声明废弃(@Deprecated)了
+
+      常见的线程对立的操作还有 System.setIn() 、Sytem.setOut() 和 System.runFinalizersOnExit() 等
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org5fb3184" class="outline-3">
+<h3 id="org5fb3184">实现方法</h3>
+<div class="outline-text-3" id="text-org5fb3184">
+<p>
+应该如何实现线程安全，这听起来似乎是一件由代码如何编写来决定的事情，确实，如何实现线程安全与代码编写有很大的关系，但虚拟机提供的 <span class="underline">同步</span> 和 <span class="underline">锁机制</span> 也起到了非常重要的作用
+</p>
+
+<pre class="example">
+     代码编写如何实现线程安全和虚拟机如何实现同步与锁这两者都会有所涉及，相对而言更偏重后者一些
+
+     只要了解了虚拟机线程安全手段的运作过程，自己去思考代码如何编写会变得更加容易
+</pre>
+</div>
+<div id="outline-container-orgea7ecb8" class="outline-4">
+<h4 id="orgea7ecb8">互斥同步</h4>
+<div class="outline-text-4" id="text-orgea7ecb8">
+<p>
+<b>互斥同步</b> 是常见的一种并发正确性保障手段：
+</p>
+<ul class="org-ul">
+<li><span class="underline">同步</span> ：在多个线程 <span class="underline">并发</span> 访问 <span class="underline">共享数据</span> 时，保证共享数据在 <span class="underline">同一个时刻</span> 只被 <b>一个</b> （或者是 <span class="underline">一些</span> ，使用信号量的时候）线程使用</li>
+<li><span class="underline">互斥</span> ：是实现同步的一种 <b>手段</b> ，下面是主要的互斥实现方式：
+<ul class="org-ul">
+<li>临界区</li>
+<li>互斥量</li>
+<li>信号量</li>
+</ul></li>
+</ul>
+
+<pre class="example">
+      因此，在这4个字里面：
+
+      互斥是 因 ，同步是 果
+      互斥是 方法 ，同步是 目的 
+</pre>
+</div>
+<div id="outline-container-org2cda805" class="outline-5">
+<h5 id="org2cda805">synchronized</h5>
+<div class="outline-text-5" id="text-org2cda805">
+<p>
+在Java中，最基本的互斥同步手段就是 <b>synchronized</b> 关键字，synchronized关键字经过编译之后，会在同步块的前后分别形成 <span class="underline">monitorenter</span> 和 <span class="underline">monitorexit</span> 这两个 <b>字节码指令</b> ，这两个字节码都需要一个 <span class="underline">reference</span> 类型的参数来 <span class="underline">指明</span> 要 <b>锁定</b> 和 <b>解锁</b> 的 <span class="underline">对象</span> ：
+</p>
+<ul class="org-ul">
+<li>如果Java程序中的 synchronized <b>明确指定</b> 了 <span class="underline">对象参数</span> ，那就是这个 <b>对象的reference</b></li>
+<li>如果 <b>没有明确指定</b> ，那就根据 synchronized 修饰的是 <span class="underline">实例方法</span> 还是 <span class="underline">类方法</span> ，去取对应的 <b>对象实例</b> 或 <b>Class对象</b> 来作为锁对象</li>
+</ul>
+
+<pre class="example">
+有两点是需要特别注意的：
+
+1. synchronized 同步块对 同一条线程 来说是 可重入 的，不会出现自己把自己锁死的问题
+2. 同步块在已进入的线程执行完之前，会 阻塞后面 其他线程 的进入
+</pre>
+
+<p>
+根据虚拟机规范的要求：
+</p>
+<ul class="org-ul">
+<li>在执行 <span class="underline">monitorenter</span> 指令时： <b>尝试获取对象的锁</b> 
+<ul class="org-ul">
+<li>如果这个对象 <span class="underline">没被锁定</span> ，或者 <span class="underline">当前线程</span> 已经拥有了 <span class="underline">那个对象的锁</span> ，把 <b>锁的计数器加1</b></li>
+</ul></li>
+<li>在执行 <span class="underline">monitorexit</span> 指令时：会将 <b>锁计数器减1</b> ，当计数器为 <span class="underline">0</span> 时，锁就被 <b>释放</b></li>
+<li>如果 <span class="underline">获取对象锁失败</span> ，那当前线程就要 <b>阻塞等待</b> ，直到对象 <b>锁被 <span class="underline">另外一个</span> 线程 <span class="underline">释放</span> 为止</b></li>
+</ul>
+
+<pre class="example">
+Java的线程 是映射到 操作系统的原生线程 之上的
+
+如果要阻塞或唤醒一个线程，都需要 操作系统 来帮忙完成
+这就需要从用户态转换到核心态中，因此状态转换需要耗费很多的处理器时间
+
+对于代码简单的同步块（如被synchronized修饰的 getter() 或 setter() 方法），状态转换消耗的时间有可能比用户代码执行的时间还要长
+所以synchronized是Java语言中一个重量级的操作，有经验的程序员都会在确实必要的情况下才使用这种操作
+
+而虚拟机本身也会进行一些优化，譬如在通知操作系统阻塞线程之前加入一段自旋等待过程，避免频繁地切入到核心态之中
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org012edf4" class="outline-5">
+<h5 id="org012edf4">ReentrantLock</h5>
+<div class="outline-text-5" id="text-org012edf4">
+<p>
+还可以使用 <span class="underline">java.util.concurrent</span> 包中的 <b>重入锁</b> ( <span class="underline">ReentrantLock</span> )来实现同步
+</p>
+
+<pre class="example">
+在基本用法上，ReentrantLock 与 synchronized 很相似，他们都具备一样的 线程重入 特性，只是 代码写法 上有点区别：
+
+ReentrantLock：表现为 API层面 的互斥锁
+   lock() 和 unlock() 方法配合 try/finally 语句块来完成
+
+synchronzed： 原生语法 层面的互斥锁
+</pre>
+
+<p>
+同时 ReentrantLock增加了一些 <b>高级</b> 功能，主要有以下3项：
+</p>
+<ol class="org-ol">
+<li><span class="underline">等待可中断</span> ：当持有锁的线程 <span class="underline">长期不释放锁</span> 的时候， <span class="underline">正在等待的线程</span> 可以选择 <b>放弃等待</b> ，改为处理其他事情，可中断特性对 <span class="underline">处理执行时间非常长的同步块</span> 很有帮助</li>
+<li>实现 <span class="underline">公平锁</span> ：指多个线程在等待同一个锁时，必须 <b>按照 <span class="underline">申请锁的时间顺序</span> 来 <span class="underline">依次</span> 获得锁</b> ；而非公平锁则不保证这一点，在锁被释放时， <span class="underline">任何一个等待锁的线程</span> 都有机会获得锁
+<ul class="org-ul">
+<li>synchronized 中的锁是 <span class="underline">非公平的</span></li>
+<li>ReentrantLock <span class="underline">默认</span> 情况下也是 <span class="underline">非公平的</span> ，但可以通过 <span class="underline">带布尔值的构造函数</span> 要求 <b>使用公平锁</b></li>
+</ul></li>
+<li>锁可以 <b>绑定多个条件</b> ：一个 <span class="underline">ReentrantLock 对象</span> 可以 <b>同时绑定多个 <span class="underline">Condition</span> 对象</b> 
+<ul class="org-ul">
+<li>synchronized中：锁对象的 <span class="underline">wait()</span> 和 <span class="underline">notify()</span> 或 <span class="underline">notifyAll()</span> 方法可以 <b>实现一个隐含的条件</b> ，如果要和 <span class="underline">多于一个的条件</span> 关联的时候，就不得不 <b>额外地添加一个锁</b></li>
+<li>ReentrantLock则无须这样做，只需要 <b>多次调用 <span class="underline">newCondition()</span> 方法</b> 即可</li>
+</ul></li>
+</ol>
+
+<pre class="example">
+       如果需要使用上述功能，选用ReentrantLock是一个很好的选择
+</pre>
+</div>
+</div>
+<div id="outline-container-org76523b3" class="outline-5">
+<h5 id="org76523b3">性能比较</h5>
+<div class="outline-text-5" id="text-org76523b3">
+<p>
+关于 synchronized 和 ReentrantLock 的 <b>性能</b> 问题，Brian Goetz对这两种锁在 <span class="underline">JDK 1.5</span> 与 <span class="underline">单核</span> 处理器，以及JDK 1.5与 <span class="underline">双Xeon</span> 处理器环境下做了一组吞吐量对比的实验，实验结果如图所示：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/jdk5-single-cpu.jpg" alt="jdk5-single-cpu.jpg" width="70%" /> 
+</p>
+</div>
+
+
+<div class="figure">
+<p><img src="pic/jdk5-dual-xeon.jpg" alt="jdk5-dual-xeon.jpg" width="70%" /> 
+</p>
+</div>
+
+<p>
+从图中看出，多线程环境下 <span class="underline">synchronized</span> 的吞吐量 <b>下降得非常严重</b> ，而 <span class="underline">ReentrantLock</span> 则能基本 <b>保持在同一个比较稳定</b> 的水平上
+</p>
+<pre class="example">
+与其说 ReentrantLock 性能好，还不如说 synchronized 还有非常大的优化余地
+
+后续的技术发展也证明了这一点，JDK 1.6中加入了很多针对锁的优化措施
+JDK 1.6发布之后，人们就发现 synchronized 与 ReentrantLock 的性能基本上是完全持平了
+
+因此，如果读者的程序是使用JDK 1.6或以上部署的话，性能因素就不再是选择ReentrantLock的理由了
+虚拟机在未来的性能改进中肯定也会更加偏向于原生的synchronized
+
+所以还是提倡在 synchronized 能实现需求的情况下，优先考虑使用 synchronized 来进行同步
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-orgecdaed9" class="outline-4">
+<h4 id="orgecdaed9">非阻塞同步</h4>
+<div class="outline-text-4" id="text-orgecdaed9">
+<p>
+互斥同步最主要的问题就是进行线程阻塞和唤醒所带来的性能问题，因此这种同步也称为 <b>阻塞同步</b> 。从处理问题的方式上说，互斥同步属于一种 <span class="underline">悲观的并发</span> 策略，总是认为只要不去做正确的同步措施（例如加锁），那就肯定会出现问题，无论共享数据是否真的会出现竞争，它都要进行 <span class="underline">加锁</span> （这里讨论的是概念模型，实际上虚拟机会优化掉很大一部分不必要的加锁）、 <span class="underline">用户态核心态转换</span> 、 <span class="underline">维护锁计数器</span> 和 <span class="underline">检查是否有被阻塞的线程需要唤醒</span> 等操作。随着硬件指令集的发展，有了另外一个选择： 基于 <span class="underline">冲突检测</span> 的 <span class="underline">乐观并发</span> 策略，就是先进行操作：
+</p>
+<ul class="org-ul">
+<li>如果 <span class="underline">没有其他线程争用共享数据</span> ，那操作就成功了</li>
+<li>如果 <span class="underline">共享数据有争用</span> ，产生了冲突，那就再 <b>采取其他的补偿措施</b> 
+<ul class="org-ul">
+<li>最常见的补偿措施就是 <span class="underline">不断地重试</span> ，直到成功为止</li>
+</ul></li>
+</ul>
+
+<p>
+这种乐观的并发策略的许多实现都不需要把线程挂起，因此这种同步操作称为 <b>非阻塞同步</b> 
+</p>
+
+<pre class="example">
+      为什么说使用乐观并发策略需要“硬件指令集的发展”才能进行呢？
+
+      因为需要操作和冲突检测这两个步骤具备原子性，靠什么来保证呢？
+
+      如果这里再使用互斥同步来保证就失去意义了，所以只能靠硬件来完成这件事情
+</pre>
+
+<p>
+硬件保证一个从语义上 <span class="underline">看起来需要多次操作的行为</span> 只通过 <span class="underline">一条处理器指令</span> 就能完成，这类指令常用的有：
+</p>
+<ul class="org-ul">
+<li>Test-and-Set : 测试并设置</li>
+<li>Fetch-and-Increment : 获取并增加</li>
+<li>Swap : 交换</li>
+<li>Compare-and-Swap : 比较并交换，简称 <span class="underline">CAS</span></li>
+<li>Load-Linked/Store-Conditional : 加载链接/条件存储，下文称 <span class="underline">LL/SC</span></li>
+</ul>
+
+<pre class="example">
+      前面的 3条 是 20世纪就已经存在于大多数指令集之中的处理器指令
+      后面的两条是现代处理器新增的，而且这两条指令的目的和功能是类似的
+
+      在 IA64、 x86 指令集中有 cmpxchg 指令完成CAS功能
+      在 sparc-TSO 也有 casa 指令实现
+      而在 ARM 和 PowerPC 架构下，则需要使用一对 ldrex/strex 指令来完成LL/SC的功能
+</pre>
+</div>
+
+<div id="outline-container-orgb3c7bb1" class="outline-5">
+<h5 id="orgb3c7bb1">CAS 指令</h5>
+<div class="outline-text-5" id="text-orgb3c7bb1">
+<p>
+<span class="underline">CAS指令</span> 需要有3个 <span class="underline">操作数</span> ：
+</p>
+<ol class="org-ol">
+<li><b>内存位置</b> ：在 Java 中可以简单理解为 <span class="underline">变量的内存地址</span> ，用 <span class="underline">V</span> 表示</li>
+<li><b>旧的预期值</b> : 用 <span class="underline">A</span> 表示</li>
+<li><b>新值</b> : 用 <span class="underline">B</span> 表示</li>
+</ol>
+
+<p>
+CAS指令执行时， <b>当且仅当</b> ：
+</p>
+<ul class="org-ul">
+<li><span class="underline">V</span> <b>符合</b> 旧预期值 <span class="underline">A</span> 时，处理器用新值 <span class="underline">B</span> <b>更新</b> <span class="underline">V</span> 的值</li>
+<li>否则它就 <b>不执行更新</b></li>
+<li>但是无论是否更新了 V 的值，都会 <b>返回 <span class="underline">V</span> 的旧值</b></li>
+<li>上述的处理过程是一个 <b>原子</b> 操作</li>
+</ul>
+
+<pre class="example">
+       在JDK 1.5之后，Java程序中才可以使用CAS操作
+
+       该操作由 sun.misc.Unsafe类 里面的 compareAndSwapInt() 和 compareAndSwapLong() 等几个方法包装提供
+
+       虚拟机在内部对这些方法做了特殊处理，即时编译出来的结果就是一条平台相关的处理器CAS指令
+
+       没有方法调用的过程，或者可以认为是 无条件内联 进去了
+</pre>
+
+<p>
+由于 <span class="underline">Unsafe</span> 类不是 <b>提供给用户程序调用的类</b> 
+</p>
+<pre class="example">
+Unsafe.getUnsafe() 的代码中限制了只有启动类加载器 Bootstrap ClassLoader 加载的Class才能访问它
+</pre>
+<p>
+因此，如果不采用反射手段，只能通过 <span class="underline">其他的 Java API</span> 来 <b>间接使用</b> 它，如J.U.C包里面的 <span class="underline">整数原子类</span> ，其中的 <span class="underline">compareAndSet()</span> 和 <span class="underline">getAndIncrement()</span> 等方法都使用了 <span class="underline">Unsafe类的CAS操作</span> 
+</p>
+
+<p>
+曾经通过这段 20个线程 自增 10000次 的代码来证明 volatile 变量不具备原子性，那么如何才能让它具备原子性呢？把 <span class="underline">race++</span> 操作或 <span class="underline">increase()</span> 方法 <span class="underline">用同步块</span> 包裹起来当然是一个办法，但是如果改成如下面代码，那 <b>效率将会提高许多</b> ：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-java"><span style="color: #ffebcd;">/**</span>
+<span style="color: #ffebcd;"> * Atomic&#21464;&#37327;&#33258;&#22686;&#36816;&#31639;&#27979;&#35797;</span>
+<span style="color: #ffebcd;"> * </span>
+<span style="color: #ffebcd;"> * </span><span style="color: #ffd700;">@author</span><span style="color: #ffebcd;"> zzm</span>
+<span style="color: #ffebcd;"> */</span>
+<span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">class</span> <span style="color: #98f5ff;">AtomicTest</span> {
+
+    <span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">static</span> <span style="color: #98f5ff;">AtomicInteger</span> <span style="color: #4eee94;">race</span> = <span style="color: #00bfff; font-weight: bold;">new</span> <span style="color: #98f5ff;">AtomicInteger</span>(0);
+
+    <span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">static</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">increase</span>() {
+        race.incrementAndGet();
+    }
+
+    <span style="color: #00bfff; font-weight: bold;">private</span> <span style="color: #00bfff; font-weight: bold;">static</span> <span style="color: #00bfff; font-weight: bold;">final</span> <span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">THREADS_COUNT</span> = 20;
+
+    <span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">static</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">main</span>(<span style="color: #98f5ff;">String</span>[] <span style="color: #4eee94;">args</span>) <span style="color: #00bfff; font-weight: bold;">throws</span> <span style="color: #98f5ff;">Exception</span> {
+        <span style="color: #98f5ff;">Thread</span>[] <span style="color: #4eee94;">threads</span> = <span style="color: #00bfff; font-weight: bold;">new</span> <span style="color: #98f5ff;">Thread</span>[THREADS_COUNT];
+        <span style="color: #00bfff; font-weight: bold;">for</span> (<span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">i</span> = 0; i &lt; <span style="color: #98f5ff;">THREADS_COUNT</span>; i++) {
+            threads[i] = <span style="color: #00bfff; font-weight: bold;">new</span> <span style="color: #98f5ff;">Thread</span>(<span style="color: #00bfff; font-weight: bold;">new</span> <span style="color: #98f5ff;">Runnable</span>() {
+                    <span style="color: #ffd700;">@Override</span>
+                    <span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">run</span>() {
+                        <span style="color: #00bfff; font-weight: bold;">for</span> (<span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">i</span> = 0; i &lt; 10000; i++) {
+                            increase();
+                        }
+                    }
+                });
+            threads[i].start();
+        }
+
+        <span style="color: #00bfff; font-weight: bold;">while</span> (Thread.activeCount() &gt; 1)
+            Thread.yield();
+
+        System.out.println(race);
+    }
+}
+</pre>
+</div>
+
+<pre class="example">
+200000
+
+</pre>
+
+<p>
+使用 <span class="underline">AtomicInteger</span> 代替 <span class="underline">int</span> 后，程序输出了正确的结果，一切都要归功于 <span class="underline">incrementAndGet()</span> 方法的 <b>原子性</b> 。它的实现其实非常简单，如下所示：
+</p>
+<div class="org-src-container">
+<pre class="src src-java"><span style="color: #ffebcd;">/**</span>
+<span style="color: #ffebcd;"> * Atomically increment by one the current value.</span>
+<span style="color: #ffebcd;"> * </span><span style="color: #ffd700;">@return</span><span style="color: #ffebcd;"> the updated value</span>
+<span style="color: #ffebcd;"> */</span>
+<span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">final</span> <span style="color: #98f5ff;">int</span> <span style="color: #daa520; font-weight: bold;">incrementAndGet</span>() {
+    <span style="color: #00bfff; font-weight: bold;">for</span> (;;) {
+        <span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">current</span> = get();
+        <span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">next</span> = current + 1;
+        <span style="color: #00bfff; font-weight: bold;">if</span> (compareAndSet(current, next))
+            <span style="color: #00bfff; font-weight: bold;">return</span> next;
+    }
+}
+</pre>
+</div>
+
+<p>
+incrementAndGet() 方法在一个无限循环中，不断尝试将一个 <span class="underline">比当前值大1的新值</span> <b>赋给自己</b> ：
+</p>
+<ul class="org-ul">
+<li>如果失败了，那说明在执行 <span class="underline">获取-设置</span> 操作的时候 <b>值已经有了修改</b> ，于是 <b>再次循环</b> 进行下一次操作，直到 <b>设置成功</b> 为止</li>
+</ul>
+
+<pre class="example">
+尽管CAS看起来很美，但显然这种操作无法涵盖互斥同步的所有使用场景
+
+并且CAS从语义上来说并不是完美的，存在这样的一个逻辑漏洞：
+
+如果一个变量 V 初次读取的时候是 A 值，并且在准备赋值的时候检查到它仍然为 A 值，那我们就能说它的值没有被其他线程改变过了吗？
+如果在这段期间它的值曾经被改成了B，后来又被改回为A，那CAS操作就会误认为它从来没有被改变过
+这个漏洞称为CAS操作的“ABA”问题
+
+J.U.C包为了解决这个问题，提供了一个带有标记的原子引用类“AtomicStampedReference”
+它可以通过控制变量值的版本来保证CAS的正确性
+
+不过目前来说这个类比较“鸡肋”，大部分情况下ABA问题不会影响程序并发的正确性
+如果需要解决ABA问题，改用传统的互斥同步可能会比原子类更高效
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org024b7e1" class="outline-4">
+<h4 id="org024b7e1">无同步方案</h4>
+<div class="outline-text-4" id="text-org024b7e1">
+<pre class="example">
+      要保证线程安全，并不是一定就要进行同步，两者没有因果关系
+
+      同步只是保证共享数据争用时的正确性的手段，如果一个方法本来就不涉及共享数据，那它自然就无须任何同步措施去保证正确性
+</pre>
+
+<p>
+因此会有一些代码天生就是线程安全的，简单地介绍其中的两类
+</p>
+<ul class="org-ul">
+<li>可重入代码</li>
+<li>线程本地存储</li>
+</ul>
+</div>
+
+<div id="outline-container-org88745d3" class="outline-5">
+<h5 id="org88745d3">可重入代码</h5>
+<div class="outline-text-5" id="text-org88745d3">
+<p>
+这种代码也叫做 <span class="underline">纯代码</span> ，可以在代码执行的任何时刻中断它，转而去执行另外一段代码（包括递归调用它本身），而在控制权返回后，原来的程序不会出现任何错误
+</p>
+<pre class="example">
+       相对线程安全来说，可重入性是更基本的特性，它可以保证线程安全
+
+       即所有的可重入的代码都是线程安全的，但是并非所有的线程安全的代码都是可重入的
+</pre>
+
+<p>
+可重入代码有一些共同的特征：
+</p>
+<ul class="org-ul">
+<li>不依赖 <span class="underline">存储在堆上的数据</span> 和 <span class="underline">公用的系统资源</span></li>
+<li>用到的 <span class="underline">状态量都由参数中</span> 传入</li>
+<li><span class="underline">不调用非可重入的方法</span> 等</li>
+</ul>
+
+<p>
+可以通过一个简单的原则来判断代码是否具备可重入性： 如果一个方法，它的 <b>返回结果是可以预测的</b> ，只要输入了相同的数据，就都能返回相同的结果，那它就满足可重入性的要求，当然也就是线程安全的
+</p>
+
+<pre class="example">
+     实际上函数式编程，产生的就是可重入的代码
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orgcd139ed" class="outline-5">
+<h5 id="orgcd139ed">线程本地存储</h5>
+<div class="outline-text-5" id="text-orgcd139ed">
+<p>
+如果一段代码中所需要的数据必须与其他代码共享，那就看看 <b>这些 <span class="underline">共享数据的代码</span> 是否能 <span class="underline">保证在同一个线程</span> 中执行</b> ？如果能保证，就可以把 <span class="underline">共享数据的可见范围</span> <b>限制</b> 在 <span class="underline">同一个线程</span> 之内，这样，无须同步也能保证线程之间不出现数据争用的问题
+</p>
+
+<p>
+符合这种特点的应用并不少见，大部分 <b>使用消费队列</b> 的架构模式（如 <span class="underline">生产者-消费者</span> 模式）都会将 <b>产品的消费过程尽量在一个线程中消费</b> 完，其中最重要的一个应用实例就是经典Web交互模型中的 <span class="underline">一个请求对应一个服务器线程</span> 的处理方式，这种处理方式的广泛应用使得很多Web服务端应用都可以使用 <span class="underline">线程本地存储</span> 来解决线程安全问题
+</p>
+
+<pre class="example">
+Java语言中，如果一个变量要被多线程访问，可以使用volatile关键字声明它为“易变的”
+
+如果一个变量要被某个线程独享，Java中就没有类似C++中__declspec 这样的关键字
+不过还是可以通过 java.lang.ThreadLocal 类来实现线程本地存储的功能
+
+每一个线程的Thread 对象中都有一个 ThreadLocalMap 对象
+这个对象存储了一组以 ThreadLocal.threadLocalHashCode 为键，以本地线程变量为值的 K-V 值对
+
+ThreadLocal对象就是当前线程的 ThreadLocalMap 的访问入口
+每一个ThreadLocal对象都包含了一个独一无二的 ThreadLocalHashCode值，使用这个值就可以在线程 K-V值对中找回对应的本地线程变量
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgb9392d0" class="outline-2">
+<h2 id="orgb9392d0">锁优化</h2>
+<div class="outline-text-2" id="text-orgb9392d0">
+<p>
+高效并发是从 JDK 1.5 到 JDK 1.6 的一个重要改进，HotSpot虚拟机开发团队在这个版本上花费了大量的精力去实现各种锁优化技术：
+</p>
+<ul class="org-ul">
+<li>适应性自旋</li>
+<li>锁消除</li>
+<li>锁粗化</li>
+<li>轻量级锁</li>
+<li>偏向锁</li>
+</ul>
+
+<p>
+这些技术都是为了在线程之间更高效地共享数据，以及解决竞争问题，从而提高程序的执行效率
+</p>
+</div>
+
+<div id="outline-container-org955e84b" class="outline-3">
+<h3 id="org955e84b">自旋锁与自适应自旋</h3>
 </div>
 </div>
 </div>
