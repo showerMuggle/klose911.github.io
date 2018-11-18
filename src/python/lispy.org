@@ -1,0 +1,55 @@
+#+TITLE: 用Python实现一个更好的Lisp解释器
+#+HTML_HEAD: <link rel="stylesheet" type="text/css" href="css/main.css" />
+#+OPTIONS: num:nil timestamp:nil 
+
+[[http://norvig.com/lispy.html][这篇博客]] 展示了如何在90行Python代码实现一个简单的Lisp解释器：[[file:src/lisp/lis.py][lis.py]] 。[[file:src/lisp/lispy.py][lispy.py]] 这个版本做了一些新的扩展，虽然代码量是原来的三倍左右，但这是一个更完整的 Lisp 实现
+* 数据类型：字符串，布尔值，复数，端口
+  #+BEGIN_EXAMPLE
+    增加一个新的数据类型可能有三个地方需要修改：
+
+    数据类型的内部表达方式
+    对这些数据类型的操作
+    读取新的数据类型的语法
+  #+END_EXAMPLE
+
+  下面是增加的四种数据类型：
+  1. 字符串：使用 _双引号_ 扩起来的。在一个字符串中， *\n* 代表着一个 _新行_ ， *\"* 表示一个 _双引号_
+  2. 布尔值： 
+     + _True_ 和 _False_ 的语法是： *#t* 和 *#f*
+     + 类型判断过程： *boolean?*
+  3. 复数：使用 *cmath* 模块 替换 _math_ 模块来支付复数。这样可以用 _3+4i_ 来表达复数常量
+  4. 端口：没有语法需要添加，但是需要新增 _port?_ ,  _load_ ,  _open-input-file_ ,  _close-input-port_ ,  _open-output-file_ ,  _close-output-port_ , _read_ ,  _read-char_ ,  _write_  and _display_ 
+     + 输出端口：使用 Python _原生 file 对象_ 来表达
+     + 输入端口：包装在一个 *InputPort* 类，这个类包含 _被读的 file 对象_ 和 _最后被读的那一行_ 
+  #+BEGIN_EXAMPLE
+    这四种新的数据结构，除了输入端口用了新实现的 InputPort 类，其他都使用了 Python 原生的数据结构
+
+    InputPort 类更加方便，因为 Scheme 输入端口不仅需要处理读取表达式，而且需要读取字符
+    与之相比原来的 tokenizer 只能处理一个完整行，而不是单独的字符
+  #+END_EXAMPLE
+
+  同时还有一种老的数据类型独立出来：
+  + 符号：在上一个版本的解释器中，符号被实现为字符串。为了和新增加的字符串类型作为区别，符号被实现为一个新的类 *Symbol* ，直接继承于 _str_ 类
+
+  #+BEGIN_SRC python 
+  class Symbol(str): pass
+
+  def Sym(s, symbol_table={}):
+      "Find or create unique Symbol entry for str s in symbol table."
+      if s not in symbol_table: symbol_table[s] = Symbol(s)
+      return symbol_table[s]
+
+  _quote, _if, _set, _define, _lambda, _begin, _definemacro, = map(Sym, 
+  "quote   if   set!  define   lambda   begin   define-macro".split())
+
+  _quasiquote, _unquote, _unquotesplicing = map(Sym,
+  "quasiquote   unquote   unquote-splicing".split())
+  #+END_SRC  
+
+  #+BEGIN_EXAMPLE
+    现在无法再使用 x[0] == 'if' ，因为 if 现在是一个字符串，而不是 Symbol 对象
+
+    相应地定义 _if 为 Sym('if') ，用 x[0] == _if 来做判断
+    其中 Sym 函数管理了一个 没有重复的符号表 ：symbol_table 
+  #+END_EXAMPLE
+* 新增语法: 字符串，注释，引用，#常量
