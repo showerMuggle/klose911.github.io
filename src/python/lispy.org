@@ -2,7 +2,7 @@
 #+HTML_HEAD: <link rel="stylesheet" type="text/css" href="css/main.css" />
 #+OPTIONS: num:nil timestamp:nil 
 
-[[http://norvig.com/lispy.html][这篇博客]] 展示了如何在90行Python代码实现一个简单的Lisp解释器：[[file:src/lisp/lis.py][lis.py]] 。[[file:src/lisp/lispy.py][lispy.py]] 这个版本做了一些新的扩展，虽然代码量是原来的三倍左右，但这是一个更完整的 Lisp 实现
+[[http://norvig.com/lispy.html][这篇博客]] 展示了如何在90行Python代码实现一个简单的Lisp解释器：[[https://github.com/klose911/klose911.github.io/blob/master/src/python/src/lisp/lis.py][lis.py]] 。[[https://github.com/klose911/klose911.github.io/blob/master/src/python/src/lisp/lispy.py][lispy.py]] 这个版本做了一些新的扩展，虽然代码量是原来的三倍左右，但这是一个更完整的 Lisp 实现
 * 数据类型：字符串，布尔值，复数，端口
   #+BEGIN_EXAMPLE
     增加一个新的数据类型可能有三个地方需要修改：
@@ -53,3 +53,173 @@
     其中 Sym 函数管理了一个 没有重复的符号表 ：symbol_table 
   #+END_EXAMPLE
 * 新增语法: 字符串，注释，引用，#常量
+  + 增加字符串类型以后使得标记化过程变得复杂。现在无法再使用 _空白符_ 来分割标记，因为 *空白符同样会出现在字符串中* 。相应地需要使用复杂的 *正则表达式* 来把输入解析成标记
+  + 在 Scheme 中 _注释_ 是以' *;* '开头直到行尾。，必须把从' *;* '开头直到行尾收集到一个标记中，并且忽略到这个标记
+  + 还需要支持6中新的标记： 
+    + *#t* : _True_ 常量
+    + *#f* : _False_ 常量
+    + *'* : *引用* ( _quote_ ) 后面的表达式，例如 _'exp_ 等价于 _(quote exp)_ 
+    + *`* : *准引用* ( _quasiquote_ ) 后面的表达式 
+      + _准引用_ 是 *运行时获得值* ，而 _引用_ 是 *编译时值已经确定* ，因此 _准引用_ 可以 *包含变量* ，如果需要这个变量会在运行时被替换：
+	+ *,* : _,exp_ 表示 exp 是个 _变量_ ，替换这个 exp _变量的值_ 
+	+ *,@* : _,@exp_ 表示 exp 是个 _列表_ ，用这个 _列表中所有的元素_ 来做替换
+
+  #+BEGIN_SRC scheme
+  (define a 1)
+  (define b 2)
+
+  '(a b)                          ; => (a b) 
+  `(a b)                          ; => '(a b)
+
+  `(a ,b)                         ; => '(a 2), a 依旧是那个变量 a
+  (quasiquote (a (unquote b)))    ; => '(a 2), 和 `(a ,b) 等价
+
+  `(,a ,b)                        ; => '(1 2)
+
+  (define c '(3 4 5))
+  `(,b ,@c)                       ; => (2 3 4 5) 
+  #+END_SRC
+
+** InputPort 类
+   引入 InputPort 类之后使得 repl 循环变得更加强大：
+   + 支持多行读取
+   + 错误检查和打印
+
+   下面是 InputPort 的实现：
+
+   #+BEGIN_SRC python
+  class InPort(object):
+      "An input port. Retains a line of chars."
+      tokenizer = r'''\s*(,@|[('`,)]|"(?:[\\].|[^\\"])*"|;.*|[^\s('"`,;)]*)(.*)'''
+      def __init__(self, file):
+	  self.file = file; self.line = ''
+      def next_token(self):
+	  "Return the next token, reading new text into line buffer if needed."
+	  while True:
+	      if self.line == '': self.line = self.file.readline()
+	      if self.line == '': return eof_object
+	      token, self.line = re.match(InPort.tokenizer, self.line).groups()
+	      if token != '' and not token.startswith(';'):
+		  return token
+   #+END_SRC
+
+** read 系列函数
+   #+BEGIN_SRC python 
+  eof_object = Symbol('#<eof-object>') # Note: uninterned; can't be read
+
+  def readchar(inport):
+      "Read the next character from an input port."
+      if inport.line != '':
+	  ch, inport.line = inport.line[0], inport.line[1:]
+	  return ch
+      else:
+	  return inport.file.read(1) or eof_object
+
+  def read(inport):
+      "Read a Scheme expression from an input port."
+      def read_ahead(token):
+	  if '(' == token: 
+	      L = []
+	      while True:
+		  token = inport.next_token()
+		  if token == ')': return L
+		  else: L.append(read_ahead(token))
+	  elif ')' == token: raise SyntaxError('unexpected )')
+	  elif token in quotes: return [quotes[token], read(inport)]
+	  elif token is eof_object: raise SyntaxError('unexpected EOF in list')
+	  else: return atom(token)
+	  # body of read:
+      token1 = inport.next_token()
+      return eof_object if token1 is eof_object else read_ahead(token1)
+
+  quotes = {"'":_quote, "`":_quasiquote, ",":_unquote, ",@":_unquotesplicing}
+
+  def atom(token):
+      'Numbers become numbers; #t and #f are booleans; "..." string; otherwise Symbol.'
+      if token == '#t': return True
+      elif token == '#f': return False
+      elif token[0] == '"': return token[1:-1].decode('string_escape')
+      try: return int(token)
+      except ValueError:
+	  try: return float(token)
+	  except ValueError:
+	      try: return complex(token.replace('i', 'j', 1))
+	      except ValueError:
+		  return Sym(token)
+   #+END_SRC
+
+** 加强版 repl 
+   #+BEGIN_SRC python 
+  def to_string(x):
+      "Convert a Python object back into a Lisp-readable string."
+      if x is True: return "#t"
+      elif x is False: return "#f"
+      elif isa(x, Symbol): return x
+      elif isa(x, str): return '"%s"' % x.encode('string_escape').replace('"',r'\"')
+      elif isa(x, list): return '('+' '.join(map(to_string, x))+')'
+      elif isa(x, complex): return str(x).replace('j', 'i')
+      else: return str(x)
+
+  def repl(prompt='lispy> ', inport=InPort(sys.stdin), out=sys.stdout):
+      "A prompt-read-eval-print loop."
+      sys.stderr.write("Lispy version 2.0\n")
+      while True:
+	  try:
+	      if prompt: sys.stderr.write(prompt)
+	      x = parse(inport)
+	      if x is eof_object: return
+	      val = eval(x)
+	      if val is not None and out: print >> out, to_string(val)
+	  except Exception as e:
+	      print '%s: %s' % (type(e).__name__, e)
+
+  def load(filename):
+      "Eval every expression from a file."
+      repl(None, InPort(open(filename)), None)
+   #+END_SRC
+
+   现在可以支持从文件读取 sheme 代码
+
+** 测试
+   #+BEGIN_SRC sh 
+  >>> repl()
+  Lispy version 2.0
+  lispy> (define (cube x)
+	    (* x (* x x))) ; input spans multiple lines
+
+  lispy> (cube 10)
+  1000
+
+  lispy> (cube 1) (cube 2) (cube 3) ; multiple inputs per line
+  1
+
+  lispy> 8
+
+  lispy> 27
+
+  lispy> (/ 3 0) ; error recovery
+  ZeroDivisionError: integer division or modulo by zero
+
+  lispy> (if 1 2 3 4 5) ; syntax error recovery
+  SyntaxError: (if 1 2 3 4 5): wrong length
+
+  lispy> (defun (f x)
+	    (set! 3 x)) ;; early syntax error detection
+  SyntaxError: (set! 3 x): can set! only a symbol
+
+  lispy> 
+   #+END_SRC
+
+* 宏
+
+* 尾递归
+
+* 续延
+
+* 不定长函数参数
+
+* 语法检查
+
+* 更多原始过程
+
+* 测试

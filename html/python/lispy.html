@@ -257,12 +257,26 @@ for the JavaScript code in this tag.
 <div id="text-table-of-contents">
 <ul>
 <li><a href="#org312cbd8">数据类型：字符串，布尔值，复数，端口</a></li>
-<li><a href="#org93e2dc9">新增语法: 字符串，注释，引用，#常量</a></li>
+<li><a href="#org93e2dc9">新增语法: 字符串，注释，引用，#常量</a>
+<ul>
+<li><a href="#orgb909c9c">InputPort 类</a></li>
+<li><a href="#org7645d47">read 系列函数</a></li>
+<li><a href="#org17f11f1">加强版 repl</a></li>
+<li><a href="#org6f7e05b">测试</a></li>
+</ul>
+</li>
+<li><a href="#org03c97f1">宏</a></li>
+<li><a href="#org34894aa">尾递归</a></li>
+<li><a href="#org07fe06f">续延</a></li>
+<li><a href="#org1ca3f30">不定长函数参数</a></li>
+<li><a href="#org220da3a">语法检查</a></li>
+<li><a href="#org55cfd76">更多原始过程</a></li>
+<li><a href="#orge806f80">测试</a></li>
 </ul>
 </div>
 </div>
 <p>
-<a href="http://norvig.com/lispy.html">这篇博客</a> 展示了如何在90行Python代码实现一个简单的Lisp解释器：<a href="src/lisp/lis.py">lis.py</a> 。<a href="src/lisp/lispy.py">lispy.py</a> 这个版本做了一些新的扩展，虽然代码量是原来的三倍左右，但这是一个更完整的 Lisp 实现
+<a href="http://norvig.com/lispy.html">这篇博客</a> 展示了如何在90行Python代码实现一个简单的Lisp解释器：<a href="https://github.com/klose911/klose911.github.io/blob/master/src/python/src/lisp/lis.py">lis.py</a> 。<a href="https://github.com/klose911/klose911.github.io/blob/master/src/python/src/lisp/lispy.py">lispy.py</a> 这个版本做了一些新的扩展，虽然代码量是原来的三倍左右，但这是一个更完整的 Lisp 实现
 </p>
 <div id="outline-container-org312cbd8" class="outline-2">
 <h2 id="org312cbd8">数据类型：字符串，布尔值，复数，端口</h2>
@@ -332,6 +346,229 @@ _quote, _if, _set, _define, _lambda, _begin, _definemacro, = <span style="color:
 </div>
 <div id="outline-container-org93e2dc9" class="outline-2">
 <h2 id="org93e2dc9">新增语法: 字符串，注释，引用，#常量</h2>
+<div class="outline-text-2" id="text-org93e2dc9">
+<ul class="org-ul">
+<li>增加字符串类型以后使得标记化过程变得复杂。现在无法再使用 <span class="underline">空白符</span> 来分割标记，因为 <b>空白符同样会出现在字符串中</b> 。相应地需要使用复杂的 <b>正则表达式</b> 来把输入解析成标记</li>
+<li>在 Scheme 中 <span class="underline">注释</span> 是以' <b>;</b> '开头直到行尾。，必须把从' <b>;</b> '开头直到行尾收集到一个标记中，并且忽略到这个标记</li>
+<li>还需要支持6中新的标记： 
+<ul class="org-ul">
+<li><b>#t</b> : <span class="underline">True</span> 常量</li>
+<li><b>#f</b> : <span class="underline">False</span> 常量</li>
+<li><b>'</b> : <b>引用</b> ( <span class="underline">quote</span> ) 后面的表达式，例如 <span class="underline">'exp</span> 等价于 <span class="underline">(quote exp)</span></li>
+<li><b>`</b> : <b>准引用</b> ( <span class="underline">quasiquote</span> ) 后面的表达式 
+<ul class="org-ul">
+<li><span class="underline">准引用</span> 是 <b>运行时获得值</b> ，而 <span class="underline">引用</span> 是 <b>编译时值已经确定</b> ，因此 <span class="underline">准引用</span> 可以 <b>包含变量</b> ，如果需要这个变量会在运行时被替换：
+<ul class="org-ul">
+<li><b>,</b> : <span class="underline">,exp</span> 表示 exp 是个 <span class="underline">变量</span> ，替换这个 exp <span class="underline">变量的值</span></li>
+<li><b>,@</b> : <span class="underline">,@exp</span> 表示 exp 是个 <span class="underline">列表</span> ，用这个 <span class="underline">列表中所有的元素</span> 来做替换</li>
+</ul></li>
+</ul></li>
+</ul></li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">a</span> 1<span style="color: #696969;">)</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">b</span> 2<span style="color: #696969;">)</span>
+
+'<span style="color: #696969;">(</span>a b<span style="color: #696969;">)</span>                          <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">=&gt; (a b) </span>
+`<span style="color: #696969;">(</span>a b<span style="color: #696969;">)</span>                          <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">=&gt; '(a b)</span>
+
+`<span style="color: #696969;">(</span>a ,b<span style="color: #696969;">)</span>                         <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">=&gt; '(a 2), a &#20381;&#26087;&#26159;&#37027;&#20010;&#21464;&#37327; a</span>
+<span style="color: #696969;">(</span>quasiquote <span style="color: #696969;">(</span>a <span style="color: #696969;">(</span>unquote b<span style="color: #696969;">)))</span>    <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">=&gt; '(a 2), &#21644; `(a ,b) &#31561;&#20215;</span>
+
+`<span style="color: #696969;">(</span>,a ,b<span style="color: #696969;">)</span>                        <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">=&gt; '(1 2)</span>
+
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">c</span> '<span style="color: #696969;">(</span>3 4 5<span style="color: #696969;">))</span>
+`<span style="color: #696969;">(</span>,b ,@c<span style="color: #696969;">)</span>                       <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">=&gt; (2 3 4 5) </span>
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orgb909c9c" class="outline-3">
+<h3 id="orgb909c9c">InputPort 类</h3>
+<div class="outline-text-3" id="text-orgb909c9c">
+<p>
+引入 InputPort 类之后使得 repl 循环变得更加强大：
+</p>
+<ul class="org-ul">
+<li>支持多行读取</li>
+<li>错误检查和打印</li>
+</ul>
+
+<p>
+下面是 InputPort 的实现：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-python"><span style="color: #00bfff; font-weight: bold;">class</span> <span style="color: #98f5ff;">InPort</span>(<span style="color: #f08080;">object</span>):
+<span style="background-color: #405060;"> </span>   <span style="color: #ffebcd;">"An input port. Retains a line of chars."</span>
+<span style="background-color: #405060;"> </span>   <span style="color: #4eee94;">tokenizer</span> = r<span style="color: #deb887;">'''\s*(,@|[('`,)]|"(?:[\\].|[^\\"])*"|;.*|[^\s('"`,;)]*)(.*)'''</span>
+<span style="background-color: #405060;"> </span>   <span style="color: #00bfff; font-weight: bold;">def</span> <span style="color: #daa520; font-weight: bold;">__init__</span>(<span style="color: #00bfff; font-weight: bold;">self</span>, <span style="color: #f08080;">file</span>):
+        <span style="color: #00bfff; font-weight: bold;">self</span>.<span style="color: #f08080;">file</span> = <span style="color: #f08080;">file</span>; <span style="color: #00bfff; font-weight: bold;">self</span>.line = <span style="color: #deb887;">''</span>
+<span style="background-color: #405060;"> </span>   <span style="color: #00bfff; font-weight: bold;">def</span> <span style="color: #daa520; font-weight: bold;">next_token</span>(<span style="color: #00bfff; font-weight: bold;">self</span>):
+        <span style="color: #ffebcd;">"Return the next token, reading new text into line buffer if needed."</span>
+        <span style="color: #00bfff; font-weight: bold;">while</span> <span style="color: #ffd700;">True</span>:
+            <span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #00bfff; font-weight: bold;">self</span>.line == <span style="color: #deb887;">''</span>: <span style="color: #00bfff; font-weight: bold;">self</span>.line = <span style="color: #00bfff; font-weight: bold;">self</span>.<span style="color: #f08080;">file</span>.readline()
+            <span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #00bfff; font-weight: bold;">self</span>.line == <span style="color: #deb887;">''</span>: <span style="color: #00bfff; font-weight: bold;">return</span> eof_object
+            <span style="color: #4eee94;">token</span>, <span style="color: #00bfff; font-weight: bold;">self</span>.line = re.match(InPort.tokenizer, <span style="color: #00bfff; font-weight: bold;">self</span>.line).groups()
+            <span style="color: #00bfff; font-weight: bold;">if</span> token != <span style="color: #deb887;">''</span> <span style="color: #00bfff; font-weight: bold;">and</span> <span style="color: #00bfff; font-weight: bold;">not</span> token.startswith(<span style="color: #deb887;">';'</span>):
+                <span style="color: #00bfff; font-weight: bold;">return</span> token
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org7645d47" class="outline-3">
+<h3 id="org7645d47">read 系列函数</h3>
+<div class="outline-text-3" id="text-org7645d47">
+<div class="org-src-container">
+<pre class="src src-python"><span style="color: #4eee94;">eof_object</span> = Symbol(<span style="color: #deb887;">'#&lt;eof-object&gt;'</span>) <span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">Note: uninterned; can't be read</span>
+
+<span style="color: #00bfff; font-weight: bold;">def</span> <span style="color: #daa520; font-weight: bold;">readchar</span>(inport):
+<span style="background-color: #405060;"> </span>   <span style="color: #ffebcd;">"Read the next character from an input port."</span>
+<span style="background-color: #405060;"> </span>   <span style="color: #00bfff; font-weight: bold;">if</span> inport.line != <span style="color: #deb887;">''</span>:
+        <span style="color: #4eee94;">ch</span>, <span style="color: #4eee94;">inport.line</span> = inport.line[0], inport.line[1:]
+        <span style="color: #00bfff; font-weight: bold;">return</span> ch
+<span style="background-color: #405060;"> </span>   <span style="color: #00bfff; font-weight: bold;">else</span>:
+        <span style="color: #00bfff; font-weight: bold;">return</span> inport.<span style="color: #f08080;">file</span>.read(1) <span style="color: #00bfff; font-weight: bold;">or</span> eof_object
+
+<span style="color: #00bfff; font-weight: bold;">def</span> <span style="color: #daa520; font-weight: bold;">read</span>(inport):
+<span style="background-color: #405060;"> </span>   <span style="color: #ffebcd;">"Read a Scheme expression from an input port."</span>
+<span style="background-color: #405060;"> </span>   <span style="color: #00bfff; font-weight: bold;">def</span> <span style="color: #daa520; font-weight: bold;">read_ahead</span>(token):
+        <span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #deb887;">'('</span> == token: 
+            <span style="color: #4eee94;">L</span> = []
+            <span style="color: #00bfff; font-weight: bold;">while</span> <span style="color: #ffd700;">True</span>:
+                <span style="color: #4eee94;">token</span> = inport.next_token()
+                <span style="color: #00bfff; font-weight: bold;">if</span> token == <span style="color: #deb887;">')'</span>: <span style="color: #00bfff; font-weight: bold;">return</span> L
+                <span style="color: #00bfff; font-weight: bold;">else</span>: L.append(read_ahead(token))
+        <span style="color: #00bfff; font-weight: bold;">elif</span> <span style="color: #deb887;">')'</span> == token: <span style="color: #00bfff; font-weight: bold;">raise</span> <span style="color: #98f5ff;">SyntaxError</span>(<span style="color: #deb887;">'unexpected )'</span>)
+        <span style="color: #00bfff; font-weight: bold;">elif</span> token <span style="color: #00bfff; font-weight: bold;">in</span> quotes: <span style="color: #00bfff; font-weight: bold;">return</span> [quotes[token], read(inport)]
+        <span style="color: #00bfff; font-weight: bold;">elif</span> token <span style="color: #00bfff; font-weight: bold;">is</span> eof_object: <span style="color: #00bfff; font-weight: bold;">raise</span> <span style="color: #98f5ff;">SyntaxError</span>(<span style="color: #deb887;">'unexpected EOF in list'</span>)
+        <span style="color: #00bfff; font-weight: bold;">else</span>: <span style="color: #00bfff; font-weight: bold;">return</span> atom(token)
+        <span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">body of read:</span>
+<span style="background-color: #405060;"> </span>   <span style="color: #4eee94;">token1</span> = inport.next_token()
+<span style="background-color: #405060;"> </span>   <span style="color: #00bfff; font-weight: bold;">return</span> eof_object <span style="color: #00bfff; font-weight: bold;">if</span> token1 <span style="color: #00bfff; font-weight: bold;">is</span> eof_object <span style="color: #00bfff; font-weight: bold;">else</span> read_ahead(token1)
+
+<span style="color: #4eee94;">quotes</span> = {<span style="color: #deb887;">"'"</span>:_quote, <span style="color: #deb887;">"`"</span>:_quasiquote, <span style="color: #deb887;">","</span>:_unquote, <span style="color: #deb887;">",@"</span>:_unquotesplicing}
+
+<span style="color: #00bfff; font-weight: bold;">def</span> <span style="color: #daa520; font-weight: bold;">atom</span>(token):
+<span style="background-color: #405060;"> </span>   <span style="color: #ffebcd;">'Numbers become numbers; #t and #f are booleans; "..." string; otherwise Symbol.'</span>
+<span style="background-color: #405060;"> </span>   <span style="color: #00bfff; font-weight: bold;">if</span> token == <span style="color: #deb887;">'#t'</span>: <span style="color: #00bfff; font-weight: bold;">return</span> <span style="color: #ffd700;">True</span>
+<span style="background-color: #405060;"> </span>   <span style="color: #00bfff; font-weight: bold;">elif</span> token == <span style="color: #deb887;">'#f'</span>: <span style="color: #00bfff; font-weight: bold;">return</span> <span style="color: #ffd700;">False</span>
+<span style="background-color: #405060;"> </span>   <span style="color: #00bfff; font-weight: bold;">elif</span> token[0] == <span style="color: #deb887;">'"'</span>: <span style="color: #00bfff; font-weight: bold;">return</span> token[1:-1].decode(<span style="color: #deb887;">'string_escape'</span>)
+<span style="background-color: #405060;"> </span>   <span style="color: #00bfff; font-weight: bold;">try</span>: <span style="color: #00bfff; font-weight: bold;">return</span> <span style="color: #f08080;">int</span>(token)
+<span style="background-color: #405060;"> </span>   <span style="color: #00bfff; font-weight: bold;">except</span> <span style="color: #98f5ff;">ValueError</span>:
+        <span style="color: #00bfff; font-weight: bold;">try</span>: <span style="color: #00bfff; font-weight: bold;">return</span> <span style="color: #f08080;">float</span>(token)
+        <span style="color: #00bfff; font-weight: bold;">except</span> <span style="color: #98f5ff;">ValueError</span>:
+            <span style="color: #00bfff; font-weight: bold;">try</span>: <span style="color: #00bfff; font-weight: bold;">return</span> <span style="color: #f08080;">complex</span>(token.replace(<span style="color: #deb887;">'i'</span>, <span style="color: #deb887;">'j'</span>, 1))
+            <span style="color: #00bfff; font-weight: bold;">except</span> <span style="color: #98f5ff;">ValueError</span>:
+                <span style="color: #00bfff; font-weight: bold;">return</span> Sym(token)
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org17f11f1" class="outline-3">
+<h3 id="org17f11f1">加强版 repl</h3>
+<div class="outline-text-3" id="text-org17f11f1">
+<div class="org-src-container">
+<pre class="src src-python"><span style="color: #00bfff; font-weight: bold;">def</span> <span style="color: #daa520; font-weight: bold;">to_string</span>(x):
+<span style="background-color: #405060;"> </span>   <span style="color: #ffebcd;">"Convert a Python object back into a Lisp-readable string."</span>
+<span style="background-color: #405060;"> </span>   <span style="color: #00bfff; font-weight: bold;">if</span> x <span style="color: #00bfff; font-weight: bold;">is</span> <span style="color: #ffd700;">True</span>: <span style="color: #00bfff; font-weight: bold;">return</span> <span style="color: #deb887;">"#t"</span>
+<span style="background-color: #405060;"> </span>   <span style="color: #00bfff; font-weight: bold;">elif</span> x <span style="color: #00bfff; font-weight: bold;">is</span> <span style="color: #ffd700;">False</span>: <span style="color: #00bfff; font-weight: bold;">return</span> <span style="color: #deb887;">"#f"</span>
+<span style="background-color: #405060;"> </span>   <span style="color: #00bfff; font-weight: bold;">elif</span> isa(x, Symbol): <span style="color: #00bfff; font-weight: bold;">return</span> x
+<span style="background-color: #405060;"> </span>   <span style="color: #00bfff; font-weight: bold;">elif</span> isa(x, <span style="color: #f08080;">str</span>): <span style="color: #00bfff; font-weight: bold;">return</span> <span style="color: #deb887;">'"%s"'</span> % x.encode(<span style="color: #deb887;">'string_escape'</span>).replace(<span style="color: #deb887;">'"'</span>,r<span style="color: #deb887;">'\"'</span>)
+<span style="background-color: #405060;"> </span>   <span style="color: #00bfff; font-weight: bold;">elif</span> isa(x, <span style="color: #f08080;">list</span>): <span style="color: #00bfff; font-weight: bold;">return</span> <span style="color: #deb887;">'('</span>+<span style="color: #deb887;">' '</span>.join(<span style="color: #f08080;">map</span>(to_string, x))+<span style="color: #deb887;">')'</span>
+<span style="background-color: #405060;"> </span>   <span style="color: #00bfff; font-weight: bold;">elif</span> isa(x, <span style="color: #f08080;">complex</span>): <span style="color: #00bfff; font-weight: bold;">return</span> <span style="color: #f08080;">str</span>(x).replace(<span style="color: #deb887;">'j'</span>, <span style="color: #deb887;">'i'</span>)
+<span style="background-color: #405060;"> </span>   <span style="color: #00bfff; font-weight: bold;">else</span>: <span style="color: #00bfff; font-weight: bold;">return</span> <span style="color: #f08080;">str</span>(x)
+
+<span style="color: #00bfff; font-weight: bold;">def</span> <span style="color: #daa520; font-weight: bold;">repl</span>(prompt=<span style="color: #deb887;">'lispy&gt; '</span>, inport=InPort(sys.stdin), out=sys.stdout):
+<span style="background-color: #405060;"> </span>   <span style="color: #ffebcd;">"A prompt-read-eval-print loop."</span>
+<span style="background-color: #405060;"> </span>   sys.stderr.write(<span style="color: #deb887;">"Lispy version 2.0\n"</span>)
+<span style="background-color: #405060;"> </span>   <span style="color: #00bfff; font-weight: bold;">while</span> <span style="color: #ffd700;">True</span>:
+        <span style="color: #00bfff; font-weight: bold;">try</span>:
+            <span style="color: #00bfff; font-weight: bold;">if</span> prompt: sys.stderr.write(prompt)
+            <span style="color: #4eee94;">x</span> = parse(inport)
+            <span style="color: #00bfff; font-weight: bold;">if</span> x <span style="color: #00bfff; font-weight: bold;">is</span> eof_object: <span style="color: #00bfff; font-weight: bold;">return</span>
+            <span style="color: #4eee94;">val</span> = <span style="color: #f08080;">eval</span>(x)
+            <span style="color: #00bfff; font-weight: bold;">if</span> val <span style="color: #00bfff; font-weight: bold;">is</span> <span style="color: #00bfff; font-weight: bold;">not</span> <span style="color: #ffd700;">None</span> <span style="color: #00bfff; font-weight: bold;">and</span> out: <span style="color: #00bfff; font-weight: bold;">print</span> &gt;&gt; out, to_string(val)
+        <span style="color: #00bfff; font-weight: bold;">except</span> <span style="color: #98f5ff;">Exception</span> <span style="color: #00bfff; font-weight: bold;">as</span> e:
+            <span style="color: #00bfff; font-weight: bold;">print</span> <span style="color: #deb887;">'%s: %s'</span> % (<span style="color: #f08080;">type</span>(e).<span style="color: #f08080;">__name__</span>, e)
+
+<span style="color: #00bfff; font-weight: bold;">def</span> <span style="color: #daa520; font-weight: bold;">load</span>(filename):
+<span style="background-color: #405060;"> </span>   <span style="color: #ffebcd;">"Eval every expression from a file."</span>
+<span style="background-color: #405060;"> </span>   repl(<span style="color: #ffd700;">None</span>, InPort(<span style="color: #f08080;">open</span>(filename)), <span style="color: #ffd700;">None</span>)
+</pre>
+</div>
+
+<p>
+现在可以支持从文件读取 sheme 代码
+</p>
+</div>
+</div>
+
+<div id="outline-container-org6f7e05b" class="outline-3">
+<h3 id="org6f7e05b">测试</h3>
+<div class="outline-text-3" id="text-org6f7e05b">
+<div class="org-src-container">
+<pre class="src src-sh">&gt;&gt;&gt; repl()
+Lispy version 2.0
+lispy&gt; (define (cube x)
+          (* x (* x x))) ; input spans multiple lines
+
+lispy&gt; (cube 10)
+1000
+
+lispy&gt; (cube 1) (cube 2) (cube 3) ; multiple inputs per line
+1
+
+lispy&gt; 8
+
+lispy&gt; 27
+
+lispy&gt; (/ 3 0) ; error recovery
+ZeroDivisionError: integer division or modulo by zero
+
+lispy&gt; (<span style="color: #00bfff; font-weight: bold;">if</span> 1 2 3 4 5) ; syntax error recovery
+SyntaxError: (<span style="color: #00bfff; font-weight: bold;">if</span> 1 2 3 4 5): wrong length
+
+lispy&gt; (defun (f x)
+          (<span style="color: #f08080;">set</span>! 3 x)) ;; early syntax error detection
+SyntaxError: (<span style="color: #f08080;">set</span>! 3 x): can set! only a symbol
+
+lispy&gt; 
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org03c97f1" class="outline-2">
+<h2 id="org03c97f1">宏</h2>
+</div>
+
+<div id="outline-container-org34894aa" class="outline-2">
+<h2 id="org34894aa">尾递归</h2>
+</div>
+
+<div id="outline-container-org07fe06f" class="outline-2">
+<h2 id="org07fe06f">续延</h2>
+</div>
+
+<div id="outline-container-org1ca3f30" class="outline-2">
+<h2 id="org1ca3f30">不定长函数参数</h2>
+</div>
+
+<div id="outline-container-org220da3a" class="outline-2">
+<h2 id="org220da3a">语法检查</h2>
+</div>
+
+<div id="outline-container-org55cfd76" class="outline-2">
+<h2 id="org55cfd76">更多原始过程</h2>
+</div>
+
+<div id="outline-container-orge806f80" class="outline-2">
+<h2 id="orge806f80">测试</h2>
 </div>
 </div>
 <div id="postamble" class="status">
