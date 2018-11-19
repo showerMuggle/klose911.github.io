@@ -88,52 +88,55 @@
    下面是 InputPort 的实现：
 
    #+BEGIN_SRC python
-  class InPort(object):
-      "An input port. Retains a line of chars."
-      tokenizer = r'''\s*(,@|[('`,)]|"(?:[\\].|[^\\"])*"|;.*|[^\s('"`,;)]*)(.*)'''
-      def __init__(self, file):
-	  self.file = file; self.line = ''
-      def next_token(self):
-	  "Return the next token, reading new text into line buffer if needed."
-	  while True:
-	      if self.line == '': self.line = self.file.readline()
-	      if self.line == '': return eof_object
-	      token, self.line = re.match(InPort.tokenizer, self.line).groups()
-	      if token != '' and not token.startswith(';'):
-		  return token
+     class InPort(object):
+	 "An input port. Retains a line of chars."
+	 tokenizer = r"""\s*(,@|[('`,)]|"(?:[\\].|[^\\"])*"|;.*|[^\s('"`,;)]*)(.*)"""
+	 def __init__(self, file):
+	     self.file = file; self.line = ""
+	 def next_token(self):
+	     "Return the next token, reading new text into line buffer if needed."
+	     while True:
+		 if self.line == "": self.line = self.file.readline()
+		 if self.line == "": return eof_object
+		 token, self.line = re.match(InPort.tokenizer, self.line).groups()
+		 if token != '' and not token.startswith(';'):
+		     return token
    #+END_SRC
 
-** read 系列函数
+** readchar  和 readport 
    #+BEGIN_SRC python 
-  eof_object = Symbol('#<eof-object>') # Note: uninterned; can't be read
+     eof_object = Symbol('#<eof-object>') # Note: uninterned; can't be read
 
-  def readchar(inport):
-      "Read the next character from an input port."
-      if inport.line != '':
-	  ch, inport.line = inport.line[0], inport.line[1:]
-	  return ch
-      else:
-	  return inport.file.read(1) or eof_object
+     def readchar(inport):
+	 "Read the next character from an input port."
+	 if inport.line != '':
+	     ch, inport.line = inport.line[0], inport.line[1:]
+	     return ch
+	 else:
+	     return inport.file.read(1) or eof_object
 
-  def read(inport):
-      "Read a Scheme expression from an input port."
-      def read_ahead(token):
-	  if '(' == token: 
-	      L = []
-	      while True:
-		  token = inport.next_token()
-		  if token == ')': return L
-		  else: L.append(read_ahead(token))
-	  elif ')' == token: raise SyntaxError('unexpected )')
-	  elif token in quotes: return [quotes[token], read(inport)]
-	  elif token is eof_object: raise SyntaxError('unexpected EOF in list')
-	  else: return atom(token)
-	  # body of read:
-      token1 = inport.next_token()
-      return eof_object if token1 is eof_object else read_ahead(token1)
+     quotes = {"'":_quote, "`":_quasiquote, ",":_unquote, ",@":_unquotesplicing}
 
-  quotes = {"'":_quote, "`":_quasiquote, ",":_unquote, ",@":_unquotesplicing}
+     def read(inport):
+	 "Read a Scheme expression from an input port."
+	 def read_ahead(token):
+	     if '(' == token: 
+		 L = []
+		 while True:
+		     token = inport.next_token()
+		     if token == ')': return L
+		     else: L.append(read_ahead(token))
+	     elif ')' == token: raise SyntaxError('unexpected )')
+	     elif token in quotes: return [quotes[token], read(inport)]
+	     elif token is eof_object: raise SyntaxError('unexpected EOF in list')
+	     else: return atom(token)
+	     # body of read:
+	 token1 = inport.next_token()
+	 return eof_object if token1 is eof_object else read_ahead(token1)
+   #+END_SRC
 
+** token -> 原始数据类型
+   #+BEGIN_SRC python
   def atom(token):
       'Numbers become numbers; #t and #f are booleans; "..." string; otherwise Symbol.'
       if token == '#t': return True
@@ -148,7 +151,7 @@
 		  return Sym(token)
    #+END_SRC
 
-** 加强版 repl 
+   原始数据类型转换成字符串：
    #+BEGIN_SRC python 
   def to_string(x):
       "Convert a Python object back into a Lisp-readable string."
@@ -159,29 +162,37 @@
       elif isa(x, list): return '('+' '.join(map(to_string, x))+')'
       elif isa(x, complex): return str(x).replace('j', 'i')
       else: return str(x)
+   #+END_SRC
+** 加强版 repl 
+   #+BEGIN_SRC python 
+     def repl(prompt='lispy> ', inport=InPort(sys.stdin), out=sys.stdout):
+	 "A prompt-read-eval-print loop."
+	 sys.stderr.write("Lispy version 2.0\n")
+	 while True:
+	     try:
+		 if prompt: sys.stderr.write(prompt)
+		 x = parse(inport)
+		 if x is eof_object: return
+		 val = eval(x)
+		 if val is not None and out: print >> out, to_string(val)
+	     except Exception as e:
+		 print '%s: %s' % (type(e).__name__, e)
 
-  def repl(prompt='lispy> ', inport=InPort(sys.stdin), out=sys.stdout):
-      "A prompt-read-eval-print loop."
-      sys.stderr.write("Lispy version 2.0\n")
-      while True:
-	  try:
-	      if prompt: sys.stderr.write(prompt)
-	      x = parse(inport)
-	      if x is eof_object: return
-	      val = eval(x)
-	      if val is not None and out: print >> out, to_string(val)
-	  except Exception as e:
-	      print '%s: %s' % (type(e).__name__, e)
+     def parse(inport):
+	 "Parse a program: read and expand/error-check it."
+	 # Backwards compatibility: given a str, convert it to an InPort
+	 if isinstance(inport, str): inport = InPort(StringIO.StringIO(inport))
+	 return expand(read(inport), toplevel=True)
+   #+END_SRC
 
+   现在可以支持从文件读取 sheme 代码
+   #+BEGIN_SRC python
   def load(filename):
       "Eval every expression from a file."
       repl(None, InPort(open(filename)), None)
    #+END_SRC
-
-   现在可以支持从文件读取 sheme 代码
-
 ** 测试
-   #+BEGIN_SRC sh 
+   #+BEGIN_EXAMPLE
   >>> repl()
   Lispy version 2.0
   lispy> (define (cube x)
@@ -208,7 +219,7 @@
   SyntaxError: (set! 3 x): can set! only a symbol
 
   lispy> 
-   #+END_SRC
+   #+END_EXAMPLE
 
 * 宏
 
