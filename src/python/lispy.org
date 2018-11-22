@@ -222,8 +222,117 @@
    #+END_EXAMPLE
 
 * 宏
+  用户可以使用 _define-macro_ 特殊形式（和标准 Scheme 实现略有不同）来定义宏，这也可以被用来定义一些其他的类似 _and_ 的特殊形式。宏只能被定义在一个 _文件的顶层级别_ ， _交互式会话_ ，或在 _顶层执行环境_ 中以 _begin_ 开头 
+
+  下面定义了 _let_ 和 _and_ 宏，这两个例子也展示了 *'`'* ,  *','* ,  *',@'* 的使用方法： 
+
+  #+BEGIN_SRC python
+  def let(*args):
+      args = list(args)
+      x = cons(_let, args)
+      require(x, len(args)>1)
+      bindings, body = args[0], args[1:]
+      require(x, all(isa(b, list) and len(b)==2 and isa(b[0], Symbol)
+		     for b in bindings), "illegal binding list")
+      vars, vals = zip(*bindings)
+      return [[_lambda, list(vars)]+map(expand, body)] + map(expand, vals)
+
+  _append, _cons, _let = map(Sym("append cons let".split))
+
+  macro_table = {_let:let} ## More macros can go here
+
+  eval(parse("""(begin
+
+  (define-macro and (lambda args 
+     (if (null? args) #t
+	 (if (= (length args) 1) (car args)
+	     `(if ,(car args) (and ,@(cdr args)) #f)))))
+
+  ;; More macros can go here
+
+  )"""))
+  #+END_SRC
+
+  #+BEGIN_EXAMPLE
+    def let(*args):
+
+    这里的 *args 表示任何多个无名参数，它是一个tuple
+    类似的 **kwargs 表示关键字参数，它是一个dict
+  #+END_EXAMPLE
+
+  其中 _require_ 和 _expand_ 过程后面会讲
 
 * 尾递归
+
+  在原有的 _eval_ 逻辑，现在支持 *尾递归* 。实现尾递归的方式是：把 *原有的主体逻辑包装在一个 _while True_ 循环内* ，大部分情景下，代码无需改动，只有下面三种情况需要  *更新变量 x*  （ _被求值的字符串表达式_ ）： 
+  1. _if_ 表达式
+  2. _begin_ 表达式
+  3. 调用 _自定义的过程_ ：不仅需要把 x 更新为 _自定义的过程体_ ，还需要把 _环境_ 更新为一个 _新的帧_ （绑定了 _实参_ 和 _形参_ ） 
+
+  #+BEGIN_SRC python 
+  def eval(x, env=global_env):
+      "Evaluate an expression in an environment."
+      while True:
+	  if isa(x, Symbol):       # variable reference
+	      return env.find(x)[x]
+	  elif not isa(x, list):   # constant literal
+	      return x                
+	  elif x[0] is _quote:     # (quote exp)
+	      (_, exp) = x
+	      return exp
+	  elif x[0] is _if:        # (if test conseq alt)
+	      (_, test, conseq, alt) = x
+	      x = (conseq if eval(test, env) else alt) # 更新 x 
+	  elif x[0] is _set:       # (set! var exp)
+	      (_, var, exp) = x
+	      env.find(var)[var] = eval(exp, env)
+	      return None # 退出循环
+	  elif x[0] is _define:    # (define var exp)
+	      (_, var, exp) = x
+	      env[var] = eval(exp, env)
+	      return None # 退出循环
+	  elif x[0] is _lambda:    # (lambda (var*) exp)
+	      (_, vars, exp) = x
+	      return Procedure(vars, exp, env)
+	  elif x[0] is _begin:     # (begin exp+)
+	      for exp in x[1:-1]:
+		  eval(exp, env)
+		  x = x[-1]
+	  else:                    # (proc exp*)
+	      exps = [eval(exp, env) for exp in x]
+	      proc = exps.pop(0)
+	      if isa(proc, Procedure):
+		  x = proc.exp # 更新求值字符串为自定义过程体
+		  env = Env(proc.parms, exps, proc.env) # 更新环境体
+	      else:
+		  return proc(*exps)
+  #+END_SRC
+
+  _Procedure_  类和原来版本一样：
+  #+BEGIN_SRC python 
+  class Procedure(object):
+      "A user-defined Scheme procedure."
+      def __init__(self, parms, exp, env):
+	  self.parms, self.exp, self.env = parms, exp, env
+      def __call__(self, *args): 
+	  return eval(self.exp, Env(self.parms, args, self.env))
+  #+END_SRC
+
+  #+BEGIN_EXAMPLE
+    递归版本的累加：
+    (define (sum-to n)
+      (if (= n 0)
+	  0
+	  (+ n (sum-to (- n 1)))))
+
+    尾递归版本的累加：
+    (define (sum2 n acc)
+      (if (= n 0)
+	  acc
+	  (sum2 (- n 1) (+ n acc))))
+
+    尾递归版本的累加不会每次都开一个新的栈，但是更难编写
+  #+END_EXAMPLE
 
 * 续延
 
