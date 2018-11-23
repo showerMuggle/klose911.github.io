@@ -263,7 +263,7 @@ for the JavaScript code in this tag.
 <li><a href="#orgfaa9463">readchar  和 readport</a></li>
 <li><a href="#org2504d93">token -&gt; 原始数据类型</a></li>
 <li><a href="#org40332b4">加强版 repl</a></li>
-<li><a href="#orged230b2">测试</a></li>
+<li><a href="#orgcb37b7b">测试</a></li>
 </ul>
 </li>
 <li><a href="#org7deab8f">宏</a></li>
@@ -272,7 +272,7 @@ for the JavaScript code in this tag.
 <li><a href="#orga1ca3b4">不定长函数参数</a></li>
 <li><a href="#org7aa3a40">语法检查</a></li>
 <li><a href="#orgbb299c8">更多原始过程</a></li>
-<li><a href="#org15f30ae">测试</a></li>
+<li><a href="#org62e6511">测试</a></li>
 </ul>
 </div>
 </div>
@@ -528,9 +528,9 @@ _quote, _if, _set, _define, _lambda, _begin, _definemacro, = <span style="color:
 </div>
 </div>
 </div>
-<div id="outline-container-orged230b2" class="outline-3">
-<h3 id="orged230b2">测试</h3>
-<div class="outline-text-3" id="text-orged230b2">
+<div id="outline-container-orgcb37b7b" class="outline-3">
+<h3 id="orgcb37b7b">测试</h3>
+<div class="outline-text-3" id="text-orgcb37b7b">
 <pre class="example">
 &gt;&gt;&gt; repl()
 Lispy version 2.0
@@ -700,8 +700,90 @@ def let(*args):
 
 <div id="outline-container-org0fa467e" class="outline-2">
 <h2 id="org0fa467e">续延</h2>
+<div class="outline-text-2" id="text-org0fa467e">
+<p>
+Scheme 可以用 <span class="underline">迭代</span> 来替代 <span class="underline">递归</span> ，因此不需要任何特殊类似 for 或者 while 的特殊语法。 但是像 python 中的 <span class="underline">try/except</span> 或者 C 语言中的 <span class="underline">setjmp/longjmp</span> 等非局部函数中的控制流程又怎么实现呢？ Scheme 提供了一种被称为 <span class="underline">call/cc</span> (call with the current continuation) 的原始过程，来处理这个问题，先看几个例子： 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">call/cc</span> <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>throw<span style="color: #696969;">)</span> 
+           <span style="color: #696969;">(</span>+ 5 <span style="color: #696969;">(</span>* 10 <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">call/cc</span> <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>escape<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>* 100 <span style="color: #696969;">(</span>escape 3<span style="color: #696969;">))))))))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">=&gt; (+ 5 (* 10 3)) = 35  </span>
+
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">call/cc</span> <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>throw<span style="color: #696969;">)</span> 
+           <span style="color: #696969;">(</span>+ 5 <span style="color: #696969;">(</span>* 10 <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">call/cc</span> <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>escape<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>* 100 <span style="color: #696969;">(</span>throw 3<span style="color: #696969;">))))))))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">=&gt; 3 </span>
+</pre>
+</div>
+<p>
+In the first example, evaluating (escape 3) causes Scheme to abort the current calculation and return 3 as the value of the enclosing call to call/cc. The result is the same as (+ 5 (* 10 3)) or 35.
+</p>
+
+<ul class="org-ul">
+<li>第一个例子里，对于 (esacpe 3) 的求值导致 Scheme 放弃了当前的计算，并返回了 3 作为 <span class="underline">(call/cc (lambda (escape) (* 100 (escape 3))))</span> 的返回值。最终的结果等于  <span class="underline">(+ 5 (* 10 3))</span> 或者 35</li>
+<li>第二个例子中，(throw 3) 放弃了两层计算，直接返回到顶层的续延，因此直接返回了 3</li>
+</ul>
+
+<p>
+通常来讲， <span class="underline">call/cc</span> 有一个参数 <span class="underline">proc</span> ，proc 也是一个 <b>只接受一个参数 <span class="underline">throw</span> 的过程</b> ：
+</p>
+<ul class="org-ul">
+<li>throw 同样是一个 <b>只接受一个参数的过程</b> ，实际上这个参数就是所谓的 <b>续延</b></li>
+<li>proc 有自己定义的过程体</li>
+</ul>
+
+<p>
+当 call/cc 被调用时：
+</p>
+<ol class="org-ol">
+<li><b>当前计算环境的续延</b> 会被绑定到  <span class="underline">throw</span> 参数上</li>
+<li>求值 proc 的过程体 
+<ul class="org-ul">
+<li>如果在这个过程体中 throw 被调用，那么 call/cc 就会立刻返回这个 <span class="underline">调用 throw 的参数值</span></li>
+<li>如果在这个过程体中 throw 没被调用，那么 call/cc 就会返回 <span class="underline">过程体的求值结果</span></li>
+</ul></li>
+</ol>
+
+<pre class="example">
+ (call/cc (lambda (throw) 
+	     (+ 5 (* 10 (call/cc (lambda (escape) (* 100 (throw 3))))))))
+
+(call/cc proc) 中的 proc 就是 (lambda (throw) (+ 5 (* 10 (call/cc (lambda (escape) (* 100 (throw 3)))))))
+proc 只有一个参数  throw
+proc 有一段自己定义的逻辑 (+ 5 (* 10 (call/cc (lambda (escape) (* 100 (throw 3)))))) 作为过程体 
+
+最难以理解的是这个 throw 哪里来的？实际上 throw 的绑定是由最外层的 call/cc 做的，它会把最外层的续延绑定到 throw
+
+这个过程体会被求解：
+如果在这个过程体里 throw 被一个参数 v 调用，整个 call/cc 就会返回这个 v , 类似这里的 (throw 3) ，因此这个 call/cc 的返回值就是 3 
+如果在这个过程体里 throw 没有被调用，那 call/cc 就会返回这个过程体的求值结果
+</pre>
+
+<p>
+了解 续延的含义后，现在来看看他的实现：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-python"><span style="color: #00bfff; font-weight: bold;">def</span> <span style="color: #daa520; font-weight: bold;">callcc</span>(proc):
+    <span style="color: #ffebcd;">"Call proc with current continuation; escape only"</span>
+    <span style="color: #4eee94;">ball</span> = <span style="color: #98f5ff;">RuntimeWarning</span>(<span style="color: #deb887;">"Sorry, can't continue this continuation any longer."</span>)
+    <span style="color: #00bfff; font-weight: bold;">def</span> <span style="color: #daa520; font-weight: bold;">throw</span>(retval): <span style="color: #4eee94;">ball.retval</span> = retval; <span style="color: #00bfff; font-weight: bold;">raise</span> ball
+    <span style="color: #00bfff; font-weight: bold;">try</span>:
+        <span style="color: #00bfff; font-weight: bold;">return</span> proc(throw)
+    <span style="color: #00bfff; font-weight: bold;">except</span> <span style="color: #98f5ff;">RuntimeWarning</span> <span style="color: #00bfff; font-weight: bold;">as</span> w:
+        <span style="color: #00bfff; font-weight: bold;">if</span> w <span style="color: #00bfff; font-weight: bold;">is</span> ball: <span style="color: #00bfff; font-weight: bold;">return</span> ball.retval
+        <span style="color: #00bfff; font-weight: bold;">else</span>: <span style="color: #00bfff; font-weight: bold;">raise</span> w
+</pre>
 </div>
 
+<pre class="example">
+    现在这个实现仅仅允许能离开某个局部过程
+
+    但是，标准的 Scheme 不仅能通过 call/cc 返回一个值
+    还能把续延作为变量保存起来，而且可以被调用任意次，每次都会返回到同一个位置 
+</pre>
+</div>
+</div>
 <div id="outline-container-orga1ca3b4" class="outline-2">
 <h2 id="orga1ca3b4">不定长函数参数</h2>
 </div>
@@ -714,8 +796,8 @@ def let(*args):
 <h2 id="orgbb299c8">更多原始过程</h2>
 </div>
 
-<div id="outline-container-org15f30ae" class="outline-2">
-<h2 id="org15f30ae">测试</h2>
+<div id="outline-container-org62e6511" class="outline-2">
+<h2 id="org62e6511">测试</h2>
 </div>
 </div>
 <div id="postamble" class="status">
