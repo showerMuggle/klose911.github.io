@@ -1,8 +1,8 @@
-#+TITLE: 用Python实现一个更好的Lisp解释器
+#+TITLE: 实现一个更好的Lisp解释器
 #+HTML_HEAD: <link rel="stylesheet" type="text/css" href="css/main.css" />
 #+OPTIONS: num:nil timestamp:nil 
 
-[[http://norvig.com/lispy.html][这篇博客]] 展示了如何在90行Python代码实现一个简单的Lisp解释器：[[https://github.com/klose911/klose911.github.io/blob/master/src/python/src/lisp/lis.py][lis.py]] 。[[https://github.com/klose911/klose911.github.io/blob/master/src/python/src/lisp/lispy.py][lispy.py]] 这个版本做了一些新的扩展，虽然代码量是原来的三倍左右，但这是一个更完整的 Lisp 实现
+[[http://norvig.com/lispy.html][这篇博客]] 展示了如何在100行Python代码实现一个简单的Lisp解释器：[[https://github.com/klose911/klose911.github.io/blob/master/src/python/src/lisp/lis.py][lis.py]] 。[[https://github.com/klose911/klose911.github.io/blob/master/src/python/src/lisp/lispy.py][lispy.py]] 这个版本做了一些新的扩展，虽然代码量是原来的三倍左右，但这是一个更完整的 Lisp 实现
 * 数据类型：字符串，布尔值，复数，端口
   #+BEGIN_EXAMPLE
     增加一个新的数据类型可能有三个地方需要修改：
@@ -177,12 +177,6 @@
 		 if val is not None and out: print >> out, to_string(val)
 	     except Exception as e:
 		 print '%s: %s' % (type(e).__name__, e)
-
-     def parse(inport):
-	 "Parse a program: read and expand/error-check it."
-	 # Backwards compatibility: given a str, convert it to an InPort
-	 if isinstance(inport, str): inport = InPort(StringIO.StringIO(inport))
-	 return expand(read(inport), toplevel=True)
    #+END_SRC
 
    现在可以支持从文件读取 sheme 代码
@@ -397,13 +391,13 @@
     还能把续延作为变量保存起来，而且可以被调用任意次，每次都会返回到同一个位置 
   #+END_EXAMPLE
 * 不定长函数参数
-Scheme 原生的 list 函数可以接受任意个参数：(list 1 2) , (list 1 2 3) 等。可以使用类似 (lambda args body) 的形式来定义一个函数，其中 _args_  是 一个符号 可以支持任意数量的参数列表，而 _body_ 是过程体
+  Scheme 原生的 list 函数可以接受任意个参数：(list 1 2) , (list 1 2 3) 等。可以使用类似 (lambda args body) 的形式来定义一个函数，其中 _args_  是 一个符号 可以支持任意数量的参数列表，而 _body_ 是过程体
 
-实现不定长参数很简单： 只需要在 Env 类的构造器 *__init__* 中增加校验 _形参名_ 是否是一个 _符号_ 
-+ 如果是一个符号，则 _形参_ 绑定到一个 _所有实参组成的列表_ 上
-+ 如果不是一个符号，则 _每个形参_ 按照顺序绑定到 _对应的实参_ 上
+  实现不定长参数很简单： 只需要在 Env 类的构造器中增加校验 _形参名_ 是否是一个 _符号_ 
+  + 如果是一个符号，则 _形参_ 绑定到一个 _所有实参组成的列表_ 上
+  + 如果不是一个符号，则 _每个形参_ 按照顺序绑定到 _对应的实参_ 上
 
-#+BEGIN_SRC python
+  #+BEGIN_SRC python
   class Env(dict):
       "An environment: a dict of {'var':val} pairs, with an outer Env."
       def __init__(self, parms=(), args=(), outer=None):
@@ -421,17 +415,169 @@ Scheme 原生的 list 函数可以接受任意个参数：(list 1 2) , (list 1 2
 	  if var in self: return self
 	  elif self.outer is None: raise LookupError(var)
 	  else: return self.outer.find(var)
-#+END_SRC
+  #+END_SRC
 
-#+BEGIN_EXAMPLE
-  真实的 Scheme 还支持 (lambda (arg1 arg2 . rest) ...) 这种形式
-  这表示：arg1 是一个定长的形参名，而 arg2 是一个不定长度的形参符号
+  #+BEGIN_EXAMPLE
+    真实的 Scheme 还支持 (lambda (arg1 arg2 . rest) ...) 这种形式
+    这表示：arg1 是一个定长的形参名，而 arg2 是一个不定长度的形参符号
 
-  这需要支持 pair 的列表，但因为这里使用了 python 内置的 list 数据类型，因此无法支持这种形式
-#+END_EXAMPLE
+    这需要支持 pair 的列表，但因为这里使用了 python 内置的 list 数据类型，因此无法支持这种形式
+  #+END_EXAMPLE
 
-* 语法检查
+* 语法检查和宏扩展
+  思考下面的定义错误的代码：
+  #+BEGIN_SRC scheme
+  (define f (lambda (x) (set! 3 x)))
+  (define g (lambda (3) (if (x = 0))))
+  (define h (lambda (x) (if (x = 0) 1 2 3)))
+  #+END_SRC
+
+  上个版本中，这些定义被求值的时候不会有任何的报错提示。直到这些过程被调用，才会有错误产生。通常情况下，错误应该越早被报出越好，所以这个版本希望语法错误在定义的时候就被检查到，而不是直到他们被调用才抛出
+
+  错误检查可以通过改进原有的 _parse_ 函数来实现。上个版本中 parse 被实现为一个 _解析S表达式_ 的过程，换句话说，任何符合 S 表达式的字符串都会被认为是合法的程序。现在版本会校验表达式的合法性：
+  + 每个特殊语法形式的 _参数数量_ 是否正确
+  + _set!_ 和 _define_ 是否作用在一个 _符号_
+  + _宏_ 和 _准引用_ 会被扩展
+
+  | 被扩展的表达式              | 扩展后的表达式                      |
+  | (begin)                     | None                                |
+  | (if test conseq)            | (if test conseq None)               |
+  | (define (f arg...) body...) | (define f (lambda (arg...) body...) |
+  | (lambda (arg...) e1 e2...)  | (lambda (arg...) (begin e1 e2...))  |
+  | `exp 和 (quasiquote exp)    | expand , and ,@ within exp          |
+  | (macro-name arg...)         | expansion of (macro-name arg...)    |
+
+  _parse_ 函数的实现如下：
+
+  #+BEGIN_SRC python
+  def parse(inport):
+      "Parse a program: read and expand/error-check it."
+      # Backwards compatibility: given a str, convert it to an InPort
+      if isinstance(inport, str): inport = InPort(StringIO.StringIO(inport))
+      return expand(read(inport), toplevel=True)
+  #+END_SRC
+
+  _expand_ 函数实现如下：
+
+  #+BEGIN_SRC python
+  def expand(x, toplevel=False):
+      "Walk tree of x, making optimizations/fixes, and signaling SyntaxError."
+      require(x, x!=[])                    # () => Error
+      if not isa(x, list):                 # constant => unchanged
+	  return x
+      elif x[0] is _quote:                 # (quote exp)
+	  require(x, len(x)==2)
+	  return x
+      elif x[0] is _if:                    
+	  if len(x)==3: x = x + [None]     # (if t c) => (if t c None)
+	  require(x, len(x)==4)
+	  return map(expand, x)
+      elif x[0] is _set:                   
+	  require(x, len(x)==3); 
+	  var = x[1]                       # (set! non-var exp) => Error
+	  require(x, isa(var, Symbol), "can set! only a symbol")
+	  return [_set, var, expand(x[2])]
+      elif x[0] is _define or x[0] is _definemacro: 
+	  require(x, len(x)>=3)            
+	  _def, v, body = x[0], x[1], x[2:]
+	  if isa(v, list) and v:           # (define (f args) body)
+	      f, args = v[0], v[1:]        #  => (define f (lambda (args) body))
+	      return expand([_def, f, [_lambda, args]+body])
+	  else:
+	      require(x, len(x)==3)        # (define non-var/list exp) => Error
+	      require(x, isa(v, Symbol), "can define only a symbol")
+	      exp = expand(x[2])
+	      if _def is _definemacro:     
+		  require(x, toplevel, "define-macro only allowed at top level")
+		  proc = eval(exp)       
+		  require(x, callable(proc), "macro must be a procedure")
+		  macro_table[v] = proc    # (define-macro v proc)
+		  return None              #  => None; add v:proc to macro_table
+	      return [_define, v, exp]
+      elif x[0] is _begin:
+	  if len(x)==1: return None        # (begin) => None
+	  else: return [expand(xi, toplevel) for xi in x]
+      elif x[0] is _lambda:                # (lambda (x) e1 e2) 
+	  require(x, len(x)>=3)            #  => (lambda (x) (begin e1 e2))
+	  vars, body = x[1], x[2:]
+	  require(x, (isa(vars, list) and all(isa(v, Symbol) for v in vars))
+		  or isa(vars, Symbol), "illegal lambda argument list")
+	  exp = body[0] if len(body) == 1 else [_begin] + body
+	  return [_lambda, vars, expand(exp)]   
+      elif x[0] is _quasiquote:            # `x => expand_quasiquote(x)
+	  require(x, len(x)==2)
+	  return expand_quasiquote(x[1])
+      elif isa(x[0], Symbol) and x[0] in macro_table:
+	  return expand(macro_table[x[0]](*x[1:]), toplevel) # (m arg...) 
+      else:                                #        => macroexpand if m isa macro
+	  return map(expand, x)            # (f arg...) => expand each
+  #+END_SRC
+
+  _expand_ 函数比起 _eval_ 函数大概长了一倍，这并不令人惊讶：
+  1. 它不但要处理正确的表达式，还要校验错误的表达式，并给出出错信息
+  2. 它需要支持宏扩展
+
+  _require_ 函数：校验表达式是否正确，如果不正确则抛错
+
+  #+BEGIN_SRC python
+  def require(x, predicate, msg="wrong length"):
+      "Signal a syntax error if predicate is false."
+      if not predicate: raise SyntaxError(to_string(x)+': '+msg)
+  #+END_SRC
+
+  expand _ quasiquote 函数：替换准引用
+  #+BEGIN_SRC python
+  def expand_quasiquote(x):
+      """Expand `x => 'x; `,x => x; `(,@x y) => (append x y) """
+      if not is_pair(x):
+	  return [_quote, x]
+      require(x, x[0] is not _unquotesplicing, "can't splice here")
+      if x[0] is _unquote:
+	  require(x, len(x)==2)
+	  return x[1]
+      elif is_pair(x[0]) and x[0][0] is _unquotesplicing:
+	  require(x[0], len(x[0])==2)
+	  return [_append, x[0][1], expand_quasiquote(x[1:])]
+      else:
+	  return [_cons, expand_quasiquote(x[0]), expand_quasiquote(x[1:])]
+  #+END_SRC
 
 * 更多原始过程
+  在add _ globals中添加更多的原始过程（函数）：
+
+  #+BEGIN_SRC python
+  def add_globals(self):
+      "Add some Scheme standard procedures."
+      import math, cmath, operator as op
+      self.update(vars(math))
+      self.update(vars(cmath))
+      self.update({
+       '+':op.add, '-':op.sub, '*':op.mul, '/':op.div, 'not':op.not_, 
+       '>':op.gt, '<':op.lt, '>=':op.ge, '<=':op.le, '=':op.eq, 
+       'equal?':op.eq, 'eq?':op.is_, 'length':len, 'cons':lambda x,y:[x]+list(y), 
+       'car':lambda x:x[0], 'cdr':lambda x:x[1:], 'append':op.add,  
+       'list':lambda *x:list(x), 'list?': lambda x:isa(x,list),
+       'null?':lambda x:x==[], 'symbol?':lambda x: isa(x, Symbol),
+       'boolean?':lambda x: isa(x, bool), 'pair?':is_pair, 
+       'port?': lambda x:isa(x,file), 'apply':lambda proc,l: proc(*l), 
+       'eval':lambda x: eval(expand(x)), 'load':lambda fn: load(fn), 'call/cc':callcc,
+       'open-input-file':open,'close-input-port':lambda p: p.file.close(), 
+       'open-output-file':lambda f:open(f,'w'), 'close-output-port':lambda p: p.close(),
+       'eof-object?':lambda x:x is eof_object, 'read-char':readchar,
+       'read':read, 'write':lambda x,port=sys.stdout:port.write(to_string(x)),
+       'display':lambda x,port=sys.stdout:port.write(x if isa(x,str) else to_string(x))})
+      return self
+
+  global_env = add_globals(Env())
+  #+END_SRC
+
+  #+BEGIN_EXAMPLE
+  这里总共有75个左右的原始过程被定义，离 Scheme 标准大概还差80个左右没有被定义，如果想定义可以被添加在这里
+  #+END_EXAMPLE
 
 * 测试
+  [[https://github.com/klose911/klose911.github.io/blob/master/src/python/src/lisp/lispytest.py][lispytest.py]] 被用来测试当前版本的 lispy 实现
+
+  #+BEGIN_EXAMPLE
+    这个版本的lispy只能在 python2.7 运行， 不能在 python3 下运行
+  #+END_EXAMPLE
