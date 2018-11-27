@@ -13,8 +13,8 @@
 
 ;; (diag diag)
 
-;; loop-forever ÕâÒâÎ¶×Å (stop? diag diag) ÎªÕæ£¬ÕâºÍstop? º¯ÊıµÄ¶¨Òå²»·û
-;; Èç¹û·µ»Ø42£¬ÔòÒâÎ¶×Å(stop? diag diag) Îªfalse£¬ÕâÓÖºÍ stop? º¯ÊıµÄ¶¨Òå²»·û
+;; loop-forever è¿™æ„å‘³ç€ (stop? diag diag) ä¸ºçœŸï¼Œè¿™å’Œstop? å‡½æ•°çš„å®šä¹‰ä¸ç¬¦
+;; å¦‚æœè¿”å›42ï¼Œåˆ™æ„å‘³ç€(stop? diag diag) ä¸ºfalseï¼Œè¿™åˆå’Œ stop? å‡½æ•°çš„å®šä¹‰ä¸ç¬¦
 
 
 
