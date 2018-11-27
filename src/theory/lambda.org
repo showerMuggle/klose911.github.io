@@ -347,14 +347,8 @@
       EQ & := & \lambda m \centerdot \lambda n \; AND \; (LEQ \; m \; n) \; (LEQ \; n \; m) \end{aligned}$$
 
 * 实现递归
-
 ** Y不动子
-
-*** 实现递归：Y不动子
-
-    -  递归是用函数自身去定义函数
-
-    -  $\lambda$演算的函数都是无名函数，表面看不支持递归，但是可以构造特殊的函数来实现递归
+递归是用 *函数自身去定义函数* ，$\lambda$ 演算的函数都是无名函数，表面看不支持递归，但是可以 *构造特殊的函数* 来实现递归
 
       $$\begin{aligned}
       Y & := & \lambda g \centerdot (\lambda x \centerdot g(x \;x)) \; (\lambda x \centerdot g(x \;x)) \\ 
@@ -363,94 +357,80 @@
       YG & \equiv & G(YG) 
       \end{aligned}$$
 
-      YG被称为G的一个不动点，Y被称为不动子
+      _YG_ 被称为 _G_ 的一个 *不动点* ，Y 被称为 _不动子_ 
 
-    -  任何递归函数都可以被看成是另一个函数的不动点
+#+BEGIN_EXAMPLE
+  任何递归函数都可以被看成是另一个函数的不动点
 
-*** 实现递归：用Y不动子计算阶乘1
+#+END_EXAMPLE
+
+*** 用Y不动子计算阶乘
 
     $$G  := \lambda r \centerdot \lambda n \centerdot (IF \; ISZERO(n) \; 1 \; (MULT \; n \; (r \; (SUB \; n \;1))))$$
+
+#+BEGIN_EXAMPLE
+  定义一个合适的函数G（使用一个额外的参数来描述递归的 lambda 表达式）
+
+  对这个函数 G 进行不动子求值就相当于调用递归
+#+END_EXAMPLE
 
     $$\begin{aligned}
     & (YG) \; 4  & \\
     & =  &  (G \; (YG)) \; 4 \\  
     & =  & (\underbrace{(\lambda r \centerdot \lambda n \centerdot  (IF \, ISZERO(n) \, 1 \, (MULT \, n \, (r \, (SUB \, n \,1)))))}_G \; YG) \; 4 \\
     & =  & (\lambda n \centerdot (IF \; ISZERO(n) \; 1 \; (MULT \; n ((YG) \; (SUB \; n \; 1))))) \;4 \\
-    & =  & IF \; ISZERO(4) \; 1 \; {\color{red}\underline{(MULT \; 4 \; ((YG) \; (SUB \;4 \;1)))}} \\
+    & =  & IF \; ISZERO(4) \; 1 \; \underline{(MULT \; 4 \; ((YG) \; (SUB \;4 \;1)))} \\
     & =  & MULT \; 4 \; ((YG) \;3)  \\ 
     & \dots & \\ 
-    & = & MULT \; 4 \; (MULT \; 3 \; (MULT \; 2 \; (MULT \; 1 \; {\color{red}((YG) 0)})))   
+    & = & MULT \; 4 \; (MULT \; 3 \; (MULT \; 2 \; (MULT \; 1 \; ((YG) 0))))   
     \end{aligned}$$
 
-*** 实现递归：用Y不动子计算阶乘2
+现在计算 ((YG) 0) : 
 
     $$\begin{aligned}
-    & {\color{red}(YG) \; 0} &    \\
+    & (YG) \; 0 &    \\
     & =  & (G \; (YG)) \; 0 \\  
     & = & (\underbrace{(\lambda r \centerdot \lambda n \centerdot  (IF \, ISZERO(n) \, 1 (MULT \, n (r (SUB \, n \,1)))))}_G YG) \, 0 \\
     & =  & (\lambda n \centerdot (IF \; ISZERO(n) \; 1 \; (MULT \; n ((YG) \; (SUB \; n \; 1))))) \;0 \\
-    & = & IF \; ISZERO(0) \; {\color{red}\underline{1}} \; (MULT \; 0 \; ((YG) \; (SUB \;0 \;1))) \\ 
-    & =  & {\color{red}1} \\
-    & (YG) \; 4 &  \\ 
-    & = &  MULT \; 4 \; (MULT \; 3 (MULT \; 2 \; (MULT \; 1 \; {\color{red}1}))) \\ 
-    & =  & {\color{red}24}
+    & = & IF \; ISZERO(0) \; \underline{1} \; (MULT \; 0 \; ((YG) \; (SUB \;0 \;1))) \\ 
+    & =  & 1 
     \end{aligned}$$
 
-    定义一个合适的函数G（使用一个额外的参数来描述递归的$\lambda$表达式），
-    对这个函数G进行不动子求值就相当于调用递归
+最终可以得到： 
+    $$\begin{aligned}
+    & (YG) \; 4 &  \\ 
+    & = &  MULT \; 4 \; (MULT \; 3 (MULT \; 2 \; (MULT \; 1 \; 1))) \\ 
+    & =  & 24
+    \end{aligned}$$
 
-* $\lambda$计算模型
 
-*** $\lambda$计算模型：例子
 
-    -  $\lambda$演算可以描述复杂计算，计算能力等价于图灵计算模型
+* $\lambda$ 计算模型
++ $\lambda$ 演算可以描述复杂计算， *计算能力等价于图灵计算模型*
++ 给定２个 $\lambda$ 表达式，如果两者等价则输出 TRUE，反之则输出 FALSE。这是第一个被证明 *没有算法可以解决* 的问题
 
-    -  给定２个$\lambda$表达式，如果两者等价则输出TRUE，反之则输出FALSE。这是第一个被证明没有算法可以解决的问题
+** 解释器
+quote，atom，cons，car，cdr，eq，cond 是 LISP 的 *7个原始操作符* 
+    - quote ： *引用* 函数，它的自变量不被求值, 而是作为整个表达式的值返回
+    - cond： *条件* 函数，可以由 _IFTHENELSE_ 定义
+    - atom，cons，car，cdr，eq：已经被定义
+    - 用这7个操作符可以写出最原始版本的 _eval_ 函数，也就是 *最简单的解释器* 
 
-    -  quote，atom，cons，car，cdr，eq，cond是LISP的7个原始操作符
-
-      -  quote ： 引用函数，它的自变量不被求值, 而是作为整个表达式的值返回
-
-      -  cond： 条件函数，可以由IFTHENELSE定义
-
-      -  atom，cons，car，cdr，eq：已经被定义
-
-      -  用这7个操作符可以写出最原始版本的eval函数，也就是最简单的解释器\cite{RootsOfLisp}
-
-** $\lambda$计算模型扩充
-
-*** $\lambda$计算模型：扩充
-
-    -  $\lambda$演算实际使用很不方便
-
-    -  $\lambda$计算模型扩充
-
+** $\lambda$ 计算模型扩充
+$\lambda$ 演算 实际使用很不方便
       -  扩充表达式
-
 	-  常数：TRUE，FALSE，整数
-
 	-  标准函数：ADD，SUB，MULT，CONS，CAR，CDR ...
-
 	-  条件表达式：COND((P1 E1) (P2 E2))
-
-	-  let表达式：(LET((V1 E1)) E)
-
+	-  let表达式：(LET ((V1 E1)) E)
       -  扩充变换系统
-
       -  扩充数据类型：INT，REAL，BOOLEAN
-
 *** let表达式
-
     $$(let ((x \quad E_0)) \quad E_1) \equiv (\lambda x \centerdot E_1) E_0$$
 
-    把$E_1$中的变量x的值绑定为$E_0$
+    把 $E_1$ 中的变量 x 的值绑定为 $E_0$
 
-    引入let表达式后$\lambda$演算就有了2种变量
+    引入let表达式后 $\lambda$ 演算就有了2种变量
+    -  $\lambda$ 变量： _形参_ 变量
+    -  let变量：过程体内的 *临时* 变量
 
-    -  $\lambda$变量：形参变量
-
-    -  let变量：过程体内的临时变量
-
-* 致谢
-
-  谢谢大家的聆听!
