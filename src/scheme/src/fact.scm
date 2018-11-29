@@ -16,9 +16,9 @@
 (define (t-fact n)
   (letrec ((iter
 	    (lambda (m p)
-		   (if (= m 1)
-		       p
-		       (iter (- m 1) (* m p))))))
+	      (if (= m 1)
+		  p
+		  (iter (- m 1) (* m p))))))
     (iter n 1)))  
 
 (t-fact 1)
@@ -32,7 +32,7 @@
   (if (= n 0) 
       (k 1)
       (k-fact (- n 1)
-             (lambda (x) (k (* n x))))))
+              (lambda (x) (k (* n x))))))
 
 (define (return x)
   x)
@@ -51,19 +51,19 @@
 
 (define (y-fact n)
   ((Y (lambda (arg)
-         (lambda (n)
-            (if (zero? n)
-                1
-                (* n (arg (- n 1))))))) n))
+        (lambda (n)
+          (if (zero? n)
+              1
+              (* n (arg (- n 1))))))) n))
 
-(y-fact 0)
 (y-fact 1)
-(y-fact 10) ; 362800 
+(y-fact 2)
+(y-fact 10) 
 
 
-;;;;;;;;;;;;;;;;;;
-;; map-reduce version  ;;
-;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;
+;; map reduce version ;;
+;;;;;;;;;;;;;;;;;;;;;;;;
 (define (enumerate-interval low high)
   (if (> low high)
       '()
@@ -72,13 +72,13 @@
 (define (r-fact n)
   (reduce * 1 (enumerate-interval  1 n)))
 
-(r-fact 0)
 (r-fact 1)
-(r-fact 10) ; 362800
+(r-fact 2)
+(r-fact 10) 
 
-;;;;;;;;;;;;;;;;;;;;;
-;; stream map version  ;;
-;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;
+;; stream map version ;;
+;;;;;;;;;;;;;;;;;;;;;;;;
 (define ones (cons-stream 1 ones))
 
 (define (add-streams s1 s2)
@@ -96,6 +96,6 @@
 (define (s-fact n)
   (stream-ref fact-stream n))
 
-(s-fact 0)
 (s-fact 1)
+(s-fact 2)
 (s-fact 10) 
