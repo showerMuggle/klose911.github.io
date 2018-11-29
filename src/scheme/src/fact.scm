@@ -60,3 +60,42 @@
 (y-fact 1)
 (y-fact 10) ; 362800 
 
+
+;;;;;;;;;;;;;;;;;;
+;; map-reduce version  ;;
+;;;;;;;;;;;;;;;;;;
+(define (enumerate-interval low high)
+  (if (> low high)
+      nil
+      (cons low (enumerate-interval (+ low 1) high))))
+
+(define (r-fact n)
+  (reduce * 1 (enumerate-interval  1 n)))
+
+(r-fact 0)
+(r-fact 1)
+(r-fact 10) ; 362800
+
+;;;;;;;;;;;;;;;;;;;;;
+;; stream map version  ;;
+;;;;;;;;;;;;;;;;;;;;;
+(define ones (cons-stream 1 ones))
+
+(define (add-streams s1 s2)
+  (stream-map + s1 s2))
+
+(define (mul-stream s1 s2)
+  (stream-map * s1 s2))
+
+(define integers (cons-stream 1 (add-streams ones integers))) 
+
+(define fact-stream
+  (cons-stream 1
+	       (mul-stream fact-stream integers)))   
+
+(define (s-fact n)
+  (stream-ref fact-stream n))
+
+(s-fact 0)
+(s-fact 1)
+(s-fact 10) 
