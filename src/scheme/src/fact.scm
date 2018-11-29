@@ -1,0 +1,62 @@
+;;;;;;;;;;;;;;;;;;;;;;;
+;; normal recursive  ;;
+;;;;;;;;;;;;;;;;;;;;;;;
+(define (fact n)
+  (if (> n 1)
+      (* n (fact (- n 1)))
+      1))
+
+(fact 1)
+(fact 2)
+(fact 10)
+
+;;;;;;;;;;;;;;;;;;;;
+;; tail recursive ;;
+;;;;;;;;;;;;;;;;;;;;
+(define (t-fact n)
+  (letrec ((iter
+	    (lambda (m p)
+		   (if (= m 1)
+		       p
+		       (iter (- m 1) (* m p))))))
+    (iter n 1)))  
+
+(t-fact 1)
+(t-fact 2)
+(t-fact 10)
+
+;;;;;;;;;;;;;;;;;;;;
+;; CPS recursive  ;;
+;;;;;;;;;;;;;;;;;;;;
+(define (k-fact n k)
+  (if (= n 0) 
+      (k 1)
+      (k-fact (- n 1)
+             (lambda (x) (k (* n x))))))
+
+(define (return x)
+  x)
+
+(k-fact 0 return) 
+(k-fact 1 return) 
+(k-fact 10 return)
+
+;;;;;;;;;;;;;;;;;;;
+;; y combinator  ;;
+;;;;;;;;;;;;;;;;;;;
+(define (Y F)
+  (define (W P)
+    (F (lambda (x) ((P P) x))))
+  (W W))
+
+(define (y-fact n)
+  ((Y (lambda (arg)
+         (lambda (n)
+            (if (zero? n)
+                1
+                (* n (arg (- n 1))))))) n))
+
+(y-fact 0)
+(y-fact 1)
+(y-fact 10) ; 362800 
+
