@@ -12,21 +12,57 @@
       (car exp)
       (error "Unknown expression TYPE" exp)))
 
+;; (type '(assert! (job (Bitdiddle Ben) (computer wizard)))) ; assert!
+;; (type '(assert! (rule (wheel ?person)
+;; 		      (and (supervisor ?middle-manager ?person)
+;; 			   (supervisor ?x ?middle-manager))))) ; assert! 
+;; (type '(and (job ?x (computer programmer))
+;; 	    (supervisor ?x ?y))) ; and 
+;; (type 1) ;Unknown expression TYPE 1
+
 (define (contents exp)
   (if (pair? exp)
       (cdr exp)
       (error "Unknown expression CONTENTS" exp)))
 
+;; (contents '(assert! (job (Bitdiddle Ben) (computer wizard)))) ;  ((job (bitdiddle ben) (computer wizard)))
+;; (contents '(assert! (rule (wheel ?person)
+;; 			  (and (supervisor ?middle-manager ?person)
+;; 			       (supervisor ?x ?middle-manager)))))
+					; ((rule (wheel ?person) (and (supervisor ?middle-manager ?person) (supervisor ?x ?middle-manager)))) 
+;; (contents '(and (job ?x (computer programmer))
+;; 	    (supervisor ?x ?y))) ; ((job ?x (computer programmer)) (supervisor ?x ?y)) 
+;; (contents 1) ;Unknown expression CONTENTS 1
+
 (define (assertion-to-be-added? exp)
   (eq? (type exp) 'assert!))
 
+;; (assertion-to-be-added? '(assert! (job (Bitdiddle Ben) (computer wizard)))) ; #t
+;; (assertion-to-be-added? '(assert! (rule (wheel ?person)
+;; 					(and (supervisor ?middle-manager ?person)
+;; 					     (supervisor ?x ?middle-manager))))) ; #t
+;; (assertion-to-be-added? '(and (job ?x (computer programmer))
+;; 			      (supervisor ?x ?y))) ;#f
+
 (define (add-assertion-body exp)
   (car (contents exp)))
+
+;; (add-assertion-body '(assert! (job (Bitdiddle Ben) (computer wizard))))
+;; => (job (bitdiddle ben) (computer wizard)) 
+;; (add-assertion-body '(assert! (rule (wheel ?person)
+;; 					(and (supervisor ?middle-manager ?person)
+;; 					     (supervisor ?x ?middle-manager)))))
+;; =>(rule (wheel ?person) (and (supervisor ?middle-manager ?person) (supervisor ?x ?middle-manager)))
 
 ;;; and 
 (define (empty-conjunction? exps) (null? exps))
 (define (first-conjunct exps) (car exps))
 (define (rest-conjuncts exps) (cdr exps))
+
+
+;; (and (supervisor ?middle-manager ?person)
+;;      (supervisor ?x ?middle-manager))
+
 ;;; or
 (define (empty-disjunction? exps) (null? exps))
 (define (first-disjunct exps) (car exps))
@@ -47,15 +83,39 @@
 (define (var? exp)
   (tagged-list? exp '?))
 
+;; (var? '(? x)) ; #t
+;; (var? '(rule b)) ;#f 
+
 (define (constant-symbol? exp) (symbol? exp))
+
+;; (constant-symbol? 1) ;#f
+;; (constant-symbol? "hello wold") ;#f
+;; (constant-symbol? 'rule) ;#t
+;; (constant-symbol? '?x) ;#t
+;; (constant-symbol? '(a b c)) ;#f
 
 (define (rule? statement)
   (tagged-list? statement 'rule))
+
+;; (rule? '(job (Bitdiddle Ben) (computer wizard))) ; #f 
+;; (rule? '(rule (wheel ?person)
+;;       (and (supervisor ?middle-manager ?person)
+;; 	   (supervisor ?x ?middle-manager)))) ; #t
+
 (define (conclusion rule) (cadr rule)) ; 结论
+
+;; (conclusion  '(rule (wheel ?person)
+;;       (and (supervisor ?middle-manager ?person)
+;; 	   (supervisor ?x ?middle-manager)))) ; (wheel ?person)
+
 (define (rule-body rule)
   (if (null? (cddr rule))
       '(always-true)
       (caddr rule))) ; 规则的体
+
+;; (rule-body  '(rule (wheel ?person)
+;;       (and (supervisor ?middle-manager ?person)
+;; 	   (supervisor ?x ?middle-manager)))) ; (and (supervisor ?middle-manager ?person) (supervisor ?x ?middle-manager))
 
 (define (query-syntax-process exp)
   (map-over-symbols expand-question-mark exp))
@@ -67,6 +127,11 @@
         ((symbol? exp) (proc exp))
         (else exp)))
 
+;; (map-over-symbols expand-question-mark '(rule (wheel ?person)
+;; 					      (and (supervisor ?middle-manager ?person)
+;; 						   (supervisor ?x ?middle-manager))))
+;; =>  (rule (wheel (? person)) (and (supervisor (? middle-manager) (? person)) (supervisor (? x) (? middle-manager))))
+
 (define (expand-question-mark symbol)
   (let ((chars (symbol->string symbol))) ; 取得 symbol 的名字字符串
     (if (string=? (substring chars 0 1) "?") ; 名字的第一个字符是否 '?
@@ -75,12 +140,24 @@
                (substring chars 1 (string-length chars)))) ; 取得 symbol 的名字除去 '? 后的字符串
         symbol)))
 
+;; (expand-question-mark '?wheel) ; => (? wheel)
+;; (expand-question-mark 'wheel) ; => wheel
+
+;; (query-syntax-process '(assert! (job (Bitdiddle Ben) (computer wizard))))
+;; => (assert! (job (bitdiddle ben) (computer wizard)))
+;; (query-syntax-process '(assert! (rule (wheel ?person)
+;; 				      (and (supervisor ?middle-manager ?person)
+;; 					   (supervisor ?x ?middle-manager))))) 
+;; => (assert! (rule (wheel (? person)) (and (supervisor (? middle-manager) (? person)) (supervisor (? x) (? middle-manager)))))
+
 (define rule-counter 0)
 (define (new-rule-application-id)
   (set! rule-counter (+ 1 rule-counter))
   rule-counter)
 (define (make-new-variable var rule-application-id)
   (cons '? (cons rule-application-id (cdr var))))
+
+(make-new-variable '(? wheel) rule-counter) ; (? 0 wheel)
 
 (define (contract-question-mark variable)
   (string->symbol
@@ -91,11 +168,48 @@
 				     (number->string (cadr variable)))
 		      (symbol->string (cadr variable))))))
 
+;; (contract-question-mark  '(? 0 wheel)) ; ?wheel-0
+;; (cadr '(? 0 wheel)) ; 0 
+;; (caddr '(? 0 wheel)) ; wheel
+;; (string-append (symbol->string 'wheel)
+;; 	       "-"
+;; 	       (number->string 0)) ; "wheel-0"
+;; (string->symbol
+;;  (string-append "?" "wheel-0")) ; ?wheel-0
+
+;; (contract-question-mark  '(? wheel)) ; ?wheel
 
 ;;;;;;;;;;;;;;;;;;;;;;;
 ;; Mantain Database ;;
 ;;;;;;;;;;;;;;;;;;;;;;;
+
+(define (use-index? pat)
+  (constant-symbol? (car pat)))
+
+;; (use-index? '(? wheel person)) ; #t
+;; (use-index? '(1 2)) ; #f
+
+(define (indexable? pat)
+  (or (constant-symbol? (car pat)) ; 模式的 car 是常量符号
+      (var? (car pat)))) ; 模式（结论）的 car 是模式变量
+
+;; (indexable? ' (job (Bitdiddle Ben) (computer wizard))) ; #t
+;; (indexable? '(wheel ? person)) ; #t
+;; (indexable? '(wheel person)) ; #t
+;; (indexable? '(1 2 3)) ;#f  
+
+(define (index-key-of pat)
+  (let ((key (car pat)))
+    (if (var? key) '? key))) 
+
+;; (index-key-of '(job (Bitdiddle Ben) (computer wizard))) ; job
+;; (index-key-of '(? wheel person)) ; ?
+
 ;;; assertions
+(define (get-stream key1 key2)
+  (let ((s (get key1 key2)))
+    (if s s the-empty-stream)))
+
 (define THE-ASSERTIONS the-empty-stream)
 
 (define (fetch-assertions pattern frame)
@@ -106,11 +220,54 @@
 (define (get-all-assertions) THE-ASSERTIONS)
 
 (define (get-indexed-assertions pattern)
-  (get-stream (index-key-of pattern) 'assertion-stream)) 
+  (get-stream (index-key-of pattern) 'assertion-stream))
 
-(define (get-stream key1 key2)
-  (let ((s (get key1 key2)))
-    (if s s the-empty-stream)))
+(define (store-assertion-in-index assertion)
+  (if (indexable? assertion)
+      (let ((key (index-key-of assertion)))
+        (let ((current-assertion-stream
+               (get-stream key 'assertion-stream)))
+          (put key
+               'assertion-stream
+               (cons-stream assertion
+                            current-assertion-stream)))))) 
+
+;; (get-stream 'job 'assertion-stream) ; 
+;; (store-assertion-in-index '(job (Bitdiddle Ben) (computer wizard)))
+;; =>  ((job (bitdiddle ben) (computer wizard)) . #[promise 39]) 
+;; (indexable? '(job (Bitdiddle Ben) (computer wizard))) ; #t
+;; (index-key-of '(job (Bitdiddle Ben) (computer wizard))) ; job
+
+(define (add-assertion! assertion)
+  (store-assertion-in-index assertion)
+  (let ((old-assertions THE-ASSERTIONS))
+    (set! THE-ASSERTIONS
+          (cons-stream assertion old-assertions))
+    'ok))
+
+;; (add-assertion! '(job (Bitdiddle Ben) (computer wizard)))
+;; => ((job (bitdiddle ben) (computer wizard)) . #[promise 15])
+;; (display-stream THE-ASSERTIONS)
+;; => (job (bitdiddle ben) (computer wizard))
+;; (display-stream (get 'job 'assertion-stream))
+;; => (job (bitdiddle ben) (computer wizard)) 
+
+;; (add-assertion! '(job (Klose Wu) (computer noob))) 
+;; ((job (klose wu) (computer noob)) . #[promise 19])
+;; (display-stream THE-ASSERTIONS) 
+;; => (job (klose wu) (computer noob))
+;; (job (bitdiddle ben) (computer wizard))
+;; (display-stream (get 'job 'assertion-stream))
+;; => (job (klose wu) (computer noob))
+;; (job (bitdiddle ben) (computer wizard))
+
+;; (add-assertion! '(boss (fabian li)  (mule kai)))
+;; (display-stream THE-ASSERTIONS)
+;; => (boss (fabian li) (mule kai))
+;; (job (klose wu) (computer noob))
+;; (job (bitdiddle ben) (computer wizard))
+;; (display-stream (get 'boss 'assertion-stream))
+;; (boss (fabian li) (mule kai))
 
 ;;; rules
 (define THE-RULES the-empty-stream)
@@ -127,34 +284,21 @@
    (get-stream (index-key-of pattern) 'rule-stream)
    (get-stream '? 'rule-stream))) ; 所有结论的 car 是变量的规则存入 ?索引 的流
 
-(define (add-rule-or-assertion! assertion)
-  (if (rule? assertion)
-      (add-rule! assertion)
-      (add-assertion! assertion)))
-
-(define (add-assertion! assertion)
-  (store-assertion-in-index assertion)
-  (let ((old-assertions THE-ASSERTIONS))
-    (set! THE-ASSERTIONS
-          (cons-stream assertion old-assertions))
-    'ok))
-
 (define (add-rule! rule)
   (store-rule-in-index rule)
   (let ((old-rules THE-RULES))
     (set! THE-RULES (cons-stream rule old-rules))
     'ok))
 
-(define (store-assertion-in-index assertion)
-  (if (indexable? assertion)
-      (let ((key (index-key-of assertion)))
-        (let ((current-assertion-stream
-               (get-stream key 'assertion-stream)))
-          (put key
-               'assertion-stream
-               (cons-stream assertion
-                            current-assertion-stream))))))
+;; (add-rule! '(rule (wheel (? person)) (and (supervisor (? middle-manager) (? person)) (supervisor (? x) (? middle-manager)))))
+;; (display-stream (get-stream 'wheel 'rule-stream))
+;; => (rule (wheel (? person)) (and (supervisor (? middle-manager) (? person)) (supervisor (? x) (? middle-manager))))
+;; (display-stream THE-RULES)
+;; => (rule (wheel (? person)) (and (supervisor (? middle-manager) (? person)) (supervisor (? x) (? middle-manager))))
 
+(display-stream (get-indexed-rules '(wheel (? person))))
+;; => (rule (wheel (? person)) (and (supervisor (? middle-manager) (? person)) (supervisor (? x) (? middle-manager)))) 
+		
 (define (store-rule-in-index rule)
   (let ((pattern (conclusion rule)))
     (if (indexable? pattern)
@@ -166,16 +310,13 @@
                  (cons-stream rule
                               current-rule-stream)))))))
 
-(define (use-index? pat)
-  (constant-symbol? (car pat)))
+;; (conclusion '(rule (wheel (? person)) (and (supervisor (? middle-manager) (? person)) (supervisor (? x) (? middle-manager))))) ;; (wheel (? person))
 
-(define (indexable? pat)
-  (or (constant-symbol? (car pat)) ; 模式的 car 是常量符号
-      (var? (car pat)))) ; 模式（结论）的 car 是模式变量
-
-(define (index-key-of pat)
-  (let ((key (car pat)))
-    (if (var? key) '? key))) 
+;;; add rule or assertion 
+(define (add-rule-or-assertion! assertion)
+  (if (rule? assertion)
+      (add-rule! assertion)
+      (add-assertion! assertion)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;
 ;; binding and frame ;;
