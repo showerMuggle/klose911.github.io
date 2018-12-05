@@ -308,11 +308,11 @@ Unix 参考手册页是进行系统编程必备的参考工具。它通常通过
 </ul>
 
 <pre class="example">
-  库函数也可以由其它程序提供，例如 GTK 库等
-  用户也可以自己重新实现库函数接口以替代所提供的库函数功能
+    库函数也可以由其它程序提供，例如 GTK 库等
+    用户也可以自己重新实现库函数接口以替代所提供的库函数功能
 
-  系统调用实际上也以库函数的形式直接提供给用户程序，如 write(2)、fork(2)等
-  对用户程序来说，不必专门区别那些是库函数、哪些是系统调用接口
+    系统调用实际上也以库函数的形式直接提供给用户程序，如 write(2)、fork(2)等
+    对用户程序来说，不必专门区别那些是库函数、哪些是系统调用接口
 </pre>
 
 <p>
@@ -394,9 +394,25 @@ fork(2) 导致复制地址空间等情况下
 <h2 id="org584f067">异步、并发、通信</h2>
 <div class="outline-text-2" id="text-org584f067">
 <ul class="org-ul">
-<li>异步(Asynchronous)：对系统资源以不可预测的时间和顺序执行的操作。例如等待外部输入、监听 TCP 端口等都是异步操作。对于异步操作，需要设计阻塞等待或超时等机制(一般都是基于信号机制实现)</li>
-<li>并发(Concurrency)：多个并行的异步进程/线程同时在同一个资源上会合时，产生并发。这时由于各自的异步性，读写等 I/O 操作可能交错发生乱序，从而出现意外的结果。为使它们的操作被强制的顺序化，需要进行同步处理。同步处理属于广义上的通信的范畴，有多种同步方式，一般采用锁机制。同步处理还需要注意竞争条件出现的死锁。这是 Unix 系统编程中较为复杂、容易出现 bug 的地方</li>
-<li>通信(Communication)：通过某种机制，在不同实体间交换数据。对 Unix 编程来说发送/接收、通知/响应、输入/输出等都属于比较广义的通信的范畴。狭义点的说法就指数据的发送/接收。Unix编程的主要通信方式为进程间通信和线程通信。广义的进程间通信包括了信号、管道、IPC 对象、套接字。条件变量、取消等操作可以用作线程间的通信(通知)。建议性锁和全局变量也是一种通信机制。不同应用场合的通信使用不同的机制和做法</li>
+<li>异步：对 <span class="underline">系统资源</span> 以 <b>不可预测的 <span class="underline">时间</span> 和 <span class="underline">顺序</span> 执行</b> 的操作。例如等待外部输入、监听 TCP 端口等都是异步操作
+<ul class="org-ul">
+<li>对于异步操作，需要设计 <span class="underline">阻塞等待</span> 或 <span class="underline">超时</span> 等机制，一般都是基于 <b>信号机制</b> 实现</li>
+</ul></li>
+<li>并发： <b>多个 <span class="underline">并行的异步</span>  <span class="underline">进程/线程</span> 同时在 <span class="underline">同一个资源</span> 上会合</b> 时，产生并发。这时由于各自的异步性，读写等 I/O 操作可能交错发生乱序，从而出现意外的结果。为使它们的操作被强制的顺序化，需要进行同步处理
+<ul class="org-ul">
+<li>同步处理属于广义上的通信的范畴，有多种同步方式，一般采用 <span class="underline">锁机制</span></li>
+<li>同步处理还需要注意竞争条件出现的 <span class="underline">死锁</span> 。这是 Unix 系统编程中较为复杂、容易出现 bug 的地方</li>
+</ul></li>
+<li>通信：通过某种机制，在 <b>不同实体间交换数据</b> 。对 Unix 编程来说发送/接收、通知/响应、输入/输出等都属于比较广义的通信的范畴。狭义点的说法就指数据的发送/接收，Unix编程的主要通信方式为 <span class="underline">进程间通信</span> 和 <span class="underline">线程通信</span>
+<ul class="org-ul">
+<li>广义的进程间通信包括了 
+<ul class="org-ul">
+<li><span class="underline">信号</span> 、 <span class="underline">管道</span> 、 <span class="underline">IPC 对象</span> 、 <span class="underline">套接字</span></li>
+<li><span class="underline">条件变量</span> 、 <span class="underline">取消</span> 等操作可以用作线程间的通信(通知)</li>
+<li><span class="underline">建议性锁</span> 和 <span class="underline">全局变量</span> 也是一种通信机制</li>
+</ul></li>
+<li>不同应用场合的通信使用不同的机制和做法</li>
+</ul></li>
 </ul>
 </div>
 </div>
@@ -405,9 +421,14 @@ fork(2) 导致复制地址空间等情况下
 <h2 id="org98f2501">出错处理</h2>
 <div class="outline-text-2" id="text-org98f2501">
 <p>
-Unix 系统一般通过设置全局变量 errno(3) 标识程序执行时发生的错误。在系统所提供的库函数中，除非再次发生错误，否则不会改动 errno 的值也不会将其清零。errno 可以通过下面两个函数转换为对应的错误消息字符串
+Unix 系统一般通过设置 <b>全局变量</b>  <span class="underline">errno(3)</span>  标识程序执行时发生的错误
 </p>
-
+<pre class="example">
+     在系统所提供的库函数中，除非再次发生错误，否则不会改动 errno 的值也不会将其清零
+</pre>
+<p>
+errno 可以通过下面两个函数转换为对应的错误消息字符串：
+</p>
 <ul class="org-ul">
 <li>指定的 errno 错误号转换为字符串并返回这个字符串的指针</li>
 </ul>
@@ -444,12 +465,12 @@ Unix 系统一般通过设置全局变量 errno(3) 标识程序执行时发生�
 <h3 id="org4a43067">用户</h3>
 <div class="outline-text-3" id="text-org4a43067">
 <p>
-正常下，UID 唯一标识了一个用户
+正常下， <span class="underline">UID</span>  唯一标识了一个用户
 </p>
 <ul class="org-ul">
-<li>系统的用户信息定义在/etc/passwd(passwd(5))</li>
-<li>用户的创建、修改、删除通常由系统管理员通过 useradd(1)、userdel(1)、usermod(1)等系统命令执行，而不应直接修改/etc/passwd 文件</li>
-<li>超级用户(root)的 UID 为 0</li>
+<li>系统的用户信息定义在 <span class="underline">/etc/passwd</span> (passwd(5))</li>
+<li>用户的 <b>创建</b> 、 <b>修改</b> 、 <b>删除</b> 通常由系统管理员通过 <span class="underline">useradd(1)</span> 、 <span class="underline">userdel(1)</span> 、 <span class="underline">usermod(1)</span> 等系统命令执行，而不应直接修改/etc/passwd 文件</li>
+<li><b>超级用户</b> (root)的 UID 为 <b>0</b></li>
 </ul>
 </div>
 </div>
@@ -458,12 +479,12 @@ Unix 系统一般通过设置全局变量 errno(3) 标识程序执行时发生�
 <h3 id="org65d010d">组</h3>
 <div class="outline-text-3" id="text-org65d010d">
 <p>
-组(group)将一个或多个用户组织起来，以使它们能以指定的相同权限访问资源。正常下，GID 唯一标识了一个组
+组 <b>将一个或多个用户组织起来</b> ，以使它们能以指定的相同权限访问资源。正常下，GID 唯一标识了一个组
 </p>
 <ul class="org-ul">
-<li>GID 定义在/etc/group(group(5))</li>
+<li>GID 定义在 <span class="underline">/etc/group</span> (group(5))</li>
 <li>组的创建、修改、删除通常由系统管理员通过 groupadd(1)、groupdel(1)、groupmod(1)等系统命令执行，而不应直接修改/etc/group 文件</li>
-<li>用户可以同时加入多个组，命令 groups(1) 可以打印出用户所在的组，第一个以外的均为附加组</li>
+<li>用户可以同时加入多个组，命令 groups(1) 可以打印出用户所在的组，第一个以外的均为 <span class="underline">附加组</span></li>
 </ul>
 </div>
 </div>
@@ -473,14 +494,12 @@ Unix 系统一般通过设置全局变量 errno(3) 标识程序执行时发生�
 <h2 id="org92d8ede">信号</h2>
 <div class="outline-text-2" id="text-org92d8ede">
 <p>
-信号是软件中断机制，作为系统某种事件发生的通知
+信号是 <b>软件中断机制</b> ，作为系统 <b>某种事件发生的通知</b> 
 </p>
 <ul class="org-ul">
-<li>进程可以通过调用信号函数，在信号递送到进程时选择对其的处理方式</li>
-
-<li>进程还可以选择在信号递送之前屏蔽之，使之成为未决信号而延后处理</li>
-
-<li>进程捕捉到信号时将被中断，直到信号处理函数返回时方恢复执行</li>
+<li>进程可以通过调用 <span class="underline">信号函数</span> ，在信号递送到进程时选择对其的处理方式</li>
+<li>进程还可以选择在 <span class="underline">信号递送之前屏蔽之</span> ，使之成为 <b>未决信号</b> 而 <b>延后处理</b></li>
+<li>进程 <b>捕捉到信号时将被中断，直到 <span class="underline">信号处理函数返回</span> 时方恢复执行</b></li>
 </ul>
 </div>
 
@@ -502,10 +521,27 @@ Unix 系统一般通过设置全局变量 errno(3) 标识程序执行时发生�
 <p>
 Unix系统使用两种方式标识时间
 </p>
-<ol class="org-ol">
-<li>日历时间：指自 UTC 时间 1970 年 1 月 1 日 00:00:00 以来流逝的秒数，这个时间以 time<sub>t</sub> 类型保存。这是一个 32 位整型数。在 2038 年 1 月 18 日将发生溢出错误。例如，在 Unix 系统上无法创建一个时间为 2038 年 1 月以后的文件(touch ­t 命令)</li>
-<li>进程时间：用以衡量进程资源耗时情况，包括实际时钟时间(real time，为一个进程执行开始至今的全部时间)、用户 CPU 时间(user time，为程序在用户地址空间中执行的时间)、系统 CPU 时间(system time，为程序执行系统调用后在内核空间中执行的时间)。另外如果进程执行了 sleep(3) 等调用，睡眠的时间不计算为 CPU 时间，但计入实际时钟时间</li>
-</ol>
+<ul class="org-ul">
+<li><span class="underline">日历</span> 时间：指自 UTC 时间 1970 年 1 月 1 日 00:00:00 以来流逝的秒数，这个时间以 <b>time _ t</b> 类型保存</li>
+</ul>
+<pre class="example">
+time_t 是一个 32 位整型数。在 2038 年 1 月 18 日将发生溢出错误
+
+例如，在 Unix 系统上无法创建一个时间为 2038 年 1 月以后的文件(touch ­t 命令)
+</pre>
+<ul class="org-ul">
+<li><p>
+<span class="underline">进程</span> 时间：用以衡量进程资源耗时情况
+</p>
+<ul class="org-ul">
+<li>实际时钟时间(rtime) :  一个进程执行开始至今的全部时间</li>
+<li>用户 CPU 时间(utime) : 程序在用户地址空间中执行的时间</li>
+<li>系统 CPU 时间(stime) : 程序执行系统调用后在内核空间中执行的时间</li>
+</ul>
+
+<pre class="example">
+      如果进程执行了 sleep(3) 等调用，睡眠的时间不计算为 CPU 时间，但计入实际时钟时间
+</pre>
 
 <p>
 <a href="standard.html">Next：标准和实现</a>
@@ -513,7 +549,8 @@ Unix系统使用两种方式标识时间
 
 <p>
 <a href="apue.html">Home：目录</a>
-</p>
+</p></li>
+</ul>
 </div>
 </div>
 </div>
