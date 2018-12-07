@@ -150,6 +150,13 @@
 ;; 					   (supervisor ?x ?middle-manager))))) 
 ;; => (assert! (rule (wheel (? person)) (and (supervisor (? middle-manager) (? person)) (supervisor (? x) (? middle-manager)))))
 
+;; (query-syntax-process '(assert! (rule (append-to-form () ?y ?y))))
+;; => (assert! (rule (append-to-form () (? y) (? y))))
+
+;; (query-syntax-process '(assert! (rule (append-to-form (?u . ?v) ?y (?u . ?z))
+;;				      (append-to-form ?v ?y ?z))))
+;; => (assert! (rule (append-to-form ((? u) ? v) (? y) ((? u) ? z)) (append-to-form (? v) (? y) (? z)))) 
+
 (define rule-counter 0)
 (define (new-rule-application-id)
   (set! rule-counter (+ 1 rule-counter))
@@ -296,9 +303,22 @@
 ;; (display-stream THE-RULES)
 ;; => (rule (wheel (? person)) (and (supervisor (? middle-manager) (? person)) (supervisor (? x) (? middle-manager))))
 
-(display-stream (get-indexed-rules '(wheel (? person))))
+;; (display-stream (get-indexed-rules '(wheel (? person))))
 ;; => (rule (wheel (? person)) (and (supervisor (? middle-manager) (? person)) (supervisor (? x) (? middle-manager)))) 
-		
+
+;; (add-rule! '(rule (append-to-form () (? y) (? y))))
+;; (add-rule! '(rule (append-to-form ((? u) ? v) (? y) ((? u) ? z)) (append-to-form (? v) (? y) (? z))))
+;; (display-stream THE-RULES)
+;; => (rule (append-to-form ((? u) ? v) (? y) ((? u) ? z)) (append-to-form (? v) (? y) (? z)))
+;;    (rule (append-to-form () (? y) (? y)))
+;;    (rule (wheel (? person)) (and (supervisor (? middle-manager) (? person)) (supervisor (? x) (? middle-manager))))
+;; (display-stream (get-stream 'append-to-form 'rule-stream)) 
+;; => (rule (append-to-form ((? u) ? v) (? y) ((? u) ? z)) (append-to-form (? v) (? y) (? z)))
+;;    (rule (append-to-form () (? y) (? y)))
+;; (display-stream (get-indexed-rules '(append-to-form ((? u) ? v) (? y) ((? u) ? z)))) 
+;; => (rule (append-to-form ((? u) ? v) (? y) ((? u) ? z)) (append-to-form (? v) (? y) (? z)))
+;;    (rule (append-to-form () (? y) (? y)))
+
 (define (store-rule-in-index rule)
   (let ((pattern (conclusion rule)))
     (if (indexable? pattern)
@@ -336,6 +356,19 @@
 (define (extend variable value frame)
   (cons (make-binding variable value) frame))
 
+;; (define test-frame '())
+;; (set! test-frame (extend 'x 100 test-frame)) 
+;; (binding-in-frame 'x test-frame) ;; (x . 100)
+;; (set! test-frame (extend 'x 200 test-frame)) 
+;; (binding-in-frame 'x test-frame) ;; (x . 200)
+;; (set! test-frame (extend 'y 300 test-frame))
+;; (binding-in-frame 'x test-frame) ;; (x . 200)
+;; (binding-variable (binding-in-frame 'x test-frame)) ; x
+;; (binding-value (binding-in-frame 'x test-frame)) ; 200
+;; (binding-in-frame 'y test-frame) ;; (y . 300)
+;; (binding-variable (binding-in-frame 'y test-frame)) ; y
+;; (binding-value (binding-in-frame 'y test-frame)) ; 300
+
 ;;;;;;;;;;;
 ;; Query ;;
 ;;;;;;;;;;;
@@ -347,6 +380,11 @@
       (find-assertions query-pattern frame) ; 找数据库里的匹配断言，生成扩充框架的流 
       (delay (apply-rules query-pattern frame)))) ; 应用可应用的规则，生成扩充框架的流 
    frame-stream))
+
+;; (define init-frame-stream (singleton-stream '())) 
+;; (display-stream (simple-query '(append-to-form (a b) (c d) (? z)) init-frame-stream)) 
+;; (find-assertions '(append-to-form (a b) (c d) (? z)) init-frame-stream) ; () 
+;; (apply-rules '(append-to-form (a b) (c d) (? z)) init-frame-stream)
 
 ;;; and queries
 (define (conjoin conjuncts frame-stream)
@@ -416,6 +454,10 @@
   (stream-flatmap (lambda (datum)
                     (check-an-assertion datum pattern frame)) ; 丢掉不可能匹配的断言
                   (fetch-assertions pattern frame))) ; 从数据库获取断言的流
+;; (add-rule-or-assertion! '(append-to-form (a b) (c d) (a b c d)))
+;; (define test-frame (singleton-stream '()))
+;; (find-assertions '(append-to-form (a b) (c d) (? z)) test-frame)
+;; => ((((? z) a b c d)) . #[promise 129])
 
 (define (check-an-assertion assertion query-pat query-frame)
   (let ((match-result
@@ -423,6 +465,9 @@
     (if (eq? match-result 'failed) 
         the-empty-stream ; 失败返回空流
         (singleton-stream match-result)))) ; 成功包含 一个扩充框架的流
+
+;; (check-an-assertion '(append-to-form (a b) (c d) (a b c d)) '(append-to-form (a b) (c d) (? z)) '())
+;; => ((((? z) a b c d)) . #[promise 134])
 
 (define (pattern-match pat dat frame) 
   (cond ((eq? frame 'failed) 'failed)
@@ -436,11 +481,27 @@
                                        frame))) ; 以匹配 car 部分得到的可能，扩充的框架作为框架
         (else 'failed)))
 
+;; (pattern-match '(append-to-form (a b) (c d) (? z)) '(append-to-form (a b) (c d) (a b c d)) '()) 
+;; => (((? z) a b c d))
+
+;; (pattern-match '(append-to-form (a b) (c d) (? z)) '(append-to-form (a b) (c d) (a b c d)) '(((? z) a b c))) ;; failed
+
 (define (extend-if-consistent var dat frame)
   (let ((binding (binding-in-frame var frame))) ; 找出 var 在 frame 里的约束
     (if binding
         (pattern-match (binding-value binding) dat frame) ; 检查是否匹配 
         (extend var dat frame)))) ; var 无约束，把新约束加入frame
+
+;; (extend-if-consistent '(? z) '(a b c d) '())
+;; => (((? z) a b c d))
+;; (binding-in-frame '(? z) '()) ; #f
+;; (extend '(? z) '(a b c d) '()) ; (((? z) a b c d))
+
+;; (extend-if-consistent '(? z) '(a b c d) '(((? z) a b c)))
+;; failed
+;; (binding-in-frame '(? z) '(((? z) a b c))) ; ((? z) a b c)
+;; (binding-value '((? z) a b c)) ; (a b c)
+;; (pattern-match '(a b c) '(a b c d) '(((? z) a b c))) ; failed
 
 ;;;;;;;;;;;
 ;; rules ;;
@@ -449,6 +510,17 @@
   (stream-flatmap (lambda (rule)
                     (apply-a-rule rule pattern frame))
                   (fetch-rules pattern frame)))
+
+;; (add-rule-or-assertion! '(rule (append-to-form () (? y) (? y))))
+;; (add-rule-or-assertion! '(rule (append-to-form ((? u) ? v) (? y) ((? u) ? z)) (append-to-form (? v) (? y) (? z))))
+;; (display-stream (apply-rules '(append-to-form (a b) (c d) (? z)) '()))
+;; => 
+;; (((? 71 z) c d) ((? 73 y) c d) ((? 70 z) (? 71 u) ? 71 z) ((? 71 y) c d) ((? 71 v)) ((? 71 u) . b) ((? z) (? 70 u) ? 70 z) ((? 70 y) c d) ((? 70 v) b) ((? 70 u) . a))
+
+;; (define init-frame-stream (singleton-stream '())) 
+;; (display-stream (fetch-rules '(append-to-form (a b) (c d) (? z)) init-frame-stream)) 
+;; => (rule (append-to-form ((? u) ? v) (? y) ((? u) ? z)) (append-to-form (? v) (? y) (? z)))
+;;    (rule (append-to-form () (? y) (? y)))
 
 (define (apply-a-rule rule query-pattern query-frame)
   (let ((clean-rule (rename-variables-in rule))) ; 规则里的变量统一改名，使之不会与其他规则冲突
@@ -461,6 +533,37 @@
           (qeval (rule-body clean-rule)
                  (singleton-stream unify-result)))))) ; 基于得到的 新框架流 做 规则体 的匹配
 
+;; (apply-a-rule '(rule (append-to-form ((? u) ? v) (? y) ((? u) ? z)) (append-to-form (? v) (? y) (? z)))
+;; 	      '(append-to-form (a b) (c d) (? z))
+;; 	      '())
+;; => ((((? 46 z) c d) ((? 48 y) c d) ((? 45 z) (? 46 u) ? 46 z) ((? 46 y) c d) ((? 46 v)) ((? 46 u) . b) ((? z) (? 45 u) ? 45 z) ((? 45 y) c d) ((? 45 v) b) ((? 45 u) . a)) . #[promise 81])
+
+;; (rename-variables-in '(rule (append-to-form ((? u) ? v) (? y) ((? u) ? z)) (append-to-form (? v) (? y) (? z))))
+;; =>  (rule (append-to-form ((? 38 u) ? 38 v) (? 38 y) ((? 38 u) ? 38 z)) (append-to-form (? 38 v) (? 38 y) (? 38 z)))
+
+;; (conclusion '(rule (append-to-form ((? 38 u) ? 38 v) (? 38 y) ((? 38 u) ? 38 z)) (append-to-form (? 38 v) (? 38 y) (? 38 z)))) ;; => (append-to-form ((? 38 u) ? 38 v) (? 38 y) ((? 38 u) ? 38 z))
+
+;; (unify-match '(append-to-form (a b) (c d) (? z))
+;;               '(append-to-form ((? 38 u) ? 38 v) (? 38 y) ((? 38 u) ? 38 z))        
+;;              '())
+;; => (((? z) (? 38 u) ? 38 z) ((? 38 y) c d) ((? 38 v) b) ((? 38 u) . a))
+
+;; (rule-body '(rule (append-to-form ((? 38 u) ? 38 v) (? 38 y) ((? 38 u) ? 38 z)) (append-to-form (? 38 v) (? 38 y) (? 38 z)))) ;; (append-to-form (? 38 v) (? 38 y) (? 38 z))
+
+;; (display-stream (qeval '(append-to-form (? 38 v) (? 38 y) (? 38 z))
+;;        (singleton-stream '(((? z) (? 38 u) ? 38 z) ((? 38 y) c d) ((? 38 v) b) ((? 38 u) . a))))) 
+;; => 
+;; (((? 52 z) c d) ; ?-52z = (c d) 
+;;  ((? 54 y) c d) ; ?-54y = (c d) 
+;;  ((? 38 z) (? 52 u) ? 52 z) ; ?-38z = ?-52u . ?52-z
+;;  ((? 52 y) c d) ; ?-52y = ( c d) 
+;;  ((? 52 v))  ; ?-52v = () 
+;;  ((? 52 u) . b) ; ?52-u = b 
+;;  ((? z) (? 38 u) ? 38 z) ; ?z = (?-38u ?-38z) 
+;;  ((? 38 y) c d) ; ?-38y = (c d) 
+;;  ((? 38 v) b) ; ?-38v = (b) 
+;;  ((? 38 u) . a)) ; ?-38u = a 
+
 (define (rename-variables-in rule)
   (let ((rule-application-id (new-rule-application-id)))
     (define (tree-walk exp)
@@ -471,6 +574,9 @@
                    (tree-walk (cdr exp))))
             (else exp)))
     (tree-walk rule)))
+
+;; (rename-variables-in '(rule (append-to-form ((? u) ? v) (? y) ((? u) ? z)) (append-to-form (? v) (? y) (? z))))
+;; =>  (rule (append-to-form ((? 38 u) ? 38 v) (? 38 y) ((? 38 u) ? 38 z)) (append-to-form (? 38 v) (? 38 y) (? 38 z)))
 
 ;;;;;;;;;;;;;;;;;;
 ;; Unifications ;;
@@ -488,6 +594,58 @@
                                    frame)))
         (else 'failed)))
 
+;; (unify-match '(append-to-form (a b) (c d) (? z)) 
+;;                         '(append-to-form ((? 38 u) ? 38 v) (? 38 y) ((? 38 u) ? 38 z)) 
+;; 			'())
+;; => (((? z) (? 38 u) ? 38 z) ((? 38 y) c d) ((? 38 v) b) ((? 38 u) . a))
+
+;; (cdr '(append-to-form (a b) (c d) (? z))) ; ((a b) (c d) (? z))
+;; (cdr '(append-to-form ((? 38 u) ? 38 v) (? 38 y) ((? 38 u) ? 38 z))) ;; (((? 38 u) ? 38 v) (? 38 y) ((? 38 u) ? 38 z))
+;; (unify-match '((a b) (c d) (? z))
+;; 	     '(((? 38 u) ? 38 v) (? 38 y) ((? 38 u) ? 38 z))
+;; 	     (unify-match 'append-to-form 'append-to-form '()))
+
+;; (unify-match 'append-to-form 'append-to-form '()) ; () 
+
+;; (unify-match '((a b) (c d) (? z))
+;; 	     '(((? 38 u) ? 38 v) (? 38 y) ((? 38 u) ? 38 z))
+;; 	     '())
+
+;; (unify-match '((c d) (? z))
+;; 	     '((? 38 y) ((? 38 u) ? 38 z))
+;; 	     (unify-match '(a b) '((? 38 u) ? 38 v) '()))
+
+;; (unify-match '(a b) '((? 38 u) ? 38 v) '())
+;; (unify-match '(b)
+;; 	     '(? 38 v)
+;; 	     (unify-match 'a
+;; 			  '(? 38 u)
+;; 			  '()))  
+
+;; (unify-match 'a
+;; 	     '(? 38 u)
+;; 	     '()) 
+;; (var? 'a) ; #f
+;; (var? '(? 38 u)) ;#t 
+;; (extend-if-possible '(? 38 u) 'a '()) ; (((? 38 u) . a))
+
+;; (unify-match '(b)
+;; 	     '(? 38 v)
+;; 	     '(((? 38 u) . a))) ; (((? 38 v) b) ((? 38 u) . a))
+
+;; (extend-if-possible '(? 38 v) '(b) '(((? 38 u) . a))) ;; (((? 38 v) b) ((? 38 u) . a))  
+
+;; (unify-match '((c d) (? z))
+;; 	     '((? 38 y) ((? 38 u) ? 38 z))
+;; 	     '(((? 38 v) b) ((? 38 u) . a)))
+
+;; (unify-match '((? z))
+;; 	     '(((? 38 u) ? 38 z))
+;; 	     (unify-match '(c d)
+;; 			  '(? 38 y)
+;; 			  '(((? 38 v) b) ((? 38 u) . a))))
+;; => (((? z) (? 38 u) ? 38 z) ((? 38 y) c d) ((? 38 v) b) ((? 38 u) . a)) 
+
 (define (extend-if-possible var val frame)
   (let ((binding (binding-in-frame var frame)))
     (cond (binding 
@@ -502,6 +660,18 @@
           ((depends-on? val var frame)     ; val 依赖于 var 时匹配失败
            'failed)
           (else (extend var val frame)))))
+
+;; (extend-if-possible '(? 38 v) '(b) '(((? 38 u) . a))) ;; (((? 38 v) b) ((? 38 u) . a))  
+;; (binding-in-frame '(? 38 v) '(((? 38 u) . a))) ; #f
+;; (var? '(b)) ; #f 
+;; (depends-on? '(? 38 v) '(b) '(((? 38 u) . a))) ; #f
+;; (extend '(? 38 v) '(b) '(((? 38 u) . a))) ;; (((? 38 v) b) ((? 38 u) . a))
+
+;; (extend-if-possible '(? 38 u) '(? 38 v) '(((? 38 u) . b)))) ;; (((? 38 v) . b) ((? 38 u) . b))
+;; (extend-if-possible 'b '(? 38 v) '(((? 38 u) . a))) ;;  ((b ? 38 v) ((? 38 u) . a))
+
+;; (extend-if-possible '(? 38 u) 'a '(((? 38 u) . b)))) ;; failed
+
 
 ;;; exp : 模式
 ;;; var: 变量
@@ -521,6 +691,16 @@
           (else false)))
   (tree-walk exp))
 
+;; (depends-on? 'a 'b '(((? 38 u) . a))) ; #f 
+;; (depends-on? '(? 38 v) '(b) '(((? 38 u) . a))) ; #f
+
+;; (depends-on? '(? 38 v) '(? 38 v) '(((? 38 u) . a))) ; #t
+;; (depends-on? '(? 38 u) '(? 38 v) '(((? 38 u) . (? 38 v)))) ; #t 
+;; (binding-in-frame '(? 38 u) '(((? 38 u) . (? 38 v)))) ; ((? 38 u) ? 38 v)  
+;; (binding-value '((? 38 u) ? 38 v)) ; (? 38 v) 
+;; (equal? '(? 38 v) (binding-value '((? 38 u) ? 38 v))) ; #t
+
+
 ;;;;;;;;;;;;;;;;;;;;;
 ;; query evalutor  ;;
 ;;;;;;;;;;;;;;;;;;;;;
@@ -529,6 +709,11 @@
     (if qproc 
         (qproc (contents query) frame-stream) ; 如果是特殊处理过程，就用该过程处理
         (simple-query query frame-stream)))) ; 非特殊形式的表达式都当作简单查询
+
+;; (qeval '(append-to-form (a b) (c d) (? z)) (singleton-stream '()))
+;; (type '(append-to-form (a b) (c d) (? z))) ; => append-to-form 
+;; (get 'append-to-form 'qeval) ;#f 
+;; (simple-query '(append-to-form (a b) (c d) (? z)) (singleton-stream '()))
 
 (define (instantiate exp frame unbound-var-handler)
   (define (copy exp) ; 使用 frame 里的约束构造 exp 的实例化副本
@@ -541,6 +726,51 @@
            (cons (copy (car exp)) (copy (cdr exp))))
           (else exp)))
   (copy exp))
+
+;; (instantiate '(append-to-form (a b) (c d) (? z)) 
+;;                  '(((? 21 z) c d) ((? 23 y) c d) ((? 20 z) (? 21 u) ? 21 z) ((? 21 y) c d) ((? 21 v)) ((? 21 u) . b) ((? z) (? 20 u) ? 20 z) ((? 20 y) c d) ((? 20 v) b) ((? 20 u) . a))
+;;                  (lambda (v f) 
+;;                    (contract-question-mark v)))
+;; ;; => (append-to-form (a b) (c d) (a b c d))
+
+;; (instantiate '(? z)
+;; 	      '(((? 21 z) c d) ((? 23 y) c d) ((? 20 z) (? 21 u) ? 21 z) ((? 21 y) c d) ((? 21 v)) ((? 21 u) . b) ((? z) (? 20 u) ? 20 z) ((? 20 y) c d) ((? 20 v) b) ((? 20 u) . a))
+;;                  (lambda (v f) 
+;;                    (contract-question-mark v))) 
+;; ;; => (a b c d) 
+;; (binding-in-frame '(? z)
+;; 		  '(((? 21 z) c d) ((? 23 y) c d) ((? 20 z) (? 21 u) ? 21 z) ((? 21 y) c d) ((? 21 v)) ((? 21 u) . b) ((? z) (? 20 u) ? 20 z) ((? 20 y) c d) ((? 20 v) b) ((? 20 u) . a)))
+;; ;; => ((? z) (? 20 u) ? 20 z)
+;; (binding-value '((? z) (? 20 u) ? 20 z)) ;; ((? 20 u) ? 20 z)
+
+;; (binding-in-frame '(? 20 u)
+;; 		  '(((? 21 z) c d) ((? 23 y) c d) ((? 20 z) (? 21 u) ? 21 z) ((? 21 y) c d) ((? 21 v)) ((? 21 u) . b) ((? z) (? 20 u) ? 20 z) ((? 20 y) c d) ((? 20 v) b) ((? 20 u) . a))) ;; ((? 20 u) . a)
+;; (binding-value '((? 20 u) . a)) ;; => a 
+
+;; (binding-in-frame '(? 20 z)
+;; 		  '(((? 21 z) c d) ((? 23 y) c d) ((? 20 z) (? 21 u) ? 21 z) ((? 21 y) c d) ((? 21 v)) ((? 21 u) . b) ((? z) (? 20 u) ? 20 z) ((? 20 y) c d) ((? 20 v) b) ((? 20 u) . a))) ;; => ((? 20 z) (? 21 u) ? 21 z)
+;; (binding-value '((? 20 z) (? 21 u) ? 21 z)) ;; => ((? 21 u) ? 21 z)
+
+;; (binding-in-frame '(? 21 u)
+;; 		  '(((? 21 z) c d) ((? 23 y) c d) ((? 20 z) (? 21 u) ? 21 z) ((? 21 y) c d) ((? 21 v)) ((? 21 u) . b) ((? z) (? 20 u) ? 20 z) ((? 20 y) c d) ((? 20 v) b) ((? 20 u) . a))) ;; => ((? 21 u) . b)
+;; (binding-value '((? 21 u) . b)) ;; => b
+
+;; (binding-in-frame '(? 21 z)
+;; 		  '(((? 21 z) c d) ((? 23 y) c d) ((? 20 z) (? 21 u) ? 21 z) ((? 21 y) c d) ((? 21 v)) ((? 21 u) . b) ((? z) (? 20 u) ? 20 z) ((? 20 y) c d) ((? 20 v) b) ((? 20 u) . a))) ;; => ((? 21 z) c d)
+;; (binding-value '((? 21 z) c d)) ;; => (c d)
+;; (cons 'a (cons 'b '(c d))) ;; => (a b c d) 
+
+
+;; (instantiate '(append-to-form (a b) (c d) (? z)) 
+;;              '(((? z) (? 20 u) ? 20 z) ((? 20 u) . a))
+;;              (lambda (v f) 
+;;                (contract-question-mark v)))
+;; => (append-to-form (a b) (c d) (a . ?z-20))
+;; (binding-in-frame '(? 20 z)
+;; 		  '(((? z) (? 20 u) ? 20 z) ((? 20 u) . a))) ; #f
+;; ((lambda (v f) ; 
+;;    (contract-question-mark v))
+;;  '(? 20 z) '(((? z) (? 20 u) ? 20 z) ((? 20 u) . a))) ;; => ?z-20
 
 ;;;;;;;;;;;;;;;;;;
 ;; driver loop  ;;
@@ -572,6 +802,9 @@
              (qeval q (singleton-stream '())))) ; 从包含一个空框架的流查询出匹配的框架流
            (query-driver-loop))))) ; 重启主循环
 
+;; (query-syntax-process '(append-to-form (a b) (c d) ?z)) 
+;; => (append-to-form (a b) (c d) (? z))
+;; (qeval '(append-to-form (a b) (c d) (? z)) (singleton-stream '()))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Following are commented out so as not to be evaluated when ;;
