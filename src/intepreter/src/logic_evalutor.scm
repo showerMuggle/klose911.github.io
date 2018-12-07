@@ -59,20 +59,35 @@
 (define (first-conjunct exps) (car exps))
 (define (rest-conjuncts exps) (cdr exps))
 
-
-;; (and (supervisor ?middle-manager ?person)
-;;      (supervisor ?x ?middle-manager))
+;; (rest-conjuncts '((supervisor (? middle-manager) (? person)) (supervisor (? x) (? middle-manager))))
+;; ((supervisor (? x) (? middle-manager)))
+;; (first-conjunct '((supervisor (? middle-manager) (? person)) (supervisor (? x) (? middle-manager))))
+;; (supervisor (? middle-manager) (? person))
+;; (empty-conjunction? ' ((supervisor (? x) (? middle-manager)))) ; #f
 
 ;;; or
 (define (empty-disjunction? exps) (null? exps))
 (define (first-disjunct exps) (car exps))
 (define (rest-disjuncts exps) (cdr exps))
+
+;; (rest-disjuncts '((supervisor (? middle-manager) (? person)) (supervisor (? x) (? middle-manager))))
+;; => ((supervisor (? x) (? middle-manager)))
+;; (first-disjunct '((supervisor (? middle-manager) (? person)) (supervisor (? x) (? middle-manager))))
+;; => (supervisor (? middle-manager) (? person))
+;; (empty-disjunction? ' ((supervisor (? x) (? middle-manager)))) ; #f
+
 ;;; not 
 (define (negated-query exps) (car exps))
+
+;;(negated-query '((supervisor (? x) (? middle-manager))))
+;; => (supervisor (? x) (? middle-manager)) 
+
 ;;; lisp-value
 (define (predicate exps) (car exps))
 (define (args exps) (cdr exps))
 
+;; (predicate '(> (? amount) 30000)) ;; > 
+;; (args '(> (? amount) 30000)) ;; ((? amount) 30000) 
 
 ;;; rule syntax 
 (define (tagged-list? exp tag)
