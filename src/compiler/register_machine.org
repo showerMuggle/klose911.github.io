@@ -179,3 +179,201 @@
     #+END_SRC
 
 ** 机器语言设计抽象
+   #+BEGIN_EXAMPLE
+     一部机器的定义总是基于一组基本操作，有些操作本身很复杂
+
+     可能考虑把 Scheme 环境提供的操作作为基本操作
+   #+END_EXAMPLE
+   基于复杂操作定义机器，可以将注意力集中到某些关键方面，隐藏不关注的细节。必要时再 *基于更基本的操作构造这些操作* ，说明它们可实现。例如，
+   GCD 机器的一个操作是计算 a 除以 b 的余数赋给 t。如果希望机器不以它作为基本操作，需考虑 _基于更简单的操作计算余数_ ，可以只用减法写出求余数过程：
+
+   #+BEGIN_SRC scheme
+  (define (remainder n d)
+    (if (< n d)
+	n
+	(remainder (- n d) d)))
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     可以用一个减法操作和一个比较代替前面机器里的求余数
+   #+END_EXAMPLE
+
+   新GCD 控制器代码（用减法实现求余）：
+   #+BEGIN_SRC scheme
+  (controller
+   test-b
+   (test (op =) (reg b) (const 0))
+   (branch (label gcd-done))
+   (assign t (reg a))
+   rem-loop
+   (test (op <) (reg t) (reg b))
+   (branch (label rem-done))
+   (assign t (op -) (reg t) (reg b))
+   (goto (label rem-loop))
+   rem-done
+   (assign a (reg b))
+   (assign b (reg t))
+   (goto (label test-b))
+   gcd-done)
+   #+END_SRC
+
+   新 GCD 的数据通路和控制器：
+
+   #+ATTR_HTML: image :width 30% 
+   [[file:pic/gcd_substraction.gif]] 
+
+   #+BEGIN_EXAMPLE
+     这里是把原来的 (assign t (op rem) (reg a) (reg b)) 替换成下面的循环：
+
+     rem-loop
+	(test (op <) (reg t) (reg b))
+	(branch (label rem-done))
+	(assign t (op -) (reg t) (reg b))
+	(goto (label rem-loop))
+      rem-done
+   #+END_EXAMPLE
+
+** 子程序
+   #+BEGIN_EXAMPLE
+     用基于更基本操作的结构代替原复杂操作后，得到的控制器将更复杂
+
+     下面希望能做某种安排，使相同的计算不必重复构造（以简化机器结构）
+   #+END_EXAMPLE
+
+   如果机器两次用 GCD，分别算 _a 与 b_ 和 _c 与 d_ 的 GCD，数据通路将包含两个 GCD 块，控制器也包含两段类似代码 :-( 
+
+   #+BEGIN_SRC scheme
+  gcd-1
+   (test (op =) (reg b) (const 0))
+   (branch (label after-gcd-1))
+   (assign t (op rem) (reg a) (reg b))
+   (assign a (reg b))
+   (assign b (reg t))
+   (goto (label gcd-1))
+  after-gcd-1
+    
+  gcd-2
+   (test (op =) (reg d) (const 0))
+   (branch (label after-gcd-2))
+   (assign s (op rem) (reg c) (reg d))
+   (assign c (reg d))
+   (assign d (reg s))
+   (goto (label gcd-2))
+  after-gcd-2
+   #+END_SRC
+
+   两台 GCD 的机器模型如下：
+
+   #+ATTR_HTML: image :width 30% 
+   [[file:pic/two_gcds.gif]] 
+
+   #+BEGIN_EXAMPLE
+     多次出现同样部分不经济
+
+     现在考虑如何只用一个 GCD 部件实现
+   #+END_EXAMPLE
+
+   计算 c 和 d 的GCD时，寄存器中 a 和 b 里 的值没有用（如有用可以把它们移到其他寄存器），因此可以修改机器：
+   1. 计算 c 和 d 的GCD时，先把c 和 d 的值分别移到 a 和 b
+   2. 用第一个GCD通路完成计算
+
+   这就删去了一个算GCD 的通路，控制器代码如下：
+
+   #+BEGIN_SRC scheme
+  gcd-1
+  (test (op =) (reg b) (const 0))
+  (branch (label after-gcd-1))
+  (assign t (op rem) (reg a) (reg b))
+  (assign a (reg b))
+  (assign b (reg t))
+  (goto (label gcd-1))
+  after-gcd-1
+  ;; 这里把求 GCD 的数据 c 和 d 移入 a 和b 
+  gcd-2
+  (test (op =) (reg b) (const 0))
+  (branch (label after-gcd-2))
+  (assign t (op rem) (reg a) (reg b))
+  (assign a (reg b))
+  (assign b (reg t))
+  (goto (label gcd-2))
+  after-gcd-2
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     现在两个代码片段基本相同，只是入口和出口标号不同
+
+     这里还有一些重复的控制器代码，下面考虑如何消去它们
+   #+END_EXAMPLE
+
+   1. 调用在进入 GCD 代码前把一个 _continue 寄存器_ 设为不同值
+   2. 在 GCD 代码出口根据 continue 寄存器 *跳到正确执行位置* 
+
+   得到的代码如下所示，其中只有一段计算 GCD 的代码：
+
+   #+BEGIN_SRC scheme
+  gcd
+  (test (op =) (reg b) (const 0))
+  (branch (label gcd-done))
+  (assign t (op rem) (reg a) (reg b))
+  (assign a (reg b))
+  (assign b (reg t))
+  (goto (label gcd))
+  gcd-done
+  (test (op =) (reg continue) (const 0))       
+  (branch (label after-gcd-1))
+  (goto (label after-gcd-2))
+
+  ;; 在第一次调用 gcd 之前，把 continue 寄存器设置为 0 
+  (assign continue (const 0))
+  (goto (label gcd))
+  after-gcd-1
+
+  ;; 在第二次调用 gcd 之前，把 continue 寄存器设置为 1 
+  (assign continue (const 1))
+  (goto (label gcd))
+  after-gcd-2
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     这种技术可满足本程序需要（一段代码，正确返回）
+
+     但如果程序里有许多GCD 计算，代码会很复杂，难写也难维护
+
+     需要考虑更一般的实现模式
+   #+END_EXAMPLE
+
+   新的思路是基于 _代码指针_ ，也就是在寄存器里 *保存控制信息* ：
+   + 用一个寄存器 continue 保存 *返回地址* ，GCD 代码最后按它的内容跳转
+   + 扩充 _goto_ 指令功能：
+     + 参数是 _标号_ ：（直接）跳
+     + 参数是 _寄存器_ ： *跳到寄存器中保存的标号* （寄存器间接跳）
+
+   #+BEGIN_SRC scheme
+  gcd
+  (test (op =) (reg b) (const 0))
+  (branch (label gcd-done))
+  (assign t (op rem) (reg a) (reg b))
+  (assign a (reg b))
+  (assign b (reg t))
+  (goto (label gcd))
+  gcd-done
+  (goto (reg continue)) ;; 间接跳转到寄存器中保存的标号
+
+  ;; continue 寄存器保存标号
+  (assign continue (label after-gcd-1)) 
+  (goto (label gcd))
+  after-gcd-1
+
+  (assign continue (label after-gcd-2)) 
+  (goto (label gcd))
+  after-gcd-2
+   #+END_SRC
+
+   这样就实现了子程序和子程序调用
+   #+BEGIN_EXAMPLE
+     多个子程序调用相互无关时可以共用一个 continue 寄存器
+
+     如果子程序里还有子程序调用，就需要多个continue 寄存器，否则会丢失外层调用的返回标号
+   #+END_EXAMPLE
+
+** 递归

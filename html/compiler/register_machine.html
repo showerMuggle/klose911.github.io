@@ -243,6 +243,8 @@ for the JavaScript code in this tag.
 </ul>
 </li>
 <li><a href="#org4503710">机器语言设计抽象</a></li>
+<li><a href="#orgaf49d50">子程序</a></li>
+<li><a href="#orgdc23a2a">递归</a></li>
 </ul>
 </li>
 </ul>
@@ -520,6 +522,252 @@ print 和前面讨论的操作不同，它并不会把任何的计算结果保�
 
 <div id="outline-container-org4503710" class="outline-3">
 <h3 id="org4503710">机器语言设计抽象</h3>
+<div class="outline-text-3" id="text-org4503710">
+<pre class="example">
+     一部机器的定义总是基于一组基本操作，有些操作本身很复杂
+
+     可能考虑把 Scheme 环境提供的操作作为基本操作
+</pre>
+<p>
+基于复杂操作定义机器，可以将注意力集中到某些关键方面，隐藏不关注的细节。必要时再 <b>基于更基本的操作构造这些操作</b> ，说明它们可实现。例如，
+GCD 机器的一个操作是计算 a 除以 b 的余数赋给 t。如果希望机器不以它作为基本操作，需考虑 <span class="underline">基于更简单的操作计算余数</span> ，可以只用减法写出求余数过程：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">remainder</span> n d<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>&lt; n d<span style="color: #696969;">)</span>
+      n
+      <span style="color: #696969;">(</span>remainder <span style="color: #696969;">(</span>- n d<span style="color: #696969;">)</span> d<span style="color: #696969;">)))</span>
+</pre>
+</div>
+
+<pre class="example">
+     可以用一个减法操作和一个比较代替前面机器里的求余数
+</pre>
+
+<p>
+新GCD 控制器代码（用减法实现求余）：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span>controller
+ test-b
+ <span style="color: #696969;">(</span>test <span style="color: #696969;">(</span>op =<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg b<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>const 0<span style="color: #696969;">))</span>
+ <span style="color: #696969;">(</span>branch <span style="color: #696969;">(</span>label gcd-done<span style="color: #696969;">))</span>
+ <span style="color: #696969;">(</span>assign t <span style="color: #696969;">(</span>reg a<span style="color: #696969;">))</span>
+ rem-loop
+ <span style="color: #696969;">(</span>test <span style="color: #696969;">(</span>op &lt;<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg t<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg b<span style="color: #696969;">))</span>
+ <span style="color: #696969;">(</span>branch <span style="color: #696969;">(</span>label rem-done<span style="color: #696969;">))</span>
+ <span style="color: #696969;">(</span>assign t <span style="color: #696969;">(</span>op -<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg t<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg b<span style="color: #696969;">))</span>
+ <span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label rem-loop<span style="color: #696969;">))</span>
+ rem-done
+ <span style="color: #696969;">(</span>assign a <span style="color: #696969;">(</span>reg b<span style="color: #696969;">))</span>
+ <span style="color: #696969;">(</span>assign b <span style="color: #696969;">(</span>reg t<span style="color: #696969;">))</span>
+ <span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label test-b<span style="color: #696969;">))</span>
+ gcd-done<span style="color: #696969;">)</span>
+</pre>
+</div>
+
+<p>
+新 GCD 的数据通路和控制器：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/gcd_substraction.gif" alt="gcd_substraction.gif" width="30%" /> 
+</p>
+</div>
+
+<pre class="example">
+这里是把原来的 (assign t (op rem) (reg a) (reg b)) 替换成下面的循环：
+
+rem-loop
+   (test (op &lt;) (reg t) (reg b))
+   (branch (label rem-done))
+   (assign t (op -) (reg t) (reg b))
+   (goto (label rem-loop))
+ rem-done
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orgaf49d50" class="outline-3">
+<h3 id="orgaf49d50">子程序</h3>
+<div class="outline-text-3" id="text-orgaf49d50">
+<pre class="example">
+     用基于更基本操作的结构代替原复杂操作后，得到的控制器将更复杂
+
+     下面希望能做某种安排，使相同的计算不必重复构造（以简化机器结构）
+</pre>
+
+<p>
+如果机器两次用 GCD，分别算 <span class="underline">a 与 b</span> 和 <span class="underline">c 与 d</span> 的 GCD，数据通路将包含两个 GCD 块，控制器也包含两段类似代码 :-( 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme">gcd-1
+ <span style="color: #696969;">(</span>test <span style="color: #696969;">(</span>op =<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg b<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>const 0<span style="color: #696969;">))</span>
+ <span style="color: #696969;">(</span>branch <span style="color: #696969;">(</span>label after-gcd-1<span style="color: #696969;">))</span>
+ <span style="color: #696969;">(</span>assign t <span style="color: #696969;">(</span>op rem<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg a<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg b<span style="color: #696969;">))</span>
+ <span style="color: #696969;">(</span>assign a <span style="color: #696969;">(</span>reg b<span style="color: #696969;">))</span>
+ <span style="color: #696969;">(</span>assign b <span style="color: #696969;">(</span>reg t<span style="color: #696969;">))</span>
+ <span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label gcd-1<span style="color: #696969;">))</span>
+after-gcd-1
+
+gcd-2
+ <span style="color: #696969;">(</span>test <span style="color: #696969;">(</span>op =<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg d<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>const 0<span style="color: #696969;">))</span>
+ <span style="color: #696969;">(</span>branch <span style="color: #696969;">(</span>label after-gcd-2<span style="color: #696969;">))</span>
+ <span style="color: #696969;">(</span>assign s <span style="color: #696969;">(</span>op rem<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg c<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg d<span style="color: #696969;">))</span>
+ <span style="color: #696969;">(</span>assign c <span style="color: #696969;">(</span>reg d<span style="color: #696969;">))</span>
+ <span style="color: #696969;">(</span>assign d <span style="color: #696969;">(</span>reg s<span style="color: #696969;">))</span>
+ <span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label gcd-2<span style="color: #696969;">))</span>
+after-gcd-2
+</pre>
+</div>
+
+<p>
+两台 GCD 的机器模型如下：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/two_gcds.gif" alt="two_gcds.gif" width="30%" /> 
+</p>
+</div>
+
+<pre class="example">
+     多次出现同样部分不经济
+
+     现在考虑如何只用一个 GCD 部件实现
+</pre>
+
+<p>
+计算 c 和 d 的GCD时，寄存器中 a 和 b 里 的值没有用（如有用可以把它们移到其他寄存器），因此可以修改机器：
+</p>
+<ol class="org-ol">
+<li>计算 c 和 d 的GCD时，先把c 和 d 的值分别移到 a 和 b</li>
+<li>用第一个GCD通路完成计算</li>
+</ol>
+
+<p>
+这就删去了一个算GCD 的通路，控制器代码如下：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme">gcd-1
+<span style="color: #696969;">(</span>test <span style="color: #696969;">(</span>op =<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg b<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>const 0<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>branch <span style="color: #696969;">(</span>label after-gcd-1<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>assign t <span style="color: #696969;">(</span>op rem<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg a<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg b<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>assign a <span style="color: #696969;">(</span>reg b<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>assign b <span style="color: #696969;">(</span>reg t<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label gcd-1<span style="color: #696969;">))</span>
+after-gcd-1
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#36825;&#37324;&#25226;&#27714; GCD &#30340;&#25968;&#25454; c &#21644; d &#31227;&#20837; a &#21644;b </span>
+gcd-2
+<span style="color: #696969;">(</span>test <span style="color: #696969;">(</span>op =<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg b<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>const 0<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>branch <span style="color: #696969;">(</span>label after-gcd-2<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>assign t <span style="color: #696969;">(</span>op rem<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg a<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg b<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>assign a <span style="color: #696969;">(</span>reg b<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>assign b <span style="color: #696969;">(</span>reg t<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label gcd-2<span style="color: #696969;">))</span>
+after-gcd-2
+</pre>
+</div>
+
+<pre class="example">
+     现在两个代码片段基本相同，只是入口和出口标号不同
+
+     这里还有一些重复的控制器代码，下面考虑如何消去它们
+</pre>
+
+<ol class="org-ol">
+<li>调用在进入 GCD 代码前把一个 <span class="underline">continue 寄存器</span> 设为不同值</li>
+<li>在 GCD 代码出口根据 continue 寄存器 <b>跳到正确执行位置</b></li>
+</ol>
+
+<p>
+得到的代码如下所示，其中只有一段计算 GCD 的代码：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme">gcd
+<span style="color: #696969;">(</span>test <span style="color: #696969;">(</span>op =<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg b<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>const 0<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>branch <span style="color: #696969;">(</span>label gcd-done<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>assign t <span style="color: #696969;">(</span>op rem<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg a<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg b<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>assign a <span style="color: #696969;">(</span>reg b<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>assign b <span style="color: #696969;">(</span>reg t<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label gcd<span style="color: #696969;">))</span>
+gcd-done
+<span style="color: #696969;">(</span>test <span style="color: #696969;">(</span>op =<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg continue<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>const 0<span style="color: #696969;">))</span>       
+<span style="color: #696969;">(</span>branch <span style="color: #696969;">(</span>label after-gcd-1<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label after-gcd-2<span style="color: #696969;">))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#22312;&#31532;&#19968;&#27425;&#35843;&#29992; gcd &#20043;&#21069;&#65292;&#25226; continue &#23492;&#23384;&#22120;&#35774;&#32622;&#20026; 0 </span>
+<span style="color: #696969;">(</span>assign continue <span style="color: #696969;">(</span>const 0<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label gcd<span style="color: #696969;">))</span>
+after-gcd-1
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#22312;&#31532;&#20108;&#27425;&#35843;&#29992; gcd &#20043;&#21069;&#65292;&#25226; continue &#23492;&#23384;&#22120;&#35774;&#32622;&#20026; 1 </span>
+<span style="color: #696969;">(</span>assign continue <span style="color: #696969;">(</span>const 1<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label gcd<span style="color: #696969;">))</span>
+after-gcd-2
+</pre>
+</div>
+
+<pre class="example">
+     这种技术可满足本程序需要（一段代码，正确返回）
+
+     但如果程序里有许多GCD 计算，代码会很复杂，难写也难维护
+
+     需要考虑更一般的实现模式
+</pre>
+
+<p>
+新的思路是基于 <span class="underline">代码指针</span> ，也就是在寄存器里 <b>保存控制信息</b> ：
+</p>
+<ul class="org-ul">
+<li>用一个寄存器 continue 保存 <b>返回地址</b> ，GCD 代码最后按它的内容跳转</li>
+<li>扩充 <span class="underline">goto</span> 指令功能：
+<ul class="org-ul">
+<li>参数是 <span class="underline">标号</span> ：（直接）跳</li>
+<li>参数是 <span class="underline">寄存器</span> ： <b>跳到寄存器中保存的标号</b> （寄存器间接跳）</li>
+</ul></li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-scheme">gcd
+<span style="color: #696969;">(</span>test <span style="color: #696969;">(</span>op =<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg b<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>const 0<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>branch <span style="color: #696969;">(</span>label gcd-done<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>assign t <span style="color: #696969;">(</span>op rem<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg a<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg b<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>assign a <span style="color: #696969;">(</span>reg b<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>assign b <span style="color: #696969;">(</span>reg t<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label gcd<span style="color: #696969;">))</span>
+gcd-done
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>reg continue<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#38388;&#25509;&#36339;&#36716;&#21040;&#23492;&#23384;&#22120;&#20013;&#20445;&#23384;&#30340;&#26631;&#21495;</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">continue &#23492;&#23384;&#22120;&#20445;&#23384;&#26631;&#21495;</span>
+<span style="color: #696969;">(</span>assign continue <span style="color: #696969;">(</span>label after-gcd-1<span style="color: #696969;">))</span> 
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label gcd<span style="color: #696969;">))</span>
+after-gcd-1
+
+<span style="color: #696969;">(</span>assign continue <span style="color: #696969;">(</span>label after-gcd-2<span style="color: #696969;">))</span> 
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label gcd<span style="color: #696969;">))</span>
+after-gcd-2
+</pre>
+</div>
+
+<p>
+这样就实现了子程序和子程序调用
+</p>
+<pre class="example">
+     多个子程序调用相互无关时可以共用一个 continue 寄存器
+
+     如果子程序里还有子程序调用，就需要多个continue 寄存器，否则会丢失外层调用的返回标号
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orgdc23a2a" class="outline-3">
+<h3 id="orgdc23a2a">递归</h3>
 </div>
 </div>
 </div>
