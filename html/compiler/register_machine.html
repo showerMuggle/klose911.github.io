@@ -236,7 +236,13 @@ for the JavaScript code in this tag.
 <ul>
 <li><a href="#org1db0306">寄存器机器</a>
 <ul>
-<li><a href="#org79e690e">寄存器机器描述语言</a></li>
+<li><a href="#org79e690e">寄存器机器描述语言</a>
+<ul>
+<li><a href="#orga36149b">GCD 语言描述</a></li>
+<li><a href="#org62b1748">GCD 机器扩展</a></li>
+</ul>
+</li>
+<li><a href="#org4503710">机器语言设计抽象</a></li>
 </ul>
 </li>
 </ul>
@@ -324,6 +330,196 @@ GCD 算法：
 
 <div id="outline-container-org79e690e" class="outline-3">
 <h3 id="org79e690e">寄存器机器描述语言</h3>
+<div class="outline-text-3" id="text-org79e690e">
+<pre class="example">
+     用这种图形描述很小的机器还可以，但难用于描述大型机器
+
+     为方便使用，可以考虑一种描述寄存器机器的文本语言
+</pre>
+
+<p>
+一种设计是提供两套描述方式，分别用于描述 <span class="underline">数据通路</span> 和 <span class="underline">控制器</span> ：
+</p>
+<ul class="org-ul">
+<li>数据通路描述： <b>寄存器</b> 和 <b>操作</b> 
+<ul class="org-ul">
+<li><span class="underline">寄存器命名</span></li>
+<li>寄存器赋值的 <span class="underline">按钮命名</span> 
+<ul class="org-ul">
+<li>受其控制的数据传输的 <b>数据源</b> （寄存器/常量/操作）。也需给 <span class="underline">操作命名</span> ，并说明其输入</li>
+</ul></li>
+</ul></li>
+<li>控制器是 <b>指令序列</b> ，加上一些 <b>表示控制入口点</b> 的 <span class="underline">标号</span> 
+<ul class="org-ul">
+<li>指令可为：
+<ul class="org-ul">
+<li>数据通路的一个 <span class="underline">按钮</span> ： 指定 <b>寄存器赋值</b> 动作</li>
+<li><span class="underline">test</span> 指令：完成 <b>检测</b></li>
+<li><span class="underline">branch</span> 指令:  <b>条件转跳</b> 指令，基于前面检测结果
+<ul class="org-ul">
+<li>检测为 <span class="underline">真</span> ：  <b>跳转</b> 到 <span class="underline">指定标号</span> 的指令</li>
+<li>检测为 <span class="underline">假</span> ： <b>继续</b> 下一条指令</li>
+</ul></li>
+<li><span class="underline">goto</span> 指令： <b>无条件跳转</b> 到 <span class="underline">指定标号</span></li>
+</ul></li>
+<li>标号：branch 和 goto 的 <b>目标</b></li>
+</ul></li>
+</ul>
+</div>
+
+<div id="outline-container-orga36149b" class="outline-4">
+<h4 id="orga36149b">GCD 语言描述</h4>
+<div class="outline-text-4" id="text-orga36149b">
+<p>
+数据通路：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span>data-paths
+ <span style="color: #696969;">(</span>registers
+  <span style="color: #696969;">((</span>name a<span style="color: #696969;">)</span>
+   <span style="color: #696969;">(</span>buttons <span style="color: #696969;">((</span>name a&lt;-b<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>source <span style="color: #696969;">(</span>register b<span style="color: #696969;">)))))</span>
+  <span style="color: #696969;">((</span>name b<span style="color: #696969;">)</span>
+   <span style="color: #696969;">(</span>buttons <span style="color: #696969;">((</span>name b&lt;-t<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>source <span style="color: #696969;">(</span>register t<span style="color: #696969;">)))))</span>
+  <span style="color: #696969;">((</span>name t<span style="color: #696969;">)</span>
+   <span style="color: #696969;">(</span>buttons <span style="color: #696969;">((</span>name t&lt;-r<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>source <span style="color: #696969;">(</span>operation rem<span style="color: #696969;">))))))</span>
+
+ <span style="color: #696969;">(</span>operations
+  <span style="color: #696969;">((</span>name rem<span style="color: #696969;">)</span>
+   <span style="color: #696969;">(</span>inputs <span style="color: #696969;">(</span>register a<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>register b<span style="color: #696969;">)))</span>
+  <span style="color: #696969;">((</span>name =<span style="color: #696969;">)</span>
+   <span style="color: #696969;">(</span>inputs <span style="color: #696969;">(</span>register b<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>constant 0<span style="color: #696969;">)))))</span>
+</pre>
+</div>
+<p>
+控制器：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span>controller
+ test-b                           <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">label</span>
+ <span style="color: #696969;">(</span>test =<span style="color: #696969;">)</span>                       <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">test</span>
+ <span style="color: #696969;">(</span>branch <span style="color: #696969;">(</span>label gcd-done<span style="color: #696969;">))</span>      <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">conditional branch</span>
+ <span style="color: #696969;">(</span>t&lt;-r<span style="color: #696969;">)</span>                         <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">button push</span>
+ <span style="color: #696969;">(</span>a&lt;-b<span style="color: #696969;">)</span>                         <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">button push</span>
+ <span style="color: #696969;">(</span>b&lt;-t<span style="color: #696969;">)</span>                         <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">button push</span>
+ <span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label test-b<span style="color: #696969;">))</span>          <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">unconditional branch</span>
+ gcd-done<span style="color: #696969;">)</span>                        <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">label</span>
+</pre>
+</div>
+
+<pre class="example">
+      这种描述很难读：要理解控制器里的指令，必须仔细对照数据通路的按钮和操作的名字
+</pre>
+<p>
+一种改进是把 <b>数据通路描述融入控制器描述</b> ，在指令里直接说做什么
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span>controller
+ test-b
+ <span style="color: #696969;">(</span>test <span style="color: #696969;">(</span>op =<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg b<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>const 0<span style="color: #696969;">))</span>
+ <span style="color: #696969;">(</span>branch <span style="color: #696969;">(</span>label gcd-done<span style="color: #696969;">))</span>
+ <span style="color: #696969;">(</span>assign t <span style="color: #696969;">(</span>op rem<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg a<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg b<span style="color: #696969;">))</span>
+ <span style="color: #696969;">(</span>assign a <span style="color: #696969;">(</span>reg b<span style="color: #696969;">))</span>
+ <span style="color: #696969;">(</span>assign b <span style="color: #696969;">(</span>reg t<span style="color: #696969;">))</span>
+ <span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label test-b<span style="color: #696969;">))</span>
+ gcd-done<span style="color: #696969;">)</span>
+</pre>
+</div>
+
+<pre class="example">
+改造后语言清晰多了，但还有缺点，如：
+
+1. 较罗嗦，如果指令里多次提到某数据通路元素，就要多次写出其完整描述（上例简单，无此情况）。重复出现使实际数据通路结构不
+够清晰，看不清有多少寄存器操作按钮，及其互连关系
+
+2. 虽然指令用 Lisp 表达式表示，但实际上这里只能写合法指令
+</pre>
+<p>
+虽然有这些缺点，下面还是准备用这套寄存器机器语言
+</p>
+<pre class="example">
+      在这里比起数据通路的内部结构来说我们更关心控制器的
+
+      反过来如果设计一台真实的计算机，最核心的部分却是如何设计数据通路
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org62b1748" class="outline-4">
+<h4 id="org62b1748">GCD 机器扩展</h4>
+<div class="outline-text-4" id="text-org62b1748">
+<p>
+作为例子，现在想修改前面的 GCD 机器，使得能给它 <b>输入</b> 想求 GCD 的数，并能 <b>打印</b> 出计算结果
+</p>
+<pre class="example">
+      这里不准备研究读入或输出的实现
+</pre>
+<p>
+只假定有两个基本操作：
+</p>
+<ul class="org-ul">
+<li><span class="underline">read</span> :  <b>产生可存入寄存器的值</b> ，值来自机器之外</li>
+<li><span class="underline">print</span> :  <b>给环境产生某种效果</b> 
+<ul class="org-ul">
+<li>图形上给 print 关联一个按钮，按压导致 print 执行。指令形式：</li>
+</ul></li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span>perform <span style="color: #696969;">(</span>op print<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg a<span style="color: #696969;">))</span>
+</pre>
+</div>
+
+<pre class="example">
+print 和前面讨论的操作不同，它并不会把任何的计算结果保存到寄存器
+
+因此这里新增一个特殊的指令 perform 来标识触发 print 这样的动作
+</pre>
+
+<p>
+扩充后的 GCD 机器控制器的工作过程：
+</p>
+<ol class="org-ol">
+<li>反复读入一对对数值</li>
+<li>求出两个数的 GCD</li>
+<li>输出</li>
+</ol>
+
+<p>
+扩充后的 GCD 寄存器模型：
+</p>
+
+<div class="figure">
+<p><img src="pic/gcd_extended.gif" alt="gcd_extended.gif" width="30%" /> 
+</p>
+</div>
+
+<p>
+扩充后的 GCD 控制器指令序列：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span>controller
+ gcd-loop
+ <span style="color: #696969;">(</span>assign a <span style="color: #696969;">(</span>op read<span style="color: #696969;">))</span>
+ <span style="color: #696969;">(</span>assign b <span style="color: #696969;">(</span>op read<span style="color: #696969;">))</span>
+ test-b
+ <span style="color: #696969;">(</span>test <span style="color: #696969;">(</span>op =<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg b<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>const 0<span style="color: #696969;">))</span>
+ <span style="color: #696969;">(</span>branch <span style="color: #696969;">(</span>label gcd-done<span style="color: #696969;">))</span>
+ <span style="color: #696969;">(</span>assign t <span style="color: #696969;">(</span>op rem<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg a<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg b<span style="color: #696969;">))</span>
+ <span style="color: #696969;">(</span>assign a <span style="color: #696969;">(</span>reg b<span style="color: #696969;">))</span>
+ <span style="color: #696969;">(</span>assign b <span style="color: #696969;">(</span>reg t<span style="color: #696969;">))</span>
+ <span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label test-b<span style="color: #696969;">))</span>
+ gcd-done
+ <span style="color: #696969;">(</span>perform <span style="color: #696969;">(</span>op print<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg a<span style="color: #696969;">))</span>
+ <span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label gcd-loop<span style="color: #696969;">)))</span>
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org4503710" class="outline-3">
+<h3 id="org4503710">机器语言设计抽象</h3>
 </div>
 </div>
 </div>

@@ -29,21 +29,153 @@
 	(gcd b (remainder a b))))
   #+END_SRC
 
-执行本算法的机器必须维护 _a_ 和 _b_ 的轨迹，假定两个值存于 *寄存器* a 和 b 。所需操作：
-+ 判断 b 是否 0，计算 a 除以 b 的余数（假定有计算设备）
-+ 每一次循环迭代需要同时更新 a 和 b。由于一条简单指令只能更新一个寄存器，因此引进了 *辅助寄存器* _t_ 
+  执行本算法的机器必须维护 _a_ 和 _b_ 的轨迹，假定两个值存于 *寄存器* a 和 b 。所需操作：
+  + 判断 b 是否 0，计算 a 除以 b 的余数（假定有计算设备）
+  + 每一次循环迭代需要同时更新 a 和 b。由于一条简单指令只能更新一个寄存器，因此引进了 *辅助寄存器* _t_ 
 
-它的 _数据通路_ 如图：
+  它的 _数据通路_ 如图：
   #+ATTR_HTML: image :width 30% 
   [[file:pic/gcd_data_flow.gif]] 
 
-为了寄存器机器能正确工作，必须 *正确控制* 其中各 *按钮的开闭顺序* 。下图是 GCD 机器的 _控制器_ ，用流程图表示：
-+ 方框是动作
-+ 菱形框是判断
-+ 控制按箭头方向运行，进入判断后的流向由数据通路图中的检测决定
+  为了寄存器机器能正确工作，必须 *正确控制* 其中各 *按钮的开闭顺序* 。下图是 GCD 机器的 _控制器_ ，用流程图表示：
+  + 方框是动作
+  + 菱形框是判断
+  + 控制按箭头方向运行，进入判断后的流向由数据通路图中的检测决定
     + 控制到达 done 时工作结束，寄存器 a 里存放着计算结果
 
-  #+ATTR_HTML: image :width 30% 
-  [[file:pic/gcd_controller.gif]] 
+    #+ATTR_HTML: image :width 30% 
+    [[file:pic/gcd_controller.gif]] 
 
 ** 寄存器机器描述语言
+   #+BEGIN_EXAMPLE
+     用这种图形描述很小的机器还可以，但难用于描述大型机器
+
+     为方便使用，可以考虑一种描述寄存器机器的文本语言
+   #+END_EXAMPLE
+
+   一种设计是提供两套描述方式，分别用于描述 _数据通路_ 和 _控制器_ ：
+   + 数据通路描述： *寄存器* 和 *操作* 
+     + _寄存器命名_ 
+     + 寄存器赋值的 _按钮命名_ 
+       + 受其控制的数据传输的 *数据源* （寄存器/常量/操作）。也需给 _操作命名_ ，并说明其输入
+   + 控制器是 *指令序列* ，加上一些 *表示控制入口点* 的 _标号_ 
+     + 指令可为：
+       + 数据通路的一个 _按钮_ ： 指定 *寄存器赋值* 动作
+       + _test_ 指令：完成 *检测* 
+       + _branch_ 指令:  *条件转跳* 指令，基于前面检测结果
+	 + 检测为 _真_ ：  *跳转* 到 _指定标号_ 的指令
+	 + 检测为 _假_ ： *继续* 下一条指令
+       + _goto_ 指令： *无条件跳转* 到 _指定标号_ 
+     + 标号：branch 和 goto 的 *目标* 
+
+*** GCD 语言描述
+    数据通路：
+    #+BEGIN_SRC scheme
+  (data-paths
+   (registers
+    ((name a)
+     (buttons ((name a<-b) (source (register b)))))
+    ((name b)
+     (buttons ((name b<-t) (source (register t)))))
+    ((name t)
+     (buttons ((name t<-r) (source (operation rem))))))
+
+   (operations
+    ((name rem)
+     (inputs (register a) (register b)))
+    ((name =)
+     (inputs (register b) (constant 0)))))
+    #+END_SRC
+    控制器：
+    #+BEGIN_SRC scheme
+  (controller
+   test-b                           ; label
+   (test =)                       ; test
+   (branch (label gcd-done))      ; conditional branch
+   (t<-r)                         ; button push
+   (a<-b)                         ; button push
+   (b<-t)                         ; button push
+   (goto (label test-b))          ; unconditional branch
+   gcd-done)                        ; label
+    #+END_SRC
+
+    #+BEGIN_EXAMPLE
+      这种描述很难读：要理解控制器里的指令，必须仔细对照数据通路的按钮和操作的名字
+    #+END_EXAMPLE
+    一种改进是把 *数据通路描述融入控制器描述* ，在指令里直接说做什么
+
+    #+BEGIN_SRC scheme
+  (controller
+   test-b
+   (test (op =) (reg b) (const 0))
+   (branch (label gcd-done))
+   (assign t (op rem) (reg a) (reg b))
+   (assign a (reg b))
+   (assign b (reg t))
+   (goto (label test-b))
+   gcd-done)
+    #+END_SRC
+
+    #+BEGIN_EXAMPLE
+      改造后语言清晰多了，但还有缺点，如：
+
+      1. 较罗嗦，如果指令里多次提到某数据通路元素，就要多次写出其完整描述（上例简单，无此情况）。重复出现使实际数据通路结构不
+      够清晰，看不清有多少寄存器操作按钮，及其互连关系
+
+      2. 虽然指令用 Lisp 表达式表示，但实际上这里只能写合法指令
+    #+END_EXAMPLE
+    虽然有这些缺点，下面还是准备用这套寄存器机器语言
+    #+BEGIN_EXAMPLE
+      在这里比起数据通路的内部结构来说我们更关心控制器的
+
+      反过来如果设计一台真实的计算机，最核心的部分却是如何设计数据通路
+    #+END_EXAMPLE
+
+*** GCD 机器扩展
+    作为例子，现在想修改前面的 GCD 机器，使得能给它 *输入* 想求 GCD 的数，并能 *打印* 出计算结果
+    #+BEGIN_EXAMPLE
+      这里不准备研究读入或输出的实现
+    #+END_EXAMPLE
+    只假定有两个基本操作：
+    + _read_ :  *产生可存入寄存器的值* ，值来自机器之外
+    + _print_ :  *给环境产生某种效果* 
+      + 图形上给 print 关联一个按钮，按压导致 print 执行。指令形式：
+
+    #+BEGIN_SRC scheme
+  (perform (op print) (reg a))
+    #+END_SRC
+
+    #+BEGIN_EXAMPLE
+      print 和前面讨论的操作不同，它并不会把任何的计算结果保存到寄存器
+
+      因此这里新增一个特殊的指令 perform 来标识触发 print 这样的动作
+    #+END_EXAMPLE
+
+    扩充后的 GCD 机器控制器的工作过程：
+    1. 反复读入一对对数值
+    2. 求出两个数的 GCD
+    3. 输出
+
+    扩充后的 GCD 寄存器模型：
+    #+ATTR_HTML: image :width 30% 
+    [[file:pic/gcd_extended.gif]] 
+
+    扩充后的 GCD 控制器指令序列：
+    #+BEGIN_SRC scheme
+  (controller
+   gcd-loop
+   (assign a (op read))
+   (assign b (op read))
+   test-b
+   (test (op =) (reg b) (const 0))
+   (branch (label gcd-done))
+   (assign t (op rem) (reg a) (reg b))
+   (assign a (reg b))
+   (assign b (reg t))
+   (goto (label test-b))
+   gcd-done
+   (perform (op print) (reg a))
+   (goto (label gcd-loop)))
+    #+END_SRC
+
+** 机器语言设计抽象
