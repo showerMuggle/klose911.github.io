@@ -377,3 +377,149 @@
    #+END_EXAMPLE
 
 ** 递归
+   考虑阶乘过程：
+   #+BEGIN_SRC scheme
+  (define (factorial n)
+    (if (= n 1)
+	1
+	(* (factorial (- n 1)) n)))
+   #+END_SRC
+
+   粗看这和计算 gcd 类似： 
+
+   #+BEGIN_SRC scheme
+  (define (gcd a b)
+    (if (= b 0)
+	a
+	(gcd b (remainder a b))))
+   #+END_SRC
+
+   但两者有重要的区别：
+   + 最后一次调用 gcd 的结果就是最终需要的结果
+   + 阶乘子问题的结果并不是原问题的结果，返回后还要乘以 n
+
+   #+BEGIN_EXAMPLE
+     如采用前面设计，减值后求 n-1 的阶乘，原来的 n 值就丢了，没办法再找回来求乘积
+
+     另外做一个机器解决子问题也不行：
+     子问题还可能有子问题，初始时 n 为任意整数，因此子问题可以有任意层嵌套，
+     有穷个部件无法构造出所需要的机器
+
+     计算阶乘需要做一种安排，使所有计算能通过同一机器完成。
+   #+END_EXAMPLE
+
+   表面看需要嵌套的无穷多部机器，但任何时刻实际上只用一部，因此可以在遇到子问题时 *挂起当前计算* ，解决子问题后回来继续原计算。注意：
+   + 进入 *子问题时的状态与原问题不同* （如 n 变成 n-1）
+   + 为了以后能继续做中断的计算，必须 *保存状态* （当时n 的值）
+
+   #+BEGIN_EXAMPLE
+     还有控制问题，子程序结束后返回哪里？
+
+     continue 保存返回位置，但是递归使用同一机器时又需要用这个寄存器，赋以新值就会丢掉将来要返回的位置
+   #+END_EXAMPLE
+
+   由于不知道递归的深度，需要准备保存任意多个寄存器值：
+   + 这些值的 *使用顺序* 与 *保存顺序* 相反， *后存先用*
+   + 用一个 *后进先出* 数据结构 *栈* 
+
+   为保证正确返回，调用前也要把 _continue_  的值 *入栈* 
+
+*** 阶乘递归机器
+    假定有栈操作 _save_ / _restore_ ，就可以重用同一阶乘机器，完成所有子阶乘计算：
+    #+BEGIN_SRC scheme
+  (controller
+   (assign continue (label fact-done))     ; 设置最终返回的执行地址
+   fact-loop
+   (test (op =) (reg n) (const 1))
+   (branch (label base-case))
+   ;; 为了执行递归，保存 continue 和 n 的值
+   (save continue)
+   (save n)
+   (assign n (op -) (reg n) (const 1))
+   (assign continue (label after-fact)) ;; fact-loop 子程序返回后恢复，使计算可以继续执行 after-fact 
+   (goto (label fact-loop))
+   after-fact
+   (restore n)
+   (restore continue)
+   (assign val (op *) (reg n) (reg val))   ; val now contains n(n - 1)!
+   (goto (reg continue))                   ; return to caller 持续调用 after-fact 最后一次调用 fact-done 
+   base-case
+   (assign val (const 1))                  ; base case: 1! = 1
+   (goto (reg continue))                   ; return to caller 递归调用前保存返回的位置 after-fact
+   fact-done)
+    #+END_SRC
+
+    #+ATTR_HTML: image :width 50% 
+    [[file:pic/fact_recursive_machine.gif]] 
+
+    #+BEGIN_EXAMPLE
+      原则上说，实现递归计算需要无穷机器。这里用有穷机器实现
+
+      但其中还是有无穷的东西：栈的存储空间没有上界
+      实际机器里栈的规模有限，这就限制了机器递归的深度，也限制了能求解的阶乘的大小
+    #+END_EXAMPLE
+
+    处理递归的一般方法：
+    + 用一部常规寄存器机器加一个 *栈*
+    + 遇到递归调用时，把从 _子程序返回_ 后还 _需要的寄存器的值_ 存 *入栈* 
+      + 特别是必须保存当时continue 寄存器的值，将来返回一定需要 
+
+    #+BEGIN_EXAMPLE
+	    可以把所有子程序调用都统一到这一模式
+
+	    前面说的在子程序里调用子程序的麻烦也一起解决了
+    #+END_EXAMPLE
+
+*** 斐波纳契数递归机器
+    考虑双递归，以过程 fib 为例：
+    #+BEGIN_SRC scheme
+  (define (fib n)
+    (if (< n 2)
+	n
+	(+ (fib (- n 1) (fib (- n 2)))))) 
+    #+END_SRC
+
+    斐波纳契数计算可以实现为寄存器机器：两个递归调用都用同一机器完成。调用前设置 continue 寄存器，指明完成计算后返回的位置
+    #+BEGIN_SRC scheme
+  (controller
+   (assign continue (label fib-done))
+   fib-loop
+   (test (op <) (reg n) (const 2))
+   (branch (label immediate-answer))
+   ;; set up to compute Fib(n - 1)
+   (save continue)
+   (assign continue (label afterfib-n-1))
+   (save n)                           ; save old value of n
+   (assign n (op -) (reg n) (const 1)); clobber n to n - 1
+   (goto (label fib-loop))            ; perform recursive call
+   afterfib-n-1                         ; upon return, val contains Fib(n - 1)
+   (restore n)
+   (restore continue)
+   ;; set up to compute Fib(n - 2)
+   (assign n (op -) (reg n) (const 2))
+   (save continue)
+   (assign continue (label afterfib-n-2))
+   (save val)                         ; save Fib(n - 1)
+   (goto (label fib-loop))
+   afterfib-n-2                         ; upon return, val contains Fib(n - 2)
+   (assign n (reg val))               ; n now contains Fib(n - 2)
+   (restore val)                      ; val now contains Fib(n - 1)
+   (restore continue)
+   (assign val                        ;  Fib(n - 1) +  Fib(n - 2)
+	   (op +) (reg val) (reg n)) 
+   (goto (reg continue))              ; return to caller, answer is in val
+   immediate-answer
+   (assign val (reg n))               ; base case:  Fib(n) = n
+   (goto (reg continue))
+   fib-done)
+    #+END_SRC
+
+    #+BEGIN_EXAMPLE
+      调用 afterfib-n-1 前必须保存 n 寄存器，因为计算 fib(n -2) 需要 n
+
+      调用 afterfib-n-2 前必须保存 val 寄存器，此时 val 寄存器中的值是 fib(n -1)
+      因为计算完 fib(n - 2) 以后需要 fib(n - 1) 做加法
+    #+END_EXAMPLE
+
+
+** 指令总结
