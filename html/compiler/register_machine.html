@@ -253,7 +253,19 @@ for the JavaScript code in this tag.
 <li><a href="#org66cae60">指令总结</a></li>
 </ul>
 </li>
-<li><a href="#orgee18268">寄存器机器模拟器</a></li>
+<li><a href="#orgee18268">寄存器机器模拟器</a>
+<ul>
+<li><a href="#org70a852b">GCD 模拟器实例</a></li>
+<li><a href="#org7556d92">机器模型</a>
+<ul>
+<li><a href="#orgad139a9">寄存器</a></li>
+<li><a href="#org5413a1e">栈</a></li>
+<li><a href="#org2514462">基础机器</a></li>
+</ul>
+</li>
+<li><a href="#org9b7f1f6">汇编器</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
@@ -1015,10 +1027,10 @@ continue 保存返回位置，但是递归使用同一机器时又需要用这�
 </p>
 
 <pre class="example">
-  字符串：(const "abc") 
-  符号：(const abc) 
-  列表：(const (a b c)) 
-  空表：(const ()) 
+     字符串：(const "abc") 
+     符号：(const abc) 
+     列表：(const (a b c)) 
+     空表：(const ()) 
 </pre>
 </div>
 </div>
@@ -1026,6 +1038,354 @@ continue 保存返回位置，但是递归使用同一机器时又需要用这�
 
 <div id="outline-container-orgee18268" class="outline-2">
 <h2 id="orgee18268">寄存器机器模拟器</h2>
+<div class="outline-text-2" id="text-orgee18268">
+<pre class="example">
+    为了更好的理解前面设计的寄存器机器，必须测试机器是否如预计地运行
+
+    有一种方式就是如上面一样用手工来模拟控制器动作，但哪怕是之前那些最简单的程序，这项工作仍然是非常单调乏味的！
+</pre>
+
+<p>
+下面开发的寄存器模拟器是一个Scheme 程序，有 4 个 <span class="underline">接口过程</span> ：
+</p>
+<ol class="org-ol">
+<li><p>
+根据被 <b>模拟机器的描述</b> （ <span class="underline">寄存器</span> 、 <span class="underline">操作</span> 和 <span class="underline">控制器</span> ）构造出一个可以 <b>模拟执行的机器模型</b> 
+</p>
+<pre class="example">
+(make-machine &lt;register-names&gt; &lt;operations&gt; &lt;controller&gt;)
+</pre></li>
+<li><p>
+把一个 <span class="underline">值</span> <b>存入</b> 指定的 <span class="underline">寄存器</span> 
+</p>
+<pre class="example">
+(set-register-contents! &lt;machine-model&gt; &lt;register-name&gt; &lt;value&gt;)
+</pre></li>
+<li><p>
+取出一个寄存器的内容
+</p>
+<pre class="example">
+(get-register-contents &lt;machine-model&gt; &lt;register-name&gt;)
+</pre></li>
+<li><p>
+让机器开始运行
+</p>
+<pre class="example">
+(start &lt;machine-model&gt;)
+</pre></li>
+</ol>
+</div>
+
+<div id="outline-container-org70a852b" class="outline-3">
+<h3 id="org70a852b">GCD 模拟器实例</h3>
+<div class="outline-text-3" id="text-org70a852b">
+<p>
+make-machine 参数：
+</p>
+<ul class="org-ul">
+<li>寄存器表： <span class="underline">( a b t)</span></li>
+<li>操作表：每个子表给出  
+<ul class="org-ul">
+<li>操作名 : <span class="underline">rem</span></li>
+<li>实现操作的 Scheme 过程: <span class="underline">remainder</span></li>
+</ul></li>
+<li>控制器代码</li>
+</ul>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">gcd-machine</span>
+  <span style="color: #696969;">(</span>make-machine
+   '<span style="color: #696969;">(</span>a b t<span style="color: #696969;">)</span>
+   <span style="color: #696969;">(</span>list <span style="color: #696969;">(</span>list 'rem remainder<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>list '= =<span style="color: #696969;">))</span>
+   '<span style="color: #696969;">(</span>test-b
+     <span style="color: #696969;">(</span>test <span style="color: #696969;">(</span>op =<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg b<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>const 0<span style="color: #696969;">))</span>
+     <span style="color: #696969;">(</span>branch <span style="color: #696969;">(</span>label gcd-done<span style="color: #696969;">))</span>
+     <span style="color: #696969;">(</span>assign t <span style="color: #696969;">(</span>op rem<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg a<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg b<span style="color: #696969;">))</span>
+     <span style="color: #696969;">(</span>assign a <span style="color: #696969;">(</span>reg b<span style="color: #696969;">))</span>
+     <span style="color: #696969;">(</span>assign b <span style="color: #696969;">(</span>reg t<span style="color: #696969;">))</span>
+     <span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label test-b<span style="color: #696969;">))</span>
+     gcd-done<span style="color: #696969;">)))</span>
+</pre>
+</div>
+
+<p>
+计算：设置寄存器，然后启动
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span>set-register-contents! gcd-machine 'a 206<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">done</span>
+<span style="color: #696969;">(</span>set-register-contents! gcd-machine 'b 40<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">done</span>
+
+<span style="color: #696969;">(</span>start gcd-machine<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">done</span>
+
+<span style="color: #696969;">(</span>get-register-contents gcd-machine 'a<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">=&gt; 2</span>
+</pre>
+</div>
+
+<pre class="example">
+     这个计算会比 用 Scheme实现的 gcd 过程慢得多，因为模拟底层机器语言（类似assign语句），需要许多非常复杂的操作才行 
+</pre>
+</div>
+</div>
+<div id="outline-container-org7556d92" class="outline-3">
+<h3 id="org7556d92">机器模型</h3>
+<div class="outline-text-3" id="text-org7556d92">
+<p>
+机器模型是 <b>包含局部变量</b> 的 <span class="underline">过程</span> ，采用 <span class="underline">消息传递</span> 技术
+</p>
+<ol class="org-ol">
+<li>make-new-machine: 构造出所有寄存器机器都有的 <b>公共部分</b> ，包括
+<ul class="org-ul">
+<li>若干内部 <span class="underline">寄存器</span></li>
+<li>一个 <span class="underline">栈</span></li>
+<li>一个 <span class="underline">执行器</span></li>
+</ul></li>
+<li>扩充该模型：
+<ul class="org-ul">
+<li>加入 <b>具体机器</b> 的 <span class="underline">寄存器</span> 和 <span class="underline">操作</span></li>
+<li>用一个 <b>汇编器</b> 把 <span class="underline">控制器表</span>  <b>翻译成</b> 易于解释的 <span class="underline">指令序列</span> 并 <b>安装到机器</b> 里</li>
+</ul></li>
+</ol>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">make-machine</span> register-names ops controller-text<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>machine <span style="color: #696969;">(</span>make-new-machine<span style="color: #696969;">)))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#26500;&#36896;&#20986;&#19968;&#21488;&#36890;&#29992;&#30340;&#23492;&#23384;&#22120;&#26426;&#22120;</span>
+    <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#21152;&#20837;&#20855;&#20307;&#26426;&#22120;&#30340;&#23492;&#23384;&#22120;</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">for-each</span> <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>register-name<span style="color: #696969;">)</span> 
+                <span style="color: #696969;">((</span>machine 'allocate-register<span style="color: #696969;">)</span> register-name<span style="color: #696969;">))</span> 
+              register-names<span style="color: #696969;">)</span>
+    <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#23433;&#35013;&#26426;&#22120;&#30340;&#25805;&#20316;</span>
+    <span style="color: #696969;">((</span>machine 'install-operations<span style="color: #696969;">)</span> ops<span style="color: #696969;">)</span>
+    <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#27719;&#32534;&#22120;&#32763;&#35793;&#25104;&#25351;&#20196;&#65292;&#24182;&#23433;&#35013;&#21040;&#26426;&#22120;&#37324;</span>
+    <span style="color: #696969;">((</span>machine 'install-instruction-sequence<span style="color: #696969;">)</span>
+     <span style="color: #696969;">(</span>assemble controller-text machine<span style="color: #696969;">))</span>
+    machine<span style="color: #696969;">))</span>
+</pre>
+</div>
+</div>
+<div id="outline-container-orgad139a9" class="outline-4">
+<h4 id="orgad139a9">寄存器</h4>
+<div class="outline-text-4" id="text-orgad139a9">
+<p>
+寄存器：有 <b>局部状态</b> 的 <span class="underline">过程</span> ，可以 <span class="underline">保存</span> 值、 <span class="underline">访问</span> 或 <span class="underline">修改</span> 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">make-register</span> name<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>contents '*unassigned*<span style="color: #696969;">))</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">dispatch</span> message<span style="color: #696969;">)</span>
+      <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">cond</span> <span style="color: #696969;">((</span>eq? message 'get<span style="color: #696969;">)</span> contents<span style="color: #696969;">)</span>
+            <span style="color: #696969;">((</span>eq? message 'set<span style="color: #696969;">)</span>
+             <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>value<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>set! contents value<span style="color: #696969;">)))</span>
+            <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">else</span>
+             <span style="color: #696969;">(</span>error <span style="color: #deb887;">"Unknown request -- REGISTER"</span> message<span style="color: #696969;">))))</span>
+    dispatch<span style="color: #696969;">))</span>
+</pre>
+</div>
+
+<p>
+访问寄存器的过程：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">get-contents</span> register<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>register 'get<span style="color: #696969;">))</span>
+
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">set-contents!</span> register value<span style="color: #696969;">)</span>
+  <span style="color: #696969;">((</span>register 'set<span style="color: #696969;">)</span> value<span style="color: #696969;">))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define test-register (make-register 'test))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(get-contents test-register) ;; *unassigned*</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(set-contents! test-register 10)</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(get-contents test-register) ;; 10</span>
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org5413a1e" class="outline-4">
+<h4 id="org5413a1e">栈</h4>
+<div class="outline-text-4" id="text-org5413a1e">
+<p>
+栈和寄存器类似，也是有局部状态的过程：
+</p>
+<ul class="org-ul">
+<li>make-stack : 创建栈，接收消息：
+<ul class="org-ul">
+<li>push :  压栈</li>
+<li>pop : 出栈</li>
+<li>initialize : 初始化</li>
+</ul></li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">make-stack</span><span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>s '<span style="color: #696969;">()))</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">push</span> x<span style="color: #696969;">)</span>
+      <span style="color: #696969;">(</span>set! s <span style="color: #696969;">(</span>cons x s<span style="color: #696969;">)))</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">pop</span><span style="color: #696969;">)</span>
+      <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>null? s<span style="color: #696969;">)</span>
+          <span style="color: #696969;">(</span>error <span style="color: #deb887;">"Empty stack -- POP"</span><span style="color: #696969;">)</span>
+          <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>top <span style="color: #696969;">(</span>car s<span style="color: #696969;">)))</span>
+            <span style="color: #696969;">(</span>set! s <span style="color: #696969;">(</span>cdr s<span style="color: #696969;">))</span>
+            top<span style="color: #696969;">)))</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">initialize</span><span style="color: #696969;">)</span>
+      <span style="color: #696969;">(</span>set! s '<span style="color: #696969;">())</span>
+      'done<span style="color: #696969;">)</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">dispatch</span> message<span style="color: #696969;">)</span>
+      <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">cond</span> <span style="color: #696969;">((</span>eq? message 'push<span style="color: #696969;">)</span> push<span style="color: #696969;">)</span>
+            <span style="color: #696969;">((</span>eq? message 'pop<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>pop<span style="color: #696969;">))</span>
+            <span style="color: #696969;">((</span>eq? message 'initialize<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>initialize<span style="color: #696969;">))</span>
+            <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">else</span> <span style="color: #696969;">(</span>error <span style="color: #deb887;">"Unknown request -- STACK"</span>
+                         message<span style="color: #696969;">))))</span>
+    dispatch<span style="color: #696969;">))</span>
+</pre>
+</div>
+
+<p>
+访问栈的过程：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">pop</span> stack<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>stack 'pop<span style="color: #696969;">))</span>
+
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">push</span> stack value<span style="color: #696969;">)</span>
+  <span style="color: #696969;">((</span>stack 'push<span style="color: #696969;">)</span> value<span style="color: #696969;">))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(define test-stack (make-stack))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(pop test-stack) ;;  Empty stack -- POP</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(push test-stack 1)</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(pop test-stack) ;;  1</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(pop test-stack) ;;  Empty stack -- POP</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(push test-stack 2) ;;</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(test-stack 'initialize) ;; done</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(pop test-stack) ;;  Empty stack -- POP</span>
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org2514462" class="outline-4">
+<h4 id="org2514462">基础机器</h4>
+<div class="outline-text-4" id="text-org2514462">
+<p>
+基础机器模型的 <b>局部状态变量</b> 包含：
+</p>
+<ul class="org-ul">
+<li>一个寄存器表：register-table 
+<ul class="org-ul">
+<li>指令寄存器： pc</li>
+<li>标志寄存器：flag</li>
+</ul></li>
+<li>一个栈：stack</li>
+<li>一个操作列表： the-ops 
+<ul class="org-ul">
+<li>初始化栈操作：initialize-stack</li>
+</ul></li>
+<li>一个初始为空的指令列表：the-instruction-sequence</li>
+</ul>
+
+<p>
+基础机器模型的包含的过程：
+</p>
+<ul class="org-ul">
+<li>allocate-register : 添加新的寄存器到寄存器表</li>
+<li>lookup-register: 在寄存器表中获取对应寄存器的值</li>
+<li>execute: 执行指令：
+<ul class="org-ul">
+<li>取 pc 指向的指令
+<ul class="org-ul">
+<li>如果 pc 中的指令不为空
+<ol class="org-ol">
+<li>执行指令：</li>
+<li>执行结束改变 pc 寄存器的值
+<ul class="org-ul">
+<li>branch 和 goto 指令会直接改变 pc 寄存器中的值</li>
+<li>其他情况简单的使 pc 指向指令列表中的下一个元素</li>
+</ul></li>
+<li>递归调用 execute</li>
+</ol></li>
+<li>如果 pc 中的指令为空：结束执行</li>
+</ul></li>
+</ul></li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">make-new-machine</span><span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>pc <span style="color: #696969;">(</span>make-register 'pc<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#25351;&#20196;&#23492;&#23384;&#22120;</span>
+        <span style="color: #696969;">(</span>flag <span style="color: #696969;">(</span>make-register 'flag<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#26631;&#24535;&#23492;&#23384;&#22120;</span>
+        <span style="color: #696969;">(</span>stack <span style="color: #696969;">(</span>make-stack<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#26632;</span>
+        <span style="color: #696969;">(</span>the-instruction-sequence '<span style="color: #696969;">()))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#25351;&#20196;&#21015;&#34920;</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>the-ops <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#25805;&#20316;&#21015;&#34920;</span>
+           <span style="color: #696969;">(</span>list <span style="color: #696969;">(</span>list 'initialize-stack
+                       <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">()</span> <span style="color: #696969;">(</span>stack 'initialize<span style="color: #696969;">)))))</span>
+          <span style="color: #696969;">(</span>register-table <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#23492;&#23384;&#22120;&#21015;&#34920;</span>
+           <span style="color: #696969;">(</span>list <span style="color: #696969;">(</span>list 'pc pc<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>list 'flag flag<span style="color: #696969;">))))</span>
+      <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#28155;&#21152;&#26032;&#30340;&#23492;&#23384;&#22120;</span>
+      <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">allocate-register</span> name<span style="color: #696969;">)</span> 
+        <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>assoc name register-table<span style="color: #696969;">)</span>
+            <span style="color: #696969;">(</span>error <span style="color: #deb887;">"Multiply defined register: "</span> name<span style="color: #696969;">)</span>
+            <span style="color: #696969;">(</span>set! register-table
+                  <span style="color: #696969;">(</span>cons <span style="color: #696969;">(</span>list name <span style="color: #696969;">(</span>make-register name<span style="color: #696969;">))</span>
+                        register-table<span style="color: #696969;">)))</span>
+        'register-allocated<span style="color: #696969;">)</span>
+      <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#20174;&#23492;&#23384;&#22120;&#21015;&#34920;&#33719;&#24471;&#29305;&#23450;&#23492;&#23384;&#22120;</span>
+      <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">lookup-register</span> name<span style="color: #696969;">)</span>
+        <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>val <span style="color: #696969;">(</span>assoc name register-table<span style="color: #696969;">)))</span>
+          <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> val
+              <span style="color: #696969;">(</span>cadr val<span style="color: #696969;">)</span>
+              <span style="color: #696969;">(</span>error <span style="color: #deb887;">"Unknown register:"</span> name<span style="color: #696969;">))))</span>
+      <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#25191;&#34892;&#25351;&#20196;</span>
+      <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">execute</span><span style="color: #696969;">)</span>
+        <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>insts <span style="color: #696969;">(</span>get-contents pc<span style="color: #696969;">)))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#33719;&#24471; pc &#23492;&#23384;&#22120;&#30340;&#20540;</span>
+          <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>null? insts<span style="color: #696969;">)</span>
+              'done
+              <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">begin</span>
+                <span style="color: #696969;">((</span>instruction-execution-proc <span style="color: #696969;">(</span>car insts<span style="color: #696969;">)))</span>
+                <span style="color: #696969;">(</span>execute<span style="color: #696969;">)))))</span>
+      <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">dispatch</span> message<span style="color: #696969;">)</span>
+        <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">cond</span> <span style="color: #696969;">((</span>eq? message 'start<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#21551;&#21160;&#26426;&#22120;</span>
+               <span style="color: #696969;">(</span>set-contents! pc the-instruction-sequence<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">pc &#23492;&#23384;&#22120;&#25351;&#21521;&#25351;&#20196;&#21015;&#34920;</span>
+               <span style="color: #696969;">(</span>execute<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#25191;&#34892;&#25351;&#20196;</span>
+              <span style="color: #696969;">((</span>eq? message 'install-instruction-sequence<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#23433;&#35013;&#25351;&#20196;&#21015;&#34920; </span>
+               <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>seq<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>set! the-instruction-sequence seq<span style="color: #696969;">)))</span> 
+              <span style="color: #696969;">((</span>eq? message 'allocate-register<span style="color: #696969;">)</span> allocate-register<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#28155;&#21152;&#23492;&#23384;&#22120;</span>
+              <span style="color: #696969;">((</span>eq? message 'get-register<span style="color: #696969;">)</span> lookup-register<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#26597;&#35810;&#23492;&#23384;&#22120;</span>
+              <span style="color: #696969;">((</span>eq? message 'install-operations<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#23433;&#35013;&#25805;&#20316;&#36807;&#31243;</span>
+               <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>ops<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>set! the-ops <span style="color: #696969;">(</span>append the-ops ops<span style="color: #696969;">))))</span>
+              <span style="color: #696969;">((</span>eq? message 'stack<span style="color: #696969;">)</span> stack<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#36820;&#22238;&#26632;</span>
+              <span style="color: #696969;">((</span>eq? message 'operations<span style="color: #696969;">)</span> the-ops<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#36820;&#22238;&#25805;&#20316;&#21015;&#34920;</span>
+              <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">else</span> <span style="color: #696969;">(</span>error <span style="color: #deb887;">"Unknown request -- MACHINE"</span> message<span style="color: #696969;">))))</span>
+      dispatch<span style="color: #696969;">)))</span>
+</pre>
+</div>
+
+<p>
+基本机器的一些接口过程：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#21551;&#21160;&#26426;&#22120;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">start</span> machine<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>machine 'start<span style="color: #696969;">))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#33719;&#24471;&#23492;&#23384;&#22120;&#20013;&#30340;&#20540;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">get-register-contents</span> machine register-name<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>get-contents <span style="color: #696969;">(</span>get-register machine register-name<span style="color: #696969;">)))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#35774;&#32622;&#23492;&#23384;&#22120;&#20013;&#30340;&#20540;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">set-register-contents!</span> machine register-name value<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>set-contents! <span style="color: #696969;">(</span>get-register machine register-name<span style="color: #696969;">)</span> value<span style="color: #696969;">)</span>
+  'done<span style="color: #696969;">)</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#21462;&#25351;&#23450;&#23492;&#23384;&#22120;&#20449;&#24687;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">get-register</span> machine reg-name<span style="color: #696969;">)</span>
+  <span style="color: #696969;">((</span>machine 'get-register<span style="color: #696969;">)</span> reg-name<span style="color: #696969;">))</span>
+
+</pre>
+</div>
+</div>
+</div>
+</div>
+<div id="outline-container-org9b7f1f6" class="outline-3">
+<h3 id="org9b7f1f6">汇编器</h3>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
