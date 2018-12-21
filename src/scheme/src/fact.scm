@@ -95,7 +95,7 @@
 
 (define (s-fact n)
   (stream-ref fact-stream n))
-
+	       
 (s-fact 1)
 (s-fact 2)
 (s-fact 10) 

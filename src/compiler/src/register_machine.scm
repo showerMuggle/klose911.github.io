@@ -56,16 +56,16 @@
 ;; (pop test-stack) ;;  Empty stack -- POP
 
 (define (make-new-machine)
-  (let ((pc (make-register 'pc)) ;; Ö¸Áî¼Ä´æÆ÷
-	(flag (make-register 'flag)) ;; ±êÖ¾¼Ä´æÆ÷
-	(stack (make-stack)) ;; Õ»
-	(the-instruction-sequence '())) ;; Ö¸ÁîÁĞ±í
-    (let ((the-ops ;; ²Ù×÷ÁĞ±í
+  (let ((pc (make-register 'pc)) ;; æŒ‡ä»¤å¯„å­˜å™¨
+	(flag (make-register 'flag)) ;; æ ‡å¿—å¯„å­˜å™¨
+	(stack (make-stack)) ;; æ ˆ
+	(the-instruction-sequence '())) ;; æŒ‡ä»¤åˆ—è¡¨
+    (let ((the-ops ;; æ“ä½œåˆ—è¡¨
 	   (list (list 'initialize-stack
 		       (lambda () (stack 'initialize)))))
-	  (register-table ;; ¼Ä´æÆ÷ÁĞ±í
+	  (register-table ;; å¯„å­˜å™¨åˆ—è¡¨
 	   (list (list 'pc pc) (list 'flag flag))))
-      ;; Ìí¼ÓĞÂµÄ¼Ä´æÆ÷
+      ;; æ·»åŠ æ–°çš„å¯„å­˜å™¨
       (define (allocate-register name) 
 	(if (assoc name register-table)
 	    (error "Multiply defined register: " name)
@@ -73,48 +73,48 @@
 		  (cons (list name (make-register name))
 			register-table)))
 	'register-allocated)
-      ;; ´Ó¼Ä´æÆ÷ÁĞ±í»ñµÃÌØ¶¨¼Ä´æÆ÷
+      ;; ä»å¯„å­˜å™¨åˆ—è¡¨è·å¾—ç‰¹å®šå¯„å­˜å™¨
       (define (lookup-register name)
 	(let ((val (assoc name register-table)))
 	  (if val
 	      (cadr val)
 	      (error "Unknown register:" name))))
-      ;; Ö´ĞĞÖ¸Áî
+      ;; æ‰§è¡ŒæŒ‡ä»¤
       (define (execute)
-	(let ((insts (get-contents pc))) ;; »ñµÃ pc ¼Ä´æÆ÷µÄÖµ
+	(let ((insts (get-contents pc))) ;; è·å¾— pc å¯„å­˜å™¨çš„å€¼
 	  (if (null? insts)
 	      'done
 	      (begin
 		((instruction-execution-proc (car insts)))
 		(execute)))))
       (define (dispatch message)
-	(cond ((eq? message 'start) ;; Æô¶¯»úÆ÷
-	       (set-contents! pc the-instruction-sequence) ;; pc ¼Ä´æÆ÷Ö¸ÏòÖ¸ÁîÁĞ±í
-	       (execute)) ;; Ö´ĞĞÖ¸Áî
-	      ((eq? message 'install-instruction-sequence) ;; °²×°Ö¸ÁîÁĞ±í 
+	(cond ((eq? message 'start) ;; å¯åŠ¨æœºå™¨
+	       (set-contents! pc the-instruction-sequence) ;; pc å¯„å­˜å™¨æŒ‡å‘æŒ‡ä»¤åˆ—è¡¨
+	       (execute)) ;; æ‰§è¡ŒæŒ‡ä»¤
+	      ((eq? message 'install-instruction-sequence) ;; å®‰è£…æŒ‡ä»¤åˆ—è¡¨ 
 	       (lambda (seq) (set! the-instruction-sequence seq))) 
-	      ((eq? message 'allocate-register) allocate-register) ;; Ìí¼Ó¼Ä´æÆ÷
-	      ((eq? message 'get-register) lookup-register) ;; ²éÑ¯¼Ä´æÆ÷
-	      ((eq? message 'install-operations) ;; °²×°²Ù×÷¹ı³Ì
+	      ((eq? message 'allocate-register) allocate-register) ;; æ·»åŠ å¯„å­˜å™¨
+	      ((eq? message 'get-register) lookup-register) ;; æŸ¥è¯¢å¯„å­˜å™¨
+	      ((eq? message 'install-operations) ;; å®‰è£…æ“ä½œè¿‡ç¨‹
 	       (lambda (ops) (set! the-ops (append the-ops ops))))
-	      ((eq? message 'stack) stack) ;; ·µ»ØÕ»
-	      ((eq? message 'operations) the-ops) ;; ·µ»Ø²Ù×÷ÁĞ±í
+	      ((eq? message 'stack) stack) ;; è¿”å›æ ˆ
+	      ((eq? message 'operations) the-ops) ;; è¿”å›æ“ä½œåˆ—è¡¨
 	      (else (error "Unknown request -- MACHINE" message))))
       dispatch)))
 
-;; Æô¶¯»úÆ÷
+;; å¯åŠ¨æœºå™¨
 (define (start machine)
   (machine 'start))
 
-;; »ñµÃ¼Ä´æÆ÷ÖĞµÄÖµ
+;; è·å¾—å¯„å­˜å™¨ä¸­çš„å€¼
 (define (get-register-contents machine register-name)
   (get-contents (get-register machine register-name)))
 
-;; ÉèÖÃ¼Ä´æÆ÷ÖĞµÄÖµ
+;; è®¾ç½®å¯„å­˜å™¨ä¸­çš„å€¼
 (define (set-register-contents! machine register-name value)
   (set-contents! (get-register machine register-name) value)
   'done)
 
-;; È¡Ö¸¶¨¼Ä´æÆ÷ĞÅÏ¢
+;; å–æŒ‡å®šå¯„å­˜å™¨ä¿¡æ¯
 (define (get-register machine reg-name)
   ((machine 'get-register) reg-name))
