@@ -118,3 +118,90 @@
 ;; 取指定寄存器信息
 (define (get-register machine reg-name)
   ((machine 'get-register) reg-name))
+
+;; 定义寄存器机器
+(define (make-machine register-names ops controller-text)
+  (let ((machine (make-new-machine)))
+    (for-each (lambda (register-name)
+                ((machine 'allocate-register) register-name))
+              register-names)
+    ((machine 'install-operations) ops)    
+    ((machine 'install-instruction-sequence)
+     (assemble controller-text machine))
+    machine))
+
+
+;;;;;;;;;;;;
+;; 指令表 ;;
+;;;;;;;;;;;;
+;; 构造指令表
+(define (make-instruction text)
+  (cons text '())) ;; 构造指令表时，执行过程暂时用一个空表，后面将填入实际执行过程
+;; 获取指令
+(define (instruction-text inst)
+  (car inst))
+;; 获得指令执行过程
+(define (instruction-execution-proc inst)
+  (cdr inst))
+;; 设置指令执行过程
+(define (set-instruction-execution-proc! inst proc)
+  (set-cdr! inst proc))
+
+;;;;;;;;;;;;
+;; 标号表 ;;
+;;;;;;;;;;;;
+;; 把标号和指令做关联
+(define (make-label-entry label-name insts)
+  (cons label-name insts)) ;; 标号表项就是序对 
+
+;; 查询某个标号关联表下某个标号对应的指令
+(define (lookup-label labels label-name)
+  (let ((val (assoc label-name labels)))
+    (if val
+        (cdr val)
+        (error "Undefined label -- ASSEMBLE" label-name))))
+;;;;;;;;;;;;
+;; 汇编器 ;;
+;;;;;;;;;;;;
+(define (assemble controller-text machine)
+  (extract-labels controller-text ;; 构造初始指令表和标号表
+                  (lambda (insts labels) ;; 指令表，标号表作为参数
+                    (update-insts! insts labels machine) ;; 以指令表、标号表和机器为参数，生成各条指令的执行过程加入指令表
+                    insts))) ;; 返回指令表
+
+;; 逐项检查指令表内容，提取其中的标号
+;; text: 控制器代码
+;; receive: 函数参数 
+(define (extract-labels text receive)
+  (if (null? text)
+      (receive '() '())
+      ;; 递归处理控制器正文序列的 cdr
+      (extract-labels (cdr text)
+		      (lambda (insts labels)
+			(let ((next-inst (car text))) 
+			  (if (symbol? next-inst) ;; 检查 car 是否是标号
+			      (receive insts ;; 如果是标号，加入标号项
+				  (cons (make-label-entry next-inst
+							  insts)
+					labels))
+			      (receive (cons (make-instruction next-inst)
+					     insts)  ;; 反之加入指令表项
+				  labels)))))))
+
+;;; 原来每个位置只有指令正文，执行过程用空表占位，现在加入实际的执行过程
+;;; insts: 指令表
+;;; labels: 标号关联表
+;;; machine: 机器模型
+(define (update-insts! insts labels machine)
+  (let ((pc (get-register machine 'pc))
+	(flag (get-register machine 'flag))
+	(stack (machine 'stack))
+	(ops (machine 'operations)))
+    (for-each ;; 给一条指令设置执行过程
+     (lambda (inst)
+       (set-instruction-execution-proc! 
+	inst
+	(make-execution-procedure ;; 构造一条指令的执行过程
+	 (instruction-text inst) labels machine
+	 pc flag stack ops)))
+     insts)))
