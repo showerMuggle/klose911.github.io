@@ -818,3 +818,109 @@
 
     #+END_SRC
 ** 汇编器
+   最重要的部分是一个 *汇编器* 程序，它把给定的机器 *控制器* 翻译为一个 *指令序列* ，每条指令带着相应的 *执行过程* 
+   #+BEGIN_EXAMPLE
+     与分析求值器类似，但这里处理的是寄存器机器语言
+   #+END_EXAMPLE
+   虽然不知道表达式值和寄存器内容，也可以做许多分析和优化，如：
+   + 用 _指向寄存器对象的指针_ 代替 _寄存器引用_ 
+   + 用 _指向指令序列里具体位置的指针_ 代替 _标号引用_ 
+
+   #+BEGIN_EXAMPLE
+     这和之前实现的“分析解释器”类似，都是不知道变量具体值的时候就可以做的优化（比如，避免多次分析表达式语法结构等）
+   #+END_EXAMPLE
+
+   生成执行过程前要确定 *标号的位置* ，工作方式：
+   1. 扫描控制器， *识别* 序列里的 _标号_ ，构造：
+      + 一个 _指令表_
+      + 一个 _标号位置关联表_ ：把每个标号关联到指令表的一个位置
+   2. 再次扫描控制器， *生成* 并 *设置*  _指令表_ 里各指令的 _执行过程_ 
+*** 接口程序
+    汇编程序的入口是 _assemble_ ：
+    + 参数：一个 _控制器代码_ 和一个 _基本机器模型_
+    + 返回： *可以放入机器模型* 的 _指令序列_ 
+
+    #+BEGIN_SRC scheme
+  (define (assemble controller-text machine)
+    (extract-labels controller-text ;; 构造初始指令表和标号表
+		    (lambda (insts labels) ;; 指令表，标号表作为参数
+		      (update-insts! insts labels machine) ;; 以指令表、标号表和机器为参数，生成各条指令的执行过程加入指令表
+		      insts))) ;; 返回指令表
+    #+END_SRC
+
+    构造和使用 _指令表_ 的过程：
+    #+BEGIN_SRC scheme
+  ;; 构造指令表
+  (define (make-instruction text)
+    (cons text '())) ;; 构造指令表时，执行过程暂时用一个空表，后面将填入实际执行过程
+  ;; 获取指令
+  (define (instruction-text inst)
+    (car inst))
+  ;; 获得指令执行过程
+  (define (instruction-execution-proc inst)
+    (cdr inst))
+  ;; 设置指令执行过程
+  (define (set-instruction-execution-proc! inst proc)
+    (set-cdr! inst proc))
+    #+END_SRC
+
+    构造和查询 _标号关联表_ 相关过程：
+    #+BEGIN_SRC scheme
+  ;; 把标号和指令做关联
+  (define (make-label-entry label-name insts)
+    (cons label-name insts)) ;; 标号表项就是序对
+
+  ;; 查询某个标号关联表下某个标号对应的指令
+  (define (lookup-label labels label-name)
+    (let ((val (assoc label-name labels)))
+      (if val
+	  (cdr val)
+	  (error "Undefined label -- ASSEMBLE" label-name))))
+
+    #+END_SRC
+
+    _extract-labels_ : 逐项检查指令表内容， *提取* 其中的 _标号_ ：
+
+    #+BEGIN_SRC scheme
+  ;; 逐项检查指令表内容，提取其中的标号
+  ;; text: 控制器代码
+  ;; receive: 函数参数 
+  (define (extract-labels text receive)
+    (if (null? text)
+	(receive '() '())
+	;; 递归处理控制器正文序列的 cdr
+	(extract-labels (cdr text)
+			(lambda (insts labels)
+			  (let ((next-inst (car text))) 
+			    (if (symbol? next-inst) ;; 检查 car 是否是标号
+				(receive insts ;; 如果是标号，加入标号项
+				    (cons (make-label-entry next-inst
+							    insts)
+					  labels))
+				(receive (cons (make-instruction next-inst)
+					       insts)  ;; 反之加入指令表项
+				    labels)))))))
+    #+END_SRC
+
+    _undate-insts!_  : 修改指令表。原来每个位置只有指令正文，执行过程用空表占位，现在 *添加* 实际的 _执行过程_ 
+
+    #+BEGIN_SRC scheme
+  ;;; 原来每个位置只有指令正文，执行过程用空表占位，现在加入实际的执行过程
+  ;;; insts: 指令表
+  ;;; labels: 标号关联表
+  ;;; machine: 机器模型
+  (define (update-insts! insts labels machine)
+    (let ((pc (get-register machine 'pc))
+	  (flag (get-register machine 'flag))
+	  (stack (machine 'stack))
+	  (ops (machine 'operations)))
+      (for-each ;; 给一条指令设置执行过程
+       (lambda (inst)
+	 (set-instruction-execution-proc! 
+	  inst
+	  (make-execution-procedure ;; 构造一条指令的执行过程
+	   (instruction-text inst) labels machine
+	   pc flag stack ops)))
+       insts)))
+    #+END_SRC
+*** 生成指令的执行过程

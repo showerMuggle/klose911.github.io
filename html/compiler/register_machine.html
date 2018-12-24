@@ -263,7 +263,12 @@ for the JavaScript code in this tag.
 <li><a href="#org2514462">基础机器</a></li>
 </ul>
 </li>
-<li><a href="#org9b7f1f6">汇编器</a></li>
+<li><a href="#org9b7f1f6">汇编器</a>
+<ul>
+<li><a href="#orga85b3fa">接口程序</a></li>
+<li><a href="#org92556cd">生成指令的执行过程</a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -1385,6 +1390,149 @@ make-machine 参数：
 </div>
 <div id="outline-container-org9b7f1f6" class="outline-3">
 <h3 id="org9b7f1f6">汇编器</h3>
+<div class="outline-text-3" id="text-org9b7f1f6">
+<p>
+最重要的部分是一个 <b>汇编器</b> 程序，它把给定的机器 <b>控制器</b> 翻译为一个 <b>指令序列</b> ，每条指令带着相应的 <b>执行过程</b> 
+</p>
+<pre class="example">
+     与分析求值器类似，但这里处理的是寄存器机器语言
+</pre>
+<p>
+虽然不知道表达式值和寄存器内容，也可以做许多分析和优化，如：
+</p>
+<ul class="org-ul">
+<li>用 <span class="underline">指向寄存器对象的指针</span> 代替 <span class="underline">寄存器引用</span></li>
+<li>用 <span class="underline">指向指令序列里具体位置的指针</span> 代替 <span class="underline">标号引用</span></li>
+</ul>
+
+<pre class="example">
+     这和之前实现的“分析解释器”类似，都是不知道变量具体值的时候就可以做的优化（比如，避免多次分析表达式语法结构等）
+</pre>
+
+<p>
+生成执行过程前要确定 <b>标号的位置</b> ，工作方式：
+</p>
+<ol class="org-ol">
+<li>扫描控制器， <b>识别</b> 序列里的 <span class="underline">标号</span> ，构造：
+<ul class="org-ul">
+<li>一个 <span class="underline">指令表</span></li>
+<li>一个 <span class="underline">标号位置关联表</span> ：把每个标号关联到指令表的一个位置</li>
+</ul></li>
+<li>再次扫描控制器， <b>生成</b> 并 <b>设置</b>  <span class="underline">指令表</span> 里各指令的 <span class="underline">执行过程</span></li>
+</ol>
+</div>
+<div id="outline-container-orga85b3fa" class="outline-4">
+<h4 id="orga85b3fa">接口程序</h4>
+<div class="outline-text-4" id="text-orga85b3fa">
+<p>
+汇编程序的入口是 <span class="underline">assemble</span> ：
+</p>
+<ul class="org-ul">
+<li>参数：一个 <span class="underline">控制器代码</span> 和一个 <span class="underline">基本机器模型</span></li>
+<li>返回： <b>可以放入机器模型</b> 的 <span class="underline">指令序列</span></li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">assemble</span> controller-text machine<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>extract-labels controller-text <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#26500;&#36896;&#21021;&#22987;&#25351;&#20196;&#34920;&#21644;&#26631;&#21495;&#34920;</span>
+                  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>insts labels<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#25351;&#20196;&#34920;&#65292;&#26631;&#21495;&#34920;&#20316;&#20026;&#21442;&#25968;</span>
+                    <span style="color: #696969;">(</span>update-insts! insts labels machine<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#20197;&#25351;&#20196;&#34920;&#12289;&#26631;&#21495;&#34920;&#21644;&#26426;&#22120;&#20026;&#21442;&#25968;&#65292;&#29983;&#25104;&#21508;&#26465;&#25351;&#20196;&#30340;&#25191;&#34892;&#36807;&#31243;&#21152;&#20837;&#25351;&#20196;&#34920;</span>
+                    insts<span style="color: #696969;">)))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#36820;&#22238;&#25351;&#20196;&#34920;</span>
+</pre>
+</div>
+
+<p>
+构造和使用 <span class="underline">指令表</span> 的过程：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#26500;&#36896;&#25351;&#20196;&#34920;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">make-instruction</span> text<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>cons text '<span style="color: #696969;">()))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#26500;&#36896;&#25351;&#20196;&#34920;&#26102;&#65292;&#25191;&#34892;&#36807;&#31243;&#26242;&#26102;&#29992;&#19968;&#20010;&#31354;&#34920;&#65292;&#21518;&#38754;&#23558;&#22635;&#20837;&#23454;&#38469;&#25191;&#34892;&#36807;&#31243;</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#33719;&#21462;&#25351;&#20196;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">instruction-text</span> inst<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>car inst<span style="color: #696969;">))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#33719;&#24471;&#25351;&#20196;&#25191;&#34892;&#36807;&#31243;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">instruction-execution-proc</span> inst<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>cdr inst<span style="color: #696969;">))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#35774;&#32622;&#25351;&#20196;&#25191;&#34892;&#36807;&#31243;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">set-instruction-execution-proc!</span> inst proc<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>set-cdr! inst proc<span style="color: #696969;">))</span>
+</pre>
+</div>
+
+<p>
+构造和查询 <span class="underline">标号关联表</span> 相关过程：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#25226;&#26631;&#21495;&#21644;&#25351;&#20196;&#20570;&#20851;&#32852;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">make-label-entry</span> label-name insts<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>cons label-name insts<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#26631;&#21495;&#34920;&#39033;&#23601;&#26159;&#24207;&#23545;</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#26597;&#35810;&#26576;&#20010;&#26631;&#21495;&#20851;&#32852;&#34920;&#19979;&#26576;&#20010;&#26631;&#21495;&#23545;&#24212;&#30340;&#25351;&#20196;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">lookup-label</span> labels label-name<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>val <span style="color: #696969;">(</span>assoc label-name labels<span style="color: #696969;">)))</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> val
+        <span style="color: #696969;">(</span>cdr val<span style="color: #696969;">)</span>
+        <span style="color: #696969;">(</span>error <span style="color: #deb887;">"Undefined label -- ASSEMBLE"</span> label-name<span style="color: #696969;">))))</span>
+
+</pre>
+</div>
+
+<p>
+<span class="underline">extract-labels</span> : 逐项检查指令表内容， <b>提取</b> 其中的 <span class="underline">标号</span> ：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#36880;&#39033;&#26816;&#26597;&#25351;&#20196;&#34920;&#20869;&#23481;&#65292;&#25552;&#21462;&#20854;&#20013;&#30340;&#26631;&#21495;</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">text: &#25511;&#21046;&#22120;&#20195;&#30721;</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">receive: &#20989;&#25968;&#21442;&#25968; </span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">extract-labels</span> text receive<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>null? text<span style="color: #696969;">)</span>
+      <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">receive</span> '<span style="color: #696969;">()</span> '<span style="color: #696969;">())</span>
+      <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#36882;&#24402;&#22788;&#29702;&#25511;&#21046;&#22120;&#27491;&#25991;&#24207;&#21015;&#30340; cdr</span>
+      <span style="color: #696969;">(</span>extract-labels <span style="color: #696969;">(</span>cdr text<span style="color: #696969;">)</span>
+                      <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>insts labels<span style="color: #696969;">)</span>
+                        <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>next-inst <span style="color: #696969;">(</span>car text<span style="color: #696969;">)))</span> 
+                          <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>symbol? next-inst<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#26816;&#26597; car &#26159;&#21542;&#26159;&#26631;&#21495;</span>
+                              <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">receive</span> insts <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#22914;&#26524;&#26159;&#26631;&#21495;&#65292;&#21152;&#20837;&#26631;&#21495;&#39033;</span>
+                                  <span style="color: #696969;">(</span>cons <span style="color: #696969;">(</span>make-label-entry next-inst
+                                                          insts<span style="color: #696969;">)</span>
+                                        labels<span style="color: #696969;">))</span>
+                              <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">receive</span> <span style="color: #696969;">(</span>cons <span style="color: #696969;">(</span>make-instruction next-inst<span style="color: #696969;">)</span>
+                                             insts<span style="color: #696969;">)</span>  <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#21453;&#20043;&#21152;&#20837;&#25351;&#20196;&#34920;&#39033;</span>
+                                  labels<span style="color: #696969;">)))))))</span>
+</pre>
+</div>
+
+<p>
+<span class="underline">undate-insts!</span>  : 修改指令表。原来每个位置只有指令正文，执行过程用空表占位，现在 <b>添加</b> 实际的 <span class="underline">执行过程</span> 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#21407;&#26469;&#27599;&#20010;&#20301;&#32622;&#21482;&#26377;&#25351;&#20196;&#27491;&#25991;&#65292;&#25191;&#34892;&#36807;&#31243;&#29992;&#31354;&#34920;&#21344;&#20301;&#65292;&#29616;&#22312;&#21152;&#20837;&#23454;&#38469;&#30340;&#25191;&#34892;&#36807;&#31243;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">insts: &#25351;&#20196;&#34920;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">labels: &#26631;&#21495;&#20851;&#32852;&#34920;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">machine: &#26426;&#22120;&#27169;&#22411;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">update-insts!</span> insts labels machine<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>pc <span style="color: #696969;">(</span>get-register machine 'pc<span style="color: #696969;">))</span>
+        <span style="color: #696969;">(</span>flag <span style="color: #696969;">(</span>get-register machine 'flag<span style="color: #696969;">))</span>
+        <span style="color: #696969;">(</span>stack <span style="color: #696969;">(</span>machine 'stack<span style="color: #696969;">))</span>
+        <span style="color: #696969;">(</span>ops <span style="color: #696969;">(</span>machine 'operations<span style="color: #696969;">)))</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">for-each</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#32473;&#19968;&#26465;&#25351;&#20196;&#35774;&#32622;&#25191;&#34892;&#36807;&#31243;</span>
+     <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>inst<span style="color: #696969;">)</span>
+       <span style="color: #696969;">(</span>set-instruction-execution-proc! 
+        inst
+        <span style="color: #696969;">(</span>make-execution-procedure <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#26500;&#36896;&#19968;&#26465;&#25351;&#20196;&#30340;&#25191;&#34892;&#36807;&#31243;</span>
+         <span style="color: #696969;">(</span>instruction-text inst<span style="color: #696969;">)</span> labels machine
+         pc flag stack ops<span style="color: #696969;">)))</span>
+     insts<span style="color: #696969;">)))</span>
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org92556cd" class="outline-4">
+<h4 id="org92556cd">生成指令的执行过程</h4>
+</div>
 </div>
 </div>
 </div>
