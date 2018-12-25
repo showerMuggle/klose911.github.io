@@ -134,9 +134,11 @@
 ;;;;;;;;;;;;
 ;; 指令表 ;;
 ;;;;;;;;;;;;
+
 ;; 构造指令表
 (define (make-instruction text)
   (cons text '())) ;; 构造指令表时，执行过程暂时用一个空表，后面将填入实际执行过程
+
 ;; 获取指令
 (define (instruction-text inst)
   (car inst))
@@ -147,12 +149,21 @@
 (define (set-instruction-execution-proc! inst proc)
   (set-cdr! inst proc))
 
+;; (define test-b-inst (make-instruction 'test-b))
+;; (instruction-text test-b-inst) ;; test-b
+;; (instruction-execution-proc test-b-inst) ;; ()
+;; (set-instruction-execution-proc! test-b-inst '(assign test)) 
+;; (instruction-execution-proc test-b-inst) ;; => (assign test)
+
 ;;;;;;;;;;;;
 ;; 标号表 ;;
 ;;;;;;;;;;;;
+
 ;; 把标号和指令做关联
 (define (make-label-entry label-name insts)
   (cons label-name insts)) ;; 标号表项就是序对 
+
+;; (define test-b-lable (make-label-entry 'test-b test-b-inst)) 
 
 ;; 查询某个标号关联表下某个标号对应的指令
 (define (lookup-label labels label-name)
@@ -160,6 +171,7 @@
     (if val
         (cdr val)
         (error "Undefined label -- ASSEMBLE" label-name))))
+
 ;;;;;;;;;;;;
 ;; 汇编器 ;;
 ;;;;;;;;;;;;
@@ -205,3 +217,238 @@
 	 (instruction-text inst) labels machine
 	 pc flag stack ops)))
      insts)))
+
+;;;;;;;;;;;;;;;;;;
+;; 生成执行过程 ;;
+;;;;;;;;;;;;;;;;;;
+;;; 生成一条指令的执行过程
+;;; inst: 指令
+;;; labels: 标号表
+;;; machine: 机器模型
+;;; pc: 指令寄存器
+;;; flag: 标志寄存器
+;;; stack: 栈
+;;; ops: 操作表
+(define (make-execution-procedure inst labels machine
+                                  pc flag stack ops)
+  (cond ((eq? (car inst) 'assign)
+         (make-assign inst machine labels ops pc))
+        ((eq? (car inst) 'test)
+         (make-test inst machine labels ops flag pc))
+        ((eq? (car inst) 'branch)
+         (make-branch inst machine labels flag pc))
+        ((eq? (car inst) 'goto)
+         (make-goto inst machine labels pc))
+        ((eq? (car inst) 'save)
+         (make-save inst machine stack pc))
+        ((eq? (car inst) 'restore)
+         (make-restore inst machine stack pc))
+        ((eq? (car inst) 'perform)
+         (make-perform inst machine labels ops pc))
+        (else (error "Unknown instruction type -- ASSEMBLE"
+                     inst))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;
+;; assign instruction ;;
+;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;; 为asssign指令构造执行过程
+(define (make-assign inst machine labels operations pc)
+  (let ((target (get-register machine (assign-reg-name inst))) ;; 从指令中取出被赋值的寄存器
+        (value-exp (assign-value-exp inst))) ;; 从指令中取出被赋值的值表达式
+    (let ((value-proc ;; 求值的执行过程
+           (if (operation-exp? value-exp)
+               (make-operation-exp
+                value-exp machine labels operations) ;; 构造一般 op 表达式的执行过程
+               (make-primitive-exp
+                (car value-exp) machine labels)))) ;; 构造基本表达式的 执行过程。基本表达式包括 reg, label, const
+      (lambda ()                ; assign 的执行过程
+        (set-contents! target (value-proc)) ;; 调用 value-proc 过程，并把结果赋值给对应的寄存器
+        (advance-pc pc))))) ;; pc 寄存器自增 
+
+;;; 获得 assign 指令中的寄存器表达式
+(define (assign-reg-name assign-instruction)
+  (cadr assign-instruction))
+
+
+;;; 获得 assign 指令中的赋值表达式
+(define (assign-value-exp assign-instruction)
+  (cddr assign-instruction))
+
+;;; 通用的指令计数器的更新过程
+(define (advance-pc pc)
+  (set-contents! pc (cdr (get-contents pc))))
+
+;;;;;;;;;;;;;;;;;;;;;;;
+;; test instruction  ;;
+;;;;;;;;;;;;;;;;;;;;;;;
+
+;;; 生成 test 指令的执行过程
+(define (make-test inst machine labels operations flag pc)
+  (let ((condition (test-condition inst))) ;; 获得条件的求值表达式
+    (if (operation-exp? condition)
+        (let ((condition-proc 
+               (make-operation-exp ;; 产生条件的求值过程
+                condition machine labels operations)))
+          (lambda ()
+            (set-contents! flag (condition-proc)) ;; 调用 condition-proc 过程，把结果设置到 flag 寄存器
+            (advance-pc pc))) ;; 更新 pc 寄存器
+        (error "Bad TEST instruction -- ASSEMBLE" inst))))
+
+(define (test-condition test-instruction)
+  (cdr test-instruction))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;
+;; branch instruction  ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;; 生成 branch 指令的执行过程
+(define (make-branch inst machine labels flag pc)
+  (let ((dest (branch-dest inst))) ;; 获取转跳指令里的标号
+    (if (label-exp? dest)
+	(let ((insts (lookup-label labels (label-exp-label dest)))) ;; 从标号表里找出标号在指令序列里的位置
+	  (lambda ()
+	    (if (get-contents flag) ;; 根据 flag 的值决定如何更新 pc
+		(set-contents! pc insts) ;; flag 为真，则把指令寄存器更新为标号在指令序列中的位置
+		(advance-pc pc)))) ;; flag 为假，按照通用方式更新指令寄存器
+	(error "Bad BRANCH instruction -- ASSEMBLE" inst))))
+
+
+(define (branch-dest branch-instruction)
+  (cadr branch-instruction))
+
+;;;;;;;;;;;;;;;;;;;;;;;
+;; goto instruction  ;;
+;;;;;;;;;;;;;;;;;;;;;;;
+
+;;; 生成 goto 指令的执行过程
+(define (make-goto inst machine labels pc)
+  (let ((dest (goto-dest inst))) ;; 获取转跳指令里的目的
+    (cond ((label-exp? dest) ;; 标号处理类似于 branch 
+           (let ((insts
+                  (lookup-label labels
+                                (label-exp-label dest))))
+             (lambda () (set-contents! pc insts))))
+          ((register-exp? dest) ;; 寄存器间接跳转
+           (let ((reg
+                  (get-register machine
+                                (register-exp-reg dest)))) ;; 从机器寄存器表中获得对应的寄存器变量
+             (lambda ()
+               (set-contents! pc (get-contents reg))))) ;; 从寄存器变量中获得对应的值，并把值赋给指令寄存器 pc 
+          (else (error "Bad GOTO instruction -- ASSEMBLE"
+                       inst)))))
+
+(define (goto-dest goto-instruction)
+  (cadr goto-instruction))
+
+;;;;;;;;;;;;;;;;;;;;;;;
+;; stack instruction ;;
+;;;;;;;;;;;;;;;;;;;;;;;
+
+;;; 生成 save 指令的执行过程（寄存器中的内容压栈）
+(define (make-save inst machine stack pc)
+  (let ((reg (get-register machine
+			   (stack-inst-reg-name inst))))
+    (lambda ()
+      (push stack (get-contents reg))
+      (advance-pc pc))))
+
+;;; 生成 restore 指令的执行过程（栈上的内容出栈到寄存器）
+(define (make-restore inst machine stack pc)
+  (let ((reg (get-register machine
+			   (stack-inst-reg-name inst))))
+    (lambda ()
+      (set-contents! reg (pop stack))    
+      (advance-pc pc))))
+
+(define (stack-inst-reg-name stack-instruction)
+  (cadr stack-instruction))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; perform instruction  ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;; 为 perform 指令生成执行过程
+(define (make-perform inst machine labels operations pc)
+  (let ((action (perform-action inst)))
+    (if (operation-exp? action)
+	(let ((action-proc
+	       (make-operation-exp
+		action machine labels operations))) ;; 构造 op  表达式的执行过程
+	  (lambda ()
+	    (action-proc) ;; 执行 op 表达式的执行过程
+	    (advance-pc pc))) ;; 更新指令寄存器 pc 
+	(error "Bad PERFORM instruction -- ASSEMBLE" inst))))
+
+(define (perform-action inst)
+  (cdr inst))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; primitive instruction  ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;; 生成基本表达式的执行过程
+(define (make-primitive-exp exp machine labels)
+  (cond ((constant-exp? exp)
+	 (let ((c (constant-exp-value exp)))
+	   (lambda () c))) ;; 返回常量值
+	((label-exp? exp)
+	 (let ((insts
+		(lookup-label labels
+			      (label-exp-label exp)))) 
+	   (lambda () insts))) ;; 返回标号在标号指令关联表中对应的指令
+	((register-exp? exp)
+	 (let ((r (get-register machine
+				(register-exp-reg exp)))) ;; 获取寄存器表中的对应寄存器变量
+	   (lambda () (get-contents r)))) ;; 返回对应寄存器变量中的内容
+	(else
+	 (error "Unknown expression type -- ASSEMBLE" exp))))
+
+(define (register-exp? exp) (tagged-list? exp 'reg))
+(define (register-exp-reg exp) (cadr exp))
+(define (constant-exp? exp) (tagged-list? exp 'const))
+(define (constant-exp-value exp) (cadr exp))
+(define (label-exp? exp) (tagged-list? exp 'label))
+(define (label-exp-label exp) (cadr exp))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; subprocess instruction  ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;; 生成子表达式的执行过程
+;;; exp: 子表达式
+(define (make-operation-exp exp machine labels operations)
+  (let ((op (lookup-prim (operation-exp-op exp) operations)) ;; 从操作表中查找对应操作名的函数过程，比如 + , = , remainder等
+	(aprocs
+	 (map (lambda (e)
+		(make-primitive-exp e machine labels))
+	      (operation-exp-operands exp)))) ;; 为每个操作的参数对象生成一个执行过程
+    (lambda ()
+      (apply op (map (lambda (p) (p)) aprocs))))) ;; 调用每个操作参数对象的执行过程，得到它们的值；而后应用于操作本身的执行过程
+
+;;; 用操作名到从机器的操作表里查找对应的操作
+(define (lookup-prim symbol operations)
+  (let ((val (assoc symbol operations)))
+    (if val
+	(cadr val)
+	(error "Unknown operation -- ASSEMBLE" symbol))))
+
+(define (operation-exp? exp)
+  (and (pair? exp) (tagged-list? (car exp) 'op)))
+(define (operation-exp-op operation-exp)
+  (cadr (car operation-exp)))
+(define (operation-exp-operands operation-exp)
+  (cdr operation-exp))
+
+;; from 4.1
+(define (tagged-list? exp tag)
+  (if (pair? exp)
+      (eq? (car exp) tag)
+      false))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;
+;; monitor performance ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;
+
+'(REGISTER SIMULATOR LOADED)
