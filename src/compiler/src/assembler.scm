@@ -62,7 +62,10 @@
 	(the-instruction-sequence '())) ;; 指令列表
     (let ((the-ops ;; 操作列表
 	   (list (list 'initialize-stack
-		       (lambda () (stack 'initialize)))))
+		       (lambda () (stack 'initialize)))
+		 ;; 增加一个新的打印栈统计信息的操作
+		 (list 'print-stack-statistics
+		       (lambda () (stack 'print-statistics)))))
 	  (register-table ;; 寄存器列表
 	   (list (list 'pc pc) (list 'flag flag))))
       ;; 添加新的寄存器
@@ -124,7 +127,7 @@
   (let ((machine (make-new-machine)))
     (for-each (lambda (register-name)
                 ((machine 'allocate-register) register-name))
-              register-names)
+	      register-names)
     ((machine 'install-operations) ops)    
     ((machine 'install-instruction-sequence)
      (assemble controller-text machine))
@@ -258,9 +261,9 @@
         (value-exp (assign-value-exp inst))) ;; 从指令中取出被赋值的值表达式
     (let ((value-proc ;; 求值的执行过程
            (if (operation-exp? value-exp)
-               (make-operation-exp
+	       (make-operation-exp
                 value-exp machine labels operations) ;; 构造一般 op 表达式的执行过程
-               (make-primitive-exp
+	       (make-primitive-exp
                 (car value-exp) machine labels)))) ;; 构造基本表达式的 执行过程。基本表达式包括 reg, label, const
       (lambda ()                ; assign 的执行过程
         (set-contents! target (value-proc)) ;; 调用 value-proc 过程，并把结果赋值给对应的寄存器
@@ -288,7 +291,7 @@
   (let ((condition (test-condition inst))) ;; 获得条件的求值表达式
     (if (operation-exp? condition)
         (let ((condition-proc 
-               (make-operation-exp ;; 产生条件的求值过程
+	       (make-operation-exp ;; 产生条件的求值过程
                 condition machine labels operations)))
           (lambda ()
             (set-contents! flag (condition-proc)) ;; 调用 condition-proc 过程，把结果设置到 flag 寄存器
@@ -334,9 +337,9 @@
                   (get-register machine
                                 (register-exp-reg dest)))) ;; 从机器寄存器表中获得对应的寄存器变量
              (lambda ()
-               (set-contents! pc (get-contents reg))))) ;; 从寄存器变量中获得对应的值，并把值赋给指令寄存器 pc 
+	       (set-contents! pc (get-contents reg))))) ;; 从寄存器变量中获得对应的值，并把值赋给指令寄存器 pc 
           (else (error "Bad GOTO instruction -- ASSEMBLE"
-                       inst)))))
+		       inst)))))
 
 (define (goto-dest goto-instruction)
   (cadr goto-instruction))
@@ -450,5 +453,42 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; monitor performance ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(define (make-stack)
+  (let ((s '())
+        (number-pushes 0)
+        (max-depth 0)
+        (current-depth 0))
+    (define (push x)
+      (set! s (cons x s))
+      (set! number-pushes (+ 1 number-pushes))
+      (set! current-depth (+ 1 current-depth))
+      (set! max-depth (max current-depth max-depth)))
+    (define (pop)
+      (if (null? s)
+          (error "Empty stack -- POP")
+          (let ((top (car s)))
+            (set! s (cdr s))
+            (set! current-depth (- current-depth 1))
+            top)))    
+    (define (initialize)
+      (set! s '())
+      (set! number-pushes 0)
+      (set! max-depth 0)
+      (set! current-depth 0)
+      'done)
+    (define (print-statistics)
+      (newline)
+      (display (list 'total-pushes  '= number-pushes
+                     'maximum-depth '= max-depth)))
+    (define (dispatch message)
+      (cond ((eq? message 'push) push)
+            ((eq? message 'pop) (pop))
+            ((eq? message 'initialize) (initialize))
+            ((eq? message 'print-statistics)
+             (print-statistics))
+            (else
+             (error "Unknown request -- STACK" message))))
+    dispatch))
 
 '(REGISTER SIMULATOR LOADED)

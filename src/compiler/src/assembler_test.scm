@@ -23,7 +23,7 @@
 
 (gcd-machine 'operations)
 
-(assemble '(assign b (reg a)) gcd-machine)
+;; (assemble '(assign b (reg a)) gcd-machine)
 
 (car '(assign b (cons 0))) ;; assign 
 (assign-reg-name '(assign b (cons 0)))  ;; b
