@@ -1120,7 +1120,7 @@
     (cdr inst))
      #+END_SRC
 **** 基本表达式执行过程
-*reg* 、 *label*  或 *const* ，这些是基本表达式，生成相应的执行过程：
+     *reg* 、 *label*  或 *const* ，这些是基本表达式，生成相应的执行过程：
      #+BEGIN_SRC scheme
   ;;; 生成基本表达式的执行过程
   (define (make-primitive-exp exp machine labels)
@@ -1191,3 +1191,57 @@
     (cdr operation-exp))
      #+END_SRC
 *** 监控效率
+    #+BEGIN_EXAMPLE
+      模拟器不仅可以验证所定义机器的正确性，还能够考查其性能
+    #+END_EXAMPLE
+
+    给模拟程序安装一些 _测量仪器_ 。例如记录 *栈操作的次数* 等，需要给基本机器模型增加一个操作：
+    #+BEGIN_SRC scheme
+  (list (list 'initialize-stack
+	      (lambda () (stack 'initialize)))
+	;; 增加一个新的打印栈统计信息的操作
+	(list 'print-stack-statistics
+	      (lambda () (stack 'print-statistics))))
+    #+END_SRC
+
+    修改 _make-stack_ 的定义，加入 *计数* 和 *输出统计结果* 的功能：
+    #+BEGIN_SRC scheme
+      (define (make-stack)
+	(let ((s '())
+	      ;; 添加统计信息
+	      (number-pushes 0)
+	      (max-depth 0)
+	      (current-depth 0))
+	  (define (push x)
+	    (set! s (cons x s))
+	    (set! number-pushes (+ 1 number-pushes))
+	    (set! current-depth (+ 1 current-depth))
+	    (set! max-depth (max current-depth max-depth)))
+	  (define (pop)
+	    (if (null? s)
+		(error "Empty stack -- POP")
+		(let ((top (car s)))
+		  (set! s (cdr s))
+		  (set! current-depth (- current-depth 1))
+		  top)))    
+	  (define (initialize)
+	    (set! s '())
+	    (set! number-pushes 0)
+	    (set! max-depth 0)
+	    (set! current-depth 0)
+	    'done)
+	  ;; 打印统计信息
+	  (define (print-statistics)
+	    (newline)
+	    (display (list 'total-pushes  '= number-pushes
+			   'maximum-depth '= max-depth)))
+	  (define (dispatch message)
+	    (cond ((eq? message 'push) push)
+		  ((eq? message 'pop) (pop))
+		  ((eq? message 'initialize) (initialize))
+		  ((eq? message 'print-statistics)
+		   (print-statistics))
+		  (else
+		   (error "Unknown request -- STACK" message))))
+	  dispatch))
+    #+END_SRC

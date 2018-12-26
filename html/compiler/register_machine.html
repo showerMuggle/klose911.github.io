@@ -1904,6 +1904,68 @@ perform 指令的辅助过程：
 </div>
 <div id="outline-container-org2c12e29" class="outline-4">
 <h4 id="org2c12e29">监控效率</h4>
+<div class="outline-text-4" id="text-org2c12e29">
+<pre class="example">
+      模拟器不仅可以验证所定义机器的正确性，还能够考查其性能
+</pre>
+
+<p>
+给模拟程序安装一些 <span class="underline">测量仪器</span> 。例如记录 <b>栈操作的次数</b> 等，需要给基本机器模型增加一个操作：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span>list <span style="color: #696969;">(</span>list 'initialize-stack
+            <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">()</span> <span style="color: #696969;">(</span>stack 'initialize<span style="color: #696969;">)))</span>
+      <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#22686;&#21152;&#19968;&#20010;&#26032;&#30340;&#25171;&#21360;&#26632;&#32479;&#35745;&#20449;&#24687;&#30340;&#25805;&#20316;</span>
+      <span style="color: #696969;">(</span>list 'print-stack-statistics
+            <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">()</span> <span style="color: #696969;">(</span>stack 'print-statistics<span style="color: #696969;">))))</span>
+</pre>
+</div>
+
+<p>
+修改 <span class="underline">make-stack</span> 的定义，加入 <b>计数</b> 和 <b>输出统计结果</b> 的功能：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">make-stack</span><span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>s '<span style="color: #696969;">())</span>
+        <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#28155;&#21152;&#32479;&#35745;&#20449;&#24687;</span>
+        <span style="color: #696969;">(</span>number-pushes 0<span style="color: #696969;">)</span>
+        <span style="color: #696969;">(</span>max-depth 0<span style="color: #696969;">)</span>
+        <span style="color: #696969;">(</span>current-depth 0<span style="color: #696969;">))</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">push</span> x<span style="color: #696969;">)</span>
+      <span style="color: #696969;">(</span>set! s <span style="color: #696969;">(</span>cons x s<span style="color: #696969;">))</span>
+      <span style="color: #696969;">(</span>set! number-pushes <span style="color: #696969;">(</span>+ 1 number-pushes<span style="color: #696969;">))</span>
+      <span style="color: #696969;">(</span>set! current-depth <span style="color: #696969;">(</span>+ 1 current-depth<span style="color: #696969;">))</span>
+      <span style="color: #696969;">(</span>set! max-depth <span style="color: #696969;">(</span>max current-depth max-depth<span style="color: #696969;">)))</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">pop</span><span style="color: #696969;">)</span>
+      <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>null? s<span style="color: #696969;">)</span>
+          <span style="color: #696969;">(</span>error <span style="color: #deb887;">"Empty stack -- POP"</span><span style="color: #696969;">)</span>
+          <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>top <span style="color: #696969;">(</span>car s<span style="color: #696969;">)))</span>
+            <span style="color: #696969;">(</span>set! s <span style="color: #696969;">(</span>cdr s<span style="color: #696969;">))</span>
+            <span style="color: #696969;">(</span>set! current-depth <span style="color: #696969;">(</span>- current-depth 1<span style="color: #696969;">))</span>
+            top<span style="color: #696969;">)))</span>    
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">initialize</span><span style="color: #696969;">)</span>
+      <span style="color: #696969;">(</span>set! s '<span style="color: #696969;">())</span>
+      <span style="color: #696969;">(</span>set! number-pushes 0<span style="color: #696969;">)</span>
+      <span style="color: #696969;">(</span>set! max-depth 0<span style="color: #696969;">)</span>
+      <span style="color: #696969;">(</span>set! current-depth 0<span style="color: #696969;">)</span>
+      'done<span style="color: #696969;">)</span>
+    <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#25171;&#21360;&#32479;&#35745;&#20449;&#24687;</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">print-statistics</span><span style="color: #696969;">)</span>
+      <span style="color: #696969;">(</span>newline<span style="color: #696969;">)</span>
+      <span style="color: #696969;">(</span>display <span style="color: #696969;">(</span>list 'total-pushes  '= number-pushes
+                     'maximum-depth '= max-depth<span style="color: #696969;">)))</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">dispatch</span> message<span style="color: #696969;">)</span>
+      <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">cond</span> <span style="color: #696969;">((</span>eq? message 'push<span style="color: #696969;">)</span> push<span style="color: #696969;">)</span>
+            <span style="color: #696969;">((</span>eq? message 'pop<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>pop<span style="color: #696969;">))</span>
+            <span style="color: #696969;">((</span>eq? message 'initialize<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>initialize<span style="color: #696969;">))</span>
+            <span style="color: #696969;">((</span>eq? message 'print-statistics<span style="color: #696969;">)</span>
+             <span style="color: #696969;">(</span>print-statistics<span style="color: #696969;">))</span>
+            <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">else</span>
+             <span style="color: #696969;">(</span>error <span style="color: #deb887;">"Unknown request -- STACK"</span> message<span style="color: #696969;">))))</span>
+    dispatch<span style="color: #696969;">))</span>
+</pre>
+</div>
+</div>
 </div>
 </div>
 </div>
