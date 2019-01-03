@@ -236,7 +236,13 @@ for the JavaScript code in this tag.
 <ul>
 <li><a href="#org88906f6">内存管理</a>
 <ul>
-<li><a href="#org9da2204">向量模拟内存</a></li>
+<li><a href="#org9da2204">向量模拟内存</a>
+<ul>
+<li><a href="#orgc947912">Scheme 序对的表示</a></li>
+<li><a href="#org2efd4e9">基本表操作实现</a></li>
+<li><a href="#org8b2a60e">栈实现</a></li>
+</ul>
+</li>
 <li><a href="#org356076d">垃圾回收机制</a></li>
 </ul>
 </li>
@@ -263,11 +269,11 @@ for the JavaScript code in this tag.
 为简化讨论，先假定有一个 <b>表结构</b> 的内存， <span class="underline">表操作</span> 都是基本操作
 </p>
 <pre class="example">
-  这种抽象使人能集中精力考虑求值器的关键特征
+    这种抽象使人能集中精力考虑求值器的关键特征
 
-  但表存储是 Scheme 的基础，不理解它，对系统的理解有缺陷
+    但表存储是 Scheme 的基础，不理解它，对系统的理解有缺陷
 
-  为完整起见，下面先讨论怎样在常规的内存上实现表存储结构
+    为完整起见，下面先讨论怎样在常规的内存上实现表存储结构
 </pre>
 
 <p>
@@ -278,12 +284,12 @@ for the JavaScript code in this tag.
 <li>实现： 把管理内存的工作实现为一个计算过程</li>
 </ol>
 <pre class="example">
-  要支持 Scheme 程序的执行，系统必须能随时创建对象，包括：
+    要支持 Scheme 程序的执行，系统必须能随时创建对象，包括：
 
-  程序里用的序对和其他对象
-  支持程序执行而隐式创建的对象，如环境、框架和参数表等
+    程序里用的序对和其他对象
+    支持程序执行而隐式创建的对象，如环境、框架和参数表等
 
-  程序执行中可能创建很多对象，创建的数量并没有限制
+    程序执行中可能创建很多对象，创建的数量并没有限制
 </pre>
 
 <p>
@@ -292,6 +298,237 @@ for the JavaScript code in this tag.
 </div>
 <div id="outline-container-org9da2204" class="outline-3">
 <h3 id="org9da2204">向量模拟内存</h3>
+<div class="outline-text-3" id="text-org9da2204">
+<p>
+常规计算机的内存是一串很小的单元：
+</p>
+<ul class="org-ul">
+<li>每个单元里可保存一点信息，有一个唯一的名字称为 <span class="underline">地址</span></li>
+<li>典型操作：
+<ul class="org-ul">
+<li><b>读特定单元的内容</b></li>
+<li><b>给特定单元赋新值</b></li>
+</ul></li>
+<li>通过 <span class="underline">地址增量</span> 操作可以 <b>顺序地访问</b> 一批单元</li>
+</ul>
+<pre class="example">
+     有些操作（指针）要求把地址作为数据，将其存入内存单元，或在寄存器里对地址做各种运算
+
+     “表处理”是指针运算的典型实例
+</pre>
+
+<p>
+为模拟计算机内存，下面介绍一种新数据结构称为 <b>向量</b> 。向量是一种复合数据对象，其元素可通过 <b>整数下标</b> 访问，访问所需时间与元素位置无关。用两个过程描述向量操作：
+</p>
+<ol class="org-ol">
+<li><span class="underline">(vector-ref &lt;vector&gt; &lt;n&gt;)</span> : 返回向量里的第 n 个元素</li>
+<li><span class="underline">(vector-set! &lt;vector&gt; &lt;n&gt; &lt;value&gt;)</span> : 向量里第 n 个元素赋值为 &lt;v&gt;</li>
+</ol>
+
+<p>
+对计算机内存单元的访问可以通过 <b>地址算术</b> 实现（用 <span class="underline">向量基址</span> 加 <span class="underline">特定元素的偏移量</span> ） 
+</p>
+
+<pre class="example">
+     新型计算机内存已很难用简单向量表现
+
+     它们有复杂的缓存系统，复杂的缓存一致性算法
+     多核的加入使情况进一步复杂化，理解其细节行为变得更加困难，需要通过复杂的模拟
+
+     但这种抽象模型仍反映了它的一部分情况和性质
+</pre>
+</div>
+<div id="outline-container-orgc947912" class="outline-4">
+<h4 id="orgc947912">Scheme 序对的表示</h4>
+<div class="outline-text-4" id="text-orgc947912">
+<p>
+用向量实现表存储器所需的序对结构：
+</p>
+<ol class="org-ol">
+<li>设想两个向量 <span class="underline">the-cars</span> 和 <span class="underline">the-cdrs</span></li>
+<li><span class="underline">指向序对的指针</span> 用 <b>向量的下标</b> 表示， <span class="underline">序对的 car</span> 就是 <span class="underline">向量 the-cars</span> 里 <b>特定元素的内容</b> ，cdr 类似</li>
+</ol>
+
+
+<div class="figure">
+<p><img src="pic/pair-representaion.gif" alt="pair-representaion.gif" width="60%" /> 
+</p>
+</div>
+
+<p>
+非序对数据用 <b>带类型指针</b> 表示。为此要扩充指针增加类型信息：
+</p>
+<ul class="org-ul">
+<li>可以在指针里加 <span class="underline">标志位</span></li>
+<li>如果有带标志位的硬件机器，也可利用地址中不用的位</li>
+</ul>
+
+<pre class="example">
+eq? 就是比较指向序对的指针的值是否相同
+</pre>
+<p>
+<b>符号</b> 用 <span class="underline">带类型指针</span> 表示：
+</p>
+<ul class="org-ul">
+<li>实际的 Scheme 系统里有一个 <b>符号表</b> ，称为 <span class="underline">对象表</span> 
+<ul class="org-ul">
+<li>读入遇到新符号时 <span class="underline">创建表项</span> ，取得 <span class="underline">符号指针</span></li>
+</ul></li>
+</ul>
+</div>
+</div>
+<div id="outline-container-org2efd4e9" class="outline-4">
+<h4 id="org2efd4e9">基本表操作实现</h4>
+<div class="outline-text-4" id="text-org2efd4e9">
+<pre class="example">
+      有了序对的上述表示，基本表操作都可以“代换”为向量操作
+</pre>
+<p>
+下面假定有 <span class="underline">向量访问</span> 和 <span class="underline">赋值</span> ， <span class="underline">指针算术运算</span> ： 
+</p>
+
+<p>
+寄存器机器支持的 <span class="underline">赋值</span>  指令 ：
+</p>
+
+<pre class="example">
+;;; reg2 寄存器中存放了一个序对在向量数组的下标，把这个序对的car内容放入到 reg1 寄存器
+(assign &lt;reg1&gt; (op car) (reg &lt;reg2&gt;))
+
+;;; reg2 寄存器中存放了一个序对在向量数组的下标，把这个序对的car内容放入到 reg1 寄存器
+(assign &lt;reg1&gt; (op cdr) (reg &lt;reg2&gt;))
+</pre>
+
+<p>
+可以实现为： 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#31867;&#20284;&#20110;&#35843;&#29992; (vector-ref the-cars reg2)</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">the-cars &#23492;&#23384;&#22120;:  cars &#21521;&#37327;&#30340;&#22522;&#30784;&#22320;&#22336;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">reg2 &#23492;&#23384;&#22120;: &#24207;&#23545;&#22312;&#21521;&#37327;&#25968;&#32452;&#30340;&#19979;&#26631;</span>
+<span style="color: #696969;">(</span>assign <span style="color: #98f5ff;">&lt;reg1&gt;</span> <span style="color: #696969;">(</span>op vector-ref<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg the-cars<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg <span style="color: #98f5ff;">&lt;reg2&gt;</span><span style="color: #696969;">))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#31867;&#20284;&#20110;&#35843;&#29992; (vector-ref the-cdrs reg2)</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">the-cdrs &#23492;&#23384;&#22120;:  cdrs &#21521;&#37327;&#30340;&#22522;&#30784;&#22320;&#22336;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">reg2 &#23492;&#23384;&#22120;: &#24207;&#23545;&#22312;&#21521;&#37327;&#25968;&#32452;&#30340;&#19979;&#26631;</span>
+<span style="color: #696969;">(</span>assign <span style="color: #98f5ff;">&lt;reg1&gt;</span> <span style="color: #696969;">(</span>op vector-ref<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg the-cdrs<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg <span style="color: #98f5ff;">&lt;reg2&gt;</span><span style="color: #696969;">))</span>
+</pre>
+</div>
+
+<p>
+寄存器机器的 <span class="underline">执行</span> 指令：
+</p>
+
+<pre class="example">
+;;; 把 reg1 寄存器的内容 赋值给 reg2寄存器对应的序对的car上
+(perform (op set-car!) (reg &lt;reg1&gt;) (reg &lt;reg2&gt;))
+
+;;; 把 reg1 寄存器的内容 赋值给 reg2寄存器对应的序对的cdr上
+(perform (op set-cdr!) (reg &lt;reg1&gt;) (reg &lt;reg2&gt;))
+</pre>
+
+<p>
+实现为： 
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#36825;&#37324;&#35843;&#29992; (vector-set! the-cars reg2 reg1)</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">the-cars &#23492;&#23384;&#22120;&#65306;cars&#21521;&#37327;&#30340;&#22522;&#30784;&#22320;&#22336;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">reg1 &#23492;&#23384;&#22120;: &#36171;&#20540;&#20869;&#23481;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">reg2 &#23492;&#23384;&#22120;: &#24207;&#23545;&#19979;&#26631;</span>
+<span style="color: #696969;">(</span>perform
+ <span style="color: #696969;">(</span>op vector-set!<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg the-cars<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg <span style="color: #98f5ff;">&lt;reg1&gt;</span><span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg <span style="color: #98f5ff;">&lt;reg2&gt;</span><span style="color: #696969;">))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#36825;&#37324;&#35843;&#29992; (vector-set! the-cdrs reg2 reg1)</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">the-cdrs &#23492;&#23384;&#22120;&#65306;cdrs&#21521;&#37327;&#30340;&#22522;&#30784;&#22320;&#22336;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">reg1 &#23492;&#23384;&#22120;: &#36171;&#20540;&#20869;&#23481;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">reg2 &#23492;&#23384;&#22120;: &#24207;&#23545;&#19979;&#26631;</span>
+<span style="color: #696969;">(</span>perform
+ <span style="color: #696969;">(</span>op vector-set!<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg the-cdrs<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg <span style="color: #98f5ff;">&lt;reg1&gt;</span><span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg <span style="color: #98f5ff;">&lt;reg2&gt;</span><span style="color: #696969;">))</span>
+</pre>
+</div>
+
+<p>
+执行 cons 时 <b>创建</b> 新序对单元，分别存入相应的 <span class="underline">car</span> 和 <span class="underline">cdr</span> 。假定特殊寄存器 <b>free</b>  总指向一个空闲下标，增加其值可得到下一可用下标（要
+求空闲位置连续）。这时 <span class="underline">cons</span> 指令 可以实现为： 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">(vector-set! the-cars free reg2) </span>
+<span style="color: #696969;">(</span>perform
+ <span style="color: #696969;">(</span>op vector-set!<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg the-cars<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg free<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg <span style="color: #98f5ff;">&lt;reg2&gt;</span><span style="color: #696969;">))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">(vector-set! the-cdrs free reg3) </span>
+<span style="color: #696969;">(</span>perform
+ <span style="color: #696969;">(</span>op vector-set!<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg the-cdrs<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg free<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg <span style="color: #98f5ff;">&lt;reg3&gt;</span><span style="color: #696969;">))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">free &#36171;&#20540;&#32473; reg1  </span>
+<span style="color: #696969;">(</span>assign <span style="color: #98f5ff;">&lt;reg1&gt;</span> <span style="color: #696969;">(</span>reg free<span style="color: #696969;">))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">free &#30340;&#20540;&#22686;&#21152; 1 </span>
+<span style="color: #696969;">(</span>assign free <span style="color: #696969;">(</span>op +<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg free<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>const 1<span style="color: #696969;">))</span>
+</pre>
+</div>
+
+<p>
+<span class="underline">eq?</span> 操作只是简单比较 reg1 和 reg2 的值是否相同（向量中的下标值是否相同） 
+</p>
+<pre class="example">
+(op eq?) (reg &lt;reg1&gt;) (reg &lt;reg2&gt;) 
+</pre>
+
+<p>
+<span class="underline">pair?</span> ,  <span class="underline">null?</span> ,  <span class="underline">symbol?</span> ,  <span class="underline">number?</span> 等操作还必须检查 <b>指针的类型</b> 是否相同
+</p>
+</div>
+</div>
+<div id="outline-container-org8b2a60e" class="outline-4">
+<h4 id="org8b2a60e">栈实现</h4>
+<div class="outline-text-4" id="text-org8b2a60e">
+<p>
+寄存器机器需要的 <span class="underline">栈</span> 可以用 <b>表</b> 模拟， <span class="underline">栈头序对</span> 在 <span class="underline">向量中的下标</span> （栈顶地址）用一个特殊寄存器 <b>the-stack</b> 来存放
+</p>
+
+<pre class="example">
+      这些操作都可以基于前面使用向量模拟的内存
+
+      实际系统里考虑实现效率，常另用一个向量来实现栈，压栈和出栈操作用改变栈顶寄存器的指针值来实现
+</pre>
+
+<p>
+压栈    <span class="underline">(save &lt;reg&gt;)</span> 可以实现为： 
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">(cons reg the-stack) </span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">reg &#23492;&#23384;&#22120;: &#24207;&#23545;&#30340;&#19979;&#26631;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">the stack &#23492;&#23384;&#22120;: &#26632;&#39030;&#23545;&#24212;&#30340;&#19979;&#26631;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">cons&#36820;&#22238;&#30340;&#26032;&#30340;&#24207;&#23545;&#30340;&#19979;&#26631;&#20250;&#34987;&#36171;&#20540;&#32473; the-stack &#23492;&#23384;&#22120;&#65292;&#36825;&#30456;&#24403;&#20110;&#20462;&#25913;&#20102;&#26632;&#39030;&#25351;&#38024;</span>
+<span style="color: #696969;">(</span>assign the-stack <span style="color: #696969;">(</span>op cons<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg <span style="color: #98f5ff;">&lt;reg&gt;</span><span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg the-stack<span style="color: #696969;">))</span>
+</pre>
+</div>
+
+<p>
+出栈    <span class="underline">(restore &lt;reg&gt;)</span> 实现为： 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#20174;&#26632;&#39030;&#35835;&#21462;&#20540;</span>
+<span style="color: #696969;">(</span>assign <span style="color: #98f5ff;">&lt;reg&gt;</span> <span style="color: #696969;">(</span>op car<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg the-stack<span style="color: #696969;">))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#8220;&#26632;&#39030;&#23492;&#23384;&#22120;&#8221;&#36171;&#20540;&#20026;&#8220;&#24403;&#21069;&#26632;&#39030;&#24207;&#23545;&#30340;cdr&#8221;&#30340;&#8220;&#21521;&#37327;&#19979;&#26631;&#8221;</span>
+<span style="color: #696969;">(</span>assign the-stack <span style="color: #696969;">(</span>op cdr<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg the-stack<span style="color: #696969;">))</span>
+</pre>
+</div>
+
+<p>
+初始化栈    <span class="underline">(perform (op initialize-stack))</span> 实现为：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span>assign the-stack <span style="color: #696969;">(</span>const <span style="color: #696969;">()))</span>
+</pre>
+</div>
+</div>
+</div>
 </div>
 
 <div id="outline-container-org356076d" class="outline-3">

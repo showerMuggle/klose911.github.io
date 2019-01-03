@@ -11,28 +11,186 @@
   完全可以用更基本的操作实现，做出一个可以直接对应到常规高级语言或常规机器语言的求值器
 #+END_EXAMPLE
 * 内存管理
-为简化讨论，先假定有一个 *表结构* 的内存， _表操作_ 都是基本操作
-#+BEGIN_EXAMPLE
-  这种抽象使人能集中精力考虑求值器的关键特征
+  为简化讨论，先假定有一个 *表结构* 的内存， _表操作_ 都是基本操作
+  #+BEGIN_EXAMPLE
+    这种抽象使人能集中精力考虑求值器的关键特征
 
-  但表存储是 Scheme 的基础，不理解它，对系统的理解有缺陷
+    但表存储是 Scheme 的基础，不理解它，对系统的理解有缺陷
 
-  为完整起见，下面先讨论怎样在常规的内存上实现表存储结构
-#+END_EXAMPLE
+    为完整起见，下面先讨论怎样在常规的内存上实现表存储结构
+  #+END_EXAMPLE
 
-表结构的实现要考虑两个问题：
-1. 表示： 如何只用典型计算机的 _存储单元_ 和 _寻址_ 功能，把 *序对* 的 _指针盒子_ 结构映射到常规计算机的连续内存
-2. 实现： 把管理内存的工作实现为一个计算过程
-#+BEGIN_EXAMPLE
-  要支持 Scheme 程序的执行，系统必须能随时创建对象，包括：
+  表结构的实现要考虑两个问题：
+  1. 表示： 如何只用典型计算机的 _存储单元_ 和 _寻址_ 功能，把 *序对* 的 _指针盒子_ 结构映射到常规计算机的连续内存
+  2. 实现： 把管理内存的工作实现为一个计算过程
+  #+BEGIN_EXAMPLE
+    要支持 Scheme 程序的执行，系统必须能随时创建对象，包括：
 
-  程序里用的序对和其他对象
-  支持程序执行而隐式创建的对象，如环境、框架和参数表等
+    程序里用的序对和其他对象
+    支持程序执行而隐式创建的对象，如环境、框架和参数表等
 
-  程序执行中可能创建很多对象，创建的数量并没有限制
-#+END_EXAMPLE
+    程序执行中可能创建很多对象，创建的数量并没有限制
+  #+END_EXAMPLE
 
-如果计算机的存储无穷大，就可以创建任意多个对象。但 *实际计算机的存储总有限* ，因此需要有一种自动机制：利用有限的存储制造一种无穷假象， *当已分配的对象不再需要时自动将其回收* 。这就是 _垃圾回收_ 
+  如果计算机的存储无穷大，就可以创建任意多个对象。但 *实际计算机的存储总有限* ，因此需要有一种自动机制：利用有限的存储制造一种无穷假象， *当已分配的对象不再需要时自动将其回收* 。这就是 _垃圾回收_ 
 ** 向量模拟内存
+   常规计算机的内存是一串很小的单元：
+   + 每个单元里可保存一点信息，有一个唯一的名字称为 _地址_
+   + 典型操作：
+     + *读特定单元的内容*
+     + *给特定单元赋新值* 
+   + 通过 _地址增量_ 操作可以 *顺序地访问* 一批单元
+   #+BEGIN_EXAMPLE
+     有些操作（指针）要求把地址作为数据，将其存入内存单元，或在寄存器里对地址做各种运算
+
+     “表处理”是指针运算的典型实例
+   #+END_EXAMPLE
+
+   为模拟计算机内存，下面介绍一种新数据结构称为 *向量* 。向量是一种复合数据对象，其元素可通过 *整数下标* 访问，访问所需时间与元素位置无关。用两个过程描述向量操作：
+   1. _(vector-ref <vector> <n>)_ : 返回向量里的第 n 个元素
+   2.  _(vector-set! <vector> <n> <value>)_ : 向量里第 n 个元素赋值为 <v>
+
+   对计算机内存单元的访问可以通过 *地址算术* 实现（用 _向量基址_ 加 _特定元素的偏移量_ ） 
+
+   #+BEGIN_EXAMPLE
+     新型计算机内存已很难用简单向量表现
+
+     它们有复杂的缓存系统，复杂的缓存一致性算法
+     多核的加入使情况进一步复杂化，理解其细节行为变得更加困难，需要通过复杂的模拟
+
+     但这种抽象模型仍反映了它的一部分情况和性质
+   #+END_EXAMPLE
+*** Scheme 序对的表示
+    用向量实现表存储器所需的序对结构：
+    1. 设想两个向量 _the-cars_ 和 _the-cdrs_ 
+    2. _指向序对的指针_ 用 *向量的下标* 表示， _序对的 car_ 就是 _向量 the-cars_ 里 *特定元素的内容* ，cdr 类似
+
+    #+ATTR_HTML: image :width 60% 
+    [[file:pic/pair-representaion.gif]] 
+
+    非序对数据用 *带类型指针* 表示。为此要扩充指针增加类型信息：
+    + 可以在指针里加 _标志位_ 
+    + 如果有带标志位的硬件机器，也可利用地址中不用的位 
+
+    #+BEGIN_EXAMPLE
+    eq? 就是比较指向序对的指针的值是否相同
+    #+END_EXAMPLE
+    *符号* 用 _带类型指针_ 表示：
+    + 实际的 Scheme 系统里有一个 *符号表* ，称为 _对象表_ 
+      + 读入遇到新符号时 _创建表项_ ，取得 _符号指针_ 
+*** 基本表操作实现
+    #+BEGIN_EXAMPLE
+      有了序对的上述表示，基本表操作都可以“代换”为向量操作
+    #+END_EXAMPLE
+    下面假定有 _向量访问_ 和 _赋值_ ， _指针算术运算_ ： 
+
+    寄存器机器支持的 _赋值_  指令 ：
+
+    #+BEGIN_EXAMPLE
+      ;;; reg2 寄存器中存放了一个序对在向量数组的下标，把这个序对的car内容放入到 reg1 寄存器
+      (assign <reg1> (op car) (reg <reg2>))
+
+      ;;; reg2 寄存器中存放了一个序对在向量数组的下标，把这个序对的car内容放入到 reg1 寄存器
+      (assign <reg1> (op cdr) (reg <reg2>))
+    #+END_EXAMPLE 
+
+    可以实现为： 
+
+    #+BEGIN_SRC scheme
+  ;;; 类似于调用 (vector-ref the-cars reg2)
+  ;;; the-cars 寄存器:  cars 向量的基础地址
+  ;;; reg2 寄存器: 序对在向量数组的下标
+  (assign <reg1> (op vector-ref) (reg the-cars) (reg <reg2>))
+
+  ;;; 类似于调用 (vector-ref the-cdrs reg2)
+  ;;; the-cdrs 寄存器:  cdrs 向量的基础地址
+  ;;; reg2 寄存器: 序对在向量数组的下标
+  (assign <reg1> (op vector-ref) (reg the-cdrs) (reg <reg2>))
+    #+END_SRC
+
+    寄存器机器的 _执行_ 指令：
+
+    #+BEGIN_EXAMPLE
+      ;;; 把 reg1 寄存器的内容 赋值给 reg2寄存器对应的序对的car上
+      (perform (op set-car!) (reg <reg1>) (reg <reg2>))
+
+      ;;; 把 reg1 寄存器的内容 赋值给 reg2寄存器对应的序对的cdr上
+      (perform (op set-cdr!) (reg <reg1>) (reg <reg2>))
+    #+END_EXAMPLE 
+
+    实现为： 
+    #+BEGIN_SRC scheme
+  ;;; 这里调用 (vector-set! the-cars reg2 reg1)
+  ;;; the-cars 寄存器：cars向量的基础地址
+  ;;; reg1 寄存器: 赋值内容
+  ;;; reg2 寄存器: 序对下标
+  (perform
+   (op vector-set!) (reg the-cars) (reg <reg1>) (reg <reg2>))
+
+  ;;; 这里调用 (vector-set! the-cdrs reg2 reg1)
+  ;;; the-cdrs 寄存器：cdrs向量的基础地址
+  ;;; reg1 寄存器: 赋值内容
+  ;;; reg2 寄存器: 序对下标
+  (perform
+   (op vector-set!) (reg the-cdrs) (reg <reg1>) (reg <reg2>))
+    #+END_SRC
+
+    执行 cons 时 *创建* 新序对单元，分别存入相应的 _car_ 和 _cdr_ 。假定特殊寄存器 *free*  总指向一个空闲下标，增加其值可得到下一可用下标（要
+    求空闲位置连续）。这时 _cons_ 指令 可以实现为： 
+
+    #+BEGIN_SRC scheme
+  ;;; (vector-set! the-cars free reg2) 
+  (perform
+   (op vector-set!) (reg the-cars) (reg free) (reg <reg2>))
+
+  ;;; (vector-set! the-cdrs free reg3) 
+  (perform
+   (op vector-set!) (reg the-cdrs) (reg free) (reg <reg3>))
+
+  ;;; free 赋值给 reg1  
+  (assign <reg1> (reg free))
+
+  ;;; free 的值增加 1 
+  (assign free (op +) (reg free) (const 1))
+    #+END_SRC
+
+    _eq?_ 操作只是简单比较 reg1 和 reg2 的值是否相同（向量中的下标值是否相同） 
+    #+BEGIN_EXAMPLE
+      (op eq?) (reg <reg1>) (reg <reg2>) 
+    #+END_EXAMPLE
+
+    _pair?_ ,  _null?_ ,  _symbol?_ ,  _number?_ 等操作还必须检查 *指针的类型* 是否相同
+*** 栈实现
+    寄存器机器需要的 _栈_ 可以用 *表* 模拟， _栈头序对_ 在 _向量中的下标_ （栈顶地址）用一个特殊寄存器 *the-stack* 来存放
+
+    #+BEGIN_EXAMPLE
+      这些操作都可以基于前面使用向量模拟的内存
+
+      实际系统里考虑实现效率，常另用一个向量来实现栈，压栈和出栈操作用改变栈顶寄存器的指针值来实现
+    #+END_EXAMPLE
+
+    压栈    _(save <reg>)_ 可以实现为： 
+    #+BEGIN_SRC scheme
+  ;;; (cons reg the-stack) 
+  ;;; reg 寄存器: 序对的下标
+  ;;; the stack 寄存器: 栈顶对应的下标
+  ;;; cons返回的新的序对的下标会被赋值给 the-stack 寄存器，这相当于修改了栈顶指针
+  (assign the-stack (op cons) (reg <reg>) (reg the-stack))
+    #+END_SRC
+
+    出栈    _(restore <reg>)_ 实现为： 
+
+    #+BEGIN_SRC scheme
+  ;;; 从栈顶读取值
+  (assign <reg> (op car) (reg the-stack))
+
+  ;;; “栈顶寄存器”赋值为“当前栈顶序对的cdr”的“向量下标”
+  (assign the-stack (op cdr) (reg the-stack))
+    #+END_SRC
+
+    初始化栈    _(perform (op initialize-stack))_ 实现为：
+    #+BEGIN_SRC scheme
+  (assign the-stack (const ()))
+    #+END_SRC
 
 ** 垃圾回收机制
