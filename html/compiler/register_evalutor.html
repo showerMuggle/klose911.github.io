@@ -243,9 +243,19 @@ for the JavaScript code in this tag.
 <li><a href="#org8b2a60e">栈实现</a></li>
 </ul>
 </li>
-<li><a href="#org356076d">垃圾回收机制</a></li>
+<li><a href="#org356076d">垃圾回收机制</a>
+<ul>
+<li><a href="#org54aa9cc">垃圾回收算法</a>
+<ul>
+<li><a href="#org34c053c">复制垃圾回收算法的实现</a></li>
+<li><a href="#org76d662f">寄存器语言实现垃圾回收</a></li>
 </ul>
 </li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#orgc6bb2aa">寄存求值器</a></li>
 </ul>
 </div>
 </div>
@@ -533,7 +543,269 @@ eq? 就是比较指向序对的指针的值是否相同
 
 <div id="outline-container-org356076d" class="outline-3">
 <h3 id="org356076d">垃圾回收机制</h3>
+<div class="outline-text-3" id="text-org356076d">
+<pre class="example">
+     表结构的实现问题已经解决了，但有前提：保证执行 cons 时总有可用的自由空间，为此需要无穷大的存储
+
+     而在实际计算中不断执行 cons，最终将用尽整个序对空间
+</pre>
+
+<p>
+观察到： 所建立的序对里的很多都是用于保存各种 <b>临时</b> 数据
+</p>
+<ul class="org-ul">
+<li>中间结果</li>
+<li>临时建立的环境框架</li>
+<li>&#x2026;&#x2026;</li>
+</ul>
+<p>
+相关数据用过后可以被丢弃，其存储也没有必要继续保留 
+</p>
+
+<pre class="example">
+(accumulate + 0 (filter odd? (enumerate-interval 0 n)))
+
+执行过程中构造了两个表：枚举表和奇数表，求和完成后都不再需要了
+</pre>
+
+<p>
+系统需要做出一种安排， <span class="underline">周期性</span> 地 <b>回收</b> <span class="underline">已分配但不再有用</span> 的内存。如果回收与分配的速度相当，而且程序每个时刻实际使用的单元不多于可供应的单元，系统就可以永远运转。这造成了一种无穷大存储的假象
+</p>
+
+<pre class="example">
+     要回收不用的序对，需要确定那些需对确实没用了，也就是说，其（内容）存在与否对后面的计算没有任何影响
+</pre>
+<p>
+下面提出的方法称为 <b>垃圾收集</b> ，其基本思想：
+</p>
+<ol class="org-ol">
+<li>确定所有的有用单元：从 <span class="underline">当前所有寄存器的内容</span> 出发，通过一系列的 <span class="underline">car/cdr 操作</span>  <b>可以到达</b> 的单元</li>
+<li>不可达的单元都可以回收</li>
+</ol>
+
+<pre class="example">
+     典型的基本垃圾回收方法有两类，后来有许多发展：
+     包括分代式垃圾回收，并行垃圾回收，以及各种更复杂的环境里的垃圾回收等
+
+     垃圾回收已经成为支持软件系统运行的基本技术
+</pre>
+
+<p>
+简单的垃圾回收工作周期性地进行：
+</p>
+<ul class="org-ul">
+<li>当时工作存储区满时中断计算，启动新一轮垃圾回收</li>
+<li>回收完成后重启暂停的计算工作</li>
+</ul>
 </div>
+
+<div id="outline-container-org54aa9cc" class="outline-4">
+<h4 id="org54aa9cc">垃圾回收算法</h4>
+<div class="outline-text-4" id="text-org54aa9cc">
+<p>
+最早的技术称为“标记和清扫”(mark and sweep)，工作方式：
+</p>
+<ol class="org-ol">
+<li>从寄存器出发沿car 和 cdr 指针周游单元存储区，给单元加标记</li>
+<li>扫描整个存储器，回收无标记单元</li>
+</ol>
+<pre class="example">
+      标记清除算法最主要的缺点是会形成内存碎片
+</pre>
+<p>
+另一种技术 (stop-and-move)，基于复制有用对象（搬迁有用的对象），基本想法：把一片存储区里的有用对象都搬走，使得整个存储区都可以重用了
+</p>
+<ul class="org-ul">
+<li>存储区分为相等的两个半区 <span class="underline">工作存储区</span> 和 <span class="underline">自由存储区</span></li>
+<li>cons 总在 <span class="underline">工作存储区</span> 里顺序分配，每次分配下一位置</li>
+<li><span class="underline">工作存储区</span> 满时做垃圾收集，把 所有 <b>有用序对</b> 搬到 <span class="underline">自由存储区</span> 
+<ul class="org-ul">
+<li>从所有寄存器出发追踪 <span class="underline">car</span>  和 <span class="underline">cdr</span> 指针</li>
+</ul></li>
+<li>如果工作存储区里存在无用单元，搬迁完成后自由存储区应 <b>剩下可用于分配的空闲单元</b></li>
+<li>完成一次搬迁后 <b>交换</b> <span class="underline">工作存储区</span> 和 <span class="underline">自由存储区</span> 的地位</li>
+</ul>
+
+<pre class="example">
+      复制算法的优点是效率更高，缺点是可用内存减少为一半
+</pre>
+</div>
+
+<div id="outline-container-org34c053c" class="outline-5">
+<h5 id="org34c053c">复制垃圾回收算法的实现</h5>
+<div class="outline-text-5" id="text-org34c053c">
+<ul class="org-ul">
+<li>假定寄存器 root 值为一个指针，从所指的结构可以到达所有在用单元</li>
+<li><span class="underline">the-cars</span> 和 <span class="underline">the-cdrs</span> 指向的两个向量是 <b>工作区</b></li>
+<li><span class="underline">new-cars</span> 和 <span class="underline">new-cdrs</span> 指的两个向量是 <b>自由区</b></li>
+<li><span class="underline">free</span> 指向 <span class="underline">工作区里第一个空闲单元</span> ，它的值随着分配移动，到达存储器右端时：空闲单元已用完</li>
+<li>废料收集前后情况如图</li>
+<li><p>
+收集完成后 <b>交换两对向量指针</b> ，实现存储区的 <span class="underline">切换</span> 
+</p>
+
+
+<div class="figure">
+<p><img src="pic/stop-and-move.gif" alt="stop-and-move.gif" width="70%" /> 
+</p>
+</div></li>
+</ul>
+
+<p>
+收集过程维护两个指针 <b>free</b> 和 <b>scan</b> ，收集的 <span class="underline">初始化</span> 操作：
+</p>
+<ol class="org-ol">
+<li>把 free 和 scan 设置为指向 <span class="underline">自由区起点</span></li>
+<li>把 <span class="underline">root 所指单元</span> 复制到 <span class="underline">自由区的第一个单元</span></li>
+<li><span class="underline">root 所指单元的 car</span> 设一个 <b>特殊标志</b> ， <span class="underline">root 所指单元的 cdr</span>  设为 <b>free</b>  (单元新位置)</li>
+<li><span class="underline">root</span>  指向 <b>新位置</b> ，更新 free 使之指向 <b>下一空单元</b></li>
+</ol>
+
+<pre class="example">
+       注意：scan 指向已移入新区(收集前的 自由区 ) 的单元，但其 car 和 cdr 所指单元可能还在老的工作区
+</pre>
+
+<p>
+收集过程: 若scan &lt; free，反复做： 
+</p>
+<ul class="org-ul">
+<li>若 scan 所指单元的 car 还在老区就将它搬到新区 free 处。设置原单元的 car 为特殊标志，cdr 为 free，将 free 增加一个单元</li>
+<li>若 scan 所指单元的 cdr还在老区就将它搬到新区free 处。置原单元的 car 为特殊标志，cdr 为 free，将 free 增加一个单元</li>
+<li>若发现被 scan 所指单元的 car/cdr 所指的老区单元有特殊标志，则更新这个 car/cdr，使之正确指向该单元的新位置</li>
+<li>反复上述操作至 <span class="underline">scan</span> 和 <span class="underline">free</span>  <b>相等时</b> 收集完成</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-org76d662f" class="outline-5">
+<h5 id="org76d662f">寄存器语言实现垃圾回收</h5>
+<div class="outline-text-5" id="text-org76d662f">
+<p>
+用寄存器机器语言描述算法。关键代码段 <b>relocate-old-result-in-new</b> 给表单元确定新位置，被移对象由寄存器 <span class="underline">old</span> 当时的值确定，新位置由
+寄存器 <span class="underline">free</span> 当前值确定。将新位置存入寄存器 <span class="underline">new</span> 并更新 <b>free</b> 。最后根据寄存器 <span class="underline">relocate-continue</span> 的值转跳返回
+</p>
+
+<p>
+启动垃圾收集后首先设置 <span class="underline">scan</span> 和 <span class="underline">free</span> ，而后调用上述子程序先为 root 所指单元重新分配位置
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme">begin-garbage-collection
+<span style="color: #696969;">(</span>assign free <span style="color: #696969;">(</span>const 0<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>assign scan <span style="color: #696969;">(</span>const 0<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>assign old <span style="color: #696969;">(</span>reg root<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#35753; old &#25351;&#21521;&#32769;&#24037;&#20316;&#21306;&#37324;&#34987;&#22788;&#29702;&#30340;&#21333;&#20803; </span>
+<span style="color: #696969;">(</span>assign relocate-continue <span style="color: #696969;">(</span>label reassign-root<span style="color: #696969;">))</span> 
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label relocate-old-result-in-new<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#23558; root &#21333;&#20803;&#25644;&#21040;&#26032;&#21306;</span>
+
+reassign-root
+<span style="color: #696969;">(</span>assign root <span style="color: #696969;">(</span>reg new<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#35753; root &#25351;&#21521;&#32467;&#28857;&#30340;&#26032;&#20301;&#32622;</span>
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label gc-loop<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">&#35843;&#29992;&#22522;&#26412; gc &#24490;&#29615;</span>
+</pre>
+</div>
+
+<p>
+gc-loop 主循环：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme">gc-loop
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#26816;&#26597;&#26159;&#21542;&#36824;&#26377;&#26410;&#25195;&#25551;&#21333;&#20803; (scan &#19981;&#31561;&#20110; free)</span>
+<span style="color: #696969;">(</span>test <span style="color: #696969;">(</span>op =<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg scan<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg free<span style="color: #696969;">))</span> 
+<span style="color: #696969;">(</span>branch <span style="color: #696969;">(</span>label gc-flip<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#22522;&#26412;&#25910;&#38598;&#24490;&#29615;&#32467;&#26463;&#65292;&#26368;&#21518;&#25910;&#23614;</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#23558; old &#35774;&#20026;&#26032;&#21306;&#20013; scan &#25351;&#21521;&#30340;&#21333;&#20803;&#30340; car &#25152;&#25351;&#30340;&#21333;&#20803;&#65288;&#21487;&#33021;&#26159;&#38656;&#35201;&#25644;&#36801;&#30340;&#19979;&#19968;&#20010;&#32769;&#21306;&#21333;&#20803;&#65292;&#20063;&#21487;&#33021;&#24050;&#32463;&#25644;&#36807;&#26469;&#20102;&#65289;</span>
+<span style="color: #696969;">(</span>assign old <span style="color: #696969;">(</span>op vector-ref<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg new-cars<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg scan<span style="color: #696969;">))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#23558; relocate-continue &#23492;&#23384;&#22120;&#35774;&#32622;&#20026; update-car &#65306;&#22240;&#20026;&#22797;&#21046;&#23436;&#32769;&#30340;car&#21518;&#65292;&#36824;&#24517;&#39035;&#26356;&#26032;&#24207;&#23545;&#30340;car&#30340;&#20540;&#65288;&#26032;&#24037;&#20316;&#21306;&#30340;&#19979;&#26631;&#20540;&#65289;</span>
+<span style="color: #696969;">(</span>assign relocate-continue <span style="color: #696969;">(</span>label update-car<span style="color: #696969;">))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#25191;&#34892; relocate-old-result-in-new &#26631;&#21495;&#20301;&#32622;&#30340;&#20195;&#30721;&#65306;&#23454;&#38469;&#22788;&#29702;scan&#25351;&#21521;&#30340;car&#21333;&#20803;&#30340;&#25644;&#36801;&#24037;&#20316;</span>
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label relocate-old-result-in-new<span style="color: #696969;">))</span> 
+</pre>
+</div>
+
+<p>
+update-car 操作： 
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme">update-car
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#23558; scan &#25152;&#25351;&#21333;&#20803;&#30340; car &#35774;&#32622;&#20026; new</span>
+<span style="color: #696969;">(</span>perform <span style="color: #696969;">(</span>op vector-set!<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg new-cars<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg scan<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg new<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">&#23492;&#23384;&#22120; new &#37324;&#26159; car &#25152;&#25351;&#21333;&#20803;&#30340;&#26032;&#20301;&#32622;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">&#23558; old &#35774;&#20026;&#26032;&#21306;&#20013; scan &#25351;&#21521;&#30340;&#21333;&#20803;&#30340; cdr &#25152;&#25351;&#30340;&#21333;&#20803;&#65288;&#21487;&#33021;&#26159;&#38656;&#35201;&#25644;&#36801;&#30340;&#19979;&#19968;&#20010;&#32769;&#21306;&#21333;&#20803;&#65292;&#20063;&#21487;&#33021;&#24050;&#32463;&#25644;&#36807;&#26469;&#20102;&#65289;</span>
+<span style="color: #696969;">(</span>assign old <span style="color: #696969;">(</span>op vector-ref<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg new-cdrs<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg scan<span style="color: #696969;">))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#23558; relocate-continue &#23492;&#23384;&#22120;&#35774;&#32622;&#20026; update-cdr &#65306;&#22240;&#20026;&#22797;&#21046;&#23436;&#32769;&#30340;cdr&#21518;&#65292;&#36824;&#24517;&#39035;&#26356;&#26032;&#24207;&#23545;&#30340;cdr&#30340;&#20540;&#65288;&#26032;&#24037;&#20316;&#21306;&#30340;&#19979;&#26631;&#20540;&#65289;</span>
+<span style="color: #696969;">(</span>assign relocate-continue <span style="color: #696969;">(</span>label update-cdr<span style="color: #696969;">))</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#22788;&#29702;scan&#25351;&#21521;&#30340;cdr&#21333;&#20803;&#30340;&#25644;&#36801;&#24037;&#20316;</span>
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label relocate-old-result-in-new<span style="color: #696969;">))</span> 
+</pre>
+</div>
+
+<p>
+update-cdr 操作：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme">update-cdr
+  <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#23558; scan &#25152;&#25351;&#21333;&#20803;&#30340; cdr &#35774;&#32622;&#20026; new</span>
+  <span style="color: #696969;">(</span>perform <span style="color: #696969;">(</span>op vector-set!<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg new-cdrs<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg scan<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg new<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#23492;&#23384;&#22120; new &#37324;&#26159; car &#25152;&#25351;&#21333;&#20803;&#30340;&#26032;&#20301;&#32622;</span>
+  <span style="color: #696969;">(</span>assign scan <span style="color: #696969;">(</span>op +<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg scan<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>const 1<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">scan &#33258;&#22686; 1 </span>
+  <span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label gc-loop<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#37325;&#21551;&#22403;&#22334;&#25910;&#38598;&#20027;&#24490;&#29615;</span>
+</pre>
+</div>
+
+<p>
+relocate-old-result-in-new 核心过程：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme">relocate-old-result-in-new
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#27979;&#35797;&#25351;&#38024;&#31867;&#22411;&#26159;&#21542;&#26159;&#8220;&#24207;&#23545;&#8221;</span>
+<span style="color: #696969;">(</span>test <span style="color: #696969;">(</span>op pointer-to-pair?<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg old<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>branch <span style="color: #696969;">(</span>label pair<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>assign new <span style="color: #696969;">(</span>reg old<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>reg relocate-continue<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#38750;&#24207;&#23545;&#23545;&#35937;&#65292;&#30452;&#25509;&#36820;&#22238; </span>
+
+pair
+<span style="color: #696969;">(</span>assign oldcr <span style="color: #696969;">(</span>op vector-ref<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg the-cars<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg old<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>test <span style="color: #696969;">(</span>op broken-heart?<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg oldcr<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#36825;&#20010;&#23545;&#35937;&#26159;&#21542;&#24050;&#32463;&#22238;&#25910;&#36807;&#65311; </span>
+<span style="color: #696969;">(</span>branch <span style="color: #696969;">(</span>label already-moved<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>assign new <span style="color: #696969;">(</span>reg free<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">new &#23492;&#23384;&#22120;&#35774;&#32622;&#20026; free &#23492;&#23384;&#22120;&#30340;&#20540;</span>
+<span style="color: #696969;">(</span>assign free <span style="color: #696969;">(</span>op +<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg free<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>const 1<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">free &#23492;&#23384;&#22120;&#33258;&#22686; 1 </span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#23558;&#36825;&#20010;&#21333;&#20803;&#30340; car &#21644; cdr &#25335;&#36125;&#21040;&#26032;&#20301;&#32622;</span>
+<span style="color: #696969;">(</span>perform <span style="color: #696969;">(</span>op vector-set!<span style="color: #696969;">)</span>
+         <span style="color: #696969;">(</span>reg new-cars<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg new<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg oldcr<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>assign oldcr <span style="color: #696969;">(</span>op vector-ref<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg the-cdrs<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg old<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>perform <span style="color: #696969;">(</span>op vector-set!<span style="color: #696969;">)</span>
+         <span style="color: #696969;">(</span>reg new-cdrs<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg new<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg oldcr<span style="color: #696969;">))</span> 
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#26500;&#24314; broken heart&#65306;&#22312;&#21407;&#20301;&#32622;&#35774;&#32622;&#30340; car &#35774;&#25644;&#36801;&#26631;&#24535;&#65292;cdr &#35774;&#32034;&#24341;&#25351;&#38024;</span>
+<span style="color: #696969;">(</span>perform <span style="color: #696969;">(</span>op vector-set!<span style="color: #696969;">)</span>
+         <span style="color: #696969;">(</span>reg the-cars<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg old<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>const broken-heart<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>perform
+ <span style="color: #696969;">(</span>op vector-set!<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg the-cdrs<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg old<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg new<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>reg relocate-continue<span style="color: #696969;">))</span>
+
+already-moved
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#21333;&#20803;&#24050;&#22312;&#26032;&#21306;&#65292;&#30452;&#25509;&#35774;&#32622; new &#21518;&#36820;&#22238;</span>
+<span style="color: #696969;">(</span>assign new <span style="color: #696969;">(</span>op vector-ref<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg the-cdrs<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg old<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>reg relocate-continue<span style="color: #696969;">))</span>
+</pre>
+</div>
+
+<p>
+收尾工作 gc-flip ：交换两个（半）存储区的地位
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme">gc-flip
+  <span style="color: #696969;">(</span>assign temp <span style="color: #696969;">(</span>reg the-cdrs<span style="color: #696969;">))</span>
+  <span style="color: #696969;">(</span>assign the-cdrs <span style="color: #696969;">(</span>reg new-cdrs<span style="color: #696969;">))</span>
+  <span style="color: #696969;">(</span>assign new-cdrs <span style="color: #696969;">(</span>reg temp<span style="color: #696969;">))</span>
+  <span style="color: #696969;">(</span>assign temp <span style="color: #696969;">(</span>reg the-cars<span style="color: #696969;">))</span>
+  <span style="color: #696969;">(</span>assign the-cars <span style="color: #696969;">(</span>reg new-cars<span style="color: #696969;">))</span>
+  <span style="color: #696969;">(</span>assign new-cars <span style="color: #696969;">(</span>reg temp<span style="color: #696969;">))</span>
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgc6bb2aa" class="outline-2">
+<h2 id="orgc6bb2aa">寄存求值器</h2>
 </div>
 </div>
 <div id="postamble" class="status">
