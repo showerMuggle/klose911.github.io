@@ -379,3 +379,221 @@
      #+END_SRC
 
 * 寄存求值器
+  #+BEGIN_EXAMPLE
+    前面研究过把简单 Scheme 程序变换到寄存器机器描述
+
+    下面考虑变换元循环求值器：基于eval 和 apply 实现的 Scheme 解释器
+  #+END_EXAMPLE
+
+  + 这一工作的结果是一个 *显式控制* 的求值器，求值中过程调用的 _参数传递_ 都基于 *寄存器* 和 *栈描述*
+  + 这个寄存器语言描述接近 _常规机器语言_ ，可以反映实际 Scheme 实现的许多情况，可用 _寄存器机器模拟器_ 运行
+  #+BEGIN_EXAMPLE
+      它反映了用常规机器语言实现 Scheme 解释器的基本结构
+
+      可以从它出发实现真正能用的 Scheme 解释器，或者从它出发做出能解释 Scheme 程序的硬件处理器
+
+    Java 虚拟机（JVM）或其他脚本语言虚拟机，具有类似结构和功能
+  #+END_EXAMPLE
+
+** 寄存器和操作
+   #+BEGIN_EXAMPLE
+     元循环求值器用了一些语法过程，如 quoted?, make-procedure 等
+
+     如果做一个真正完整的寄存器机器，实际上需要把这些过程都展开为表操作。但那样做出的代码将非常长
+   #+END_EXAMPLE
+
+   为简化描述，下面仍以 _元循环求值器_ 的语法过程和 _表示环境_ 的过程作为寄存器机器的基本过程。要真正实现这个求值器，还需基于 *更基本的操
+   作* 将这些操作展开，并使用前面讨论的 *表结构* 表示 
+
+   下面求值器里用一个 _栈_ 和 7 个 _寄存器_ ：
+   + *exp*  :  _表达式_
+   + *val* : 在指定环境里求值表达式得到的 _结果_
+   + *env*  : 当时 _环境_
+   + *continue* : 用于实现 _递归_ 
+   + 三个寄存器用于组合式的实现
+     + *proc* :  _过程对象_
+     + *argl* : _实参值表_
+     + *unev* :  辅助寄存器，意为 _未求值的表达式_ 
+
+   具体操作隐含在控制器代码里，不专门列出（不明确写数据通路） 
+
+** 显式求值器的实现
+
+*** 核心代码
+    求值器核心部分从 *eval-dispatch* 开始：
+    1. 基于 _env_  环境对 _exp_  求值
+    2. 求出的值存在 _val_ 
+    3. 求值完成后按 _continue_ 寄存器转移
+
+    #+BEGIN_SRC scheme
+  eval-dispatch ;; 求值器核心代码
+  (test (op self-evaluating?) (reg exp)) ;; 自求值表达式
+  (branch (label ev-self-eval))
+  (test (op variable?) (reg exp)) ;; 变量表达式
+  (branch (label ev-variable))
+  (test (op quoted?) (reg exp)) ;; 引用表达式
+  (branch (label ev-quoted))
+  (test (op assignment?) (reg exp)) ;; 赋值表达式
+  (branch (label ev-assignment))
+  (test (op definition?) (reg exp)) ;; 定义表达式
+  (branch (label ev-definition))
+  (test (op if?) (reg exp)) ;; 条件表达式
+  (branch (label ev-if))
+  (test (op lambda?) (reg exp)) ;; lambda 表达式
+  (branch (label ev-lambda))
+  (test (op begin?) (reg exp)) ;; begin 表达式
+  (branch (label ev-begin))
+  (test (op application?) (reg exp)) ;; 过程表达式
+  (branch (label ev-application))
+  (goto (label unknown-expression-type)) ;; 无法求值
+    #+END_SRC
+
+*** 简单表达式的求值 
+    下面几段代码处理各种简单表达式：
+    #+BEGIN_SRC scheme
+  ev-self-eval
+  ;; exp 寄存器的值直接放入 val 寄存器
+  (assign val (reg exp)) 
+  (goto (reg continue))
+
+  ev-variable
+  ;; env 环境中查找 exp 变量，结果放入 val 寄存器
+  (assign val (op lookup-variable-value) (reg exp) (reg env))
+  (goto (reg continue))
+
+  ev-quoted
+  ;; exp 寄存器中的表达式 作为参数调用 text-of-quotation 过程，把值放入到 val 寄存器作为结果
+  (assign val (op text-of-quotation) (reg exp)) 
+  (goto (reg continue))
+
+  ev-lambda
+  ;; exp 表达式中获得形参表放入到 unev 寄存器
+  (assign unev (op lambda-parameters) (reg exp))
+  ;; exp 表达式中获得过程体放入到 exp 寄存器
+  (assign exp (op lambda-body) (reg exp))
+  ;; 形参表，过程体，当前环境调用 make-procedure 过程，创建一个新的匿名过程，放入到 val 寄存器
+  (assign val (op make-procedure)
+	  (reg unev) (reg exp) (reg env))
+  (goto (reg continue))
+    #+END_SRC
+    处理 lambda 时：
+    1. 先把 _形式参数表_ 和 _过程体_ 分别存入unev 和 exp
+    2. 调用 _make-procedure_ 构造过程对象
+
+*** 过程应用的求值
+    过程应用是组合式，其参数是 _运算符_ 和 _运算对象_ ：
+    1. 需要先求值 _运算符_ 和 _运算对象_ 
+    2. 调用 _apply_ 实现过程应用
+    #+BEGIN_EXAMPLE
+      显式求值时也要做同样工作
+
+      递归调用同样是利用栈实现，调用前保存一些寄存器，需要仔细考虑要保存哪些信息，怎样保存
+    #+END_EXAMPLE
+
+    ev-application 指令： 过程应用的入口
+    #+BEGIN_SRC scheme
+  ev-application
+  (save continue) ;; 保存续点，因为之后会设置续点为 ev-appl-did-operator
+  (save env) ;; 保存环境，因为后面对 operands 求值需要
+  (assign unev (op operands) (reg exp)) ;; 把 operands 表达式缓存到 unev 
+  (save unev) ;; 保存 operands 表达式
+  (assign exp (op operator) (reg exp)) ;; 把运算符 operator 放入到 exp寄存器 
+  (assign continue (label ev-appl-did-operator)) ;; 对运算符求值后，转去执行 ev-appl-did-operator
+  (goto (label eval-dispatch)) ;; 调用 eval-dispatch 来对运算符进行求值
+    #+END_SRC
+
+    上面代码把 ev-appl-did-operator 设为续点， _求值运算符表达式_ 后转去执行 _ev-appl-did-operator_ ，去求值各实参表达式。此时 ：
+    + 寄存器
+       + _val_ ：求出的运算符对象的值
+    + 栈：
+      + 第一项：运算参数表 (save unev) 
+      + 第二项：环境 (save env)
+      + 地三项： ev-application 被调用时的 continue 寄存器的值 (save continue) 
+
+    ev-appl-did-operator ： 求值实参表达式 
+    #+BEGIN_SRC scheme
+  ev-appl-did-operator
+  (restore unev)  ;; 恢复过程参数表                
+  (restore env) ;; 恢复环境表
+  (assign argl (op empty-arglist)) ;; argl 寄存器初始化为空列表
+  (assign proc (reg val))  ;; 将运算符过程存入 proc 寄存器
+  (test (op no-operands?) (reg unev)) ;; 测试过程参数表是否为空
+  (branch (label apply-dispatch)) ;; 如果过程参数表为空，则立刻调用 proc 运算符
+  (save proc) ;; 保存求出的运算符过程，而后向下求值运算对象
+  ev-appl-operand-loop
+    (save argl) ;; 保存实参表
+    (assign exp (op first-operand) (reg unev)) ;; 取出第一个运算对象表达式 -> exp 寄存器
+    (test (op last-operand?) (reg unev)) ;; 测试这个表达式是否是最后一个表达式
+    (branch (label ev-appl-last-arg)) ;; 如果是转而执行 ev-appl-last-arg 
+    (save env) ;; 保存当前环境
+    (save unev) ;; 保存“整个实参表达式”组成的表
+    (assign continue (label ev-appl-accumulate-arg)) ;; 续点设置为 "ev-appl-accumulate-arg"，累加求出的实参值
+    (goto (label eval-dispatch)) ;; 求值第一个运算对象
+    #+END_SRC
+
+    ev-appl-accumulate-arg : 累加求值后的实参值
+    #+BEGIN_SRC scheme
+  ev-appl-accumulate-arg
+    (restore unev) ;; 恢复保存的实参表达式组成的表 -> unev 
+    (restore env) ;; 恢复环境 -> env 
+    (restore argl) ;; 恢复保存的已经求值过的实参值组成的表 -> argl 
+    (assign argl (op adjoin-arg) (reg val) (reg argl)) ;; 把求出的实参值添加到“已经求值的实参值组成的表” -> argl 寄存器
+    (assign unev (op rest-operands) (reg unev)) ;; “实参表达式组成的表”中去掉已经刚才求值的表达式 -> unev 寄存器
+    (goto (label ev-appl-operand-loop)) ;; 求值下一个实参表达式
+    #+END_SRC
+
+    ev-appl-last-arg : 求值最后一个实参表达式
+    #+BEGIN_SRC scheme
+  ev-appl-last-arg
+  (assign continue (label ev-appl-accum-last-arg)) ;; 求值完最后一个运算对象后转到 'ev-appl-accum-last-arg' 
+  (goto (label eval-dispatch))
+  ev-appl-accum-last-arg 
+  (restore argl) ;; 恢复“已经求值的实参值表“ -> argl 
+  (assign argl (op adjoin-arg) (reg val) (reg argl)) ;; 把最后一个计算出来的实参值添加到“已经求值的实参值表“  -> argl 
+  (restore proc) ;; 恢复求值过的运算符对象 -> proc 
+  (goto (label apply-dispatch)) ;; 调用 apply 过程
+    #+END_SRC
+
+*** 过程应用
+    实际应用过程的工作，根据是 _基本过程_ 还是 _复合过程_ 分别处理。这时： 
+    + 寄存器
+      + *proc* : 运算符过程对象
+      + *argl*  : 实际参数表
+    + 栈
+      + 第一项： apply 完成后应该转去的继续点（当初在 ev-application时候保存的 continue 寄存器的值）
+
+    #+BEGIN_SRC scheme
+  apply-dispatch
+    (test (op primitive-procedure?) (reg proc)) ;; 测试是否是基本过程
+    (branch (label primitive-apply))
+    (test (op compound-procedure?) (reg proc))  ;; 测试是否是复合过程
+    (branch (label compound-apply))
+    (goto (label unknown-procedure-type))
+    #+END_SRC
+
+    基本过程求值： 直接用 apply-primitive-procedure 完成过程应用
+    #+BEGIN_SRC scheme
+  primitive-apply
+    (assign val (op apply-primitive-procedure)
+		(reg proc)
+		(reg argl))
+    (restore continue)
+    (goto (reg continue))
+    #+END_SRC
+
+    复合过程：
+    1. 先从 proc 里取出过程的 _形参表_ 和 _环境_ 
+    2. 将 _env_ 设置为 *扩充后的环境* 
+    3. 取出过程体，转到 *序列求值* 代码的入口 _ev-sequence_ 
+
+    #+BEGIN_SRC scheme
+  compound-apply 
+  (assign unev (op procedure-parameters) (reg proc)) ;; 取出运算符对象的形参表 -> unev 
+  (assign env (op procedure-environment) (reg proc)) ;; 取出运算符对象的环境 -> env 
+  (assign env (op extend-environment) 
+	  (reg unev) (reg argl) (reg env)) ;; 扩充运算符对象的环境：绑定形参表和实参表
+  (assign unev (op procedure-body) (reg proc)) ;; 取出运算符对象的过程体 -> unev 
+  (goto (label ev-sequence)) ;; 调用“序列求值”代码入口
+    #+END_SRC
+
+*** 序列求值
