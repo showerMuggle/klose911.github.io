@@ -504,7 +504,7 @@
 
     上面代码把 ev-appl-did-operator 设为续点， _求值运算符表达式_ 后转去执行 _ev-appl-did-operator_ ，去求值各实参表达式。此时 ：
     + 寄存器
-       + _val_ ：求出的运算符对象的值
+      + _val_ ：求出的运算符对象的值
     + 栈：
       + 第一项：运算参数表 (save unev) 
       + 第二项：环境 (save env)
@@ -597,3 +597,293 @@
     #+END_SRC
 
 *** 序列求值
+    序列表达式求值（eval-sequence）有两种情况：
+    1. 要求值的是个表达式序列，如 _过程体_ 
+    2. 要求值的是 _begin 表达式_ ，去掉 begin 后，可以统一到前一情况
+
+    对 begin 表达式的处理由 _ev-begin_ 入口：
+    #+BEGIN_SRC scheme
+  ev-begin
+  (assign unev (op begin-actions) (reg exp)) ;; 取出 begin 的实际序列
+  (save continue)  ;;  保存求值完的继续点，与其他入口一致
+  (goto (label ev-sequence))
+    #+END_SRC
+
+    其他地方来的由 _ev-sequence_ 入口：
+    #+BEGIN_SRC scheme
+  ;;; 序列表达式求值入口
+  ev-sequence ;; 此时 unev 寄存器中是待求值的表达式序列
+  (assign exp (op first-exp) (reg unev)) ;; 取出序列中第一个表达式 
+  (test (op last-exp?) (reg unev)) ;; 测试是否是最后一个表达式
+  (branch (label ev-sequence-last-exp)) ;; 跳转到最后一个表达式的特殊处理 ev-sequence-last-exp 
+  (save unev) ;; 保存表达式序列
+  (save env) ;; 保存执行表达式的环境
+  (assign continue (label ev-sequence-continue)) ;; 设置求完当前表达式后的续点 ev-sequence-continue （求值余下的表达式） 
+  (goto (label eval-dispatch)) ;; 求值当前表达式
+  ;;; 当前表达式求值完毕
+  ev-sequence-continue 
+  (restore env) ;; 恢复原来的环境
+  (restore unev) ;; 恢复表达式列表
+  (assign unev (op rest-exps) (reg unev)) ;; 从表达式列表去掉已经求值过的表达式 -> unev 寄存器
+  (goto (label ev-sequence)) ;; 继续执行余下表达式序列求值
+  ;;; 做序列中最后一个表达式的求值
+  ev-sequence-last-exp 
+  (restore continue) ;;  恢复续点寄存器（调用 ev-sequence 前的 continue 寄存器中的值）
+  (goto (label eval-dispatch)) ;; 求值最后一个表达式
+    #+END_SRC
+
+**** 尾递归
+     前面说过，下面过程的形式是递归，但产生 _线性迭代_ 计算：
+     #+BEGIN_SRC scheme
+  (define (sqrt-iter guess x)
+    (if (good-enough? guess x)
+	guess
+	(sqrt-iter (improve guess x)
+		   x)))
+     #+END_SRC
+
+     原因是 *调用自身时不用保存任何信息* ，因此存储需求是常量。如果一个求值器在执行这种过程时可以 *不分配存储* ，称该求值器是 *尾递归* 的
+     #+BEGIN_EXAMPLE
+       元循环求值器是否尾递归的情况看不清，因为其求值细节依赖于基础系统
+
+       对于现在这个求值器，情况可以看得很清楚：
+       现在实现的求值器是尾递归的，因为它直接转去求值序列的最后一个表达式，没在栈里保存任何信息，没使用新的空间
+     #+END_EXAMPLE
+
+     如果不要尾递归（优化），可以统一处理所有子表达式（包括最后的子表达式）。得到的代码简单些，但丧失了尾递归性质：
+     #+BEGIN_SRC scheme
+  ev-sequence
+  (test (op no-more-exps?) (reg unev)) ;; 检查序列表达式是否为空
+  (branch (label ev-sequence-end)) ;; 如果为空则跳转执行 ev-serquence-end （返回原来的续点）
+  (assign exp (op first-exp) (reg unev)) ;; 获得第一个表达式 -> exp 
+  (save unev) ;; 序列表达式入栈
+  (save env) ;; 环境入栈
+  (assign continue (label ev-sequence-continue)) 
+  (goto (label eval-dispatch))
+  ev-sequence-continue
+  (restore env) ;; 环境出栈
+  (restore unev) ;; 序列表达式出栈
+  (assign unev (op rest-exps) (reg unev)) ;; 丢掉已经求值过的表达式
+  (goto (label ev-sequence)) ;; 继续求值下一个表单式
+  ev-sequence-end ;; 所有子表达式都已完成求值 
+  (restore continue) ;; 恢复调用 ev-sequence 前的续点寄存器的值
+  (goto (reg continue)) ;; 跳转到调用 ev-sequence 前的续点
+     #+END_SRC
+
+     看上去这和前面求值器只有一点区别：
+     + 前面的求值器：最后一个表达式的求值并不和其他的表达式求值在一个循环中
+     + 这里的求值器：最后一个表达式的求值和其他表达式是统一处理的（包含在一个save-restore的循环中）
+
+     #+BEGIN_EXAMPLE
+       虽然对于相同的表达式，两个求值器的结果是一致的
+
+       但是非递归求值器必须先做完最后一个表达式
+       然后返回到前一个表达式
+       然后返回到再前前一个表达式
+       ....
+     #+END_EXAMPLE
+
+     对于某些过程来说，是否尾递归可能非常致命： 
+     #+BEGIN_SRC scheme
+  (define (count n)
+    (newline)
+    (display n)
+    (count (+ n 1)))
+     #+END_SRC
+     + 尾递归：会一直迭代下去
+     + 非尾递归：由于栈空间不够，会爆栈
+
+*** 条件表达式
+    if 表达式：
+    + 先求值其 _谓词_ 部分，基于其值确定随后的求值
+    + 求值谓词之前保存 _整个 if 表达式_ 以便后面使用，也要保存 _环境_ 和 _继续点_ 
+
+    #+BEGIN_SRC scheme
+  ev-if
+    (save exp)                    ; 保存整个 if 表达式供后面使用
+    (save env)
+    (save continue)
+    (assign continue (label ev-if-decide)) ;; 谓词求值后，转而执行 ev-if-decide
+    (assign exp (op if-predicate) (reg exp)) ;; 获得谓词表达式
+    (goto (label eval-dispatch))  ; 对谓词进行求值
+    #+END_SRC
+
+    根据谓词表达式的结果跳转：
+    #+BEGIN_SRC scheme
+  ev-if-decide
+  (restore continue)
+  (restore env)
+  (restore exp)
+  (test (op true?) (reg val)) ;; ; 检测结果是否为真
+  (branch (label ev-if-consequent)) ;; 是真的时候，赚取执行 ev-if-consequent 
+  ev-if-alternative
+  (assign exp (op if-alternative) (reg exp)) ;; 获得 if 表达式中“谓词为假”对应的表达式 -> exp 
+  (goto (label eval-dispatch)) ;; 对 alternative 表达式进行求值
+  ev-if-consequent
+  (assign exp (op if-consequent) (reg exp)) ;; 获得 if 表达式中“谓词为真”对应的表达式 -> exp 
+  (goto (label eval-dispatch)) ;; 对 consequent 表达式进行求值
+    #+END_SRC
+
+*** 赋值表达式
+    赋值表达式用下面代码段处理：
+    #+BEGIN_SRC scheme
+  ev-assignment
+  (assign unev (op assignment-variable) (reg exp)) ;; 赋值表达式的变量名 -> unev 寄存器
+  (save unev)                   ;; 变量名压栈为以后使用
+  (assign exp (op assignment-value) (reg exp)) ;; 赋值表达式的“值表达式” -> exp 寄存器
+  (save env) ;; 环境入栈
+  (save continue) ;; 续点压栈
+  (assign continue (label ev-assignment-1)) ;; “变量值表达式”求值以后转而执行 ev-assignment-1 
+  (goto (label eval-dispatch))  ;; 对值表达式进行求值
+  ev-assignment-1
+  (restore continue) ;; 续点恢复
+  (restore env) ;; 环境恢复
+  (restore unev) ;; 变量恢复
+  (perform
+   (op set-variable-value!) (reg unev) (reg val) (reg env)) ;; 执行赋值操作(set-variable-value!) ，修改环境中的变量绑定
+  (assign val (const ok)) ;; 常量"ok" -> 结果寄存器 val 
+  (goto (reg continue)) ;; 继续执行调用 ev-assignment 前的续点
+    #+END_SRC
+
+*** 定义表达式
+    定义表达式和赋值处理类似：
+    #+BEGIN_SRC scheme
+  ev-definition
+    (assign unev (op definition-variable) (reg exp))
+    (save unev)                   
+    (assign exp (op definition-value) (reg exp))
+    (save env)
+    (save continue)
+    (assign continue (label ev-definition-1))
+    (goto (label eval-dispatch))  
+  ev-definition-1
+    (restore continue)
+    (restore env)
+    (restore unev)
+    (perform
+     (op define-variable!) (reg unev) (reg val) (reg env)) ;; 调用 scheme 实现的定义操作(define-variable!) 实现在环境中定义变量
+    (assign val (const ok))
+    (goto (reg continue))
+    #+END_SRC
+
+*** 驱动循环
+    要理解求值器的行为，需要执行它，监视其行为。先做一个驱动循环：
+    1. 打印提示语
+    2. 读取输入
+    3. 调用eval-dispatch 来对输入进行求值
+    4. 打印求值结果
+    5. 重复循环
+
+    #+BEGIN_SRC scheme
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  ;; 显示求值器的 repl 循环 ;;
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  read-eval-print-loop
+  (perform (op initialize-stack)) ;; 初始化栈
+  (perform
+   (op prompt-for-input) (const ";;; EC-Eval input:")) ;; 打印提示语
+  (assign exp (op read)) ;; 读取输入 -> exp 寄存器
+  (assign env (op get-global-environment)) ;; 读取 global env -> env 寄存器
+  (assign continue (label print-result)) ;; print-result 指令标号 -> continue 寄存器
+  (goto (label eval-dispatch)) ;; 赚取执行 eval-dispatch 对 env 寄存器中的表达式进行求值
+  ;;; 打印求值结果
+  print-result 
+  (perform
+   (op announce-output) (const ";;; EC-Eval value:")) ;; 打印提示语
+  (perform (op user-print) (reg val)) ;; 调用 user-print 真实打印 val寄存器中的求值结果
+  (goto (label read-eval-print-loop)) ;; 重新开始 repl 循环
+    #+END_SRC
+
+    需要处理遇到的错误，出现错误时打印信息并回到驱动循环：
+    #+BEGIN_SRC scheme
+       ;;; 未知表达式类型
+  unknown-expression-type
+  (assign val (const unknown-expression-type-error))
+  (goto (label signal-error))
+       ;;; 未知过程类型
+  unknown-procedure-type
+  (restore continue)    ; clean up stack (from apply-dispatch)
+  (assign val (const unknown-procedure-type-error))
+  (goto (label signal-error))
+       ;;; 打印出错类型
+  signal-error
+  (perform (op user-print) (reg val))
+  (goto (label read-eval-print-loop)) ;;; 回到基本求值循环时将栈置空，重新开始新一次循环
+    #+END_SRC
+
+*** 构造求值器对应的寄存器机器模型
+    为完成这一机器，需要把本节的所有代码收集起来，调用前面寄存器机器模拟器的操作，构造一个机器模型
+
+    + 创建机器的操作列表，把所有要用的操作加入（取自元循环求值器）：
+    #+BEGIN_SRC scheme 
+  (define eceval-operations
+    (list (list 'self-evaluating? self-evaluating)
+	  <机器的完整操作表>)) 
+    #+END_SRC
+
+    + 构造机器模型的代码框架，其中应填入前面求值器的所有代码：
+    #+BEGIN_SRC scheme
+  (define eceval
+    (make-machine
+     '(exp env val proc argl continue unev)
+     eceval-operations
+     '(read-eval-print-loop
+       <上面给出的求值器机器代码>)))
+    #+END_SRC
+
+** 显示求值器的运行
+   运行前创建环境，而后启动这个求值器：
+   #+BEGIN_SRC scheme
+  (define the-global-environment (setup-environment))
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     (start eceval)
+
+     ;;; EC-Eval input:
+     (define (append x y)
+       (if (null? x)
+	   y
+	   (cons (car x)
+		 (append (cdr x) y))))
+
+     ;;; EC-Eval value:
+     ok
+
+     ;;; EC-Eval input:
+     (append '(a b c) '(d e f))
+
+     ;;; EC-Eval value:
+     (a b c d e f)
+   #+END_EXAMPLE
+
+*** 监视求值器的执行
+    在驱动循环里增加一段代码：
+    #+BEGIN_SRC scheme
+  print-result
+    (perform (op print-stack-statistics)) ;; 在操作表里加入统计操作
+    (perform
+     (op announce-output) (const ";;; EC-Eval value:"))
+  ;;;  ... ; same as before
+    #+END_SRC
+
+    监视实例：
+    #+BEGIN_EXAMPLE
+      ;;; EC-Eval input:
+      (define (factorial n)
+	(if (= n 1)
+	    1
+	    (* (factorial (- n 1)) n)))
+      (total-pushes = 3 maximum-depth = 3)
+
+      ;;; EC-Eval value:
+      ok
+
+      ;;; EC-Eval input:
+      (factorial 5)
+
+      (total-pushes = 144 maximum-depth = 28)
+      ;;; EC-Eval value:
+      120
+    #+END_EXAMPLE
+

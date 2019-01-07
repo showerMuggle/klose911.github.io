@@ -264,7 +264,21 @@ for the JavaScript code in this tag.
 <li><a href="#orga798f61">简单表达式的求值</a></li>
 <li><a href="#org8543a13">过程应用的求值</a></li>
 <li><a href="#org4f24f3d">过程应用</a></li>
-<li><a href="#org4717f50">序列求值</a></li>
+<li><a href="#org4717f50">序列求值</a>
+<ul>
+<li><a href="#org805b9d1">尾递归</a></li>
+</ul>
+</li>
+<li><a href="#org11dbf11">条件表达式</a></li>
+<li><a href="#org74c06b4">赋值表达式</a></li>
+<li><a href="#org657f1cb">定义表达式</a></li>
+<li><a href="#org6476f43">驱动循环</a></li>
+<li><a href="#org6159b71">构造求值器对应的寄存器机器模型</a></li>
+</ul>
+</li>
+<li><a href="#orgd5cdca1">显示求值器的运行</a>
+<ul>
+<li><a href="#org33b1252">监视求值器的执行</a></li>
 </ul>
 </li>
 </ul>
@@ -1127,6 +1141,394 @@ ev-appl-accum-last-arg
 
 <div id="outline-container-org4717f50" class="outline-4">
 <h4 id="org4717f50">序列求值</h4>
+<div class="outline-text-4" id="text-org4717f50">
+<p>
+序列表达式求值（eval-sequence）有两种情况：
+</p>
+<ol class="org-ol">
+<li>要求值的是个表达式序列，如 <span class="underline">过程体</span></li>
+<li>要求值的是 <span class="underline">begin 表达式</span> ，去掉 begin 后，可以统一到前一情况</li>
+</ol>
+
+<p>
+对 begin 表达式的处理由 <span class="underline">ev-begin</span> 入口：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme">ev-begin
+<span style="color: #696969;">(</span>assign unev <span style="color: #696969;">(</span>op begin-actions<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg exp<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#21462;&#20986; begin &#30340;&#23454;&#38469;&#24207;&#21015;</span>
+<span style="color: #696969;">(</span>save continue<span style="color: #696969;">)</span>  <span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">&#20445;&#23384;&#27714;&#20540;&#23436;&#30340;&#32487;&#32493;&#28857;&#65292;&#19982;&#20854;&#20182;&#20837;&#21475;&#19968;&#33268;</span>
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label ev-sequence<span style="color: #696969;">))</span>
+</pre>
+</div>
+
+<p>
+其他地方来的由 <span class="underline">ev-sequence</span> 入口：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#24207;&#21015;&#34920;&#36798;&#24335;&#27714;&#20540;&#20837;&#21475;</span>
+ev-sequence <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#27492;&#26102; unev &#23492;&#23384;&#22120;&#20013;&#26159;&#24453;&#27714;&#20540;&#30340;&#34920;&#36798;&#24335;&#24207;&#21015;</span>
+<span style="color: #696969;">(</span>assign exp <span style="color: #696969;">(</span>op first-exp<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg unev<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#21462;&#20986;&#24207;&#21015;&#20013;&#31532;&#19968;&#20010;&#34920;&#36798;&#24335; </span>
+<span style="color: #696969;">(</span>test <span style="color: #696969;">(</span>op last-exp?<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg unev<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#27979;&#35797;&#26159;&#21542;&#26159;&#26368;&#21518;&#19968;&#20010;&#34920;&#36798;&#24335;</span>
+<span style="color: #696969;">(</span>branch <span style="color: #696969;">(</span>label ev-sequence-last-exp<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#36339;&#36716;&#21040;&#26368;&#21518;&#19968;&#20010;&#34920;&#36798;&#24335;&#30340;&#29305;&#27530;&#22788;&#29702; ev-sequence-last-exp </span>
+<span style="color: #696969;">(</span>save unev<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#20445;&#23384;&#34920;&#36798;&#24335;&#24207;&#21015;</span>
+<span style="color: #696969;">(</span>save env<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#20445;&#23384;&#25191;&#34892;&#34920;&#36798;&#24335;&#30340;&#29615;&#22659;</span>
+<span style="color: #696969;">(</span>assign continue <span style="color: #696969;">(</span>label ev-sequence-continue<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#35774;&#32622;&#27714;&#23436;&#24403;&#21069;&#34920;&#36798;&#24335;&#21518;&#30340;&#32493;&#28857; ev-sequence-continue &#65288;&#27714;&#20540;&#20313;&#19979;&#30340;&#34920;&#36798;&#24335;&#65289; </span>
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label eval-dispatch<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#27714;&#20540;&#24403;&#21069;&#34920;&#36798;&#24335;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#24403;&#21069;&#34920;&#36798;&#24335;&#27714;&#20540;&#23436;&#27605;</span>
+ev-sequence-continue 
+<span style="color: #696969;">(</span>restore env<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#24674;&#22797;&#21407;&#26469;&#30340;&#29615;&#22659;</span>
+<span style="color: #696969;">(</span>restore unev<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#24674;&#22797;&#34920;&#36798;&#24335;&#21015;&#34920;</span>
+<span style="color: #696969;">(</span>assign unev <span style="color: #696969;">(</span>op rest-exps<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg unev<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#20174;&#34920;&#36798;&#24335;&#21015;&#34920;&#21435;&#25481;&#24050;&#32463;&#27714;&#20540;&#36807;&#30340;&#34920;&#36798;&#24335; -&gt; unev &#23492;&#23384;&#22120;</span>
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label ev-sequence<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#32487;&#32493;&#25191;&#34892;&#20313;&#19979;&#34920;&#36798;&#24335;&#24207;&#21015;&#27714;&#20540;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#20570;&#24207;&#21015;&#20013;&#26368;&#21518;&#19968;&#20010;&#34920;&#36798;&#24335;&#30340;&#27714;&#20540;</span>
+ev-sequence-last-exp 
+<span style="color: #696969;">(</span>restore continue<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">&#24674;&#22797;&#32493;&#28857;&#23492;&#23384;&#22120;&#65288;&#35843;&#29992; ev-sequence &#21069;&#30340; continue &#23492;&#23384;&#22120;&#20013;&#30340;&#20540;&#65289;</span>
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label eval-dispatch<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#27714;&#20540;&#26368;&#21518;&#19968;&#20010;&#34920;&#36798;&#24335;</span>
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org805b9d1" class="outline-5">
+<h5 id="org805b9d1">尾递归</h5>
+<div class="outline-text-5" id="text-org805b9d1">
+<p>
+前面说过，下面过程的形式是递归，但产生 <span class="underline">线性迭代</span> 计算：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">sqrt-iter</span> guess x<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>good-enough? guess x<span style="color: #696969;">)</span>
+      guess
+      <span style="color: #696969;">(</span>sqrt-iter <span style="color: #696969;">(</span>improve guess x<span style="color: #696969;">)</span>
+                 x<span style="color: #696969;">)))</span>
+</pre>
+</div>
+
+<p>
+原因是 <b>调用自身时不用保存任何信息</b> ，因此存储需求是常量。如果一个求值器在执行这种过程时可以 <b>不分配存储</b> ，称该求值器是 <b>尾递归</b> 的
+</p>
+<pre class="example">
+       元循环求值器是否尾递归的情况看不清，因为其求值细节依赖于基础系统
+
+       对于现在这个求值器，情况可以看得很清楚：
+       现在实现的求值器是尾递归的，因为它直接转去求值序列的最后一个表达式，没在栈里保存任何信息，没使用新的空间
+</pre>
+
+<p>
+如果不要尾递归（优化），可以统一处理所有子表达式（包括最后的子表达式）。得到的代码简单些，但丧失了尾递归性质：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme">ev-sequence
+<span style="color: #696969;">(</span>test <span style="color: #696969;">(</span>op no-more-exps?<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg unev<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#26816;&#26597;&#24207;&#21015;&#34920;&#36798;&#24335;&#26159;&#21542;&#20026;&#31354;</span>
+<span style="color: #696969;">(</span>branch <span style="color: #696969;">(</span>label ev-sequence-end<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#22914;&#26524;&#20026;&#31354;&#21017;&#36339;&#36716;&#25191;&#34892; ev-serquence-end &#65288;&#36820;&#22238;&#21407;&#26469;&#30340;&#32493;&#28857;&#65289;</span>
+<span style="color: #696969;">(</span>assign exp <span style="color: #696969;">(</span>op first-exp<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg unev<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#33719;&#24471;&#31532;&#19968;&#20010;&#34920;&#36798;&#24335; -&gt; exp </span>
+<span style="color: #696969;">(</span>save unev<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#24207;&#21015;&#34920;&#36798;&#24335;&#20837;&#26632;</span>
+<span style="color: #696969;">(</span>save env<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#29615;&#22659;&#20837;&#26632;</span>
+<span style="color: #696969;">(</span>assign continue <span style="color: #696969;">(</span>label ev-sequence-continue<span style="color: #696969;">))</span> 
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label eval-dispatch<span style="color: #696969;">))</span>
+ev-sequence-continue
+<span style="color: #696969;">(</span>restore env<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#29615;&#22659;&#20986;&#26632;</span>
+<span style="color: #696969;">(</span>restore unev<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#24207;&#21015;&#34920;&#36798;&#24335;&#20986;&#26632;</span>
+<span style="color: #696969;">(</span>assign unev <span style="color: #696969;">(</span>op rest-exps<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg unev<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#20002;&#25481;&#24050;&#32463;&#27714;&#20540;&#36807;&#30340;&#34920;&#36798;&#24335;</span>
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label ev-sequence<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#32487;&#32493;&#27714;&#20540;&#19979;&#19968;&#20010;&#34920;&#21333;&#24335;</span>
+ev-sequence-end <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#25152;&#26377;&#23376;&#34920;&#36798;&#24335;&#37117;&#24050;&#23436;&#25104;&#27714;&#20540; </span>
+<span style="color: #696969;">(</span>restore continue<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#24674;&#22797;&#35843;&#29992; ev-sequence &#21069;&#30340;&#32493;&#28857;&#23492;&#23384;&#22120;&#30340;&#20540;</span>
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>reg continue<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#36339;&#36716;&#21040;&#35843;&#29992; ev-sequence &#21069;&#30340;&#32493;&#28857;</span>
+</pre>
+</div>
+
+<p>
+看上去这和前面求值器只有一点区别：
+</p>
+<ul class="org-ul">
+<li>前面的求值器：最后一个表达式的求值并不和其他的表达式求值在一个循环中</li>
+<li>这里的求值器：最后一个表达式的求值和其他表达式是统一处理的（包含在一个save-restore的循环中）</li>
+</ul>
+
+<pre class="example">
+虽然对于相同的表达式，两个求值器的结果是一致的
+
+但是非递归求值器必须先做完最后一个表达式
+然后返回到前一个表达式
+然后返回到再前前一个表达式
+....
+</pre>
+
+<p>
+对于某些过程来说，是否尾递归可能非常致命： 
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">count</span> n<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>newline<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>display n<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>count <span style="color: #696969;">(</span>+ n 1<span style="color: #696969;">)))</span>
+</pre>
+</div>
+<ul class="org-ul">
+<li>尾递归：会一直迭代下去</li>
+<li>非尾递归：由于栈空间不够，会爆栈</li>
+</ul>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org11dbf11" class="outline-4">
+<h4 id="org11dbf11">条件表达式</h4>
+<div class="outline-text-4" id="text-org11dbf11">
+<p>
+if 表达式：
+</p>
+<ul class="org-ul">
+<li>先求值其 <span class="underline">谓词</span> 部分，基于其值确定随后的求值</li>
+<li>求值谓词之前保存 <span class="underline">整个 if 表达式</span> 以便后面使用，也要保存 <span class="underline">环境</span> 和 <span class="underline">继续点</span></li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-scheme">ev-if
+  <span style="color: #696969;">(</span>save exp<span style="color: #696969;">)</span>                    <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#20445;&#23384;&#25972;&#20010; if &#34920;&#36798;&#24335;&#20379;&#21518;&#38754;&#20351;&#29992;</span>
+  <span style="color: #696969;">(</span>save env<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>save continue<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>assign continue <span style="color: #696969;">(</span>label ev-if-decide<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#35859;&#35789;&#27714;&#20540;&#21518;&#65292;&#36716;&#32780;&#25191;&#34892; ev-if-decide</span>
+  <span style="color: #696969;">(</span>assign exp <span style="color: #696969;">(</span>op if-predicate<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg exp<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#33719;&#24471;&#35859;&#35789;&#34920;&#36798;&#24335;</span>
+  <span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label eval-dispatch<span style="color: #696969;">))</span>  <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">&#23545;&#35859;&#35789;&#36827;&#34892;&#27714;&#20540;</span>
+</pre>
+</div>
+
+<p>
+根据谓词表达式的结果跳转：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme">ev-if-decide
+<span style="color: #696969;">(</span>restore continue<span style="color: #696969;">)</span>
+<span style="color: #696969;">(</span>restore env<span style="color: #696969;">)</span>
+<span style="color: #696969;">(</span>restore exp<span style="color: #696969;">)</span>
+<span style="color: #696969;">(</span>test <span style="color: #696969;">(</span>op true?<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg val<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">; &#26816;&#27979;&#32467;&#26524;&#26159;&#21542;&#20026;&#30495;</span>
+<span style="color: #696969;">(</span>branch <span style="color: #696969;">(</span>label ev-if-consequent<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#26159;&#30495;&#30340;&#26102;&#20505;&#65292;&#36186;&#21462;&#25191;&#34892; ev-if-consequent </span>
+ev-if-alternative
+<span style="color: #696969;">(</span>assign exp <span style="color: #696969;">(</span>op if-alternative<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg exp<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#33719;&#24471; if &#34920;&#36798;&#24335;&#20013;&#8220;&#35859;&#35789;&#20026;&#20551;&#8221;&#23545;&#24212;&#30340;&#34920;&#36798;&#24335; -&gt; exp </span>
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label eval-dispatch<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#23545; alternative &#34920;&#36798;&#24335;&#36827;&#34892;&#27714;&#20540;</span>
+ev-if-consequent
+<span style="color: #696969;">(</span>assign exp <span style="color: #696969;">(</span>op if-consequent<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg exp<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#33719;&#24471; if &#34920;&#36798;&#24335;&#20013;&#8220;&#35859;&#35789;&#20026;&#30495;&#8221;&#23545;&#24212;&#30340;&#34920;&#36798;&#24335; -&gt; exp </span>
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label eval-dispatch<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#23545; consequent &#34920;&#36798;&#24335;&#36827;&#34892;&#27714;&#20540;</span>
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org74c06b4" class="outline-4">
+<h4 id="org74c06b4">赋值表达式</h4>
+<div class="outline-text-4" id="text-org74c06b4">
+<p>
+赋值表达式用下面代码段处理：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme">ev-assignment
+<span style="color: #696969;">(</span>assign unev <span style="color: #696969;">(</span>op assignment-variable<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg exp<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#36171;&#20540;&#34920;&#36798;&#24335;&#30340;&#21464;&#37327;&#21517; -&gt; unev &#23492;&#23384;&#22120;</span>
+<span style="color: #696969;">(</span>save unev<span style="color: #696969;">)</span>                   <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#21464;&#37327;&#21517;&#21387;&#26632;&#20026;&#20197;&#21518;&#20351;&#29992;</span>
+<span style="color: #696969;">(</span>assign exp <span style="color: #696969;">(</span>op assignment-value<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg exp<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#36171;&#20540;&#34920;&#36798;&#24335;&#30340;&#8220;&#20540;&#34920;&#36798;&#24335;&#8221; -&gt; exp &#23492;&#23384;&#22120;</span>
+<span style="color: #696969;">(</span>save env<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#29615;&#22659;&#20837;&#26632;</span>
+<span style="color: #696969;">(</span>save continue<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#32493;&#28857;&#21387;&#26632;</span>
+<span style="color: #696969;">(</span>assign continue <span style="color: #696969;">(</span>label ev-assignment-1<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#8220;&#21464;&#37327;&#20540;&#34920;&#36798;&#24335;&#8221;&#27714;&#20540;&#20197;&#21518;&#36716;&#32780;&#25191;&#34892; ev-assignment-1 </span>
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label eval-dispatch<span style="color: #696969;">))</span>  <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#23545;&#20540;&#34920;&#36798;&#24335;&#36827;&#34892;&#27714;&#20540;</span>
+ev-assignment-1
+<span style="color: #696969;">(</span>restore continue<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#32493;&#28857;&#24674;&#22797;</span>
+<span style="color: #696969;">(</span>restore env<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#29615;&#22659;&#24674;&#22797;</span>
+<span style="color: #696969;">(</span>restore unev<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#21464;&#37327;&#24674;&#22797;</span>
+<span style="color: #696969;">(</span>perform
+ <span style="color: #696969;">(</span>op set-variable-value!<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg unev<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg val<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg env<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#25191;&#34892;&#36171;&#20540;&#25805;&#20316;(set-variable-value!) &#65292;&#20462;&#25913;&#29615;&#22659;&#20013;&#30340;&#21464;&#37327;&#32465;&#23450;</span>
+<span style="color: #696969;">(</span>assign val <span style="color: #696969;">(</span>const ok<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#24120;&#37327;"ok" -&gt; &#32467;&#26524;&#23492;&#23384;&#22120; val </span>
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>reg continue<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#32487;&#32493;&#25191;&#34892;&#35843;&#29992; ev-assignment &#21069;&#30340;&#32493;&#28857;</span>
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org657f1cb" class="outline-4">
+<h4 id="org657f1cb">定义表达式</h4>
+<div class="outline-text-4" id="text-org657f1cb">
+<p>
+定义表达式和赋值处理类似：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme">ev-definition
+  <span style="color: #696969;">(</span>assign unev <span style="color: #696969;">(</span>op definition-variable<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg exp<span style="color: #696969;">))</span>
+  <span style="color: #696969;">(</span>save unev<span style="color: #696969;">)</span>                   
+  <span style="color: #696969;">(</span>assign exp <span style="color: #696969;">(</span>op definition-value<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg exp<span style="color: #696969;">))</span>
+  <span style="color: #696969;">(</span>save env<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>save continue<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>assign continue <span style="color: #696969;">(</span>label ev-definition-1<span style="color: #696969;">))</span>
+  <span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label eval-dispatch<span style="color: #696969;">))</span>  
+ev-definition-1
+  <span style="color: #696969;">(</span>restore continue<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>restore env<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>restore unev<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>perform
+   <span style="color: #696969;">(</span>op define-variable!<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg unev<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg val<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg env<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#35843;&#29992; scheme &#23454;&#29616;&#30340;&#23450;&#20041;&#25805;&#20316;(define-variable!) &#23454;&#29616;&#22312;&#29615;&#22659;&#20013;&#23450;&#20041;&#21464;&#37327;</span>
+  <span style="color: #696969;">(</span>assign val <span style="color: #696969;">(</span>const ok<span style="color: #696969;">))</span>
+  <span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>reg continue<span style="color: #696969;">))</span>
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org6476f43" class="outline-4">
+<h4 id="org6476f43">驱动循环</h4>
+<div class="outline-text-4" id="text-org6476f43">
+<p>
+要理解求值器的行为，需要执行它，监视其行为。先做一个驱动循环：
+</p>
+<ol class="org-ol">
+<li>打印提示语</li>
+<li>读取输入</li>
+<li>调用eval-dispatch 来对输入进行求值</li>
+<li>打印求值结果</li>
+<li>重复循环</li>
+</ol>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;;;;;;;;;;;;;;;;;;;;;;;;;;;</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#26174;&#31034;&#27714;&#20540;&#22120;&#30340; repl &#24490;&#29615; ;;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;;;;;;;;;;;;;;;;;;;;;;;;;;;</span>
+read-eval-print-loop
+<span style="color: #696969;">(</span>perform <span style="color: #696969;">(</span>op initialize-stack<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#21021;&#22987;&#21270;&#26632;</span>
+<span style="color: #696969;">(</span>perform
+ <span style="color: #696969;">(</span>op prompt-for-input<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>const <span style="color: #deb887;">";;; EC-Eval input:"</span><span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#25171;&#21360;&#25552;&#31034;&#35821;</span>
+<span style="color: #696969;">(</span>assign exp <span style="color: #696969;">(</span>op read<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#35835;&#21462;&#36755;&#20837; -&gt; exp &#23492;&#23384;&#22120;</span>
+<span style="color: #696969;">(</span>assign env <span style="color: #696969;">(</span>op get-global-environment<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#35835;&#21462; global env -&gt; env &#23492;&#23384;&#22120;</span>
+<span style="color: #696969;">(</span>assign continue <span style="color: #696969;">(</span>label print-result<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">print-result &#25351;&#20196;&#26631;&#21495; -&gt; continue &#23492;&#23384;&#22120;</span>
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label eval-dispatch<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#36186;&#21462;&#25191;&#34892; eval-dispatch &#23545; env &#23492;&#23384;&#22120;&#20013;&#30340;&#34920;&#36798;&#24335;&#36827;&#34892;&#27714;&#20540;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#25171;&#21360;&#27714;&#20540;&#32467;&#26524;</span>
+print-result 
+<span style="color: #696969;">(</span>perform
+ <span style="color: #696969;">(</span>op announce-output<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>const <span style="color: #deb887;">";;; EC-Eval value:"</span><span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#25171;&#21360;&#25552;&#31034;&#35821;</span>
+<span style="color: #696969;">(</span>perform <span style="color: #696969;">(</span>op user-print<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg val<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#35843;&#29992; user-print &#30495;&#23454;&#25171;&#21360; val&#23492;&#23384;&#22120;&#20013;&#30340;&#27714;&#20540;&#32467;&#26524;</span>
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label read-eval-print-loop<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#37325;&#26032;&#24320;&#22987; repl &#24490;&#29615;</span>
+</pre>
+</div>
+
+<p>
+需要处理遇到的错误，出现错误时打印信息并回到驱动循环：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme">     <span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#26410;&#30693;&#34920;&#36798;&#24335;&#31867;&#22411;</span>
+unknown-expression-type
+<span style="color: #696969;">(</span>assign val <span style="color: #696969;">(</span>const unknown-expression-type-error<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label signal-error<span style="color: #696969;">))</span>
+     <span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#26410;&#30693;&#36807;&#31243;&#31867;&#22411;</span>
+unknown-procedure-type
+<span style="color: #696969;">(</span>restore continue<span style="color: #696969;">)</span>    <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">clean up stack (from apply-dispatch)</span>
+<span style="color: #696969;">(</span>assign val <span style="color: #696969;">(</span>const unknown-procedure-type-error<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label signal-error<span style="color: #696969;">))</span>
+     <span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#25171;&#21360;&#20986;&#38169;&#31867;&#22411;</span>
+signal-error
+<span style="color: #696969;">(</span>perform <span style="color: #696969;">(</span>op user-print<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg val<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label read-eval-print-loop<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#22238;&#21040;&#22522;&#26412;&#27714;&#20540;&#24490;&#29615;&#26102;&#23558;&#26632;&#32622;&#31354;&#65292;&#37325;&#26032;&#24320;&#22987;&#26032;&#19968;&#27425;&#24490;&#29615;</span>
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org6159b71" class="outline-4">
+<h4 id="org6159b71">构造求值器对应的寄存器机器模型</h4>
+<div class="outline-text-4" id="text-org6159b71">
+<p>
+为完成这一机器，需要把本节的所有代码收集起来，调用前面寄存器机器模拟器的操作，构造一个机器模型
+</p>
+
+<ul class="org-ul">
+<li>创建机器的操作列表，把所有要用的操作加入（取自元循环求值器）：</li>
+</ul>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">eceval-operations</span>
+  <span style="color: #696969;">(</span>list <span style="color: #696969;">(</span>list 'self-evaluating? self-evaluating<span style="color: #696969;">)</span>
+        <span style="color: #98f5ff;">&lt;&#26426;&#22120;&#30340;&#23436;&#25972;&#25805;&#20316;&#34920;&gt;</span><span style="color: #696969;">))</span> 
+</pre>
+</div>
+
+<ul class="org-ul">
+<li>构造机器模型的代码框架，其中应填入前面求值器的所有代码：</li>
+</ul>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">eceval</span>
+  <span style="color: #696969;">(</span>make-machine
+   '<span style="color: #696969;">(</span>exp env val proc argl continue unev<span style="color: #696969;">)</span>
+   eceval-operations
+   '<span style="color: #696969;">(</span>read-eval-print-loop
+     <span style="color: #98f5ff;">&lt;&#19978;&#38754;&#32473;&#20986;&#30340;&#27714;&#20540;&#22120;&#26426;&#22120;&#20195;&#30721;&gt;</span><span style="color: #696969;">)))</span>
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgd5cdca1" class="outline-3">
+<h3 id="orgd5cdca1">显示求值器的运行</h3>
+<div class="outline-text-3" id="text-orgd5cdca1">
+<p>
+运行前创建环境，而后启动这个求值器：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #daa520; font-weight: bold;">the-global-environment</span> <span style="color: #696969;">(</span>setup-environment<span style="color: #696969;">))</span>
+</pre>
+</div>
+
+<pre class="example">
+(start eceval)
+
+;;; EC-Eval input:
+(define (append x y)
+  (if (null? x)
+      y
+      (cons (car x)
+	    (append (cdr x) y))))
+
+;;; EC-Eval value:
+ok
+
+;;; EC-Eval input:
+(append '(a b c) '(d e f))
+
+;;; EC-Eval value:
+(a b c d e f)
+</pre>
+</div>
+
+<div id="outline-container-org33b1252" class="outline-4">
+<h4 id="org33b1252">监视求值器的执行</h4>
+<div class="outline-text-4" id="text-org33b1252">
+<p>
+在驱动循环里增加一段代码：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme">print-result
+  <span style="color: #696969;">(</span>perform <span style="color: #696969;">(</span>op print-stack-statistics<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#22312;&#25805;&#20316;&#34920;&#37324;&#21152;&#20837;&#32479;&#35745;&#25805;&#20316;</span>
+  <span style="color: #696969;">(</span>perform
+   <span style="color: #696969;">(</span>op announce-output<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>const <span style="color: #deb887;">";;; EC-Eval value:"</span><span style="color: #696969;">))</span>
+<span style="color: #5f9ea0; font-style: italic;">;;;  </span><span style="color: #5f9ea0; font-style: italic;">... ; same as before</span>
+</pre>
+</div>
+
+<p>
+监视实例：
+</p>
+<pre class="example">
+;;; EC-Eval input:
+(define (factorial n)
+  (if (= n 1)
+      1
+      (* (factorial (- n 1)) n)))
+(total-pushes = 3 maximum-depth = 3)
+
+;;; EC-Eval value:
+ok
+
+;;; EC-Eval input:
+(factorial 5)
+
+(total-pushes = 144 maximum-depth = 28)
+;;; EC-Eval value:
+120
+</pre>
+</div>
 </div>
 </div>
 </div>
