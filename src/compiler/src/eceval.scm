@@ -56,13 +56,45 @@
    (list 'get-global-environment get-global-environment))
   )
 
-定义显示求值器模型
+;;;;;;;;;;;;;;;;;;;;;;;;
+;; 定义显示求值器模型 ;;
+;;;;;;;;;;;;;;;;;;;;;;;;
 (define eceval
   (make-machine
    '(exp env val proc argl continue unev) ;; 7个寄存器
    eceval-operations ;; scheme 原生实现的操作
    ;; 要汇编的指令集代码
    '(
+     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+     ;; 显示求值器的 repl 循环 ;;
+     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+     read-eval-print-loop
+     (perform (op initialize-stack)) ;; 初始化栈
+     (perform
+      (op prompt-for-input) (const ";;; EC-Eval input:")) ;; 打印提示语
+     (assign exp (op read)) ;; 读取输入 -> exp 寄存器
+     (assign env (op get-global-environment)) ;; 读取 global env -> env 寄存器
+     (assign continue (label print-result)) ;; print-result 指令标号 -> continue 寄存器
+     (goto (label eval-dispatch)) ;; 赚取执行 eval-dispatch 对 env 寄存器中的表达式进行求值
+     ;;; 打印求值结果
+     print-result 
+     (perform
+      (op announce-output) (const ";;; EC-Eval value:")) ;; 打印提示语
+     (perform (op user-print) (reg val)) ;; 调用 user-print 真实打印 val寄存器中的求值结果
+     (goto (label read-eval-print-loop)) ;; 重新开始 repl 循环
+     ;;; 未知表达式类型
+     unknown-expression-type
+     (assign val (const unknown-expression-type-error))
+     (goto (label signal-error))
+     ;;; 未知过程类型
+     unknown-procedure-type
+     (restore continue)    ; clean up stack (from apply-dispatch)
+     (assign val (const unknown-procedure-type-error))
+     (goto (label signal-error))
+     ;;; 打印出错类型
+     signal-error
+     (perform (op user-print) (reg val))
+     (goto (label read-eval-print-loop)) ;;; 回到基本求值循环时将栈置空，重新开始新一次循环
      ;;;;;;;;;;;;;;;;;;;;
      ;; 求值器核心代码 ;;
      ;;;;;;;;;;;;;;;;;;;;
@@ -184,4 +216,95 @@
              (reg unev) (reg argl) (reg env)) ;; 扩充运算符对象的环境：绑定形参表和实参表
      (assign unev (op procedure-body) (reg proc)) ;; 取出运算符对象的过程体 -> unev 
      (goto (label ev-sequence)) ;; 调用“序列求值”代码入口
+     ;;;;;;;;;;;;;;;;;;;;
+     ;; 序列表达式求值 ;;
+     ;;;;;;;;;;;;;;;;;;;;
+     ;;; begin 表达式的入口
+     ev-begin
+     (assign unev (op begin-actions) (reg exp)) ;; 取出 begin 的实际序列
+     (save continue)  ;;  保存求值完的继续点，与其他入口一致
+     (goto (label ev-sequence))
+     ;;; 序列表达式求值入口：支持尾递归！！！
+     ev-sequence ;; 此时 unev 寄存器中是待求值的表达式序列
+     (assign exp (op first-exp) (reg unev)) ;; 取出序列中第一个表达式 
+     (test (op last-exp?) (reg unev)) ;; 测试是否是最后一个表达式
+     (branch (label ev-sequence-last-exp)) ;; 跳转到最后一个表达式的特殊处理 ev-sequence-last-exp 
+     (save unev) ;; 保存表达式序列
+     (save env) ;; 保存执行表达式的环境
+     (assign continue (label ev-sequence-continue)) ;; 设置求完当前表达式后的续点 ev-sequence-continue （求值余下的表达式） 
+     (goto (label eval-dispatch)) ;; 求值当前表达式
+     ;;; 当前表达式求值完毕
+     ev-sequence-continue 
+     (restore env) ;; 恢复原来的环境
+     (restore unev) ;; 恢复表达式列表
+     (assign unev (op rest-exps) (reg unev)) ;; 从表达式列表去掉已经求值过的表达式 -> unev 寄存器
+     (goto (label ev-sequence)) ;; 继续执行余下表达式序列求值
+     ;;; 做序列中最后一个表达式的求值
+     ev-sequence-last-exp 
+     (restore continue) ;;  恢复续点寄存器（调用 ev-sequence 前的 continue 寄存器中的值）
+     (goto (label eval-dispatch)) ;; 求值最后一个表达式
+     ;;;;;;;;;;;;;;;;;;;;
+     ;; 条件表达式求值 ;;
+     ;;;;;;;;;;;;;;;;;;;;
+     ;;; 条件表达式入口
+     ev-if
+     (save exp)                    ; 保存整个 if 表达式供后面使用
+     (save env)
+     (save continue)
+     (assign continue (label ev-if-decide)) ;; 谓词求值后，转而执行 ev-if-decide
+     (assign exp (op if-predicate) (reg exp)) ;; 获得谓词表达式
+     (goto (label eval-dispatch))  ; 对谓词进行求值
+     ;;; 根据谓词求值结果跳转
+     ev-if-decide
+     (restore continue)
+     (restore env)
+     (restore exp)
+     (test (op true?) (reg val)) ;; ; 检测结果是否为真
+     (branch (label ev-if-consequent)) ;; 是真的时候，赚取执行 ev-if-consequent 
+     ev-if-alternative
+     (assign exp (op if-alternative) (reg exp)) ;; 获得 if 表达式中“谓词为假”对应的表达式 -> exp 
+     (goto (label eval-dispatch)) ;; 对 alternative 表达式进行求值
+     ev-if-consequent
+     (assign exp (op if-consequent) (reg exp)) ;; 获得 if 表达式中“谓词为真”对应的表达式 -> exp 
+     (goto (label eval-dispatch)) ;; 对 consequent 表达式进行求值
+     ;;;;;;;;;;;;;;;;;;;;
+     ;; 赋值表达式求值 ;;
+     ;;;;;;;;;;;;;;;;;;;;
+     ev-assignment
+     (assign unev (op assignment-variable) (reg exp)) ;; 赋值表达式的变量名 -> unev 寄存器
+     (save unev)                   ;; 变量名压栈为以后使用
+     (assign exp (op assignment-value) (reg exp)) ;; 赋值表达式的“值表达式” -> exp 寄存器
+     (save env) ;; 环境入栈
+     (save continue) ;; 续点压栈
+     (assign continue (label ev-assignment-1)) ;; “变量值表达式”求值以后转而执行 ev-assignment-1 
+     (goto (label eval-dispatch))  ;; 对值表达式进行求值
+     ev-assignment-1
+     (restore continue) ;; 续点恢复
+     (restore env) ;; 环境恢复
+     (restore unev) ;; 变量恢复
+     (perform
+      (op set-variable-value!) (reg unev) (reg val) (reg env)) ;; 执行赋值操作(set-variable-value!) ，修改环境中的变量绑定
+     (assign val (const ok)) ;; 常量"ok" -> 结果寄存器 val 
+     (goto (reg continue)) ;; 继续执行调用 ev-assignment 前的续点
+     ;;;;;;;;;;;;;;;;;;;;
+     ;; 定义表达式求值 ;;
+     ;;;;;;;;;;;;;;;;;;;;
+     ev-definition
+     (assign unev (op definition-variable) (reg exp))
+     (save unev)                   
+     (assign exp (op definition-value) (reg exp))
+     (save env)
+     (save continue)
+     (assign continue (label ev-definition-1))
+     (goto (label eval-dispatch))  
+     ev-definition-1
+     (restore continue)
+     (restore env)
+     (restore unev)
+     (perform
+      (op define-variable!) (reg unev) (reg val) (reg env)) ;; 调用 scheme 实现的定义操作(define-variable!) 实现在环境中定义变量
+     (assign val (const ok))
+     (goto (reg continue))
      ))) 
+
+'(EXPLICIT CONTROL EVALUATOR LOADED)
