@@ -236,7 +236,17 @@ for the JavaScript code in this tag.
 <ul>
 <li><a href="#orgd59c735">解释和编译</a></li>
 <li><a href="#orga7b87fd">机制</a></li>
-<li><a href="#orgc7c2d6f">结构</a></li>
+<li><a href="#orga07357a">框架</a>
+<ul>
+<li><a href="#org48b356b">目标寄存器和连接描述符</a></li>
+<li><a href="#org7e6c824">指令序列和堆栈使用</a>
+<ul>
+<li><a href="#org80a2722">指令序列的构造</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#org7ac8a7e">表达式编译</a></li>
 </ul>
 </div>
 </div>
@@ -277,13 +287,13 @@ for the JavaScript code in this tag.
 <h2 id="orgd59c735">解释和编译</h2>
 <div class="outline-text-2" id="text-orgd59c735">
 <pre class="example">
-  显式控制求值器采用的是解释策略：
+    显式控制求值器采用的是解释策略：
 
-  用本机语言写一个解释器，它配置该机器使之能执行源语言（与本机语言完全不同）的程序
+    用本机语言写一个解释器，它配置该机器使之能执行源语言（与本机语言完全不同）的程序
 
-  源语言的基本过程采用本机语言写出的子程序库实现。被解释程序（源程序）用数据结构表示
+    源语言的基本过程采用本机语言写出的子程序库实现。被解释程序（源程序）用数据结构表示
 
-  解释器遍历表示程序的数据结构，分析源程序的情况，模拟其行为（需要利用库里的子程序）
+    解释器遍历表示程序的数据结构，分析源程序的情况，模拟其行为（需要利用库里的子程序）
 </pre>
 <p>
 另一种策略是 <b>编译</b> ：针对给定 <span class="underline">源语言</span> 和 <span class="underline">给定机器</span> 的编译器，将 <span class="underline">源程序</span>  <b>翻译</b> 为 <span class="underline">本机语言的等价程序</span> （目标程序），然后就可以让目标程序自己运行了
@@ -299,9 +309,9 @@ for the JavaScript code in this tag.
 </ul>
 
 <pre class="example">
-  编译和解释优势互补，现代开发环境推崇混合策略。Lisp 解释器一般都允许解释性程序和编译性程序相互调用：
+    编译和解释优势互补，现代开发环境推崇混合策略。Lisp 解释器一般都允许解释性程序和编译性程序相互调用：
 
-  这样已完成的部分可以通过编译取得效率优势；正在开发而不断变化的部分通过解释执行
+    这样已完成的部分可以通过编译取得效率优势；正在开发而不断变化的部分通过解释执行
 </pre>
 
 <p>
@@ -324,7 +334,7 @@ for the JavaScript code in this tag.
 </ul>
 
 <pre class="example">
-  从一个源程序生成的目标程序在执行中所做的寄存器操作，本质上就是解释器求值同一个源程序时执行的那些操作
+    从一个源程序生成的目标程序在执行中所做的寄存器操作，本质上就是解释器求值同一个源程序时执行的那些操作
 </pre>
 
 <p>
@@ -332,12 +342,12 @@ for the JavaScript code in this tag.
 </p>
 
 <pre class="example">
-  以求值 (f 84 96) 为例：
+    以求值 (f 84 96) 为例：
 
-  解释器每次求值表达式时都要做表达式分类（发现是过程应用），并检查表示表达式的表是否结束（弄清有两个运算对象）
+    解释器每次求值表达式时都要做表达式分类（发现是过程应用），并检查表示表达式的表是否结束（弄清有两个运算对象）
 
-  编译器只在编译源程序并生成指令序列时做一次表达式分析：
-  产生的目标代码里只有对运算符和运算对象求值的指令，以及将过程（保存在 proc）应用于实参（保存在 argl）的指令
+    编译器只在编译源程序并生成指令序列时做一次表达式分析：
+    产生的目标代码里只有对运算符和运算对象求值的指令，以及将过程（保存在 proc）应用于实参（保存在 argl）的指令
 </pre>
 
 <ul class="org-ul">
@@ -369,12 +379,240 @@ for the JavaScript code in this tag.
 </ul>
 
 <pre class="example">
-  这里并不准备特别强调各种优化，主要目标是在一个简化（但仍然很有意思）的上下文中展示编译过程的各种情况
+    这里并不准备特别强调各种优化，主要目标是在一个简化（但仍然很有意思）的上下文中展示编译过程的各种情况
 </pre>
 </div>
 </div>
-<div id="outline-container-orgc7c2d6f" class="outline-2">
-<h2 id="orgc7c2d6f">结构</h2>
+<div id="outline-container-orga07357a" class="outline-2">
+<h2 id="orga07357a">框架</h2>
+<div class="outline-text-2" id="text-orga07357a">
+<ul class="org-ul">
+<li>工作方式类似 <span class="underline">分析求值器</span> ，但生成的是能在 <span class="underline">寄存器机器</span> 上运行的 <b>指令序列</b></li>
+<li><span class="underline">表达式的语法过程</span> 就是 <span class="underline">元循环求值器</span> 用的 <b>Scheme过程</b></li>
+<li><span class="underline">显式控制求值器</span> 假定语法过程是 <b>寄存器机器操作</b></li>
+</ul>
+
+<p>
+<b>compile</b> 做最高层分派（对应 eval 或 analyze），按 <span class="underline">表达式语法类型</span> 指派 <span class="underline">特定代码生成器</span> ：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">compile</span> exp target linkage<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">cond</span> <span style="color: #696969;">((</span>self-evaluating? exp<span style="color: #696969;">)</span>
+         <span style="color: #696969;">(</span>compile-self-evaluating exp target linkage<span style="color: #696969;">))</span>
+        <span style="color: #696969;">((</span>quoted? exp<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>compile-quoted exp target linkage<span style="color: #696969;">))</span>
+        <span style="color: #696969;">((</span>variable? exp<span style="color: #696969;">)</span>
+         <span style="color: #696969;">(</span>compile-variable exp target linkage<span style="color: #696969;">))</span>
+        <span style="color: #696969;">((</span>assignment? exp<span style="color: #696969;">)</span>
+         <span style="color: #696969;">(</span>compile-assignment exp target linkage<span style="color: #696969;">))</span>
+        <span style="color: #696969;">((</span>definition? exp<span style="color: #696969;">)</span>
+         <span style="color: #696969;">(</span>compile-definition exp target linkage<span style="color: #696969;">))</span>
+        <span style="color: #696969;">((</span>if? exp<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>compile-if exp target linkage<span style="color: #696969;">))</span>
+        <span style="color: #696969;">((</span>lambda? exp<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>compile-lambda exp target linkage<span style="color: #696969;">))</span>
+        <span style="color: #696969;">((</span>begin? exp<span style="color: #696969;">)</span>
+         <span style="color: #696969;">(</span>compile-sequence <span style="color: #696969;">(</span>begin-actions exp<span style="color: #696969;">)</span>
+                           target
+                           linkage<span style="color: #696969;">))</span>
+        <span style="color: #696969;">((</span>cond? exp<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>compile <span style="color: #696969;">(</span>cond-&gt;if exp<span style="color: #696969;">)</span> target linkage<span style="color: #696969;">))</span>
+        <span style="color: #696969;">((</span>application? exp<span style="color: #696969;">)</span>
+         <span style="color: #696969;">(</span>compile-application exp target linkage<span style="color: #696969;">))</span>
+        <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">else</span>
+         <span style="color: #696969;">(</span>error <span style="color: #deb887;">"Unknown expression type -- COMPILE"</span> exp<span style="color: #696969;">))))</span>
+</pre>
+</div>
+</div>
+<div id="outline-container-org48b356b" class="outline-3">
+<h3 id="org48b356b">目标寄存器和连接描述符</h3>
+<div class="outline-text-3" id="text-org48b356b">
+<p>
+compile 及其调用的代码生成器都另有两个参数：
+</p>
+<ol class="org-ol">
+<li>target :  所 <span class="underline">生成代码段</span> 将 <span class="underline">表达式的值</span> 存入的 <span class="underline">寄存器</span></li>
+<li>linkage : 连接描述符，描述表达式的编译结果代码完成后如何继续，有几种可能动作：
+<ul class="org-ul">
+<li>连接描述符 <b>next</b> ：继续序列里的下一条指令</li>
+<li>连接描述符 <b>return</b> ：从被编译的过程返回</li>
+<li><b>指定标号</b> 作为连接描述符：跳到一个命名入口点</li>
+</ul></li>
+</ol>
+
+<pre class="example">
+以 val 寄存器为目标以 next 为连接描述符编译表达式 '5' 产生：
+(assign val (const 5)) ;; 接着执行下一指令
+
+以 return 作为连接描述符，则生成：
+(assign val (const 5))
+(goto (reg continue)) ;; 要求从一个过程返回
+</pre>
+</div>
+</div>
+<div id="outline-container-org7e6c824" class="outline-3">
+<h3 id="org7e6c824">指令序列和堆栈使用</h3>
+<div class="outline-text-3" id="text-org7e6c824">
+<p>
+代码生成器返回由 <span class="underline">被编译表达式</span> 生成的 <span class="underline">目标代码</span> 的 <span class="underline">指令序列</span> 
+</p>
+
+<p>
+复合表达式的代码是通过 <b>组合</b> <span class="underline">子表达式的代码</span> 建立的。组合指令序列的最简单方式是调用 <span class="underline">append-instruction-sequences</span> 过程：直接 <b>顺序</b> 拼接任意数目的参数指令序列，返回组合指令序列
+</p>
+
+<pre class="example">
+如果 &lt;seq1&gt; 和 &lt;seq2&gt; 都是指令序列
+
+那么 (append-instruction-sequences &lt;seq1&gt; &lt;seq2&gt;) 产生的序列是：
+&lt;seq1&gt;
+&lt;seq2&gt;
+</pre>
+
+<p>
+如果执行中有可能需要保存寄存器，就用 <span class="underline">preserving</span> 实现精细组合。过程的参数：
+</p>
+<ul class="org-ul">
+<li>R : <b>寄存器集合</b></li>
+<li>&lt;seq1&gt;,&lt;seq2&gt; : 两个 <b>顺序执行的指令序列</b></li>
+</ul>
+
+<pre class="example">
+preserving 保证如果 R 中任一寄存器 s 的值在 &lt;seq2&gt;里用，其值就不会受到 &lt;seq1&gt;的影响，如：
+
+&lt;seq1&gt;修改 s 而 &lt;seq2&gt; 需要 s 的原值，preserving 会在 &lt;seq1&gt;外面包上对 s 的 save  和 restore
+没这种情况时就 简单连接
+</pre>
+<p>
+因此 <span class="underline">(preserving (list &lt;reg1&gt;&lt;reg2&gt;) &lt;seq1&gt;&lt;seq2&gt;)</span> 可能产生四种结果：
+</p>
+<table border="2" cellspacing="0" cellpadding="6" rules="groups" frame="hsides">
+
+
+<colgroup>
+<col  class="org-left" />
+
+<col  class="org-left" />
+
+<col  class="org-left" />
+
+<col  class="org-left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="org-left">&lt;seq1&gt;</td>
+<td class="org-left">(save &lt;reg1&gt;)</td>
+<td class="org-left">(save &lt;reg2&gt;)</td>
+<td class="org-left">(save &lt;reg1&gt;)</td>
+</tr>
+
+<tr>
+<td class="org-left">&lt;seq2&gt;</td>
+<td class="org-left">&lt;seq1&gt;</td>
+<td class="org-left">&lt;seq1&gt;</td>
+<td class="org-left">(save &lt;reg2&gt;)</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">(restore &lt;reg1&gt;)</td>
+<td class="org-left">(restore &lt;reg2&gt;)</td>
+<td class="org-left">&lt;seq1&gt;</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">&lt;seq2&gt;</td>
+<td class="org-left">&lt;seq2&gt;</td>
+<td class="org-left">(restore &lt;reg2&gt;)</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">(restore &lt;reg1&gt;)</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">&lt;seq2&gt;</td>
+</tr>
+</tbody>
+</table>
+
+<p>
+用 preserving 组合指令序列可 <b>避免不必要的堆栈操作</b> ，也把生成 save 和 restore 的细节封装在preserving内部，与代码生成的具体情况分离。所有代码生成器都不显式生成 save 和 restore
+</p>
+</div>
+
+<div id="outline-container-org80a2722" class="outline-4">
+<h4 id="org80a2722">指令序列的构造</h4>
+<div class="outline-text-4" id="text-org80a2722">
+<pre class="example">
+      如果用表表示指令序列，append-instruction-sequences 就是 append
+
+      但 preserving会很复杂：要分析并确定寄存器使用情况
+      低效：需分析每个指令序列，即使前面由 preserving构造时已分析过
+</pre>
+<p>
+为避免重复分析，给 <span class="underline">每个指令序列</span> <b>关联</b>  <span class="underline">寄存器使用</span> 信息：
+</p>
+<ul class="org-ul">
+<li>简单指令序列：直接确定</li>
+<li>组合指令： <b>推导</b> 出组合的使用信息</li>
+</ul>
+
+<p>
+指令序列要包含三部分信息：
+</p>
+<ol class="org-ol">
+<li>使用的寄存器：序列中指令 <b>执行前必须初始化</b> 的 <span class="underline">寄存器集合</span></li>
+<li>这一序列 <b>执行时修改</b> 的 <span class="underline">寄存器的集合</span></li>
+<li>语句：序列里的实际指令</li>
+</ol>
+
+<p>
+因此把指令序列表示为包含这三个部分的表，构造函数：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#25351;&#20196;&#24207;&#21015;&#26500;&#36896;&#20989;&#25968;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">needs: &#38656;&#35201;&#20351;&#29992;&#30340;&#23492;&#23384;&#22120;&#38598;&#21512;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">modifies: &#25191;&#34892;&#26159;&#20462;&#25913;&#30340;&#23492;&#23384;&#22120;&#38598;&#21512;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">statements: &#35821;&#21477; </span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">make-instruction-sequence</span> needs modifies statements<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>list needs modifies statements<span style="color: #696969;">))</span>
+</pre>
+</div>
+
+<p>
+下面是一个包含两条指令的序列，它找出变量 x 的值赋给 val 后返回，要求执行前初始化寄存器 env 和 continue，并修改寄存器 val：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span>make-instruction-sequence '<span style="color: #696969;">(</span>env continue<span style="color: #696969;">)</span> '<span style="color: #696969;">(</span>val<span style="color: #696969;">)</span>
+                           '<span style="color: #696969;">((</span>assign val
+                                     <span style="color: #696969;">(</span>op lookup-variable-value<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>const x<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg env<span style="color: #696969;">))</span>
+                             <span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>reg continue<span style="color: #696969;">))))</span>
+</pre>
+</div>
+
+<p>
+有时需要构造 <span class="underline">不含语句</span> 的指令序列：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">empty-instruction-sequence</span><span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>make-instruction-sequence '<span style="color: #696969;">()</span> '<span style="color: #696969;">()</span> '<span style="color: #696969;">()))</span>
+</pre>
+</div>
+
+<p>
+组合指令序列的各种过程下面讨论
+</p>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org7ac8a7e" class="outline-2">
+<h2 id="org7ac8a7e">表达式编译</h2>
 </div>
 </div>
 <div id="postamble" class="status">

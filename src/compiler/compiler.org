@@ -26,76 +26,195 @@
 
 要在寄存器机器上运行高级语言程序，就要在 _高级语言_ 和 _寄存器机器语言_ 间架一座桥梁。有两种策略： *解释* 和 *编译* 
 * 解释和编译
-#+BEGIN_EXAMPLE
-  显式控制求值器采用的是解释策略：
+  #+BEGIN_EXAMPLE
+    显式控制求值器采用的是解释策略：
 
-  用本机语言写一个解释器，它配置该机器使之能执行源语言（与本机语言完全不同）的程序
+    用本机语言写一个解释器，它配置该机器使之能执行源语言（与本机语言完全不同）的程序
 
-  源语言的基本过程采用本机语言写出的子程序库实现。被解释程序（源程序）用数据结构表示
+    源语言的基本过程采用本机语言写出的子程序库实现。被解释程序（源程序）用数据结构表示
 
-  解释器遍历表示程序的数据结构，分析源程序的情况，模拟其行为（需要利用库里的子程序）
-#+END_EXAMPLE
-另一种策略是 *编译* ：针对给定 _源语言_ 和 _给定机器_ 的编译器，将 _源程序_  *翻译* 为 _本机语言的等价程序_ （目标程序），然后就可以让目标程序自己运行了
+    解释器遍历表示程序的数据结构，分析源程序的情况，模拟其行为（需要利用库里的子程序）
+  #+END_EXAMPLE
+  另一种策略是 *编译* ：针对给定 _源语言_ 和 _给定机器_ 的编译器，将 _源程序_  *翻译* 为 _本机语言的等价程序_ （目标程序），然后就可以让目标程序自己运行了
 
-+ 编译策略可能大大 *提高程序执行效率*
-+ 解释器能为程序的 *开发和排错* 提供强大帮助
-  + 被执行源代码在运行期间可用，可以方便地检查和修改
-  + 由于所有基本操作的库都在，因此可以支持在修改程序和排错过程中构造新程序，并将新程序随时加入系统
+  + 编译策略可能大大 *提高程序执行效率*
+  + 解释器能为程序的 *开发和排错* 提供强大帮助
+    + 被执行源代码在运行期间可用，可以方便地检查和修改
+    + 由于所有基本操作的库都在，因此可以支持在修改程序和排错过程中构造新程序，并将新程序随时加入系统
 
-#+BEGIN_EXAMPLE
-  编译和解释优势互补，现代开发环境推崇混合策略。Lisp 解释器一般都允许解释性程序和编译性程序相互调用：
+  #+BEGIN_EXAMPLE
+    编译和解释优势互补，现代开发环境推崇混合策略。Lisp 解释器一般都允许解释性程序和编译性程序相互调用：
 
-  这样已完成的部分可以通过编译取得效率优势；正在开发而不断变化的部分通过解释执行
-#+END_EXAMPLE
+    这样已完成的部分可以通过编译取得效率优势；正在开发而不断变化的部分通过解释执行
+  #+END_EXAMPLE
 
-下面实现的编译器把 _Scheme 写的程序_ （源程序）翻译为 _显式控制求值器的数据通路_ 能执行的 _指令序列_ （目标程序）。编译器的做完后，还要说明如何将它与解释器连接，形成一个集成的编译器-解释器开发环境
+  下面实现的编译器把 _Scheme 写的程序_ （源程序）翻译为 _显式控制求值器的数据通路_ 能执行的 _指令序列_ （目标程序）。编译器的做完后，还要说明如何将它与解释器连接，形成一个集成的编译器-解释器开发环境
 * 机制
-编译器分析表达式的机制与解释器类似。为使编译代码能与解释代码互连，生成代码遵循同样寄存器规则：
-+ 执行环境在 env
-+ 实参表在 argl 里积累
-+ 被应用过程在 proc
-+ 过程值通过 val 返回
-+ 过程将要用的返回地址放在 continue
+  编译器分析表达式的机制与解释器类似。为使编译代码能与解释代码互连，生成代码遵循同样寄存器规则：
+  + 执行环境在 env
+  + 实参表在 argl 里积累
+  + 被应用过程在 proc
+  + 过程值通过 val 返回
+  + 过程将要用的返回地址放在 continue
 
-#+BEGIN_EXAMPLE
-  从一个源程序生成的目标程序在执行中所做的寄存器操作，本质上就是解释器求值同一个源程序时执行的那些操作
-#+END_EXAMPLE
+  #+BEGIN_EXAMPLE
+    从一个源程序生成的目标程序在执行中所做的寄存器操作，本质上就是解释器求值同一个源程序时执行的那些操作
+  #+END_EXAMPLE
 
-编译器在技术上与前面 _分析型求值器_ 类似，遍历表达式：遇到解释器求值表达式时 _执行一条寄存器指令_ 的情况，它将 *这条指令放到一个序列* 里。最终得到的 _指令序列_ 就是所需 *目标代码* 
+  编译器在技术上与前面 _分析型求值器_ 类似，遍历表达式：遇到解释器求值表达式时 _执行一条寄存器指令_ 的情况，它将 *这条指令放到一个序列* 里。最终得到的 _指令序列_ 就是所需 *目标代码* 
 
-#+BEGIN_EXAMPLE
-  以求值 (f 84 96) 为例：
+  #+BEGIN_EXAMPLE
+    以求值 (f 84 96) 为例：
 
-  解释器每次求值表达式时都要做表达式分类（发现是过程应用），并检查表示表达式的表是否结束（弄清有两个运算对象）
+    解释器每次求值表达式时都要做表达式分类（发现是过程应用），并检查表示表达式的表是否结束（弄清有两个运算对象）
 
-  编译器只在编译源程序并生成指令序列时做一次表达式分析：
-  产生的目标代码里只有对运算符和运算对象求值的指令，以及将过程（保存在 proc）应用于实参（保存在 argl）的指令
-#+END_EXAMPLE
+    编译器只在编译源程序并生成指令序列时做一次表达式分析：
+    产生的目标代码里只有对运算符和运算对象求值的指令，以及将过程（保存在 proc）应用于实参（保存在 argl）的指令
+  #+END_EXAMPLE
 
-+ 解释器必须考虑处理 *所有* 表达式
-+ 编译结果代码完成 *特定* 表达式
-#+BEGIN_EXAMPLE
-  以保存寄存器为例：
+  + 解释器必须考虑处理 *所有* 表达式
+  + 编译结果代码完成 *特定* 表达式
+  #+BEGIN_EXAMPLE
+    以保存寄存器为例：
 
-  解释器要准备处理所有可能，求值子表达式前必须把后来可能用的所有寄存器进栈（不知道子表达式会做什么）
-  编译器可以根据具体表达式的情况，只生成必要的栈操作
+    解释器要准备处理所有可能，求值子表达式前必须把后来可能用的所有寄存器进栈（不知道子表达式会做什么）
+    编译器可以根据具体表达式的情况，只生成必要的栈操作
 
-  考虑对 (f 84 96)  的处理：
+    考虑对 (f 84 96)  的处理：
 
-  解释器求值 f 前后保存恢复运算对象和环境寄存器 (都可能有用)，最后把 val 的值移到 proc （先放到 val 再移到 proc）
+    解释器求值 f 前后保存恢复运算对象和环境寄存器 (都可能有用)，最后把 val 的值移到 proc （先放到 val 再移到 proc）
 
-  由于运算符就是 f （编译时候就能确定这是一个变量表达式，而不是一个过程表达式），求值由机器操作 lookup-variable-value 完成，不修改寄存器
-  编译代码只需要一条指令做运算符求值：
-  (assign proc (op lookup-variable-value) (const f) (reg env)) 
-  不需要保存和恢复，值直接赋给 proc
-#+END_EXAMPLE
+    由于运算符就是 f （编译时候就能确定这是一个变量表达式，而不是一个过程表达式），求值由机器操作 lookup-variable-value 完成，不修改寄存器
+    编译代码只需要一条指令做运算符求值：
+    (assign proc (op lookup-variable-value) (const f) (reg env)) 
+    不需要保存和恢复，值直接赋给 proc
+  #+END_EXAMPLE
 
-在很多情况时候编译可以 *优化环境访问* ：
-+ 通过分析代码，许多情况时候可以确定特定值所在框架，然后直接访问该框架，不需要用 lookup-variable-value 搜索
-+ 直接处理某些基本操作，而不通过通用的 apply
+  在很多情况时候编译可以 *优化环境访问* ：
+  + 通过分析代码，许多情况时候可以确定特定值所在框架，然后直接访问该框架，不需要用 lookup-variable-value 搜索
+  + 直接处理某些基本操作，而不通过通用的 apply
 
-#+BEGIN_EXAMPLE
-  这里并不准备特别强调各种优化，主要目标是在一个简化（但仍然很有意思）的上下文中展示编译过程的各种情况
-#+END_EXAMPLE
-* 结构
+  #+BEGIN_EXAMPLE
+    这里并不准备特别强调各种优化，主要目标是在一个简化（但仍然很有意思）的上下文中展示编译过程的各种情况
+  #+END_EXAMPLE
+* 框架
+  + 工作方式类似 _分析求值器_ ，但生成的是能在 _寄存器机器_ 上运行的 *指令序列* 
+  + _表达式的语法过程_ 就是 _元循环求值器_ 用的 *Scheme过程* 
+  + _显式控制求值器_ 假定语法过程是 *寄存器机器操作* 
 
+  *compile* 做最高层分派（对应 eval 或 analyze），按 _表达式语法类型_ 指派 _特定代码生成器_ ：
+  #+BEGIN_SRC scheme
+  (define (compile exp target linkage)
+    (cond ((self-evaluating? exp)
+	   (compile-self-evaluating exp target linkage))
+	  ((quoted? exp) (compile-quoted exp target linkage))
+	  ((variable? exp)
+	   (compile-variable exp target linkage))
+	  ((assignment? exp)
+	   (compile-assignment exp target linkage))
+	  ((definition? exp)
+	   (compile-definition exp target linkage))
+	  ((if? exp) (compile-if exp target linkage))
+	  ((lambda? exp) (compile-lambda exp target linkage))
+	  ((begin? exp)
+	   (compile-sequence (begin-actions exp)
+			     target
+			     linkage))
+	  ((cond? exp) (compile (cond->if exp) target linkage))
+	  ((application? exp)
+	   (compile-application exp target linkage))
+	  (else
+	   (error "Unknown expression type -- COMPILE" exp))))
+  #+END_SRC
+** 目标寄存器和连接描述符
+   compile 及其调用的代码生成器都另有两个参数：
+   1. target :  所 _生成代码段_ 将 _表达式的值_ 存入的 _寄存器_
+   2. linkage : 连接描述符，描述表达式的编译结果代码完成后如何继续，有几种可能动作：
+      + 连接描述符 *next* ：继续序列里的下一条指令
+      + 连接描述符 *return* ：从被编译的过程返回
+      + *指定标号* 作为连接描述符：跳到一个命名入口点
+
+   #+BEGIN_EXAMPLE
+     以 val 寄存器为目标以 next 为连接描述符编译表达式 '5' 产生：
+     (assign val (const 5)) ;; 接着执行下一指令
+
+     以 return 作为连接描述符，则生成：
+     (assign val (const 5))
+     (goto (reg continue)) ;; 要求从一个过程返回
+   #+END_EXAMPLE
+** 指令序列和堆栈使用
+   代码生成器返回由 _被编译表达式_ 生成的 _目标代码_ 的 _指令序列_ 
+
+   复合表达式的代码是通过 *组合* _子表达式的代码_ 建立的。组合指令序列的最简单方式是调用 _append-instruction-sequences_ 过程：直接 *顺序* 拼接任意数目的参数指令序列，返回组合指令序列
+
+   #+BEGIN_EXAMPLE
+     如果 <seq1> 和 <seq2> 都是指令序列
+
+     那么 (append-instruction-sequences <seq1> <seq2>) 产生的序列是：
+     <seq1>
+     <seq2>
+   #+END_EXAMPLE
+
+   如果执行中有可能需要保存寄存器，就用 _preserving_ 实现精细组合。过程的参数：
+   + R : *寄存器集合*
+   + <seq1>,<seq2> : 两个 *顺序执行的指令序列* 
+
+   #+BEGIN_EXAMPLE
+     preserving 保证如果 R 中任一寄存器 s 的值在 <seq2>里用，其值就不会受到 <seq1>的影响，如：
+
+     <seq1>修改 s 而 <seq2> 需要 s 的原值，preserving 会在 <seq1>外面包上对 s 的 save  和 restore
+     没这种情况时就 简单连接
+   #+END_EXAMPLE
+   因此 _(preserving (list <reg1><reg2>) <seq1><seq2>)_ 可能产生四种结果：
+   | <seq1> | (save <reg1>)    | (save <reg2>)    | (save <reg1>)    |
+   | <seq2> | <seq1>           | <seq1>           | (save <reg2>)    |
+   |        | (restore <reg1>) | (restore <reg2>) | <seq1>           |
+   |        | <seq2>           | <seq2>           | (restore <reg2>) |
+   |        |                  |                  | (restore <reg1>) |
+   |        |                  |                  | <seq2>           |
+
+   用 preserving 组合指令序列可 *避免不必要的堆栈操作* ，也把生成 save 和 restore 的细节封装在preserving内部，与代码生成的具体情况分离。所有代码生成器都不显式生成 save 和 restore
+
+*** 指令序列的构造
+    #+BEGIN_EXAMPLE
+      如果用表表示指令序列，append-instruction-sequences 就是 append
+
+      但 preserving会很复杂：要分析并确定寄存器使用情况
+      低效：需分析每个指令序列，即使前面由 preserving构造时已分析过
+    #+END_EXAMPLE
+    为避免重复分析，给 _每个指令序列_ *关联*  _寄存器使用_ 信息：
+    + 简单指令序列：直接确定
+    + 组合指令： *推导* 出组合的使用信息
+
+    指令序列要包含三部分信息：
+    1. 使用的寄存器：序列中指令 *执行前必须初始化* 的 _寄存器集合_ 
+    2. 这一序列 *执行时修改* 的 _寄存器的集合_ 
+    3. 语句：序列里的实际指令
+
+    因此把指令序列表示为包含这三个部分的表，构造函数：
+    #+BEGIN_SRC scheme
+  ;;; 指令序列构造函数
+  ;;; needs: 需要使用的寄存器集合
+  ;;; modifies: 执行是修改的寄存器集合
+  ;;; statements: 语句 
+  (define (make-instruction-sequence needs modifies statements)
+    (list needs modifies statements))
+    #+END_SRC
+
+    下面是一个包含两条指令的序列，它找出变量 x 的值赋给 val 后返回，要求执行前初始化寄存器 env 和 continue，并修改寄存器 val：
+    #+BEGIN_SRC scheme
+  (make-instruction-sequence '(env continue) '(val)
+			     '((assign val
+				       (op lookup-variable-value) (const x) (reg env))
+			       (goto (reg continue))))
+    #+END_SRC
+
+    有时需要构造 _不含语句_ 的指令序列：
+    #+BEGIN_SRC scheme
+  (define (empty-instruction-sequence)
+    (make-instruction-sequence '() '() '()))
+    #+END_SRC
+
+    组合指令序列的各种过程下面讨论
+
+* 表达式编译
