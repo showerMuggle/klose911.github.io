@@ -1,0 +1,409 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>求值器编译</title>
+<meta name="generator" content="Org mode" />
+<meta name="author" content="Wu, Shanliang" />
+<style type="text/css">
+ <!--/*--><![CDATA[/*><!--*/
+  .title  { text-align: center;
+             margin-bottom: .2em; }
+  .subtitle { text-align: center;
+              font-size: medium;
+              font-weight: bold;
+              margin-top:0; }
+  .todo   { font-family: monospace; color: red; }
+  .done   { font-family: monospace; color: green; }
+  .priority { font-family: monospace; color: orange; }
+  .tag    { background-color: #eee; font-family: monospace;
+            padding: 2px; font-size: 80%; font-weight: normal; }
+  .timestamp { color: #bebebe; }
+  .timestamp-kwd { color: #5f9ea0; }
+  .org-right  { margin-left: auto; margin-right: 0px;  text-align: right; }
+  .org-left   { margin-left: 0px;  margin-right: auto; text-align: left; }
+  .org-center { margin-left: auto; margin-right: auto; text-align: center; }
+  .underline { text-decoration: underline; }
+  #postamble p, #preamble p { font-size: 90%; margin: .2em; }
+  p.verse { margin-left: 3%; }
+  pre {
+    border: 1px solid #ccc;
+    box-shadow: 3px 3px 3px #eee;
+    padding: 8pt;
+    font-family: monospace;
+    overflow: auto;
+    margin: 1.2em;
+  }
+  pre.src {
+    position: relative;
+    overflow: visible;
+    padding-top: 1.2em;
+  }
+  pre.src:before {
+    display: none;
+    position: absolute;
+    background-color: white;
+    top: -10px;
+    right: 10px;
+    padding: 3px;
+    border: 1px solid black;
+  }
+  pre.src:hover:before { display: inline;}
+  /* Languages per Org manual */
+  pre.src-asymptote:before { content: 'Asymptote'; }
+  pre.src-awk:before { content: 'Awk'; }
+  pre.src-C:before { content: 'C'; }
+  /* pre.src-C++ doesn't work in CSS */
+  pre.src-clojure:before { content: 'Clojure'; }
+  pre.src-css:before { content: 'CSS'; }
+  pre.src-D:before { content: 'D'; }
+  pre.src-ditaa:before { content: 'ditaa'; }
+  pre.src-dot:before { content: 'Graphviz'; }
+  pre.src-calc:before { content: 'Emacs Calc'; }
+  pre.src-emacs-lisp:before { content: 'Emacs Lisp'; }
+  pre.src-fortran:before { content: 'Fortran'; }
+  pre.src-gnuplot:before { content: 'gnuplot'; }
+  pre.src-haskell:before { content: 'Haskell'; }
+  pre.src-hledger:before { content: 'hledger'; }
+  pre.src-java:before { content: 'Java'; }
+  pre.src-js:before { content: 'Javascript'; }
+  pre.src-latex:before { content: 'LaTeX'; }
+  pre.src-ledger:before { content: 'Ledger'; }
+  pre.src-lisp:before { content: 'Lisp'; }
+  pre.src-lilypond:before { content: 'Lilypond'; }
+  pre.src-lua:before { content: 'Lua'; }
+  pre.src-matlab:before { content: 'MATLAB'; }
+  pre.src-mscgen:before { content: 'Mscgen'; }
+  pre.src-ocaml:before { content: 'Objective Caml'; }
+  pre.src-octave:before { content: 'Octave'; }
+  pre.src-org:before { content: 'Org mode'; }
+  pre.src-oz:before { content: 'OZ'; }
+  pre.src-plantuml:before { content: 'Plantuml'; }
+  pre.src-processing:before { content: 'Processing.js'; }
+  pre.src-python:before { content: 'Python'; }
+  pre.src-R:before { content: 'R'; }
+  pre.src-ruby:before { content: 'Ruby'; }
+  pre.src-sass:before { content: 'Sass'; }
+  pre.src-scheme:before { content: 'Scheme'; }
+  pre.src-screen:before { content: 'Gnu Screen'; }
+  pre.src-sed:before { content: 'Sed'; }
+  pre.src-sh:before { content: 'shell'; }
+  pre.src-sql:before { content: 'SQL'; }
+  pre.src-sqlite:before { content: 'SQLite'; }
+  /* additional languages in org.el's org-babel-load-languages alist */
+  pre.src-forth:before { content: 'Forth'; }
+  pre.src-io:before { content: 'IO'; }
+  pre.src-J:before { content: 'J'; }
+  pre.src-makefile:before { content: 'Makefile'; }
+  pre.src-maxima:before { content: 'Maxima'; }
+  pre.src-perl:before { content: 'Perl'; }
+  pre.src-picolisp:before { content: 'Pico Lisp'; }
+  pre.src-scala:before { content: 'Scala'; }
+  pre.src-shell:before { content: 'Shell Script'; }
+  pre.src-ebnf2ps:before { content: 'ebfn2ps'; }
+  /* additional language identifiers per "defun org-babel-execute"
+       in ob-*.el */
+  pre.src-cpp:before  { content: 'C++'; }
+  pre.src-abc:before  { content: 'ABC'; }
+  pre.src-coq:before  { content: 'Coq'; }
+  pre.src-groovy:before  { content: 'Groovy'; }
+  /* additional language identifiers from org-babel-shell-names in
+     ob-shell.el: ob-shell is the only babel language using a lambda to put
+     the execution function name together. */
+  pre.src-bash:before  { content: 'bash'; }
+  pre.src-csh:before  { content: 'csh'; }
+  pre.src-ash:before  { content: 'ash'; }
+  pre.src-dash:before  { content: 'dash'; }
+  pre.src-ksh:before  { content: 'ksh'; }
+  pre.src-mksh:before  { content: 'mksh'; }
+  pre.src-posh:before  { content: 'posh'; }
+  /* Additional Emacs modes also supported by the LaTeX listings package */
+  pre.src-ada:before { content: 'Ada'; }
+  pre.src-asm:before { content: 'Assembler'; }
+  pre.src-caml:before { content: 'Caml'; }
+  pre.src-delphi:before { content: 'Delphi'; }
+  pre.src-html:before { content: 'HTML'; }
+  pre.src-idl:before { content: 'IDL'; }
+  pre.src-mercury:before { content: 'Mercury'; }
+  pre.src-metapost:before { content: 'MetaPost'; }
+  pre.src-modula-2:before { content: 'Modula-2'; }
+  pre.src-pascal:before { content: 'Pascal'; }
+  pre.src-ps:before { content: 'PostScript'; }
+  pre.src-prolog:before { content: 'Prolog'; }
+  pre.src-simula:before { content: 'Simula'; }
+  pre.src-tcl:before { content: 'tcl'; }
+  pre.src-tex:before { content: 'TeX'; }
+  pre.src-plain-tex:before { content: 'Plain TeX'; }
+  pre.src-verilog:before { content: 'Verilog'; }
+  pre.src-vhdl:before { content: 'VHDL'; }
+  pre.src-xml:before { content: 'XML'; }
+  pre.src-nxml:before { content: 'XML'; }
+  /* add a generic configuration mode; LaTeX export needs an additional
+     (add-to-list 'org-latex-listings-langs '(conf " ")) in .emacs */
+  pre.src-conf:before { content: 'Configuration File'; }
+
+  table { border-collapse:collapse; }
+  caption.t-above { caption-side: top; }
+  caption.t-bottom { caption-side: bottom; }
+  td, th { vertical-align:top;  }
+  th.org-right  { text-align: center;  }
+  th.org-left   { text-align: center;   }
+  th.org-center { text-align: center; }
+  td.org-right  { text-align: right;  }
+  td.org-left   { text-align: left;   }
+  td.org-center { text-align: center; }
+  dt { font-weight: bold; }
+  .footpara { display: inline; }
+  .footdef  { margin-bottom: 1em; }
+  .figure { padding: 1em; }
+  .figure p { text-align: center; }
+  .inlinetask {
+    padding: 10px;
+    border: 2px solid gray;
+    margin: 10px;
+    background: #ffffcc;
+  }
+  #org-div-home-and-up
+   { text-align: right; font-size: 70%; white-space: nowrap; }
+  textarea { overflow-x: auto; }
+  .linenr { font-size: smaller }
+  .code-highlighted { background-color: #ffff00; }
+  .org-info-js_info-navigation { border-style: none; }
+  #org-info-js_console-label
+    { font-size: 10px; font-weight: bold; white-space: nowrap; }
+  .org-info-js_search-highlight
+    { background-color: #ffff00; color: #000000; font-weight: bold; }
+  .org-svg { width: 90%; }
+  /*]]>*/-->
+</style>
+<link rel="stylesheet" type="text/css" href="css/main.css" />
+<script type="text/javascript">
+/*
+@licstart  The following is the entire license notice for the
+JavaScript code in this tag.
+
+Copyright (C) 2012-2018 Free Software Foundation, Inc.
+
+The JavaScript code in this tag is free software: you can
+redistribute it and/or modify it under the terms of the GNU
+General Public License (GNU GPL) as published by the Free Software
+Foundation, either version 3 of the License, or (at your option)
+any later version.  The code is distributed WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU GPL for more details.
+
+As additional permission under GNU GPL version 3 section 7, you
+may distribute non-source (e.g., minimized or compacted) forms of
+that code without the copy of the GNU GPL normally required by
+section 4, provided you include this license notice and a URL
+through which recipients can access the Corresponding Source.
+
+
+@licend  The above is the entire license notice
+for the JavaScript code in this tag.
+*/
+<!--/*--><![CDATA[/*><!--*/
+ function CodeHighlightOn(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(null != target) {
+     elem.cacheClassElem = elem.className;
+     elem.cacheClassTarget = target.className;
+     target.className = "code-highlighted";
+     elem.className   = "code-highlighted";
+   }
+ }
+ function CodeHighlightOff(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(elem.cacheClassElem)
+     elem.className = elem.cacheClassElem;
+   if(elem.cacheClassTarget)
+     target.className = elem.cacheClassTarget;
+ }
+/*]]>*///-->
+</script>
+</head>
+<body>
+<div id="content">
+<h1 class="title">求值器编译</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#orgd59c735">解释和编译</a></li>
+<li><a href="#orga7b87fd">机制</a></li>
+<li><a href="#orgc7c2d6f">结构</a></li>
+</ul>
+</div>
+</div>
+<pre class="example">
+  显式控制求值器是一部寄存器机器，其控制器能解释 Scheme 程序
+</pre>
+<p>
+下面研究如何在控制器不是 Scheme 解释器的寄存器机器上运行 Scheme 程序
+</p>
+
+<pre class="example">
+  显式控制求值器是解释 Scheme 程序的通用机器：
+
+  其控制器与数据通路配合，可执行任何计算过程
+  其数据通路也是通用的
+</pre>
+
+<p>
+普通计算机也都是通用寄存器机器，基于：
+</p>
+<ul class="org-ul">
+<li>一组 <b>寄存器</b></li>
+<li>一组 <span class="underline">操作</span> ：高效方便的 <b>数据通路</b> 
+<ul class="org-ul">
+<li><span class="underline">控制器</span> ：一个 <span class="underline">寄存器机器语言</span> （本机语言） <b>解释器</b></li>
+<li><span class="underline">程序</span> ： 使用 <b>机器的数据通路的指令序列</b></li>
+</ul></li>
+</ul>
+
+<pre class="example">
+  可以把显式控制求值器的指令序列看作一台通用计算机的机器语言程序，而不看作一部特定解释器机器的控制器
+</pre>
+
+<p>
+要在寄存器机器上运行高级语言程序，就要在 <span class="underline">高级语言</span> 和 <span class="underline">寄存器机器语言</span> 间架一座桥梁。有两种策略： <b>解释</b> 和 <b>编译</b> 
+</p>
+<div id="outline-container-orgd59c735" class="outline-2">
+<h2 id="orgd59c735">解释和编译</h2>
+<div class="outline-text-2" id="text-orgd59c735">
+<pre class="example">
+  显式控制求值器采用的是解释策略：
+
+  用本机语言写一个解释器，它配置该机器使之能执行源语言（与本机语言完全不同）的程序
+
+  源语言的基本过程采用本机语言写出的子程序库实现。被解释程序（源程序）用数据结构表示
+
+  解释器遍历表示程序的数据结构，分析源程序的情况，模拟其行为（需要利用库里的子程序）
+</pre>
+<p>
+另一种策略是 <b>编译</b> ：针对给定 <span class="underline">源语言</span> 和 <span class="underline">给定机器</span> 的编译器，将 <span class="underline">源程序</span>  <b>翻译</b> 为 <span class="underline">本机语言的等价程序</span> （目标程序），然后就可以让目标程序自己运行了
+</p>
+
+<ul class="org-ul">
+<li>编译策略可能大大 <b>提高程序执行效率</b></li>
+<li>解释器能为程序的 <b>开发和排错</b> 提供强大帮助
+<ul class="org-ul">
+<li>被执行源代码在运行期间可用，可以方便地检查和修改</li>
+<li>由于所有基本操作的库都在，因此可以支持在修改程序和排错过程中构造新程序，并将新程序随时加入系统</li>
+</ul></li>
+</ul>
+
+<pre class="example">
+  编译和解释优势互补，现代开发环境推崇混合策略。Lisp 解释器一般都允许解释性程序和编译性程序相互调用：
+
+  这样已完成的部分可以通过编译取得效率优势；正在开发而不断变化的部分通过解释执行
+</pre>
+
+<p>
+下面实现的编译器把 <span class="underline">Scheme 写的程序</span> （源程序）翻译为 <span class="underline">显式控制求值器的数据通路</span> 能执行的 <span class="underline">指令序列</span> （目标程序）。编译器的做完后，还要说明如何将它与解释器连接，形成一个集成的编译器-解释器开发环境
+</p>
+</div>
+</div>
+<div id="outline-container-orga7b87fd" class="outline-2">
+<h2 id="orga7b87fd">机制</h2>
+<div class="outline-text-2" id="text-orga7b87fd">
+<p>
+编译器分析表达式的机制与解释器类似。为使编译代码能与解释代码互连，生成代码遵循同样寄存器规则：
+</p>
+<ul class="org-ul">
+<li>执行环境在 env</li>
+<li>实参表在 argl 里积累</li>
+<li>被应用过程在 proc</li>
+<li>过程值通过 val 返回</li>
+<li>过程将要用的返回地址放在 continue</li>
+</ul>
+
+<pre class="example">
+  从一个源程序生成的目标程序在执行中所做的寄存器操作，本质上就是解释器求值同一个源程序时执行的那些操作
+</pre>
+
+<p>
+编译器在技术上与前面 <span class="underline">分析型求值器</span> 类似，遍历表达式：遇到解释器求值表达式时 <span class="underline">执行一条寄存器指令</span> 的情况，它将 <b>这条指令放到一个序列</b> 里。最终得到的 <span class="underline">指令序列</span> 就是所需 <b>目标代码</b> 
+</p>
+
+<pre class="example">
+  以求值 (f 84 96) 为例：
+
+  解释器每次求值表达式时都要做表达式分类（发现是过程应用），并检查表示表达式的表是否结束（弄清有两个运算对象）
+
+  编译器只在编译源程序并生成指令序列时做一次表达式分析：
+  产生的目标代码里只有对运算符和运算对象求值的指令，以及将过程（保存在 proc）应用于实参（保存在 argl）的指令
+</pre>
+
+<ul class="org-ul">
+<li>解释器必须考虑处理 <b>所有</b> 表达式</li>
+<li>编译结果代码完成 <b>特定</b> 表达式</li>
+</ul>
+<pre class="example">
+以保存寄存器为例：
+
+解释器要准备处理所有可能，求值子表达式前必须把后来可能用的所有寄存器进栈（不知道子表达式会做什么）
+编译器可以根据具体表达式的情况，只生成必要的栈操作
+
+考虑对 (f 84 96)  的处理：
+
+解释器求值 f 前后保存恢复运算对象和环境寄存器 (都可能有用)，最后把 val 的值移到 proc （先放到 val 再移到 proc）
+
+由于运算符就是 f （编译时候就能确定这是一个变量表达式，而不是一个过程表达式），求值由机器操作 lookup-variable-value 完成，不修改寄存器
+编译代码只需要一条指令做运算符求值：
+(assign proc (op lookup-variable-value) (const f) (reg env)) 
+不需要保存和恢复，值直接赋给 proc
+</pre>
+
+<p>
+在很多情况时候编译可以 <b>优化环境访问</b> ：
+</p>
+<ul class="org-ul">
+<li>通过分析代码，许多情况时候可以确定特定值所在框架，然后直接访问该框架，不需要用 lookup-variable-value 搜索</li>
+<li>直接处理某些基本操作，而不通过通用的 apply</li>
+</ul>
+
+<pre class="example">
+  这里并不准备特别强调各种优化，主要目标是在一个简化（但仍然很有意思）的上下文中展示编译过程的各种情况
+</pre>
+</div>
+</div>
+<div id="outline-container-orgc7c2d6f" class="outline-2">
+<h2 id="orgc7c2d6f">结构</h2>
+</div>
+</div>
+<div id="postamble" class="status">
+
+		  <br/>
+		  <div class='ds-thread'></div>
+		  <script>
+		  var duoshuoQuery = {short_name:'klose911'};
+		  (function() {
+					  var dsThread = document.getElementsByClassName('ds-thread')[0];
+					  dsThread.setAttribute('data-thread-key', document.title);
+					  dsThread.setAttribute('data-title', document.title);
+					  dsThread.setAttribute('data-url', window.location.href);
+					  var ds = document.createElement('script');
+					  ds.type = 'text/javascript';ds.async = true;
+					  ds.src = (document.location.protocol == 'https:' ? 'https:' : 'http:') + '//static.duoshuo.com/embed.js';
+					  ds.charset = 'UTF-8';
+					  (document.getElementsByTagName('head')[0] 
+						|| document.getElementsByTagName('body')[0]).appendChild(ds);
+					  })();
+		  </script>
+		  <script>
+		  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+			(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+			m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+			})(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+		  ga('create', 'UA-90850421-1', 'auto');
+		  ga('send', 'pageview');
+		  </script>
+</div>
+</body>
+</html>
