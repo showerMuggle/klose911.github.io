@@ -140,3 +140,44 @@
 		      (append-instruction-sequences t-branch c-code) 
 		      (append-instruction-sequences f-branch a-code))
 		     after-if))))))
+
+;;; 编译序列表达式
+(define (compile-sequence seq target linkage)
+  (if (last-exp? seq) ;; 测试是否是最后一个子表达式
+      (compile (first-exp seq) target linkage) ;; 编译最后一个子表达式，目标寄存器：target，连接：整个序列的连接
+      (preserving '(env continue) ;; 需要保留 env (下一个子表达式求值需要)， continue（最后一个拼接需要）
+		  (compile (first-exp seq) target 'next) ;; 编译下一个子表达式，目标寄存器：target，连接: next 
+		  (compile-sequence (rest-exps seq) target linkage)))) ;; 递归编译余下的子表达式，目标寄存器：target，连接：整个序列的连接
+
+;;; 编译 lambda 表达式
+(define (compile-lambda exp target linkage)
+  ;; 生成 2个新的标号： proc-entry 和 after-lambda 
+  (let ((proc-entry (make-label 'entry))
+        (after-lambda (make-label 'after-lambda)))
+    ;; 计算 lambda表达式的连接
+    (let ((lambda-linkage
+           (if (eq? linkage 'next) after-lambda linkage)))
+      (append-instruction-sequences
+       (tack-on-instruction-sequence
+        (end-with-linkage lambda-linkage
+			  (make-instruction-sequence '(env) (list target)
+						     `((assign ,target
+							       (op make-compiled-procedure)
+							       (label ,proc-entry)
+							       (reg env))))) ;; 构建一个过程对象，标号是 proc-entry的值，环境是 env, 把这个对象赋值到 target 寄存器
+        (compile-lambda-body exp proc-entry)) ;; 编译 lambda 过程体
+       after-lambda)))) ;; after-lambda 标号
+
+ ;;; 编译 lambda 运行过程
+(define (compile-lambda-body exp proc-entry)
+  (let ((formals (lambda-parameters exp))) ;; 获得形参表
+    (append-instruction-sequences
+     (make-instruction-sequence '(env proc argl) '(env) ;; 构造过程体需要的寄存器是 env, proc, argl , 构造完成后：修改的寄存器是 env 
+				`(,proc-entry ;; 过程体对应的标号
+				  (assign env (op compiled-procedure-env) (reg proc)) ;; 调用lambda表达式时候的环境
+				  (assign env 
+					  (op extend-environment) ;; 扩充环境
+					  (const ,formals) ;; 把实参和形参在环境中绑定
+					  (reg argl)
+					  (reg env))))
+     (compile-sequence (lambda-body exp) 'val 'return)))) ;; 编译过程体的指令，执行过程体的目标寄存器是 val, 连接方式: return（直接返回）
