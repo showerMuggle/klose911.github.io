@@ -246,7 +246,29 @@ for the JavaScript code in this tag.
 </li>
 </ul>
 </li>
-<li><a href="#org7ac8a7e">表达式编译</a></li>
+<li><a href="#org7ac8a7e">表达式编译</a>
+<ul>
+<li><a href="#orgf8412fe">连接代码</a></li>
+<li><a href="#org73e0d77">简单表达式</a>
+<ul>
+<li><a href="#org7d4ede7">赋值和定义表达式</a></li>
+</ul>
+</li>
+<li><a href="#org0e522f9">条件表达式</a></li>
+<li><a href="#orgedb939b">序列表达式</a></li>
+<li><a href="#orga89407d">lambda 表达式</a></li>
+<li><a href="#org8d3ba38">过程应用的编译</a>
+<ul>
+<li><a href="#orgd794cf3">应用过程</a>
+<ul>
+<li><a href="#orgeb9d922">应用编译得到的过程</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#org73c15c4">指令序列的组合</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
@@ -482,7 +504,8 @@ preserving 保证如果 R 中任一寄存器 s 的值在 &lt;seq2&gt;里用，�
 <p>
 因此 <span class="underline">(preserving (list &lt;reg1&gt;&lt;reg2&gt;) &lt;seq1&gt;&lt;seq2&gt;)</span> 可能产生四种结果：
 </p>
-<table border="2" cellspacing="0" cellpadding="6" rules="groups" frame="hsides">
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
 
 
 <colgroup>
@@ -540,8 +563,12 @@ preserving 保证如果 R 中任一寄存器 s 的值在 &lt;seq2&gt;里用，�
 </table>
 
 <p>
-用 preserving 组合指令序列可 <b>避免不必要的堆栈操作</b> ，也把生成 save 和 restore 的细节封装在preserving内部，与代码生成的具体情况分离。所有代码生成器都不显式生成 save 和 restore
+用 preserving 组合指令序列：
 </p>
+<ul class="org-ul">
+<li>避免不必要的堆栈操作</li>
+<li>把生成 save 和 restore 的细节封装在preserving内部，与代码生成的具体情况分离。所有代码生成器都不显式生成 save 和 restore</li>
+</ul>
 </div>
 
 <div id="outline-container-org80a2722" class="outline-4">
@@ -613,6 +640,653 @@ preserving 保证如果 R 中任一寄存器 s 的值在 &lt;seq2&gt;里用，�
 
 <div id="outline-container-org7ac8a7e" class="outline-2">
 <h2 id="org7ac8a7e">表达式编译</h2>
+<div class="outline-text-2" id="text-org7ac8a7e">
+<p>
+下面考虑各种表达式的编译，实现由 compile 分派的各种代码生成器
+</p>
+
+<p>
+其中会用到反引号表达式 <span class="underline">`(&#x2026;)</span>  。与 <span class="underline">引号表达式</span> 类似，被引表达式不求值。但表达式里的 <b>,exp</b> 情况特殊，需要 <b>把 exp 求出的值</b> 放在该位置
+</p>
+<pre class="example">
+例如：设 place 的值是 (China Beijing)，howlong 的值是 (5 years)
+
+`(I live in ,place for ,howlong) 的值是 (l live in (China Beijing) for (5 years))
+</pre>
+
+<p>
+这种表达式提供了一个框架，其中 <span class="underline">,e</span> 的内容用 <b>e 求出的值</b> 填充
+</p>
+</div>
+
+<div id="outline-container-orgf8412fe" class="outline-3">
+<h3 id="orgf8412fe">连接代码</h3>
+<div class="outline-text-3" id="text-orgf8412fe">
+<p>
+生成代码最后总是 <span class="underline">compile-linkage</span> 生成的 <b>连接指令</b> ：
+</p>
+<ul class="org-ul">
+<li><span class="underline">return</span> :  生成 <b>(goto(regcontinue))</b> ，不修改寄存器</li>
+<li>next: 不生成指令</li>
+<li>标号: 生成 <b>goto指令</b> ，不需要也不修改寄存器</li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#32534;&#35793;&#36830;&#25509;&#20195;&#30721;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">linkage: &#36830;&#25509;&#65292;return, next, &#25110;&#32773;&#26631;&#21495;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">compile-linkage</span> linkage<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">cond</span> <span style="color: #696969;">((</span>eq? linkage 'return<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#36807;&#31243;&#36820;&#22238;</span>
+         <span style="color: #696969;">(</span>make-instruction-sequence '<span style="color: #696969;">(</span>continue<span style="color: #696969;">)</span> '<span style="color: #696969;">()</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#38656;&#35201; continue &#23492;&#23384;&#22120;&#65292;&#19981;&#20462;&#25913;&#20219;&#20309;&#23492;&#23384;&#22120;</span>
+                                    '<span style="color: #696969;">((</span>goto <span style="color: #696969;">(</span>reg continue<span style="color: #696969;">)))))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#20135;&#29983; (goto (reg continue)) &#25351;&#20196;</span>
+        <span style="color: #696969;">((</span>eq? linkage 'next<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#19979;&#19968;&#26465;&#35821;&#21477;</span>
+         <span style="color: #696969;">(</span>empty-instruction-sequence<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#19981;&#20135;&#29983;&#20219;&#20309;&#25351;&#20196;&#65292;&#19981;&#38656;&#35201;&#65292;&#20063;&#19981;&#20462;&#25913;&#20219;&#20309;&#23492;&#23384;&#22120;</span>
+        <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">else</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#36830;&#25509;&#20026;&#26631;&#21495;</span>
+         <span style="color: #696969;">(</span>make-instruction-sequence '<span style="color: #696969;">()</span> '<span style="color: #696969;">()</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#19981;&#38656;&#35201;&#65292;&#20063;&#19981;&#20462;&#25913;&#20219;&#20309;&#23492;&#23384;&#22120;</span>
+                                    `<span style="color: #696969;">((</span>goto <span style="color: #696969;">(</span>label ,linkage<span style="color: #696969;">)))))))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#20135;&#29983;&#36339;&#36716;&#21040;&#26631;&#21495;&#30340;&#25351;&#20196;</span>
+</pre>
+</div>
+
+<p>
+把连接代码附在指令序列后需要维持 <span class="underline">continue</span> ，因为 return 连接要用。如果 <b>指令序列修改 continue</b>  而 <b>连接代码需要它</b> ，就应 <b>保存和恢复</b> 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#25226;&#36830;&#25509;&#20195;&#30721;&#21152;&#20837;&#21040;&#25351;&#20196;&#24207;&#21015;&#26368;&#21518;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">linkage: &#36830;&#25509;&#20195;&#30721;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">instruction-sequence: &#25351;&#20196;&#24207;&#21015;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">end-with-linkage</span> linkage instruction-sequence<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>preserving '<span style="color: #696969;">(</span>continue<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">comile-linkage &#20135;&#29983;&#30340;&#25351;&#20196;&#21487;&#33021;&#38656;&#35201; continue</span>
+              instruction-sequence
+              <span style="color: #696969;">(</span>compile-linkage linkage<span style="color: #696969;">)))</span>
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org73e0d77" class="outline-3">
+<h3 id="org73e0d77">简单表达式</h3>
+<div class="outline-text-3" id="text-org73e0d77">
+<p>
+对 <span class="underline">自求值</span> 表达式、 <span class="underline">引用</span> 表达式和 <span class="underline">变量</span> 表达式，代码生成器构造的指令序列将  <span class="underline">所需值</span> <b>赋给</b> 指定 <span class="underline">目标寄存器</span> ，而后根据 <span class="underline">连接描述符</span> 继续 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#32534;&#35793;&#33258;&#27714;&#20540;&#35821;&#21477;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">exp &#33258;&#27714;&#20540;&#34920;&#36798;&#24335;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">target : &#30446;&#26631;&#23492;&#23384;&#22120;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">linkage: &#36830;&#25509;&#30446;&#26631;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">compile-self-evaluating</span> exp target linkage<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>end-with-linkage linkage
+                    <span style="color: #696969;">(</span>make-instruction-sequence '<span style="color: #696969;">()</span> <span style="color: #696969;">(</span>list target<span style="color: #696969;">)</span>
+                                               `<span style="color: #696969;">((</span>assign ,target <span style="color: #696969;">(</span>const ,exp<span style="color: #696969;">))))))</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#32534;&#35793;&#24341;&#29992;&#35821;&#21477;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">exp: &#24341;&#29992;&#34920;&#36798;&#24335;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">target : &#30446;&#26631;&#23492;&#23384;&#22120;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">linkage: &#36830;&#25509;&#30446;&#26631;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">compile-quoted</span> exp target linkage<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>end-with-linkage linkage
+                    <span style="color: #696969;">(</span>make-instruction-sequence '<span style="color: #696969;">()</span> <span style="color: #696969;">(</span>list target<span style="color: #696969;">)</span>
+                                               `<span style="color: #696969;">((</span>assign ,target <span style="color: #696969;">(</span>const ,<span style="color: #696969;">(</span>text-of-quotation exp<span style="color: #696969;">)))))))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#32534;&#35793;&#21464;&#37327;&#35821;&#21477;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">exp: &#24341;&#29992;&#34920;&#36798;&#24335;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">target : &#30446;&#26631;&#23492;&#23384;&#22120;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">linkage: &#36830;&#25509;&#30446;&#26631;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">compile-variable</span> exp target linkage<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>end-with-linkage linkage
+                    <span style="color: #696969;">(</span>make-instruction-sequence '<span style="color: #696969;">(</span>env<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>list target<span style="color: #696969;">)</span>
+                                               `<span style="color: #696969;">((</span>assign ,target
+                                                         <span style="color: #696969;">(</span>op lookup-variable-value<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>const ,exp<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg env<span style="color: #696969;">))))))</span>
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org7d4ede7" class="outline-4">
+<h4 id="org7d4ede7">赋值和定义表达式</h4>
+<div class="outline-text-4" id="text-org7d4ede7">
+<p>
+赋值的处理与解释器类似：
+</p>
+<ol class="org-ol">
+<li>递归 <b>生成计算值（准备赋给变量）的代码</b> 
+<ul class="org-ul">
+<li>递归编译要用 <span class="underline">目标 val</span> 和 <span class="underline">连接 next</span> ，生成的代码逻辑里会把计算出来的值放入 val 寄存器</li>
+</ul></li>
+<li>拼接两条指令的序列完成 <span class="underline">赋值</span> 并把 <span class="underline">ok</span> 赋给 <span class="underline">target 目标寄存器</span> 
+<ul class="org-ul">
+<li>所用拼接方式要求维持 <span class="underline">env</span>  ，因为 <b>设置或定义变量都需要当时环境</b> ，而产生变量值的代码可能是复杂表达式的编译结果，其中完全可能修改 env 寄存器（可能需要 save 和 restore）</li>
+</ul></li>
+</ol>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#32534;&#35793;&#36171;&#20540;&#35821;&#21477;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">compile-assignment</span> exp target linkage<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>var <span style="color: #696969;">(</span>assignment-variable exp<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#33719;&#21462; &#36171;&#20540;&#34920;&#36798;&#24335;&#30340;&#21464;&#37327;</span>
+        <span style="color: #696969;">(</span>get-value-code <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#32534;&#35793;&#8221;&#36171;&#20540;&#34920;&#36798;&#24335;&#30340;&#27714;&#20540;&#34920;&#36798;&#24335;&#8220;&#20026;&#8221;&#25351;&#20196;&#24207;&#21015;&#8220; </span>
+         <span style="color: #696969;">(</span>compile <span style="color: #696969;">(</span>assignment-value exp<span style="color: #696969;">)</span> 'val 'next<span style="color: #696969;">)))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#30446;&#26631;&#23492;&#23384;&#22120; val&#65306;&#29983;&#25104;&#20195;&#30721;&#25226;&#20540;&#25918;&#20837; val &#65292;&#36830;&#25509;&#26041;&#24335; next : &#25191;&#34892;&#38543;&#21518;&#30340;&#35821;&#21477;</span>
+    <span style="color: #696969;">(</span>end-with-linkage linkage
+                      <span style="color: #696969;">(</span>preserving '<span style="color: #696969;">(</span>env<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#25152;&#29992;&#25340;&#25509;&#26041;&#24335;&#35201;&#27714;&#32500;&#25345; env&#65292;&#22240;&#20026;&#35774;&#32622;&#21464;&#37327;&#37117;&#38656;&#35201;&#24403;&#26102;&#29615;&#22659;&#65292;&#32780;&#20135;&#29983;&#21464;&#37327;&#20540;&#30340;&#20195;&#30721;&#21487;&#33021;&#26159;&#22797;&#26434;&#34920;&#36798;&#24335;&#30340;&#32534;&#35793;&#32467;&#26524;&#65292;&#20854;&#20013;&#23436;&#20840;&#21487;&#33021;&#20462;&#25913; env &#23492;&#23384;&#22120;</span>
+                                  get-value-code
+                                  <span style="color: #696969;">(</span>make-instruction-sequence '<span style="color: #696969;">(</span>env val<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>list target<span style="color: #696969;">)</span>
+                                                             `<span style="color: #696969;">((</span>perform <span style="color: #696969;">(</span>op set-variable-value!<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#25191;&#34892;&#30495;&#23454;&#30340;&#36171;&#20540;&#25805;&#20316;</span>
+                                                                        <span style="color: #696969;">(</span>const ,var<span style="color: #696969;">)</span>
+                                                                        <span style="color: #696969;">(</span>reg val<span style="color: #696969;">)</span>
+                                                                        <span style="color: #696969;">(</span>reg env<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#25226;,var &#20316;&#20026;&#21464;&#37327;&#21517;&#65292;&#25226; val&#23492;&#23384;&#22120;&#30340;&#20540;&#65288;&#27714;&#20540;&#34920;&#36798;&#24335;&#35745;&#31639;&#30340;&#32467;&#26524;&#65289;&#65292;&#32465;&#23450;&#22312; env &#23492;&#23384;&#22120;&#25351;&#21521;&#30340;&#29615;&#22659;&#20013;  </span>
+                                                               <span style="color: #696969;">(</span>assign ,target <span style="color: #696969;">(</span>const ok<span style="color: #696969;">))))))))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#24120;&#37327; ok &#25918;&#20837; target &#30446;&#26631;&#23492;&#23384;&#22120; &#65292;&#20316;&#20026;&#36820;&#22238;&#20540;</span>
+</pre>
+</div>
+
+<pre class="example">
+      拼接两指令序列时需要 env 和 val，修改 target 目标寄存器
+
+      这个序列只保留 env 但却不保留 val，因为 get-value-code 将把返回值放入 val 供序列里的指令用
+      维护 val 是不对的，因为这将导致 get-value-code 运行后又恢复 val 的原来内容！！！
+</pre>
+
+<p>
+定义的处理和赋值类似：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">compile-definition</span> exp target linkage<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>var <span style="color: #696969;">(</span>definition-variable exp<span style="color: #696969;">))</span>
+        <span style="color: #696969;">(</span>get-value-code
+         <span style="color: #696969;">(</span>compile <span style="color: #696969;">(</span>definition-value exp<span style="color: #696969;">)</span> 'val 'next<span style="color: #696969;">)))</span>
+    <span style="color: #696969;">(</span>end-with-linkage linkage
+                      <span style="color: #696969;">(</span>preserving '<span style="color: #696969;">(</span>env<span style="color: #696969;">)</span>
+                                  get-value-code
+                                  <span style="color: #696969;">(</span>make-instruction-sequence '<span style="color: #696969;">(</span>env val<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>list target<span style="color: #696969;">)</span>
+                                                             `<span style="color: #696969;">((</span>perform <span style="color: #696969;">(</span>op define-variable!<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#36825;&#37324;&#35843;&#29992; define-variable! </span>
+                                                                        <span style="color: #696969;">(</span>const ,var<span style="color: #696969;">)</span>
+                                                                        <span style="color: #696969;">(</span>reg val<span style="color: #696969;">)</span>
+                                                                        <span style="color: #696969;">(</span>reg env<span style="color: #696969;">))</span>
+                                                               <span style="color: #696969;">(</span>assign ,target <span style="color: #696969;">(</span>const ok<span style="color: #696969;">))))))))</span>
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org0e522f9" class="outline-3">
+<h3 id="org0e522f9">条件表达式</h3>
+<div class="outline-text-3" id="text-org0e522f9">
+<p>
+给定目标和连接，编译 if 表达式生成的指令序列形式：
+</p>
+<pre class="example">
+&lt;编译 predicate 部分的结果, 目标在 val, 连接在 next&gt;
+(test (op false?) (reg val))
+(branch (label false-branch))
+true-branch
+&lt;用给定 target, linkage 和 after-if 编译 consequence 部分的结果&gt;
+false-branch
+&lt;用给定 target 和 linkage 编译 alternative 的结果&gt;
+after-if
+</pre>
+
+<ul class="org-ul">
+<li>生成前需要编译 <span class="underline">if 的三个子部分</span> 。将得到的代码与 <span class="underline">检查谓词结果的代码</span> 组合时需生成 <b>标识真假分支</b> 和 <b>条件表达式结束的新标号</b> 。谓词为假时跳过真分支：  
+<ul class="org-ul">
+<li>如果 if 的连接是 <span class="underline">return</span> 或 <span class="underline">标号</span> ：真/假分支都使用 <b>该连接</b></li>
+<li>如果连接是 <span class="underline">next</span> ： <span class="underline">真分支</span> 最后应加入 <b>跳过假分支</b> 的指令</li>
+</ul></li>
+<li>不能直接用标号 true-branch, false-branch 和 after-if ，因程序里可能有多个 if
+<ul class="org-ul">
+<li><b>make-label</b> 生成 <b>新标号</b> ：它以一个符号为参数返回一个新符号作为标号，用与查询语言中 <span class="underline">生成唯一变量名</span> 类似的方式实现</li>
+</ul></li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">compile-if</span> exp target linkage<span style="color: #696969;">)</span>
+  <span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#29983;&#25104;&#19977;&#20010;&#26032;&#26631;&#21495;</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>t-branch <span style="color: #696969;">(</span>make-label 'true-branch<span style="color: #696969;">))</span>
+        <span style="color: #696969;">(</span>f-branch <span style="color: #696969;">(</span>make-label 'false-branch<span style="color: #696969;">))</span>                    
+        <span style="color: #696969;">(</span>after-if <span style="color: #696969;">(</span>make-label 'after-if<span style="color: #696969;">)))</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>consequent-linkage
+           <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>eq? linkage 'next<span style="color: #696969;">)</span> after-if linkage<span style="color: #696969;">)))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#26681;&#25454;&#36830;&#25509;&#30830;&#23450; then &#26368;&#21518;&#30340;&#36830;&#25509;</span>
+      <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>p-code <span style="color: #696969;">(</span>compile <span style="color: #696969;">(</span>if-predicate exp<span style="color: #696969;">)</span> 'val 'next<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#32534;&#35793;&#35859;&#35789;&#34920;&#36798;&#24335;&#20195;&#30721;&#65292;&#27714;&#20540;&#30340;&#32467;&#26524;&#25918;&#20837;&#21040; val&#23492;&#23384;&#22120;&#65292;&#36830;&#25509;&#30340;&#26041;&#24335;&#65306;next </span>
+            <span style="color: #696969;">(</span>c-code 
+             <span style="color: #696969;">(</span>compile
+              <span style="color: #696969;">(</span>if-consequent exp<span style="color: #696969;">)</span> target consequent-linkage<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#32534;&#35793;&#35859;&#35789;&#20026;&#30495;&#26102;&#20505;&#30340;&#34920;&#36798;&#24335;&#65292;&#30446;&#26631;&#23492;&#23384;&#22120;&#26159;target&#65292;&#20351;&#29992;&#35745;&#31639;&#20986;&#26469;&#30340; consequent-linkage&#20316;&#20026;&#36830;&#25509;&#26041;&#24335;</span>
+            <span style="color: #696969;">(</span>a-code
+             <span style="color: #696969;">(</span>compile <span style="color: #696969;">(</span>if-alternative exp<span style="color: #696969;">)</span> target linkage<span style="color: #696969;">)))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#32534;&#35793;&#35859;&#35789;&#20026;&#20551;&#26102;&#20505;&#30340;&#34920;&#36798;&#24335;&#65292;&#30446;&#26631;&#23492;&#23384;&#22120;&#20173;&#20026;target&#65292;&#36830;&#25509;&#26041;&#24335;&#21644;&#26465;&#20214;&#34920;&#36798;&#24335;&#30340;&#19968;&#26679;: linkage</span>
+        <span style="color: #696969;">(</span>preserving '<span style="color: #696969;">(</span>env continue<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#27714;&#35859;&#27425;&#26465;&#20214;&#30340;&#20540;&#65292;&#21069;&#21518; env,  continue&#20004;&#20010;&#23492;&#23384;&#22120;</span>
+                    p-code 
+                    <span style="color: #696969;">(</span>append-instruction-sequences
+                     <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#20135;&#29983;&#22914;&#19979;&#25351;&#20196;&#24207;&#21015;&#65306;&#26816;&#26597; val &#23492;&#23384;&#22120;&#65288;&#35859;&#35789;&#35745;&#31639;&#32467;&#26524;&#23384;&#25918;&#22312;&#27492;&#65289;&#26159;&#21542;&#20026;&#20551;&#65292;&#22914;&#26524;&#20026;&#20551;&#21017;&#25191;&#34892; f-branch &#23545;&#24212;&#30340;&#26631;&#21495;</span>
+                     <span style="color: #696969;">(</span>make-instruction-sequence '<span style="color: #696969;">(</span>val<span style="color: #696969;">)</span> '<span style="color: #696969;">()</span> 
+                                                `<span style="color: #696969;">((</span>test <span style="color: #696969;">(</span>op false?<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg val<span style="color: #696969;">))</span>
+                                                  <span style="color: #696969;">(</span>branch <span style="color: #696969;">(</span>label ,f-branch<span style="color: #696969;">))))</span> 
+                     <span style="color: #696969;">(</span>parallel-instruction-sequences <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#25340;&#25509;&#20004;&#27573;&#19981;&#20250;&#21516;&#26102;&#25191;&#34892;&#30340;&#20195;&#30721;</span>
+                      <span style="color: #696969;">(</span>append-instruction-sequences t-branch c-code<span style="color: #696969;">)</span> 
+                      <span style="color: #696969;">(</span>append-instruction-sequences f-branch a-code<span style="color: #696969;">))</span>
+                     after-if<span style="color: #696969;">))))))</span>
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgedb939b" class="outline-3">
+<h3 id="orgedb939b">序列表达式</h3>
+<div class="outline-text-3" id="text-orgedb939b">
+<p>
+对表达式序列（过程体或 begin表达式），先分别 <b>编译</b> <span class="underline">子表达式</span> ：
+</p>
+<ul class="org-ul">
+<li>最后一个子表达式用 <span class="underline">整个序列的连接</span></li>
+<li>其他表达式用 <span class="underline">next连接</span> （执行序列剩下部分）</li>
+<li>结果序列由 <b>拼接子表达式的指令序列</b> 得到</li>
+<li>需要保留 <span class="underline">env</span> （序列其余部分可能用它）和 <span class="underline">continue</span> （最后的连接可能用它）</li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#32534;&#35793;&#24207;&#21015;&#34920;&#36798;&#24335;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">compile-sequence</span> seq target linkage<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>last-exp? seq<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#27979;&#35797;&#26159;&#21542;&#26159;&#26368;&#21518;&#19968;&#20010;&#23376;&#34920;&#36798;&#24335;</span>
+      <span style="color: #696969;">(</span>compile <span style="color: #696969;">(</span>first-exp seq<span style="color: #696969;">)</span> target linkage<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#32534;&#35793;&#26368;&#21518;&#19968;&#20010;&#23376;&#34920;&#36798;&#24335;&#65292;&#30446;&#26631;&#23492;&#23384;&#22120;&#65306;target&#65292;&#36830;&#25509;&#65306;&#25972;&#20010;&#24207;&#21015;&#30340;&#36830;&#25509;</span>
+      <span style="color: #696969;">(</span>preserving '<span style="color: #696969;">(</span>env continue<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#38656;&#35201;&#20445;&#30041; env (&#19979;&#19968;&#20010;&#23376;&#34920;&#36798;&#24335;&#27714;&#20540;&#38656;&#35201;)&#65292; continue&#65288;&#26368;&#21518;&#19968;&#20010;&#25340;&#25509;&#38656;&#35201;&#65289;</span>
+                  <span style="color: #696969;">(</span>compile <span style="color: #696969;">(</span>first-exp seq<span style="color: #696969;">)</span> target 'next<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#32534;&#35793;&#19979;&#19968;&#20010;&#23376;&#34920;&#36798;&#24335;&#65292;&#30446;&#26631;&#23492;&#23384;&#22120;&#65306;target&#65292;&#36830;&#25509;: next </span>
+                  <span style="color: #696969;">(</span>compile-sequence <span style="color: #696969;">(</span>rest-exps seq<span style="color: #696969;">)</span> target linkage<span style="color: #696969;">))))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#36882;&#24402;&#32534;&#35793;&#20313;&#19979;&#30340;&#23376;&#34920;&#36798;&#24335;&#65292;&#30446;&#26631;&#23492;&#23384;&#22120;&#65306;target&#65292;&#36830;&#25509;&#65306;&#25972;&#20010;&#24207;&#21015;&#30340;linkage</span>
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orga89407d" class="outline-3">
+<h3 id="orga89407d">lambda 表达式</h3>
+<div class="outline-text-3" id="text-orga89407d">
+<p>
+lambda 表达式 <b>构造过程对象</b> ，目标代码具有下面形式：
+</p>
+<pre class="example">
+&lt;构造过程对象并将其赋给 target 寄存器&gt;
+&lt;linkage&gt;
+</pre>
+
+<p>
+编译 lambda 表达式时要生成过程体的代码。虽然构造过程对象时并不会执行过程体，但需要找地方安置其目标代码，合适的地方是 <b>过程对象后面</b> 
+</p>
+<ul class="org-ul">
+<li>如果 lambda 表达式的连接是 <span class="underline">标号</span> 或  <span class="underline">return</span> ：不需要额外的处理</li>
+<li>如果连接是 next : 需要使用 <b>转跳连接</b> 来跳过 <span class="underline">过程体代码</span> ，使用 (goto (lable after-lambda))， after-lambda 在过程体代码后面</li>
+</ul>
+
+<pre class="example">
+&lt;构造过程对象并将其赋给 target寄存器&gt;
+&lt;给定 linkage 的代码&gt;or (goto (label after-lambda))
+&lt;构成体的编译结果&gt;
+after-lambda
+</pre>
+
+<p>
+<span class="underline">compile-lambda</span> 生成 <b>构造过程对象</b> 的代码，随后是 <span class="underline">过程体</span> 代码：
+</p>
+<ul class="org-ul">
+<li><span class="underline">过程对象</span> 将在 <b>执行时</b> 构造，其中组合 <span class="underline">当时环境</span> 和 <span class="underline">编译后过程体的入口点</span></li>
+</ul>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#32534;&#35793; lambda &#34920;&#36798;&#24335;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">compile-lambda</span> exp target linkage<span style="color: #696969;">)</span>
+  <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#29983;&#25104; 2&#20010;&#26032;&#30340;&#26631;&#21495;&#65306; proc-entry &#21644; after-lambda </span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>proc-entry <span style="color: #696969;">(</span>make-label 'entry<span style="color: #696969;">))</span>
+        <span style="color: #696969;">(</span>after-lambda <span style="color: #696969;">(</span>make-label 'after-lambda<span style="color: #696969;">)))</span>
+    <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#35745;&#31639; lambda&#34920;&#36798;&#24335;&#30340;&#36830;&#25509;</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>lambda-linkage
+           <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>eq? linkage 'next<span style="color: #696969;">)</span> after-lambda linkage<span style="color: #696969;">)))</span>
+      <span style="color: #696969;">(</span>append-instruction-sequences
+       <span style="color: #696969;">(</span>tack-on-instruction-sequence
+        <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#32452;&#21512;&#25805;&#20316;&#65292;&#30452;&#25509;&#25226;&#36807;&#31243;&#20307;&#20195;&#30721;&#25918;&#22312; lambda &#34920;&#36798;&#24335; &#20195;&#30721;&#20043;&#21518;&#12290;&#23427;&#20204;&#30456;&#20114;&#26080;&#20851;&#65292;&#21482;&#26159;&#25918;&#22312;&#36825;&#37324;&#21512;&#36866;</span>
+        <span style="color: #696969;">(</span>end-with-linkage lambda-linkage
+                          <span style="color: #696969;">(</span>make-instruction-sequence '<span style="color: #696969;">(</span>env<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>list target<span style="color: #696969;">)</span>
+                                                     `<span style="color: #696969;">((</span>assign ,target
+                                                               <span style="color: #696969;">(</span>op make-compiled-procedure<span style="color: #696969;">)</span>
+                                                               <span style="color: #696969;">(</span>label ,proc-entry<span style="color: #696969;">)</span>
+                                                               <span style="color: #696969;">(</span>reg env<span style="color: #696969;">)))))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#26500;&#24314;&#19968;&#20010;&#36807;&#31243;&#23545;&#35937;&#65292;&#26631;&#21495;&#26159; proc-entry&#30340;&#20540;&#65292;&#29615;&#22659;&#26159; env, &#25226;&#36825;&#20010;&#23545;&#35937;&#36171;&#20540;&#21040; target &#23492;&#23384;&#22120;</span>
+        <span style="color: #696969;">(</span>compile-lambda-body exp proc-entry<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#32534;&#35793; lambda &#36807;&#31243;&#20307;</span>
+       after-lambda<span style="color: #696969;">))))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">after-lambda &#26631;&#21495;</span>
+</pre>
+</div>
+
+<p>
+<span class="underline">compile-lambda-body</span> ： <b>构造过程体代码</b> ：
+</p>
+<ul class="org-ul">
+<li>入口点标号:  <span class="underline">,proc-entry</span></li>
+<li>把 <span class="underline">运行时环境</span> 转到 <span class="underline">求值过程体的定义环境</span> （过程的定义环境）并做 <b>环境扩充</b></li>
+<li><span class="underline">过程体表达式序列</span> 的编译代码：
+<ul class="org-ul">
+<li>序列用 <span class="underline">连接 return</span> 和 <span class="underline">目标 val</span> 编译：从过程返回，过程的执行结果放在 val</li>
+</ul></li>
+</ul>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">compile-lambda-body</span> exp proc-entry<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>formals <span style="color: #696969;">(</span>lambda-parameters exp<span style="color: #696969;">)))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#33719;&#24471;&#24418;&#21442;&#34920;</span>
+    <span style="color: #696969;">(</span>append-instruction-sequences
+     <span style="color: #696969;">(</span>make-instruction-sequence '<span style="color: #696969;">(</span>env proc argl<span style="color: #696969;">)</span> '<span style="color: #696969;">(</span>env<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#26500;&#36896;&#36807;&#31243;&#20307;&#38656;&#35201;&#30340;&#23492;&#23384;&#22120;&#26159; env, proc, argl , &#26500;&#36896;&#23436;&#25104;&#21518;&#65306;&#20462;&#25913;&#30340;&#23492;&#23384;&#22120;&#26159; env </span>
+                                `<span style="color: #696969;">(</span>,proc-entry <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#36807;&#31243;&#20307;&#23545;&#24212;&#30340;&#26631;&#21495;</span>
+                                  <span style="color: #696969;">(</span>assign env <span style="color: #696969;">(</span>op compiled-procedure-env<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg proc<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#35843;&#29992;lambda&#34920;&#36798;&#24335;&#26102;&#20505;&#30340;&#29615;&#22659;</span>
+                                  <span style="color: #696969;">(</span>assign env 
+                                          <span style="color: #696969;">(</span>op extend-environment<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#25193;&#20805;&#29615;&#22659;</span>
+                                          <span style="color: #696969;">(</span>const ,formals<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#25226;&#23454;&#21442;&#21644;&#24418;&#21442;&#22312;&#29615;&#22659;&#20013;&#32465;&#23450;</span>
+                                          <span style="color: #696969;">(</span>reg argl<span style="color: #696969;">)</span>
+                                          <span style="color: #696969;">(</span>reg env<span style="color: #696969;">))))</span>
+     <span style="color: #696969;">(</span>compile-sequence <span style="color: #696969;">(</span>lambda-body exp<span style="color: #696969;">)</span> 'val 'return<span style="color: #696969;">))))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#32534;&#35793;&#36807;&#31243;&#20307;&#30340;&#25351;&#20196;&#65292;&#25191;&#34892;&#36807;&#31243;&#20307;&#30340;&#30446;&#26631;&#23492;&#23384;&#22120;&#26159; val, &#36830;&#25509;&#26041;&#24335;: return&#65288;&#30452;&#25509;&#36820;&#22238;&#65289;</span>
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org8d3ba38" class="outline-3">
+<h3 id="org8d3ba38">过程应用的编译</h3>
+<div class="outline-text-3" id="text-org8d3ba38">
+<pre class="example">
+     整个编译器里“过程应用”的编译最关键
+</pre>
+
+<p>
+组合式的编译结果代码的形式：
+</p>
+<pre class="example">
+&lt;运算符的编译结果, 目标为 proc, 连接为 next&gt;
+&lt;求值运算对象并在 argl 里构造实参表的代码&gt;
+&lt;用给定目标和连接编译过程调用的结果&gt; 
+</pre>
+
+<p>
+运算符和运算对象求值期间可能保留与恢复寄存器 <span class="underline">env</span> ,  <span class="underline">proc</span>  和 <span class="underline">argl</span> 
+</p>
+
+<pre class="example">
+     注意：整个编译器里只有这一处的目标寄存器不是 val 而是 proc
+</pre>
+
+<p>
+compile-application : 
+</p>
+<ul class="org-ul">
+<li>编译 <span class="underline">运算符</span> ，生成的代码把 <b>要应用的过程放 入 proc</b></li>
+<li>编译各 <span class="underline">运算对象</span> ，生成 <b>求值各运算对象的代码</b></li>
+<li>将 <span class="underline">运算对象指令序列</span> 与在 <span class="underline">argl 里构造实参表的代码</span> 组合(construct-arglist)</li>
+<li>组合的结果再与 <span class="underline">过程代码</span> 和 <span class="underline">过程调用代码</span> (compile-procedure-call) 组合
+<ul class="org-ul">
+<li><b>求值运算符</b> 前后需要保留和恢复 env ：求值运算符时可能修改它们， <b>求值运算对象</b> 时需要它们</li>
+<li><b>构造实际参数表</b> 前后需要保留 proc ：运算对象求值可能修改它， <b>实际过程应用</b> 需要它</li>
+<li><b>整个段</b> 前后需要保留和恢复continue： <b>过程调用的连接</b> 需要它</li>
+</ul></li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#32534;&#35793;&#36807;&#31243;&#24212;&#29992;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">compile-application</span> exp target linkage<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>proc-code <span style="color: #696969;">(</span>compile <span style="color: #696969;">(</span>operator exp<span style="color: #696969;">)</span> 'proc 'next<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#32534;&#35793;&#36816;&#31639;&#31526;&#34920;&#36798;&#24335;: &#30446;&#26631;&#23492;&#23384;&#22120; proc&#65292;&#36830;&#25509;&#26041;&#24335; next</span>
+        <span style="color: #696969;">(</span>operand-codes
+         <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">map</span> <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>operand<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>compile operand 'val 'next<span style="color: #696969;">))</span>
+              <span style="color: #696969;">(</span>operands exp<span style="color: #696969;">))))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#20381;&#27425;&#32534;&#35793;&#21508;&#20010;&#36816;&#31639;&#21442;&#25968;&#34920;&#36798;&#24335;&#65306;&#30446;&#26631;&#23492;&#23384;&#22120; val, &#36830;&#25509;&#26041;&#24335; next</span>
+    <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#25972;&#20010;&#27573;&#21069;&#21518;&#38656;&#35201;&#20445;&#30041;&#21644;&#24674;&#22797; continue&#65292; &#8220;&#36807;&#31243;&#35843;&#29992;&#30340;&#36830;&#25509;&#8221; &#38656;&#35201;&#23427;</span>
+    <span style="color: #696969;">(</span>preserving '<span style="color: #696969;">(</span>env continue<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#27714;&#20540;&#36816;&#31639;&#31526;&#21069;&#21518;&#38656;&#35201;&#20445;&#30041;&#21644;&#24674;&#22797; env&#65306;&#27714;&#20540;&#36816;&#31639;&#31526;&#26102;&#21487;&#33021;&#20462;&#25913;&#23427;&#20204;&#65292;&#27714;&#20540;&#36816;&#31639;&#23545;&#35937;&#26102;&#38656;&#35201;&#23427;&#20204;</span>
+                proc-code 
+                <span style="color: #696969;">(</span>preserving '<span style="color: #696969;">(</span>proc continue<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#26500;&#36896;&#23454;&#38469;&#21442;&#25968;&#34920;&#21069;&#21518;&#38656;&#35201;&#20445;&#30041; proc : &#36816;&#31639;&#23545;&#35937;&#27714;&#20540;&#21487;&#33021;&#20462;&#25913;&#23427;&#65292;&#23454;&#38469;&#36807;&#31243;&#24212;&#29992;&#38656;&#35201;&#23427;</span>
+                            <span style="color: #696969;">(</span>construct-arglist operand-codes<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#23558;&#36816;&#31639;&#23545;&#35937;&#25351;&#20196;&#24207;&#21015;&#19982;&#22312; argl &#37324;&#26500;&#36896;&#23454;&#21442;&#34920;&#30340;&#20195;&#30721;&#32452;&#21512;</span>
+                            <span style="color: #696969;">(</span>compile-procedure-call target linkage<span style="color: #696969;">)))))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#32534;&#35793;&#36807;&#31243;&#35843;&#29992;&#20195;&#30721;</span>
+</pre>
+</div>
+
+<p>
+构造实参表的代码求值运算对象，结果放在 val ，将该值积累到 argl 里的实参表中。由于是 <span class="underline">顺序处理</span> ， 从 <b>最后参数开始反向做</b> 才能得到正确顺
+序。这里让第一个代码序列 <b>构造初始的空 argl表</b> 。代码形式为：
+</p>
+<pre class="example">
+&lt;最后一个运算对象的编译结果, 目标为 val&gt;
+(assign argl (op list) (reg val))
+&lt;前一个运算对象的编译结果, 目标为val&gt;
+(assign argl (op cons) (reg val) (reg argl))
+...&lt;第一个运算对象的编译结果, 目标为val&gt;
+(assign argl (op cons) (reg val) (reg argl)) 
+</pre>
+
+<ul class="org-ul">
+<li><span class="underline">除第一个参数</span> 外，其余运算对象求值前后都保存恢复 <span class="underline">argl</span>  :  <b>保证已积累的实际参数不丢失</b></li>
+<li><span class="underline">除最后一个参数</span> 外，每个运算对象求值前后都必须保留和恢复 <span class="underline">env</span>  : 以便 <b>后续运算对象的求值</b> 中使用</li>
+</ul>
+
+<pre class="example">
+     第一个参数需要特殊处理，保存 argl 和 env的地方
+
+     与处理其他参数时不同，编译这段实参代码中有些小麻烦
+</pre>
+
+<p>
+construct-arglist 以求值各运算对象的代码段为参数
+</p>
+<ul class="org-ul">
+<li>没有运算对象：直接送出 <span class="underline">(assign argl (const ()))</span></li>
+<li>存在参数时：处理最后一个实参时创建初始化 argl的代码，而后将求值其他参数的代码顺序结合到 argl里</li>
+<li>为了反向处理实参，先反转 compile-application 送来的运算对象代码序列表</li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#32534;&#35793;&#26500;&#36896;&#23454;&#38469;&#21442;&#25968;&#21015;&#34920;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">construct-arglist</span> operand-codes<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>operand-codes <span style="color: #696969;">(</span>reverse operand-codes<span style="color: #696969;">)))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#36870;&#21521;&#21442;&#25968;&#39034;&#24207;&#65292;&#20174;&#26368;&#21518;&#19968;&#20010;&#23454;&#21442;&#24320;&#22987;&#22788;&#29702;</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>null? operand-codes<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#22914;&#26524;&#21442;&#25968;&#34920;&#36798;&#24335;&#34920;&#20026;&#31354;</span>
+        <span style="color: #696969;">(</span>make-instruction-sequence '<span style="color: #696969;">()</span> '<span style="color: #696969;">(</span>argl<span style="color: #696969;">)</span>
+                                   '<span style="color: #696969;">((</span>assign argl <span style="color: #696969;">(</span>const <span style="color: #696969;">()))))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#30452;&#25509;&#20026; argl &#26500;&#36896;&#19968;&#20010;&#31354;&#34920;</span>
+        <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>code-to-get-last-arg <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#26368;&#21518;&#19968;&#20010;&#23454;&#21442;</span>
+               <span style="color: #696969;">(</span>append-instruction-sequences
+                <span style="color: #696969;">(</span>car operand-codes<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#27714;&#20540;&#26368;&#21518;&#19968;&#20010;&#23454;&#21442;&#20540;&#65292;&#32467;&#26524;&#25918;&#20837;&#21040; val &#23492;&#23384;&#22120; </span>
+                <span style="color: #696969;">(</span>make-instruction-sequence '<span style="color: #696969;">(</span>val<span style="color: #696969;">)</span> '<span style="color: #696969;">(</span>argl<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span>
+                                           '<span style="color: #696969;">((</span>assign argl <span style="color: #696969;">(</span>op list<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg val<span style="color: #696969;">)))))))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#25226; val&#23492;&#23384;&#22120;&#20013;&#30340;&#20540;&#25918;&#20837;&#19968;&#20010;&#31354;&#21015;&#34920;&#65292;&#21015;&#34920;&#30340;&#20540;&#36171;&#20104;&#32473; argl &#23492;&#23384;&#22120;</span>
+          <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>null? <span style="color: #696969;">(</span>cdr operand-codes<span style="color: #696969;">))</span>
+              code-to-get-last-arg <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#21482;&#26377;&#19968;&#20010;&#23454;&#21442;&#65292;&#21482;&#38656;&#35201;&#36820;&#22238; code-to-get-last-arg </span>
+              <span style="color: #696969;">(</span>preserving '<span style="color: #696969;">(</span>env<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#27714;&#20540;&#20854;&#20182;&#30340;&#23454;&#21442;&#26102;&#20505;&#65288;&#38500;&#20102;&#26368;&#21518;&#19968;&#20010;&#21442;&#25968;&#65289;&#65292;&#38656;&#35201;&#20445;&#23384;&#21644;&#24674;&#22797; env &#23492;&#23384;&#22120;&#65306;&#21487;&#33021;&#20250;&#26377;&#20854;&#20182;&#23376;&#34920;&#36798;&#24335;&#20250;&#20462;&#25913; env &#23492;&#23384;&#22120;</span>
+                          code-to-get-last-arg
+                          <span style="color: #696969;">(</span>code-to-get-rest-args <span style="color: #696969;">(</span>cdr operand-codes<span style="color: #696969;">))))))))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#32487;&#32493;&#27714;&#20540;&#20854;&#20182;&#23454;&#21442;&#65292;&#24182;&#25918;&#20837; argl &#23492;&#23384;&#22120;&#20013;&#30340;&#21015;&#34920;</span>
+
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">code-to-get-rest-args</span> operand-codes<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>code-for-next-arg
+         <span style="color: #696969;">(</span>preserving '<span style="color: #696969;">(</span>argl<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#27714;&#20540;&#19979;&#19968;&#20010;&#23454;&#21442;&#30340;&#26102;&#20505;&#65288;&#38500;&#20102;&#31532;&#19968;&#20010;&#21442;&#25968;&#65289;&#65292;&#24517;&#39035;&#20445;&#23384;&#21644;&#24674;&#22797; argl &#23492;&#23384;&#22120;&#65306;&#22240;&#20026;&#36825;&#37324;&#38754;&#20445;&#23384;&#20102;&#30001;&#20854;&#20182;&#23454;&#21442;&#20540;&#32452;&#25104;&#30340;&#21015;&#34920;</span>
+                     <span style="color: #696969;">(</span>car operand-codes<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#25191;&#34892;&#31532;&#19968;&#20010;&#21442;&#25968;&#27714;&#20540;</span>
+                     <span style="color: #696969;">(</span>make-instruction-sequence '<span style="color: #696969;">(</span>val argl<span style="color: #696969;">)</span> '<span style="color: #696969;">(</span>argl<span style="color: #696969;">)</span> 
+                                                '<span style="color: #696969;">((</span>assign argl
+                                                          <span style="color: #696969;">(</span>op cons<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg val<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg argl<span style="color: #696969;">)))))))</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>null? <span style="color: #696969;">(</span>cdr operand-codes<span style="color: #696969;">))</span> 
+        code-for-next-arg
+        <span style="color: #696969;">(</span>preserving '<span style="color: #696969;">(</span>env<span style="color: #696969;">)</span>
+                    code-for-next-arg
+                    <span style="color: #696969;">(</span>code-to-get-rest-args <span style="color: #696969;">(</span>cdr operand-codes<span style="color: #696969;">))))))</span>
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orgd794cf3" class="outline-4">
+<h4 id="orgd794cf3">应用过程</h4>
+<div class="outline-text-4" id="text-orgd794cf3">
+<pre class="example">
+      组合式的元素求值后，编译结果代码要把 proc 里的过程 应用 于 argl 里的实参
+
+      这也是分派，类似元循环求值器的 apply 或显式控制求值器里 apply-dispatch
+</pre>
+<p>
+基本过程用 apply-primitive-procedure 代码形式：
+</p>
+<pre class="example">
+(test (op primitive-procedure?) (reg proc))
+ (branch (label primitive-branch))
+compiled-branch
+ &lt;code to apply compiled procedure with given target and appropriate linkage&gt;
+primitive-branch
+ (assign &lt;target&gt;
+	 (op apply-primitive-procedure)
+	 (reg proc)
+	 (reg argl))
+ &lt;linkage&gt;
+after-call
+</pre>
+
+<p>
+<span class="underline">编译后过程的分支</span> (compiled-branch )必须 <b>跳过处理基本过程的分支</b> (primitive-branch)
+</p>
+<pre class="example">
+      如果过程调用的原连接是 next， 复合分支 就要 跳到 插入在 基本分支最后的标号 的连接
+
+      类似于compile-if里真分支所用的连接
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#32534;&#35793;&#36807;&#31243;&#35843;&#29992;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">compile-procedure-call</span> target linkage<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>primitive-branch <span style="color: #696969;">(</span>make-label 'primitive-branch<span style="color: #696969;">))</span>
+        <span style="color: #696969;">(</span>compiled-branch <span style="color: #696969;">(</span>make-label 'compiled-branch<span style="color: #696969;">))</span>
+        <span style="color: #696969;">(</span>after-call <span style="color: #696969;">(</span>make-label 'after-call<span style="color: #696969;">)))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#29983;&#25104;&#19977;&#20010;&#26631;&#21495;</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>compiled-linkage
+           <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>eq? linkage 'next<span style="color: #696969;">)</span> after-call linkage<span style="color: #696969;">)))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#22914;&#26524;&#21407;&#35843;&#29992;&#30340;&#36830;&#25509;&#26159; next: com</span>
+      <span style="color: #696969;">(</span>append-instruction-sequences
+       <span style="color: #696969;">(</span>make-instruction-sequence '<span style="color: #696969;">(</span>proc<span style="color: #696969;">)</span> '<span style="color: #696969;">()</span>
+        `<span style="color: #696969;">((</span>test <span style="color: #696969;">(</span>op primitive-procedure?<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg proc<span style="color: #696969;">))</span>
+          <span style="color: #696969;">(</span>branch <span style="color: #696969;">(</span>label ,primitive-branch<span style="color: #696969;">))))</span>
+       <span style="color: #696969;">(</span>parallel-instruction-sequences <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#25340;&#25509;&#20004;&#27573;&#19981;&#20250;&#21516;&#26102;&#25191;&#34892;&#30340;&#20195;&#30721;</span>
+        <span style="color: #696969;">(</span>append-instruction-sequences
+         compiled-branch
+         <span style="color: #696969;">(</span>compile-proc-appl target compiled-linkage<span style="color: #696969;">))</span>
+        <span style="color: #696969;">(</span>append-instruction-sequences
+         primitive-branch
+         <span style="color: #696969;">(</span>end-with-linkage linkage
+          <span style="color: #696969;">(</span>make-instruction-sequence '<span style="color: #696969;">(</span>proc argl<span style="color: #696969;">)</span>
+                                     <span style="color: #696969;">(</span>list target<span style="color: #696969;">)</span>
+           `<span style="color: #696969;">((</span>assign ,target
+                     <span style="color: #696969;">(</span>op apply-primitive-procedure<span style="color: #696969;">)</span>
+                     <span style="color: #696969;">(</span>reg proc<span style="color: #696969;">)</span>
+                     <span style="color: #696969;">(</span>reg argl<span style="color: #696969;">)))))))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#35843;&#29992;&#21407;&#22987;&#36807;&#31243;&#65288;scheme&#23454;&#29616;&#30340;&#65289;</span>
+       after-call<span style="color: #696969;">))))</span>
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orgeb9d922" class="outline-5">
+<h5 id="orgeb9d922">应用编译得到的过程</h5>
+<div class="outline-text-5" id="text-orgeb9d922">
+<pre class="example">
+       处理过程调用的代码是本编译器最复杂的部分，虽然生成的指令序列很短
+</pre>
+
+<p>
+编译过程（由 compile-lambda构造）的 <span class="underline">入口点标号</span> 标明开始位置，代码将 <span class="underline">算出的结果</span> 放入 val 后返回：
+</p>
+
+<p>
+如果连接是 <span class="underline">标号</span> ：
+</p>
+<pre class="example">
+(assign continue (label proc-return))
+ (assign val (op compiled-procedure-entry) (reg proc))
+ (goto (reg val))
+proc-return
+ (assign &lt;target&gt; (reg val))   ; included if target is not val
+ (goto (label &lt;linkage&gt;))   ; linkage code
+</pre>
+
+<p>
+如果连接是 return：
+</p>
+<pre class="example">
+ (save continue)
+ (assign continue (label proc-return))
+ (assign val (op compiled-procedure-entry) (reg proc))
+ (goto (reg val))
+proc-return
+ (assign &lt;target&gt; (reg val))   ; included if target is not val
+ (restore continue)
+ (goto (reg continue))   ; linkage code
+</pre>
+
+<p>
+如果目标不是 val，编译器就应该生成上面代码。但实际目标通常是 val （仅有一处以 proc寄存器作为求值的目标），过程结果可以直接放入目标寄存器。代码还可以简化，先设置好 <span class="underline">continue</span> 使得过程直接  <b>返回</b> 到 <span class="underline">调用者的连接</span> 指定的位置：
+</p>
+<pre class="example">
+&lt;set up continue for linkage&gt;
+(assign val (op compiled-procedure-entry) (reg proc))
+(goto (reg val))
+</pre>
+
+<p>
+连接是标号时：设置 continue 使过程直接返回该标号。过程结束的 (goto (reg continue)) 变为等价于 proc-return 处的 (goto (label &lt;linkage&gt;) 
+</p>
+<pre class="example">
+(assign continue (label &lt;linkage&gt;))
+(assign val (op compiled-procedure-entry) (reg proc))
+(goto (reg val))
+</pre>
+
+<p>
+连接是return：不需要再设置 continue（它已经存着所需地址），作为过程结束的(goto(regcontinue))能直接跳到应该的地方
+</p>
+<pre class="example">
+(assign val (op compiled-procedure-entry) (reg proc))
+(goto (reg val))
+</pre>
+
+<p>
+这种 return 连接生成 <b>尾递归</b> 代码：
+</p>
+<ul class="org-ul">
+<li>过程体最后一步直接转移，不在栈里保存信息</li>
+<li>如果对有 return 连接和 val 目标的调用也像前面非 val 目标的代码一样处理，就会破坏尾递归。得到的代码语义相同，但调用时都保存 continue，调用后撤销这一无用保存，具有 线性存储需求</li>
+</ul>
+
+<pre class="example">
+看来生成尾递归代码并不难。常见语言编译器没做，因此不能用过程描述迭代
+这是因为常规语言的栈里不仅保存返回地址，还保存实参和局部变量
+用栈保存实参和局部变量可以不靠垃圾回收，一般认为效率较高
+
+这里 Scheme 实现里的实参和变量都放在能做垃圾回收的内存里
+Lisp编译器也可以用栈保存实参的同时保证尾递归
+
+对于栈分配和用废料收集的效率有争论，有些细节依赖于计算机体系结构
+</pre>
+
+<p>
+<b>compile-proc-appl</b> : 根据 <span class="underline">调用目标是否 val</span> ， <span class="underline">连接是否 return</span> 生成调用代码时分四种情况
+</p>
+<ul class="org-ul">
+<li>所有代码序列都说明为 <b>要修改所有寄存器</b> ：被执行过程体可能修改任何寄存器</li>
+<li><span class="underline">目标val</span> 和 <span class="underline">连接 return</span> 情况的代码序列说明了 <b>需要 continue</b> ：即使 continue 并没有用在两个指令序列里，也必须保证进入编译得到的过程时continue的值正确</li>
+</ul>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#32534;&#35793;&#8220;&#22797;&#21512;&#36807;&#31243;&#35843;&#29992;&#8221;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">compile-proc-appl</span> target linkage<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">cond</span> <span style="color: #696969;">((</span><span style="color: #00bfff; font-weight: bold;">and</span> <span style="color: #696969;">(</span>eq? target 'val<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>not <span style="color: #696969;">(</span>eq? linkage 'return<span style="color: #696969;">)))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#30446;&#26631;&#35299;&#37322;&#22120;&#26159; val, &#24182;&#19988;&#36830;&#25509;&#26041;&#24335;&#19981;&#26159; return </span>
+         <span style="color: #696969;">(</span>make-instruction-sequence '<span style="color: #696969;">(</span>proc<span style="color: #696969;">)</span> all-regs
+                                    `<span style="color: #696969;">((</span>assign continue <span style="color: #696969;">(</span>label ,linkage<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#20026;&#25191;&#34892;&#23436;&#27605;&#21518;&#35774;&#32622;&#32493;&#28857;&#20026; &#25972;&#20307;&#35843;&#29992;&#30340;&#36830;&#25509;&#26041;&#24335;&#65288;&#26631;&#21495;&#25110;next&#65289;</span>
+                                      <span style="color: #696969;">(</span>assign val <span style="color: #696969;">(</span>op compiled-procedure-entry<span style="color: #696969;">)</span>
+                                              <span style="color: #696969;">(</span>reg proc<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#20174;proc&#36807;&#31243;&#20013;&#33719;&#21462;&#35843;&#29992;&#36807;&#31243;&#20307;&#23545;&#24212;&#30340;&#20837;&#21475;&#26631;&#21495;</span>
+                                      <span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>reg val<span style="color: #696969;">)))))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#36716;&#21040;&#20837;&#21475;&#26631;&#21495;&#21435;&#25191;&#34892;</span>
+        <span style="color: #696969;">((</span><span style="color: #00bfff; font-weight: bold;">and</span> <span style="color: #696969;">(</span>not <span style="color: #696969;">(</span>eq? target 'val<span style="color: #696969;">))</span> <span style="color: #696969;">(</span>not <span style="color: #696969;">(</span>eq? linkage 'return<span style="color: #696969;">)))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#30446;&#26631;&#35299;&#37322;&#22120;&#19981;&#26159; val, &#24182;&#19988;&#36830;&#25509;&#26041;&#24335;&#19981;&#26159; return </span>
+         <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>proc-return <span style="color: #696969;">(</span>make-label 'proc-return<span style="color: #696969;">)))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#21019;&#24314; proc-return &#23545;&#24212;&#30340;&#26631;&#21495;</span>
+           <span style="color: #696969;">(</span>make-instruction-sequence '<span style="color: #696969;">(</span>proc<span style="color: #696969;">)</span> all-regs
+                                      `<span style="color: #696969;">((</span>assign continue <span style="color: #696969;">(</span>label ,proc-return<span style="color: #696969;">))</span>
+                                        <span style="color: #696969;">(</span>assign val <span style="color: #696969;">(</span>op compiled-procedure-entry<span style="color: #696969;">)</span>
+                                                <span style="color: #696969;">(</span>reg proc<span style="color: #696969;">))</span>
+                                        <span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>reg val<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#25191;&#34892;&#23436;&#36807;&#31243;&#35843;&#29992;&#21518;&#65292;&#26368;&#21518;&#20250;&#25191;&#34892; (goto (reg continue)) &#36339;&#36716;&#21040; proc-return &#26631;&#21495;&#23545;&#24212;&#22788;</span>
+                                        ,proc-return
+                                        <span style="color: #696969;">(</span>assign ,target <span style="color: #696969;">(</span>reg val<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#25226;&#27714;&#20540;&#32467;&#26524;&#25918;&#32622;&#21040; target &#23492;&#23384;&#22120;</span>
+                                        <span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label ,linkage<span style="color: #696969;">))))))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#36339;&#36716;&#21040;&#25972;&#20307;&#35843;&#29992;&#30340;&#36830;&#25509;&#26041;&#24335;&#65288;&#26631;&#21495;&#25110; next&#65289;</span>
+        <span style="color: #696969;">((</span><span style="color: #00bfff; font-weight: bold;">and</span> <span style="color: #696969;">(</span>eq? target 'val<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>eq? linkage 'return<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#30446;&#26631;&#35299;&#37322;&#22120;&#26159; val, &#24182;&#19988;&#36830;&#25509;&#26041;&#24335;&#26159; return </span>
+         <span style="color: #696969;">(</span>make-instruction-sequence '<span style="color: #696969;">(</span>proc continue<span style="color: #696969;">)</span> all-regs
+                                    '<span style="color: #696969;">((</span>assign val <span style="color: #696969;">(</span>op compiled-procedure-entry<span style="color: #696969;">)</span>
+                                              <span style="color: #696969;">(</span>reg proc<span style="color: #696969;">))</span>
+                                      <span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>reg val<span style="color: #696969;">)))))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#19981;&#38656;&#35201;&#35774;&#32622; continue &#23492;&#23384;&#22120;&#65292;&#30452;&#25509;&#35843;&#29992;  (goto (reg continue)) &#27492;&#26102;continue&#23492;&#23384;&#22120;&#30340;&#20540;&#26159;compile-proc-appl &#26102;&#30340;&#20540;</span>
+        <span style="color: #696969;">((</span><span style="color: #00bfff; font-weight: bold;">and</span> <span style="color: #696969;">(</span>not <span style="color: #696969;">(</span>eq? target 'val<span style="color: #696969;">))</span> <span style="color: #696969;">(</span>eq? linkage 'return<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#30446;&#26631;&#35299;&#37322;&#22120;&#19981;&#26159; val, &#24182;&#19988;&#36830;&#25509;&#26041;&#24335;&#26159; return : &#38750;&#27861;&#35843;&#29992;</span>
+         <span style="color: #696969;">(</span>error <span style="color: #deb887;">"return linkage, target not val -- COMPILE"</span>
+                target<span style="color: #696969;">))))</span>
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org73c15c4" class="outline-3">
+<h3 id="org73c15c4">指令序列的组合</h3>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
