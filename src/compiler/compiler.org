@@ -415,20 +415,19 @@
      <linkage>
    #+END_EXAMPLE
 
-   编译 lambda 表达式时要生成过程体的代码。虽然构造过程时不执行过程体，但需要找地方安置其目标代码。lambda的代码后是合适的位置：
-   + 如果 lambda 表达式的连接是 _标号_ 或  _return_ ，这样正合适
-   + 如果连接是 next : 就用 *转跳连接* 跳过过程体代码，相应标号放在过程体后面
+   编译 lambda 表达式时要生成过程体的代码。虽然构造过程对象时并不会执行过程体，但需要找地方安置其目标代码，合适的地方是 *过程对象后面* 
+   + 如果 lambda 表达式的连接是 _标号_ 或  _return_ ：不需要额外的处理
+   + 如果连接是 next : 需要使用 *转跳连接* 来跳过 _过程体代码_ ，使用 (goto (lable after-lambda))， after-lambda 在过程体代码后面
 
    #+BEGIN_EXAMPLE
-     <构造过程对象并将其赋给 target寄存器
-     >
+     <构造过程对象并将其赋给 target寄存器>
      <给定 linkage 的代码>or (goto (label after-lambda))
      <构成体的编译结果>
      after-lambda
    #+END_EXAMPLE
 
    _compile-lambda_ 生成 *构造过程对象* 的代码，随后是 _过程体_ 代码：
-   + 过程对象将在 *运行时* 构造，其中组合 _当时环境_ 和 _编译后过程体的入口点_ 
+   + _过程对象_ 将在 *执行时* 构造，其中组合 _当时环境_ 和 _编译后过程体的入口点_ 
    #+BEGIN_SRC scheme
   ;;; 编译 lambda 表达式
   (define (compile-lambda exp target linkage)
@@ -451,9 +450,10 @@
 	 after-lambda)))) ;; after-lambda 标号
    #+END_SRC
 
-   _compile-lambda-body_ ： *构造过程体代码* （运行时构造）
-   + 入口点标号后的指令把 _运行时环境_ 转到 _求值过程体的定义环境_ （过程的定义环境）并做 *环境扩充* 
-   + _过程体表达式序列_ 的编译代码
+   _compile-lambda-body_ ： *构造过程体代码* ：
+   + 入口点标号:  _,proc-entry_ 
+   + 把 _运行时环境_ 转到 _求值过程体的定义环境_ （过程的定义环境）并做 *环境扩充* 
+   + _过程体表达式序列_ 的编译代码：
      + 序列用 _连接 return_ 和 _目标 val_ 编译：从过程返回，过程的执行结果放在 val
    #+BEGIN_SRC scheme
   (define (compile-lambda-body exp proc-entry)
@@ -469,3 +469,256 @@
 					    (reg env))))
        (compile-sequence (lambda-body exp) 'val 'return)))) ;; 编译过程体的指令，执行过程体的目标寄存器是 val, 连接方式: return（直接返回）
    #+END_SRC
+
+** 过程应用的编译
+   #+BEGIN_EXAMPLE
+     整个编译器里“过程应用”的编译最关键
+   #+END_EXAMPLE
+
+   组合式的编译结果代码的形式：
+   #+BEGIN_EXAMPLE
+     <运算符的编译结果, 目标为 proc, 连接为 next>
+     <求值运算对象并在 argl 里构造实参表的代码>
+     <用给定目标和连接编译过程调用的结果> 
+   #+END_EXAMPLE
+
+   运算符和运算对象求值期间可能保留与恢复寄存器 _env_ ,  _proc_  和 _argl_ 
+
+   #+BEGIN_EXAMPLE
+     注意：整个编译器里只有这一处的目标寄存器不是 val 而是 proc
+   #+END_EXAMPLE
+
+   compile-application : 
+   + 编译 _运算符_ ，生成的代码把 *要应用的过程放 入 proc* 
+   + 编译各 _运算对象_ ，生成 *求值各运算对象的代码* 
+   + 将 _运算对象指令序列_ 与在 _argl 里构造实参表的代码_ 组合(construct-arglist)
+   + 组合的结果再与 _过程代码_ 和 _过程调用代码_ (compile-procedure-call) 组合
+     + *求值运算符* 前后需要保留和恢复 env ：求值运算符时可能修改它们， *求值运算对象* 时需要它们
+     + *构造实际参数表* 前后需要保留 proc ：运算对象求值可能修改它， *实际过程应用* 需要它
+     + *整个段* 前后需要保留和恢复continue： *过程调用的连接* 需要它
+
+   #+BEGIN_SRC scheme
+  ;;; 编译过程应用
+  (define (compile-application exp target linkage)
+    (let ((proc-code (compile (operator exp) 'proc 'next)) ;; 编译运算符表达式: 目标寄存器 proc，连接方式 next
+	  (operand-codes
+	   (map (lambda (operand) (compile operand 'val 'next))
+		(operands exp)))) ;; 依次编译各个运算参数表达式：目标寄存器 val, 连接方式 next
+      ;; 整个段前后需要保留和恢复 continue， “过程调用的连接” 需要它
+      (preserving '(env continue) ;; 求值运算符前后需要保留和恢复 env：求值运算符时可能修改它们，求值运算对象时需要它们
+		  proc-code 
+		  (preserving '(proc continue) ;; 构造实际参数表前后需要保留 proc : 运算对象求值可能修改它，实际过程应用需要它
+			      (construct-arglist operand-codes) ;; 将运算对象指令序列与在 argl 里构造实参表的代码组合
+			      (compile-procedure-call target linkage))))) ;; 编译过程调用代码
+   #+END_SRC
+
+   构造实参表的代码求值运算对象，结果放在 val ，将该值积累到 argl 里的实参表中。由于是 _顺序处理_ ， 从 *最后参数开始反向做* 才能得到正确顺
+   序。这里让第一个代码序列 *构造初始的空 argl表* 。代码形式为：
+   #+BEGIN_EXAMPLE
+     <最后一个运算对象的编译结果, 目标为 val>
+     (assign argl (op list) (reg val))
+     <前一个运算对象的编译结果, 目标为val>
+     (assign argl (op cons) (reg val) (reg argl))
+     ...<第一个运算对象的编译结果, 目标为val>
+     (assign argl (op cons) (reg val) (reg argl)) 
+   #+END_EXAMPLE
+
+   + _除第一个参数_ 外，其余运算对象求值前后都保存恢复 _argl_  :  *保证已积累的实际参数不丢失* 
+   + _除最后一个参数_ 外，每个运算对象求值前后都必须保留和恢复 _env_  : 以便 *后续运算对象的求值* 中使用 
+
+   #+BEGIN_EXAMPLE
+     第一个参数需要特殊处理，保存 argl 和 env的地方
+
+     与处理其他参数时不同，编译这段实参代码中有些小麻烦
+   #+END_EXAMPLE
+
+   construct-arglist 以求值各运算对象的代码段为参数
+   + 没有运算对象：直接送出 _(assign argl (const ()))_
+   + 存在参数时：处理最后一个实参时创建初始化 argl的代码，而后将求值其他参数的代码顺序结合到 argl里
+   + 为了反向处理实参，先反转 compile-application 送来的运算对象代码序列表
+
+   #+BEGIN_SRC scheme
+  ;;; 编译构造实际参数列表
+  (define (construct-arglist operand-codes)
+    (let ((operand-codes (reverse operand-codes))) ;; 逆向参数顺序，从最后一个实参开始处理
+      (if (null? operand-codes) ;; 如果参数表达式表为空
+	  (make-instruction-sequence '() '(argl)
+				     '((assign argl (const ())))) ;; 直接为 argl 构造一个空表
+	  (let ((code-to-get-last-arg ;; 最后一个实参
+		 (append-instruction-sequences
+		  (car operand-codes) ;; 求值最后一个实参值，结果放入到 val 寄存器 
+		  (make-instruction-sequence '(val) '(argl) ;; 
+					     '((assign argl (op list) (reg val))))))) ;; 把 val寄存器中的值放入一个空列表，列表的值赋予给 argl 寄存器
+	    (if (null? (cdr operand-codes))
+		code-to-get-last-arg ;; 只有一个实参，只需要返回 code-to-get-last-arg 
+		(preserving '(env) ;; 求值其他的实参时候（除了最后一个参数），需要保存和恢复 env 寄存器：可能会有其他子表达式会修改 env 寄存器
+			    code-to-get-last-arg
+			    (code-to-get-rest-args (cdr operand-codes)))))))) ;; 继续求值其他实参，并放入 argl 寄存器中的列表
+
+  (define (code-to-get-rest-args operand-codes)
+    (let ((code-for-next-arg
+	   (preserving '(argl) ;; 求值下一个实参的时候（除了第一个参数），必须保存和恢复 argl 寄存器：因为这里面保存了由其他实参值组成的列表
+		       (car operand-codes) ;; 执行第一个参数求值
+		       (make-instruction-sequence '(val argl) '(argl) 
+						  '((assign argl
+							    (op cons) (reg val) (reg argl)))))))
+      (if (null? (cdr operand-codes)) 
+	  code-for-next-arg
+	  (preserving '(env)
+		      code-for-next-arg
+		      (code-to-get-rest-args (cdr operand-codes))))))
+   #+END_SRC
+
+*** 应用过程
+    #+BEGIN_EXAMPLE
+      组合式的元素求值后，编译结果代码要把 proc 里的过程 应用 于 argl 里的实参
+
+      这也是分派，类似元循环求值器的 apply 或显式控制求值器里 apply-dispatch
+    #+END_EXAMPLE
+    基本过程用 apply-primitive-procedure 代码形式：
+    #+BEGIN_EXAMPLE
+      (test (op primitive-procedure?) (reg proc))
+       (branch (label primitive-branch))
+      compiled-branch
+       <code to apply compiled procedure with given target and appropriate linkage>
+      primitive-branch
+       (assign <target>
+	       (op apply-primitive-procedure)
+	       (reg proc)
+	       (reg argl))
+       <linkage>
+      after-call
+    #+END_EXAMPLE
+
+    _编译后过程的分支_ (compiled-branch )必须 *跳过处理基本过程的分支* (primitive-branch)
+    #+BEGIN_EXAMPLE
+      如果过程调用的原连接是 next， 复合分支 就要 跳到 插入在 基本分支最后的标号 的连接
+
+      类似于compile-if里真分支所用的连接
+    #+END_EXAMPLE
+
+    #+BEGIN_SRC scheme
+  ;;; 编译过程调用
+  (define (compile-procedure-call target linkage)
+    (let ((primitive-branch (make-label 'primitive-branch))
+	  (compiled-branch (make-label 'compiled-branch))
+	  (after-call (make-label 'after-call))) ;; 生成三个标号
+      (let ((compiled-linkage
+	     (if (eq? linkage 'next) after-call linkage))) ;; 如果原调用的连接是 next: com
+	(append-instruction-sequences
+	 (make-instruction-sequence '(proc) '()
+	  `((test (op primitive-procedure?) (reg proc))
+	    (branch (label ,primitive-branch))))
+	 (parallel-instruction-sequences ;; 拼接两段不会同时执行的代码
+	  (append-instruction-sequences
+	   compiled-branch
+	   (compile-proc-appl target compiled-linkage))
+	  (append-instruction-sequences
+	   primitive-branch
+	   (end-with-linkage linkage
+	    (make-instruction-sequence '(proc argl)
+				       (list target)
+	     `((assign ,target
+		       (op apply-primitive-procedure)
+		       (reg proc)
+		       (reg argl))))))) ;; 调用原始过程（scheme实现的）
+	 after-call))))
+    #+END_SRC
+
+**** 应用编译得到的过程
+     #+BEGIN_EXAMPLE
+       处理过程调用的代码是本编译器最复杂的部分，虽然生成的指令序列很短
+     #+END_EXAMPLE
+
+     编译过程（由 compile-lambda构造）的 _入口点标号_ 标明开始位置，代码将 _算出的结果_ 放入 val 后返回：
+
+     如果连接是 _标号_ ：
+     #+BEGIN_EXAMPLE
+       (assign continue (label proc-return))
+	(assign val (op compiled-procedure-entry) (reg proc))
+	(goto (reg val))
+       proc-return
+	(assign <target> (reg val))   ; included if target is not val
+	(goto (label <linkage>))   ; linkage code
+     #+END_EXAMPLE
+
+     如果连接是 return：
+     #+BEGIN_EXAMPLE
+	(save continue)
+	(assign continue (label proc-return))
+	(assign val (op compiled-procedure-entry) (reg proc))
+	(goto (reg val))
+       proc-return
+	(assign <target> (reg val))   ; included if target is not val
+	(restore continue)
+	(goto (reg continue))   ; linkage code
+     #+END_EXAMPLE
+
+     如果目标不是 val，编译器就应该生成上面代码。但实际目标通常是 val （仅有一处以 proc寄存器作为求值的目标），过程结果可以直接放入目标寄存器。代码还可以简化，先设置好 _continue_ 使得过程直接  *返回* 到 _调用者的连接_ 指定的位置：
+     #+BEGIN_EXAMPLE
+       <set up continue for linkage>
+       (assign val (op compiled-procedure-entry) (reg proc))
+       (goto (reg val))
+     #+END_EXAMPLE 
+
+     连接是标号时：设置 continue 使过程直接返回该标号。过程结束的 (goto (reg continue)) 变为等价于 proc-return 处的 (goto (label <linkage>) 
+     #+BEGIN_EXAMPLE
+       (assign continue (label <linkage>))
+       (assign val (op compiled-procedure-entry) (reg proc))
+       (goto (reg val))
+     #+END_EXAMPLE
+
+     连接是return：不需要再设置 continue（它已经存着所需地址），作为过程结束的(goto(regcontinue))能直接跳到应该的地方
+     #+BEGIN_EXAMPLE
+       (assign val (op compiled-procedure-entry) (reg proc))
+       (goto (reg val))
+     #+END_EXAMPLE
+
+     这种 return 连接生成 *尾递归* 代码：
+     + 过程体最后一步直接转移，不在栈里保存信息
+     + 如果对有 return 连接和 val 目标的调用也像前面非 val 目标的代码一样处理，就会破坏尾递归。得到的代码语义相同，但调用时都保存 continue，调用后撤销这一无用保存，具有 线性存储需求
+
+     #+BEGIN_EXAMPLE
+       看来生成尾递归代码并不难。常见语言编译器没做，因此不能用过程描述迭代
+       这是因为常规语言的栈里不仅保存返回地址，还保存实参和局部变量
+       用栈保存实参和局部变量可以不靠垃圾回收，一般认为效率较高
+
+       这里 Scheme 实现里的实参和变量都放在能做垃圾回收的内存里
+       Lisp编译器也可以用栈保存实参的同时保证尾递归
+
+       对于栈分配和用废料收集的效率有争论，有些细节依赖于计算机体系结构
+     #+END_EXAMPLE
+
+     *compile-proc-appl* : 根据 _调用目标是否 val_ ， _连接是否 return_ 生成调用代码时分四种情况
+     + 所有代码序列都说明为 *要修改所有寄存器* ：被执行过程体可能修改任何寄存器
+     + _目标val_ 和 _连接 return_ 情况的代码序列说明了 *需要 continue* ：即使 continue 并没有用在两个指令序列里，也必须保证进入编译得到的过程时continue的值正确
+     #+BEGIN_SRC scheme
+  ;;; 编译“复合过程调用”
+  (define (compile-proc-appl target linkage)
+    (cond ((and (eq? target 'val) (not (eq? linkage 'return))) ;; 目标解释器是 val, 并且连接方式不是 return 
+	   (make-instruction-sequence '(proc) all-regs
+				      `((assign continue (label ,linkage)) ;; 为执行完毕后设置续点为 整体调用的连接方式（标号或next）
+					(assign val (op compiled-procedure-entry)
+						(reg proc)) ;; 从proc过程中获取调用过程体对应的入口标号
+					(goto (reg val))))) ;; 转到入口标号去执行
+	  ((and (not (eq? target 'val)) (not (eq? linkage 'return))) ;; 目标解释器不是 val, 并且连接方式不是 return 
+	   (let ((proc-return (make-label 'proc-return))) ;; 创建 proc-return 对应的标号
+	     (make-instruction-sequence '(proc) all-regs
+					`((assign continue (label ,proc-return))
+					  (assign val (op compiled-procedure-entry)
+						  (reg proc))
+					  (goto (reg val)) ;; 执行完过程调用后，最后会执行 (goto (reg continue)) 跳转到 proc-return 标号对应处
+					  ,proc-return
+					  (assign ,target (reg val)) ;; 把求值结果放置到 target 寄存器
+					  (goto (label ,linkage)))))) ;; 跳转到整体调用的连接方式（标号或 next）
+	  ((and (eq? target 'val) (eq? linkage 'return)) ;; 目标解释器是 val, 并且连接方式是 return 
+	   (make-instruction-sequence '(proc continue) all-regs
+				      '((assign val (op compiled-procedure-entry)
+						(reg proc))
+					(goto (reg val))))) ;; 不需要设置 continue 寄存器，直接调用  (goto (reg continue)) 此时continue寄存器的值是compile-proc-appl 时的值
+	  ((and (not (eq? target 'val)) (eq? linkage 'return)) ;; 目标解释器不是 val, 并且连接方式是 return : 非法调用
+	   (error "return linkage, target not val -- COMPILE"
+		  target))))
+     #+END_SRC
+
+** 指令序列的组合
