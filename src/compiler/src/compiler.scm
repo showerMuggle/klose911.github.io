@@ -281,3 +281,88 @@
         ((and (not (eq? target 'val)) (eq? linkage 'return)) ;; 目标解释器不是 val, 并且连接方式是 return : 非法调用
          (error "return linkage, target not val -- COMPILE"
                 target))))
+
+;;;;;;;;;;;;;;;;;;;;
+;; 指令序列的组合 ;;
+;;;;;;;;;;;;;;;;;;;;
+
+(define (registers-needed s)
+  (if (symbol? s) '() (car s)))
+(define (registers-modified s)
+  (if (symbol? s) '() (cadr s)))
+(define (statements s)
+  (if (symbol? s) (list s) (caddr s)))
+
+(define (needs-register? seq reg)
+  (memq reg (registers-needed seq)))
+(define (modifies-register? seq reg)
+  (memq reg (registers-modified seq)))
+
+;;; 基本顺序序列组合
+(define (append-instruction-sequences . seqs)
+  (define (append-2-sequences seq1 seq2)
+    (make-instruction-sequence
+     (list-union (registers-needed seq1) ;;需要的寄存器是 seq1 所需寄存器加上 seq2 需要而又没有被 seq1 修改的寄存器
+                 (list-difference (registers-needed seq2)
+                                  (registers-modified seq1))) ;; 这里的实现是：seq1的需要寄存器集合，与 （seq2的需要寄存器集合与seq1的修改寄存器集合的差集）之并集 
+     (list-union (registers-modified seq1)
+                 (registers-modified seq2)) ;; 所修改的寄存器是所有被 seq1 或 seq2 修改的寄存器
+     (append (statements seq1) (statements seq2))))
+  (define (append-seq-list seqs)
+    (if (null? seqs)
+        (empty-instruction-sequence)
+        (append-2-sequences (car seqs)
+                            (append-seq-list (cdr seqs)))))
+  (append-seq-list seqs))
+
+;;; 集合并集
+(define (list-union s1 s2)
+  (cond ((null? s1) s2)
+        ((memq (car s1) s2) (list-union (cdr s1) s2))
+        (else (cons (car s1) (list-union (cdr s1) s2)))))
+
+;;; 集合差集
+(define (list-difference s1 s2)
+  (cond ((null? s1) '())
+        ((memq (car s1) s2) (list-difference (cdr s1) s2))
+        (else (cons (car s1)
+                    (list-difference (cdr s1) s2)))))
+
+;;; 处理寄存器的压栈入栈操作
+;;; regs: 寄存器列表
+;;; seq1: 语句1
+;;; seq2: 语句2  
+(define (preserving regs seq1 seq2)
+  (if (null? regs)
+      (append-instruction-sequences seq1 seq2) ;; 拼接 seq1, seq2 语句
+      (let ((first-reg (car regs)))
+	(if (and (needs-register? seq2 first-reg) ;; 如果寄存器被 seq2 需要，而又被 seq1 修改，这样的寄存器就需要执行 save 和 restore 操作
+		 (modifies-register? seq1 first-reg))
+	    (preserving (cdr regs)
+			(make-instruction-sequence
+			 ;; 调用下一个preserving 需要去掉 first-regs
+			 (list-union (list first-reg)
+				     (registers-needed seq1)) ;; seq1 需要store寄存器集合：添加first-reg
+			 (list-difference (registers-modified seq1) ;; seq1 需要restore寄存器集合：去除first-reg
+					  (list first-reg))
+			 (append `((save ,first-reg))
+				 (statements seq1)
+				 `((restore ,first-reg)))) ;; 在 seq1 的语句前后添加 save , store 寄存器的操作
+			seq2)
+	    (preserving (cdr regs) seq1 seq2)))))
+
+;;; 添加过程体到序列中
+(define (tack-on-instruction-sequence seq body-seq)
+  (make-instruction-sequence
+   (registers-needed seq)
+   (registers-modified seq)
+   (append (statements seq) (statements body-seq))))
+
+;;; 并行执行
+(define (parallel-instruction-sequences seq1 seq2)
+  (make-instruction-sequence
+   (list-union (registers-needed seq1)
+	       (registers-needed seq2))
+   (list-union (registers-modified seq1)
+	       (registers-modified seq2))
+   (append (statements seq1) (statements seq2))))

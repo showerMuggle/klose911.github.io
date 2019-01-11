@@ -266,9 +266,20 @@ for the JavaScript code in this tag.
 </li>
 </ul>
 </li>
-<li><a href="#org73c15c4">指令序列的组合</a></li>
+<li><a href="#org73c15c4">指令序列的组合</a>
+<ul>
+<li><a href="#orga5e13af">顺序组合</a>
+<ul>
+<li><a href="#orgc129759">preserving</a></li>
 </ul>
 </li>
+<li><a href="#org4b8e26f">tack-on-instruction-sequence</a></li>
+<li><a href="#org64aaace">并行序列组合</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#org4a920b8">编译实例</a></li>
 </ul>
 </div>
 </div>
@@ -1286,7 +1297,213 @@ Lisp编译器也可以用栈保存实参的同时保证尾递归
 
 <div id="outline-container-org73c15c4" class="outline-3">
 <h3 id="org73c15c4">指令序列的组合</h3>
+<div class="outline-text-3" id="text-org73c15c4">
+<pre class="example">
+  指令序列表包含 所需寄存器集合 ， 所修改寄存器集合 及一串指令
+
+  标号（符号）看作退化指令，它 不需要也不修改寄存器 
+</pre>
+
+<p>
+下面选择函数确定一个 <span class="underline">指令序列</span>  <b>需要</b> 哪些寄存器， <b>修改</b> 哪些寄存器：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">registers-needed</span> s<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>symbol? s<span style="color: #696969;">)</span> '<span style="color: #696969;">()</span> <span style="color: #696969;">(</span>car s<span style="color: #696969;">)))</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">registers-modified</span> s<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>symbol? s<span style="color: #696969;">)</span> '<span style="color: #696969;">()</span> <span style="color: #696969;">(</span>cadr s<span style="color: #696969;">)))</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">statements</span> s<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>symbol? s<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>list s<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>caddr s<span style="color: #696969;">)))</span>
+</pre>
 </div>
+
+<p>
+下面 <span class="underline">谓词</span> 确定指令序列是否需要或者修某特定寄存器：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">needs-register?</span> seq reg<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>memq reg <span style="color: #696969;">(</span>registers-needed seq<span style="color: #696969;">)))</span>
+
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">modifies-register?</span> seq reg<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>memq reg <span style="color: #696969;">(</span>registers-modified seq<span style="color: #696969;">)))</span>
+</pre>
+</div>
+
+<p>
+基于这些 <span class="underline">谓词</span> 和 <span class="underline">选择函数</span> 就可以实现编译器的各种 <b>指令序列组合</b> 过程
+</p>
+</div>
+
+<div id="outline-container-orga5e13af" class="outline-4">
+<h4 id="orga5e13af">顺序组合</h4>
+<div class="outline-text-4" id="text-orga5e13af">
+<p>
+最基本的组合过程 append-instruction-sequences 以任意个要求顺序执行的指令序列为实参，返回一个指令序列，其中：
+</p>
+<ul class="org-ul">
+<li>语句：所有参数序列的 <b>语句的顺序拼接</b></li>
+<li>修改的寄存器：被 <b>任一</b> 实参序列修改的寄存器</li>
+<li>需要的寄存器： <b>第一个序列运行前应初始化</b> 的寄存器，加上 <b>其他序列需要而又没被前面序列初始化</b> （或修改）的寄存器</li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#22522;&#26412;&#39034;&#24207;&#24207;&#21015;&#32452;&#21512;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">append-instruction-sequences</span> . seqs<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">append-2-sequences</span> seq1 seq2<span style="color: #696969;">)</span>
+    <span style="color: #696969;">(</span>make-instruction-sequence
+     <span style="color: #696969;">(</span>list-union <span style="color: #696969;">(</span>registers-needed seq1<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;;</span><span style="color: #5f9ea0; font-style: italic;">&#38656;&#35201;&#30340;&#23492;&#23384;&#22120;&#26159; seq1 &#25152;&#38656;&#23492;&#23384;&#22120;&#21152;&#19978; seq2 &#38656;&#35201;&#32780;&#21448;&#27809;&#26377;&#34987; seq1 &#20462;&#25913;&#30340;&#23492;&#23384;&#22120;</span>
+                 <span style="color: #696969;">(</span>list-difference <span style="color: #696969;">(</span>registers-needed seq2<span style="color: #696969;">)</span>
+                                  <span style="color: #696969;">(</span>registers-modified seq1<span style="color: #696969;">)))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#36825;&#37324;&#30340;&#23454;&#29616;&#26159;&#65306;seq1&#30340;&#38656;&#35201;&#23492;&#23384;&#22120;&#38598;&#21512;&#65292;&#19982; &#65288;seq2&#30340;&#38656;&#35201;&#23492;&#23384;&#22120;&#38598;&#21512;&#19982;seq1&#30340;&#20462;&#25913;&#23492;&#23384;&#22120;&#38598;&#21512;&#30340;&#24046;&#38598;&#65289;&#20043;&#24182;&#38598; </span>
+     <span style="color: #696969;">(</span>list-union <span style="color: #696969;">(</span>registers-modified seq1<span style="color: #696969;">)</span>
+                 <span style="color: #696969;">(</span>registers-modified seq2<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#25152;&#20462;&#25913;&#30340;&#23492;&#23384;&#22120;&#26159;&#25152;&#26377;&#34987; seq1 &#25110; seq2 &#20462;&#25913;&#30340;&#23492;&#23384;&#22120;</span>
+     <span style="color: #696969;">(</span>append <span style="color: #696969;">(</span>statements seq1<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>statements seq2<span style="color: #696969;">))))</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">append-seq-list</span> seqs<span style="color: #696969;">)</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>null? seqs<span style="color: #696969;">)</span>
+        <span style="color: #696969;">(</span>empty-instruction-sequence<span style="color: #696969;">)</span>
+        <span style="color: #696969;">(</span>append-2-sequences <span style="color: #696969;">(</span>car seqs<span style="color: #696969;">)</span>
+                            <span style="color: #696969;">(</span>append-seq-list <span style="color: #696969;">(</span>cdr seqs<span style="color: #696969;">)))))</span>
+  <span style="color: #696969;">(</span>append-seq-list seqs<span style="color: #696969;">))</span>
+</pre>
+</div>
+
+<p>
+序列用 append-2-sequences 逐次拼接。此过程以两个指令序列 seq1 和 seq2 为参数，返回序列里
+</p>
+<ul class="org-ul">
+<li>语句：两个序列里语句的顺序拼接</li>
+<li>所修改的寄存器：所有被 seq1 或 seq2 修改的寄存器</li>
+<li>需要的寄存器：seq1 所需寄存器加上 seq2 需要而又没有被 seq1 修改的寄存器
+<ul class="org-ul">
+<li>seq1的需要寄存器集，与（seq2的需要寄存器集与seq1的修改寄存器集的差集）之并集</li>
+</ul></li>
+</ul>
+
+<p>
+另外这个过程里用了一些简单集合操作运算：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#38598;&#21512;&#24182;&#38598;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">list-union</span> s1 s2<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">cond</span> <span style="color: #696969;">((</span>null? s1<span style="color: #696969;">)</span> s2<span style="color: #696969;">)</span>
+        <span style="color: #696969;">((</span>memq <span style="color: #696969;">(</span>car s1<span style="color: #696969;">)</span> s2<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>list-union <span style="color: #696969;">(</span>cdr s1<span style="color: #696969;">)</span> s2<span style="color: #696969;">))</span>
+        <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">else</span> <span style="color: #696969;">(</span>cons <span style="color: #696969;">(</span>car s1<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>list-union <span style="color: #696969;">(</span>cdr s1<span style="color: #696969;">)</span> s2<span style="color: #696969;">)))))</span>
+
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#38598;&#21512;&#24046;&#38598;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">list-difference</span> s1 s2<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">cond</span> <span style="color: #696969;">((</span>null? s1<span style="color: #696969;">)</span> '<span style="color: #696969;">())</span>
+        <span style="color: #696969;">((</span>memq <span style="color: #696969;">(</span>car s1<span style="color: #696969;">)</span> s2<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>list-difference <span style="color: #696969;">(</span>cdr s1<span style="color: #696969;">)</span> s2<span style="color: #696969;">))</span>
+        <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">else</span> <span style="color: #696969;">(</span>cons <span style="color: #696969;">(</span>car s1<span style="color: #696969;">)</span>
+                    <span style="color: #696969;">(</span>list-difference <span style="color: #696969;">(</span>cdr s1<span style="color: #696969;">)</span> s2<span style="color: #696969;">)))))</span>
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orgc129759" class="outline-5">
+<h5 id="orgc129759">preserving</h5>
+<div class="outline-text-5" id="text-orgc129759">
+<p>
+最重要的是 preserving ：
+</p>
+<ul class="org-ul">
+<li>参数：
+<ul class="org-ul">
+<li>寄存器表 regs</li>
+<li>两个要求顺序执行的指令序列 seq1 和 seq2</li>
+</ul></li>
+<li>返回：
+<ul class="org-ul">
+<li>指令序列中包括它们的语句</li>
+<li>围在 seq1 的语句前后适当 save 和 restore，以保护 regs 里 seq2 需要而会被 seq1 修改的寄存器</li>
+</ul></li>
+</ul>
+
+<p>
+preserving递归创建一个序列：
+</p>
+<ol class="org-ol">
+<li>所需 save 的寄存器：包括 seq1需要的和这里保留恢复的寄存器</li>
+<li>seq1 的语句</li>
+<li>所需 restore：seq1 修改的寄存器除去这里保留和恢复的寄存器</li>
+</ol>
+
+<p>
+最后按常规方式将这一扩充序列与 seq2 拼接
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#22788;&#29702;&#23492;&#23384;&#22120;&#30340;&#21387;&#26632;&#20837;&#26632;&#25805;&#20316;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">regs: &#23492;&#23384;&#22120;&#21015;&#34920;</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">seq1: &#35821;&#21477;1</span>
+<span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">seq2: &#35821;&#21477;2  </span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">preserving</span> regs seq1 seq2<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>null? regs<span style="color: #696969;">)</span>
+      <span style="color: #696969;">(</span>append-instruction-sequences seq1 seq2<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#25340;&#25509; seq1, seq2 &#35821;&#21477;</span>
+      <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>first-reg <span style="color: #696969;">(</span>car regs<span style="color: #696969;">)))</span>
+        <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">and</span> <span style="color: #696969;">(</span>needs-register? seq2 first-reg<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#22914;&#26524;&#23492;&#23384;&#22120;&#34987; seq2 &#38656;&#35201;&#65292;&#32780;&#21448;&#34987; seq1 &#20462;&#25913;&#65292;&#36825;&#26679;&#30340;&#23492;&#23384;&#22120;&#23601;&#38656;&#35201;&#25191;&#34892; save &#21644; restore &#25805;&#20316;</span>
+                 <span style="color: #696969;">(</span>modifies-register? seq1 first-reg<span style="color: #696969;">))</span>
+            <span style="color: #696969;">(</span>preserving <span style="color: #696969;">(</span>cdr regs<span style="color: #696969;">)</span>
+                        <span style="color: #696969;">(</span>make-instruction-sequence
+                         <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#35843;&#29992;&#19979;&#19968;&#20010;preserving &#38656;&#35201;&#21435;&#25481; first-regs</span>
+                         <span style="color: #696969;">(</span>list-union <span style="color: #696969;">(</span>list first-reg<span style="color: #696969;">)</span>
+                                     <span style="color: #696969;">(</span>registers-needed seq1<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">seq1 &#38656;&#35201;store&#23492;&#23384;&#22120;&#38598;&#21512;&#65306;&#28155;&#21152;first-reg</span>
+                         <span style="color: #696969;">(</span>list-difference <span style="color: #696969;">(</span>registers-modified seq1<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">seq1 &#38656;&#35201;restore&#23492;&#23384;&#22120;&#38598;&#21512;&#65306;&#21435;&#38500;first-reg</span>
+                                          <span style="color: #696969;">(</span>list first-reg<span style="color: #696969;">))</span>
+                         <span style="color: #696969;">(</span>append `<span style="color: #696969;">((</span>save ,first-reg<span style="color: #696969;">))</span>
+                                 <span style="color: #696969;">(</span>statements seq1<span style="color: #696969;">)</span>
+                                 `<span style="color: #696969;">((</span>restore ,first-reg<span style="color: #696969;">))))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#22312; seq1 &#30340;&#35821;&#21477;&#21069;&#21518;&#28155;&#21152; save , store &#23492;&#23384;&#22120;&#30340;&#25805;&#20316;</span>
+                        seq2<span style="color: #696969;">)</span>
+            <span style="color: #696969;">(</span>preserving <span style="color: #696969;">(</span>cdr regs<span style="color: #696969;">)</span> seq1 seq2<span style="color: #696969;">)))))</span>
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org4b8e26f" class="outline-4">
+<h4 id="org4b8e26f">tack-on-instruction-sequence</h4>
+<div class="outline-text-4" id="text-org4b8e26f">
+<p>
+在 <span class="underline">compile-lambda</span> 里将 <b>过程</b> 与另一 <b>序列</b> 拼接。由于过程体不作为组合序列的一部分而 <span class="underline">在线</span> 执行，它用的寄存器对它嵌入其中的序列的寄存器使用没有影响。在将过程体纳入其他序列时，应 <b>忽略</b> 它所 <span class="underline">需要</span> 和 <span class="underline">修改</span> 的寄存器集合
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#28155;&#21152;&#36807;&#31243;&#20307;&#21040;&#24207;&#21015;&#20013;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">tack-on-instruction-sequence</span> seq body-seq<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>make-instruction-sequence
+   <span style="color: #696969;">(</span>registers-needed seq<span style="color: #696969;">)</span>
+   <span style="color: #696969;">(</span>registers-modified seq<span style="color: #696969;">)</span>
+   <span style="color: #696969;">(</span>append <span style="color: #696969;">(</span>statements seq<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>statements body-seq<span style="color: #696969;">))))</span>
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org64aaace" class="outline-4">
+<h4 id="org64aaace">并行序列组合</h4>
+<div class="outline-text-4" id="text-org64aaace">
+<p>
+parallel-instruction-sequences :  <span class="underline">compile-if</span> 和 <span class="underline">compile-procedure-call</span> 用了特殊组合过程完成两个分支的拼接。两个分支 <b>不顺序</b> 执行：
+组合后的寄存器集合是两个分支的合集
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;;; </span><span style="color: #5f9ea0; font-style: italic;">&#24182;&#34892;&#25191;&#34892;</span>
+<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">parallel-instruction-sequences</span> seq1 seq2<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>make-instruction-sequence
+   <span style="color: #696969;">(</span>list-union <span style="color: #696969;">(</span>registers-needed seq1<span style="color: #696969;">)</span>
+               <span style="color: #696969;">(</span>registers-needed seq2<span style="color: #696969;">))</span>
+   <span style="color: #696969;">(</span>list-union <span style="color: #696969;">(</span>registers-modified seq1<span style="color: #696969;">)</span>
+               <span style="color: #696969;">(</span>registers-modified seq2<span style="color: #696969;">))</span>
+   <span style="color: #696969;">(</span>append <span style="color: #696969;">(</span>statements seq1<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>statements seq2<span style="color: #696969;">))))</span>
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org4a920b8" class="outline-2">
+<h2 id="org4a920b8">编译实例</h2>
 </div>
 </div>
 <div id="postamble" class="status">

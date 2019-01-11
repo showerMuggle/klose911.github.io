@@ -722,3 +722,146 @@
      #+END_SRC
 
 ** 指令序列的组合
+#+BEGIN_EXAMPLE
+  指令序列表包含 所需寄存器集合 ， 所修改寄存器集合 及一串指令
+
+  标号（符号）看作退化指令，它 不需要也不修改寄存器 
+#+END_EXAMPLE
+
+下面选择函数确定一个 _指令序列_  *需要* 哪些寄存器， *修改* 哪些寄存器：
+#+BEGIN_SRC scheme
+  (define (registers-needed s)
+    (if (symbol? s) '() (car s)))
+  (define (registers-modified s)
+    (if (symbol? s) '() (cadr s)))
+  (define (statements s)
+    (if (symbol? s) (list s) (caddr s)))
+#+END_SRC
+
+下面 _谓词_ 确定指令序列是否需要或者修某特定寄存器：
+#+BEGIN_SRC scheme
+  (define (needs-register? seq reg)
+    (memq reg (registers-needed seq)))
+
+  (define (modifies-register? seq reg)
+    (memq reg (registers-modified seq)))
+#+END_SRC
+
+基于这些 _谓词_ 和 _选择函数_ 就可以实现编译器的各种 *指令序列组合* 过程
+
+*** 顺序组合
+最基本的组合过程 append-instruction-sequences 以任意个要求顺序执行的指令序列为实参，返回一个指令序列，其中：
++ 语句：所有参数序列的 *语句的顺序拼接* 
++ 修改的寄存器：被 *任一* 实参序列修改的寄存器
++ 需要的寄存器： *第一个序列运行前应初始化* 的寄存器，加上 *其他序列需要而又没被前面序列初始化* （或修改）的寄存器
+
+#+BEGIN_SRC scheme
+  ;;; 基本顺序序列组合
+  (define (append-instruction-sequences . seqs)
+    (define (append-2-sequences seq1 seq2)
+      (make-instruction-sequence
+       (list-union (registers-needed seq1) ;;需要的寄存器是 seq1 所需寄存器加上 seq2 需要而又没有被 seq1 修改的寄存器
+		   (list-difference (registers-needed seq2)
+				    (registers-modified seq1))) ;; 这里的实现是：seq1的需要寄存器集合，与 （seq2的需要寄存器集合与seq1的修改寄存器集合的差集）之并集 
+       (list-union (registers-modified seq1)
+		   (registers-modified seq2)) ;; 所修改的寄存器是所有被 seq1 或 seq2 修改的寄存器
+       (append (statements seq1) (statements seq2))))
+    (define (append-seq-list seqs)
+      (if (null? seqs)
+	  (empty-instruction-sequence)
+	  (append-2-sequences (car seqs)
+			      (append-seq-list (cdr seqs)))))
+    (append-seq-list seqs))
+#+END_SRC
+
+序列用 append-2-sequences 逐次拼接。此过程以两个指令序列 seq1 和 seq2 为参数，返回序列里
++ 语句：两个序列里语句的顺序拼接
++ 所修改的寄存器：所有被 seq1 或 seq2 修改的寄存器
++ 需要的寄存器：seq1 所需寄存器加上 seq2 需要而又没有被 seq1 修改的寄存器
+   + seq1的需要寄存器集，与（seq2的需要寄存器集与seq1的修改寄存器集的差集）之并集
+
+另外这个过程里用了一些简单集合操作运算：
+#+BEGIN_SRC scheme
+  ;;; 集合并集
+  (define (list-union s1 s2)
+    (cond ((null? s1) s2)
+	  ((memq (car s1) s2) (list-union (cdr s1) s2))
+	  (else (cons (car s1) (list-union (cdr s1) s2)))))
+
+  ;;; 集合差集
+  (define (list-difference s1 s2)
+    (cond ((null? s1) '())
+	  ((memq (car s1) s2) (list-difference (cdr s1) s2))
+	  (else (cons (car s1)
+		      (list-difference (cdr s1) s2)))))
+#+END_SRC
+
+**** preserving 
+最重要的是 preserving ：
++ 参数：
+  + 寄存器表 regs
+  + 两个要求顺序执行的指令序列 seq1 和 seq2
++ 返回：
+  + 指令序列中包括它们的语句
+  + 围在 seq1 的语句前后适当 save 和 restore，以保护 regs 里 seq2 需要而会被 seq1 修改的寄存器
+
+preserving递归创建一个序列：
+1. 所需 save 的寄存器：包括 seq1需要的和这里保留恢复的寄存器
+2. seq1 的语句
+3. 所需 restore：seq1 修改的寄存器除去这里保留和恢复的寄存器
+
+最后按常规方式将这一扩充序列与 seq2 拼接
+
+#+BEGIN_SRC scheme
+  ;;; 处理寄存器的压栈入栈操作
+  ;;; regs: 寄存器列表
+  ;;; seq1: 语句1
+  ;;; seq2: 语句2  
+  (define (preserving regs seq1 seq2)
+    (if (null? regs)
+	(append-instruction-sequences seq1 seq2) ;; 拼接 seq1, seq2 语句
+	(let ((first-reg (car regs)))
+	  (if (and (needs-register? seq2 first-reg) ;; 如果寄存器被 seq2 需要，而又被 seq1 修改，这样的寄存器就需要执行 save 和 restore 操作
+		   (modifies-register? seq1 first-reg))
+	      (preserving (cdr regs)
+			  (make-instruction-sequence
+			   ;; 调用下一个preserving 需要去掉 first-regs
+			   (list-union (list first-reg)
+				       (registers-needed seq1)) ;; seq1 需要store寄存器集合：添加first-reg
+			   (list-difference (registers-modified seq1) ;; seq1 需要restore寄存器集合：去除first-reg
+					    (list first-reg))
+			   (append `((save ,first-reg))
+				   (statements seq1)
+				   `((restore ,first-reg)))) ;; 在 seq1 的语句前后添加 save , store 寄存器的操作
+			  seq2)
+	      (preserving (cdr regs) seq1 seq2)))))
+#+END_SRC
+
+*** tack-on-instruction-sequence
+在 _compile-lambda_ 里将 *过程* 与另一 *序列* 拼接。由于过程体不作为组合序列的一部分而 _在线_ 执行，它用的寄存器对它嵌入其中的序列的寄存器使用没有影响。在将过程体纳入其他序列时，应 *忽略* 它所 _需要_ 和 _修改_ 的寄存器集合
+
+#+BEGIN_SRC scheme
+  ;;; 添加过程体到序列中
+  (define (tack-on-instruction-sequence seq body-seq)
+    (make-instruction-sequence
+     (registers-needed seq)
+     (registers-modified seq)
+     (append (statements seq) (statements body-seq))))
+#+END_SRC
+
+*** 并行序列组合
+parallel-instruction-sequences :  _compile-if_ 和 _compile-procedure-call_ 用了特殊组合过程完成两个分支的拼接。两个分支 *不顺序* 执行：
+组合后的寄存器集合是两个分支的合集
+
+#+BEGIN_SRC scheme
+  ;;; 并行执行
+  (define (parallel-instruction-sequences seq1 seq2)
+    (make-instruction-sequence
+     (list-union (registers-needed seq1)
+		 (registers-needed seq2))
+     (list-union (registers-modified seq1)
+		 (registers-modified seq2))
+     (append (statements seq1) (statements seq2))))
+#+END_SRC
+
+* 编译实例
