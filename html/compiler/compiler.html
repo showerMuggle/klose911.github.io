@@ -280,6 +280,12 @@ for the JavaScript code in this tag.
 </ul>
 </li>
 <li><a href="#org4102d34">实例</a></li>
+<li><a href="#org90141a9">优化</a>
+<ul>
+<li><a href="#org299101f">词法地址</a></li>
+</ul>
+</li>
+<li><a href="#orgadcee4b">编译与解释的互连</a></li>
 </ul>
 </div>
 </div>
@@ -1791,6 +1797,120 @@ after-call15
     因为谓词里的过程调用要修改它们，两个分支里的过程调用和 return连接都需要它们
 </pre>
 </div>
+</div>
+
+<div id="outline-container-org90141a9" class="outline-2">
+<h2 id="org90141a9">优化</h2>
+<div class="outline-text-2" id="text-org90141a9">
+<p>
+现在考虑一种可能的代码优化，优化变量查找
+</p>
+</div>
+
+<div id="outline-container-org299101f" class="outline-3">
+<h3 id="org299101f">词法地址</h3>
+<div class="outline-text-3" id="text-org299101f">
+<pre class="example">
+  至今生成的代码用求值器机器的 lookup-variable-value查找变量，一个个框架顺序查找
+
+  如果框架嵌套很深或变量很多，代价非常高
+</pre>
+
+<p>
+考虑某过程应用里求值 (* x y z) 时的情况，lookup-variable-value 每次查找 x 时都要确定 x 不是 y 或 z （第一个框架里） 也不是 a, b, c, d或e（第二个框架）
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>x 3<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>y 4<span style="color: #696969;">))</span>
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>a b c d e<span style="color: #696969;">)</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>y <span style="color: #696969;">(</span>* a b x<span style="color: #696969;">))</span>
+          <span style="color: #696969;">(</span>z <span style="color: #696969;">(</span>+ c d x<span style="color: #696969;">)))</span>
+      <span style="color: #696969;">(</span>* x y z<span style="color: #696969;">))))</span>
+</pre>
+</div>
+
+<p>
+let 是 lambda的语法包装，等价于：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">((</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>x y<span style="color: #696969;">)</span>
+   <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>a b c d e<span style="color: #696969;">)</span>
+     <span style="color: #696969;">((</span><span style="color: #00bfff; font-weight: bold;">lambda</span> <span style="color: #696969;">(</span>y z<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>* x y z<span style="color: #696969;">))</span>
+      <span style="color: #696969;">(</span>* a b x<span style="color: #696969;">)</span>
+      <span style="color: #696969;">(</span>+ c d x<span style="color: #696969;">))))</span>
+ 3
+ 4<span style="color: #696969;">)</span>
+</pre>
+</div>
+
+<p>
+假定没有 define 而只有 lambda 建立变量约束。采用词法作用域规则，表达式运行时环境的结构与其出现所在的过程的词法结构一样。编译器分析
+这个表达式时就知道过程应用时(* x y z)里的 x 总会在 <b>当前框架外面第二个框架</b> 找到，而且是 <b>框架里第二项</b> 
+</p>
+
+<p>
+利用这一事实，可实现一个新变量查找过程 lexical-address-lookup：
+</p>
+<ul class="org-ul">
+<li>参数：
+<ul class="org-ul">
+<li>一个环境</li>
+<li>一个词法地址，词法地址由两个数组成：
+<ul class="org-ul">
+<li>框架号：描述要跳过几个框架</li>
+<li>移位数：描述在框架里应跳过几个变量</li>
+</ul></li>
+</ul></li>
+<li>返回：当前环境里找出存在给定词法地址处的变量值</li>
+
+<li>如果把 <span class="underline">lexical-address-lookup</span> 操作加进前面的机器，就可以在 <b>编译生成的代码</b> 里用它 <b>引用变量</b></li>
+<li>还可以用一个新操作 <span class="underline">lexical-address-set!</span></li>
+</ul>
+
+<p>
+为生成这种代码，编译一个 <b>变量引用</b> 时就必须 <b>确定变量的词法地址</b> 。变量在程序里的词法地址依赖于具体变量在代码里出现的位置
+</p>
+
+<pre class="example">
+((lambda (x y)
+   (lambda (a b c d e)
+     ((lambda (y z) &lt;e1&gt;)
+      &lt;e2&gt;
+      (+ c d x))))
+ 3
+ 4)
+
+表达式&lt;e1&gt;：
+变量 x 的地址是 (2,0)，向回两个框架里的最前面一个变量
+y 的地址是(0,0)
+c的地址是(1,2)
+
+表达式&lt;e2&gt;：
+变量 x 的地址是 (1,0)
+y的地址是(1,1)
+c的地址是(0,2)
+</pre>
+
+<p>
+编译器要生成使用词法地址的代码：
+</p>
+<ul class="org-ul">
+<li>维持一个称为 <span class="underline">编译时环境</span> 的数据结构，其中保存各种变化的轨迹，说明在程序执行到特定变量访问操作时，各变量出现在运行环境的哪个框架的哪个位置</li>
+<li>编译时环境也用框架的表，框架是变量表（无值，编译时不可能算值）。把这种环境作为compile的另一参数，与原有参数一起传给代码生成器</li>
+<li>对compile的最高层调用给一个 <b>空编译时环境</b> 
+<ul class="org-ul">
+<li>编译 lambda体时， <span class="underline">compile-lambda-body</span>  用一个 <b>包含该过程的所有变量的框架扩充</b> 当时的编译时环境
+<ul class="org-ul">
+<li>构成lambda体的表达式序列在 <b>扩充后的环境</b> 里编译</li>
+<li>编译中每一点， <span class="underline">compile-variable</span> 和 <span class="underline">compile-assignment</span> 都用这个环境生成出 <b>正确的词法地址</b></li>
+</ul></li>
+</ul></li>
+</ul>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgadcee4b" class="outline-2">
+<h2 id="orgadcee4b">编译与解释的互连</h2>
 </div>
 </div>
 <div id="postamble" class="status">
