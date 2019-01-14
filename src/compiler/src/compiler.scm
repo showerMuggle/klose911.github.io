@@ -1,3 +1,5 @@
+1(load "syntax")
+
 ;;;;;;;;;;;;;;;;
 ;; 编译的入口 ;;
 ;;;;;;;;;;;;;;;;
@@ -366,3 +368,17 @@
    (list-union (registers-modified seq1)
 	       (registers-modified seq2))
    (append (statements seq1) (statements seq2))))
+
+;;;labels (from footnote)
+(define label-counter 0)
+
+(define (new-label-number)
+  (set! label-counter (+ 1 label-counter))
+  label-counter)
+
+(define (make-label name)
+  (string->symbol
+   (string-append (symbol->string name)
+                  (number->string (new-label-number)))))
+;; end of footnote
+(define all-regs '(env proc val argl continue))
