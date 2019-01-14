@@ -246,7 +246,7 @@ for the JavaScript code in this tag.
 </li>
 </ul>
 </li>
-<li><a href="#org7ac8a7e">表达式编译</a>
+<li><a href="#org239a981">实现</a>
 <ul>
 <li><a href="#orgf8412fe">连接代码</a></li>
 <li><a href="#org73e0d77">简单表达式</a>
@@ -279,7 +279,7 @@ for the JavaScript code in this tag.
 </li>
 </ul>
 </li>
-<li><a href="#org4a920b8">编译实例</a></li>
+<li><a href="#org4102d34">实例</a></li>
 </ul>
 </div>
 </div>
@@ -649,9 +649,9 @@ preserving 保证如果 R 中任一寄存器 s 的值在 &lt;seq2&gt;里用，�
 </div>
 </div>
 
-<div id="outline-container-org7ac8a7e" class="outline-2">
-<h2 id="org7ac8a7e">表达式编译</h2>
-<div class="outline-text-2" id="text-org7ac8a7e">
+<div id="outline-container-org239a981" class="outline-2">
+<h2 id="org239a981">实现</h2>
+<div class="outline-text-2" id="text-org239a981">
 <p>
 下面考虑各种表达式的编译，实现由 compile 分派的各种代码生成器
 </p>
@@ -1299,9 +1299,9 @@ Lisp编译器也可以用栈保存实参的同时保证尾递归
 <h3 id="org73c15c4">指令序列的组合</h3>
 <div class="outline-text-3" id="text-org73c15c4">
 <pre class="example">
-  指令序列表包含 所需寄存器集合 ， 所修改寄存器集合 及一串指令
+     指令序列表包含 所需寄存器集合 ， 所修改寄存器集合 及一串指令
 
-  标号（符号）看作退化指令，它 不需要也不修改寄存器 
+     标号（符号）看作退化指令，它 不需要也不修改寄存器 
 </pre>
 
 <p>
@@ -1502,8 +1502,295 @@ parallel-instruction-sequences :  <span class="underline">compile-if</span> 和 
 </div>
 </div>
 
-<div id="outline-container-org4a920b8" class="outline-2">
-<h2 id="org4a920b8">编译实例</h2>
+<div id="outline-container-org4102d34" class="outline-2">
+<h2 id="org4102d34">实例</h2>
+<div class="outline-text-2" id="text-org4102d34">
+<p>
+按下面形式调用 compile，编译递归定义的 factorial 过程：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span>compile
+ '<span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">factorial</span> n<span style="color: #696969;">)</span>
+    <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>= n 1<span style="color: #696969;">)</span>
+        1
+        <span style="color: #696969;">(</span>* <span style="color: #696969;">(</span>factorial <span style="color: #696969;">(</span>- n 1<span style="color: #696969;">))</span> n<span style="color: #696969;">)))</span>
+ 'val
+ 'next<span style="color: #696969;">)</span>
+</pre>
+</div>
+<ul class="org-ul">
+<li>define 表达式的值应放入 <span class="underline">val</span></li>
+<li>随意选择 <span class="underline">next</span> 作为连接描述符：这里不关心执行 define 后的编译代码是什么</li>
+</ul>
+
+<p>
+遇到 define 表达式时，调用 <span class="underline">compile-definition</span>  ：
+</p>
+<ol class="org-ol">
+<li>编译计算被赋的值的代码（以 val为目标）</li>
+<li>安装这一定义的代码</li>
+<li>将 define的值（符号 ok）放入目标寄存器的代码</li>
+<li>连接代码</li>
+</ol>
+<pre class="example">
+    保留 env 以便在值计算之后用它安装定义。由于连接是 next，不需要连接代码
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-scheme">&lt;save env if modified by code to compute value&gt;
+&lt;compilation of definition value, target val, linkage next&gt;
+&lt;restore env if saved above&gt;
+<span style="color: #696969;">(</span>perform <span style="color: #696969;">(</span>op define-variable!<span style="color: #696969;">)</span>
+         <span style="color: #696969;">(</span>const factorial<span style="color: #696969;">)</span>
+         <span style="color: #696969;">(</span>reg val<span style="color: #696969;">)</span>
+         <span style="color: #696969;">(</span>reg env<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>assign val <span style="color: #696969;">(</span>const ok<span style="color: #696969;">))</span>
+</pre>
+</div>
+
+<p>
+产生 factorial 值的是 <span class="underline">lambda表达式</span> ，compile 调用 <span class="underline">compile-lambda</span> ：
+</p>
+<ul class="org-ul">
+<li>编译过程体</li>
+<li>用新标号标记其入口点</li>
+<li>生成一些指令将位于这个入口的过程体组合到运行时环境中</li>
+<li>最后将结果赋给val</li>
+</ul>
+
+<pre class="example">
+    编译好的过程体代码放在这里，整个序列要跳过这些代码 (goto (label after-lambda1) 
+
+    过程代码开始扩充过程定义环境，增加一个框架
+
+    随后是过程体
+
+    由于求变量值的代码不修改env，不做 save 和 restore （位于 entry2 的过程代码在这点还没有执行，它对env的使用与此无关）
+</pre>
+<p>
+代码框架变成
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span>assign val <span style="color: #696969;">(</span>op make-compiled-procedure<span style="color: #696969;">)</span>
+        <span style="color: #696969;">(</span>label entry2<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#19979;&#27425;&#35843;&#29992; factorial &#30340;&#20837;&#21475;&#28857;</span>
+        <span style="color: #696969;">(</span>reg env<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label after-lambda1<span style="color: #696969;">))</span>
+entry2
+<span style="color: #696969;">(</span>assign env <span style="color: #696969;">(</span>op compiled-procedure-env<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg proc<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>assign env <span style="color: #696969;">(</span>op extend-environment<span style="color: #696969;">)</span>
+        <span style="color: #696969;">(</span>const <span style="color: #696969;">(</span>n<span style="color: #696969;">))</span>
+        <span style="color: #696969;">(</span>reg argl<span style="color: #696969;">)</span>
+        <span style="color: #696969;">(</span>reg env<span style="color: #696969;">))</span>
+&lt;compilation of procedure body&gt;
+after-lambda1
+<span style="color: #696969;">(</span>perform <span style="color: #696969;">(</span>op define-variable!<span style="color: #696969;">)</span>
+         <span style="color: #696969;">(</span>const factorial<span style="color: #696969;">)</span>
+         <span style="color: #696969;">(</span>reg val<span style="color: #696969;">)</span>
+         <span style="color: #696969;">(</span>reg env<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>assign val <span style="color: #696969;">(</span>const ok<span style="color: #696969;">))</span>
+</pre>
+</div>
+
+<p>
+过程体用 <span class="underline">compile-lambda-body</span> 编译为一个序列，以 <span class="underline">val</span> 为目标，用连接 <span class="underline">return</span> 。目前这个序列来自 <span class="underline">if 表达式</span> : 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #696969;">(</span>= n 1<span style="color: #696969;">)</span>
+    1
+    <span style="color: #696969;">(</span>* <span style="color: #696969;">(</span>factorial <span style="color: #696969;">(</span>- n 1<span style="color: #696969;">))</span> n<span style="color: #696969;">))</span>
+</pre>
+</div>
+
+<p>
+compile-if 生成的代码：
+</p>
+<ol class="org-ol">
+<li>计算谓词：目标为 val</li>
+<li>谓词假时跳过真分支</li>
+</ol>
+
+<pre class="example">
+    谓词代码前后保留恢复 env、continue，因为其他部分可能用
+
+    这个 if 是过程体的序列的最后表达式，目标是 val 且连接是 return，所以真假分支都用目标 val 和连接 return编译
+
+    条件表达式的值就是其分支算出的值，是整个过程的值
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-scheme">&lt;save continue, env if modified by predicate and needed by branches&gt;
+&lt;compilation of predicate, target val, linkage next&gt;
+&lt;restore continue, env if saved above&gt;
+<span style="color: #696969;">(</span>test <span style="color: #696969;">(</span>op false?<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg val<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>branch <span style="color: #696969;">(</span>label false-branch4<span style="color: #696969;">))</span>
+true-branch5
+&lt;compilation of true branch, target val, linkage return&gt;
+false-branch4
+&lt;compilation of false branch, target val, linkage return&gt;
+after-if3
+</pre>
+</div>
+
+<p>
+谓词 (= n 1) 是过程调用：
+</p>
+<ol class="org-ol">
+<li>要找运算符（符号=）并把相应值放入 proc</li>
+<li>而后把实参 1 和 n 的值装进 argl</li>
+<li>代码检查 proc 里是基本过程还是复合过程，并根据情况分派，两个分支都结束在 after-call标号</li>
+</ol>
+
+<pre class="example">
+    目前情况不需要寄存器保留动作，因为这里的求值都不修改要考虑的寄存器
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span>assign proc
+        <span style="color: #696969;">(</span>op lookup-variable-value<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>const =<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg env<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>assign val <span style="color: #696969;">(</span>const 1<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>assign argl <span style="color: #696969;">(</span>op list<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg val<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>assign val <span style="color: #696969;">(</span>op lookup-variable-value<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>const n<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg env<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>assign argl <span style="color: #696969;">(</span>op cons<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg val<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg argl<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>test <span style="color: #696969;">(</span>op primitive-procedure?<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg proc<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>branch <span style="color: #696969;">(</span>label primitive-branch17<span style="color: #696969;">))</span>
+compiled-branch16
+<span style="color: #696969;">(</span>assign continue <span style="color: #696969;">(</span>label after-call15<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>assign val <span style="color: #696969;">(</span>op compiled-procedure-entry<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg proc<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>reg val<span style="color: #696969;">))</span>
+primitive-branch17
+<span style="color: #696969;">(</span>assign val <span style="color: #696969;">(</span>op apply-primitive-procedure<span style="color: #696969;">)</span>
+        <span style="color: #696969;">(</span>reg proc<span style="color: #696969;">)</span>
+        <span style="color: #696969;">(</span>reg argl<span style="color: #696969;">))</span>
+after-call15
+</pre>
+</div>
+
+<p>
+真分支是常数1，编译为用目标 val 和连接 return 
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span>assign val <span style="color: #696969;">(</span>const 1<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>reg continue<span style="color: #696969;">))</span> 
+</pre>
+</div>
+<p>
+假分支的代码是另一过程调用，其中过程是符号 * 的值，参数是 n 和另一过程调用的结果（对factorial的递归调用）
+</p>
+<pre class="example">
+    每个调用都要设置 proc 和 argl 的保存和恢复
+
+    每个调用也都要考虑 基本分支和 复合分支
+</pre>
+
+<p>
+下面是 factorial 过程定义的完整编译结果：
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">((</span>env<span style="color: #696969;">)</span>
+ <span style="color: #696969;">(</span>val<span style="color: #696969;">)</span>
+ <span style="color: #696969;">(</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">construct the procedure and skip over code for the procedure body</span>
+  <span style="color: #696969;">(</span>assign val
+          <span style="color: #696969;">(</span>op make-compiled-procedure<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>label entry2<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg env<span style="color: #696969;">))</span>
+  <span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label after-lambda1<span style="color: #696969;">))</span>
+  entry2 <span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">calls to factorial will enter here</span>
+  <span style="color: #696969;">(</span>assign env <span style="color: #696969;">(</span>op compiled-procedure-env<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg proc<span style="color: #696969;">))</span>
+  <span style="color: #696969;">(</span>assign env <span style="color: #696969;">(</span>op extend-environment<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>const <span style="color: #696969;">(</span>n<span style="color: #696969;">))</span> <span style="color: #696969;">(</span>reg argl<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg env<span style="color: #696969;">))</span>
+  <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">begin actual procedure body</span>
+  <span style="color: #696969;">(</span>save continue<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>save env<span style="color: #696969;">)</span>
+  <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">compute (= n 1)</span>
+  <span style="color: #696969;">(</span>assign proc <span style="color: #696969;">(</span>op lookup-variable-value<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>const =<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg env<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">"=" &#23545;&#24212;&#30340;&#36816;&#31639;&#23545;&#35937;&#25918;&#20837; proc &#23492;&#23384;&#22120;</span>
+  <span style="color: #696969;">(</span>assign val <span style="color: #696969;">(</span>const 1<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">1 -&gt; val</span>
+  <span style="color: #696969;">(</span>assign argl <span style="color: #696969;">(</span>op list<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg val<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(1) -&gt; argl</span>
+  <span style="color: #696969;">(</span>assign val <span style="color: #696969;">(</span>op lookup-variable-value<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>const n<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg env<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">n -&gt; val</span>
+  <span style="color: #696969;">(</span>assign argl <span style="color: #696969;">(</span>op cons<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg val<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg argl<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">(1, n) -&gt; argl</span>
+  <span style="color: #696969;">(</span>test <span style="color: #696969;">(</span>op primitive-procedure?<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg proc<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#27979;&#35797; proc &#26159;&#21542;&#20026;&#21407;&#22987;&#36807;&#31243;</span>
+  <span style="color: #696969;">(</span>branch <span style="color: #696969;">(</span>label primitive-branch17<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#22914;&#26524;&#26159;&#21407;&#22987;&#36807;&#31243;&#30340;&#35805;&#65292;&#36339;&#36716;&#21040; primitive-branch17 &#21435;</span>
+  compiled-branch16 <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#23454;&#38469;&#19978;&#36825;&#37324;&#19981;&#20250;&#34987;&#25191;&#34892;&#65292;&#21487;&#20197;&#20248;&#21270;</span>
+  <span style="color: #696969;">(</span>assign continue <span style="color: #696969;">(</span>label after-call15<span style="color: #696969;">))</span>
+  <span style="color: #696969;">(</span>assign val <span style="color: #696969;">(</span>op compiled-procedure-entry<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg proc<span style="color: #696969;">))</span>
+  <span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>reg val<span style="color: #696969;">))</span>
+  primitive-branch17
+  <span style="color: #696969;">(</span>assign val <span style="color: #696969;">(</span>op apply-primitive-procedure<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg proc<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg argl<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;;</span><span style="color: #5f9ea0; font-style: italic;">&#35843;&#29992;&#32467;&#26524; (= n 1) -&gt; val</span>
+  after-call15 <span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">val now contains result of (= n 1)</span>
+  <span style="color: #696969;">(</span>restore env<span style="color: #696969;">)</span>
+  <span style="color: #696969;">(</span>restore continue<span style="color: #696969;">)</span>
+
+  <span style="color: #696969;">(</span>test <span style="color: #696969;">(</span>op false?<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg val<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#27979;&#35797; (= n 1) &#26159;&#21542;&#20026;&#20551;</span>
+  <span style="color: #696969;">(</span>branch <span style="color: #696969;">(</span>label false-branch4<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#20551;&#30340;&#35805;&#65292;&#32487;&#32493;&#19979;&#27425;&#36882;&#24402;&#35843;&#29992;</span>
+  true-branch5 <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">return 1</span>
+  <span style="color: #696969;">(</span>assign val <span style="color: #696969;">(</span>const 1<span style="color: #696969;">))</span>
+  <span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>reg continue<span style="color: #696969;">))</span>
+
+  false-branch4
+  <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">compute and return (* (factorial (- n 1)) n)</span>
+  <span style="color: #696969;">(</span>assign proc <span style="color: #696969;">(</span>op lookup-variable-value<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>const *<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg env<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">*&#36816;&#31639;&#31526; -&gt; proc</span>
+  <span style="color: #696969;">(</span>save continue<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">continue &#20837;&#26632;</span>
+  <span style="color: #696969;">(</span>save proc<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">proc &#20837;&#26632;</span>
+  <span style="color: #696969;">(</span>assign val <span style="color: #696969;">(</span>op lookup-variable-value<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>const n<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg env<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">n &#24120;&#37327; -&gt; val</span>
+  <span style="color: #696969;">(</span>assign argl <span style="color: #696969;">(</span>op list<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg val<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(n) -&gt; argl</span>
+  <span style="color: #696969;">(</span>save argl<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">argl &#20837;&#26632;</span>
+
+  <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">compute (factorial (- n 1)), which is the other argument for *</span>
+  <span style="color: #696969;">(</span>assign proc <span style="color: #696969;">(</span>op lookup-variable-value<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>const factorial<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg env<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">factorial &#36816;&#31639;&#31526;&#21495; -&gt; proc</span>
+  <span style="color: #696969;">(</span>save proc<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">proc&#20837;&#26632;</span>
+  <span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">compute (- n 1), which is the argument for factorial</span>
+  <span style="color: #696969;">(</span>assign proc <span style="color: #696969;">(</span>op lookup-variable-value<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>const -<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg env<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">- &#36816;&#31639;&#31526; -&gt; proc</span>
+  <span style="color: #696969;">(</span>assign val <span style="color: #696969;">(</span>const 1<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">1 -&gt; val</span>
+  <span style="color: #696969;">(</span>assign argl <span style="color: #696969;">(</span>op list<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg val<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(1) -&gt; argl</span>
+  <span style="color: #696969;">(</span>assign val <span style="color: #696969;">(</span>op lookup-variable-value<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>const n<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg env<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">const n -&gt; val</span>
+  <span style="color: #696969;">(</span>assign argl <span style="color: #696969;">(</span>op cons<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg val<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg argl<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(1 n) -&gt; argl</span>
+  <span style="color: #696969;">(</span>test <span style="color: #696969;">(</span>op primitive-procedure?<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg proc<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#27979;&#35797;&#26159;&#19981;&#26159;&#21407;&#22987;&#30340;&#36816;&#31639;&#31526;</span>
+  <span style="color: #696969;">(</span>branch <span style="color: #696969;">(</span>label primitive-branch8<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">- &#26159;&#21407;&#22987;&#30340;&#36816;&#31639;&#31526;&#65292;&#25152;&#20197;&#36825;&#37324;&#36339;&#36716;&#21040; primitive-branch8</span>
+  compiled-branch7
+  <span style="color: #696969;">(</span>assign continue <span style="color: #696969;">(</span>label after-call6<span style="color: #696969;">))</span>
+  <span style="color: #696969;">(</span>assign val <span style="color: #696969;">(</span>op compiled-procedure-entry<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg proc<span style="color: #696969;">))</span>
+  <span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>reg val<span style="color: #696969;">))</span>
+  primitive-branch8
+  <span style="color: #696969;">(</span>assign val <span style="color: #696969;">(</span>op apply-primitive-procedure<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg proc<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg argl<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#35745;&#31639; (- n 1)</span>
+
+  after-call6 <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">val now contains result of (- n 1)</span>
+  <span style="color: #696969;">(</span>assign argl <span style="color: #696969;">(</span>op list<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg val<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">((- n 1)) -&gt; argl</span>
+  <span style="color: #696969;">(</span>restore proc<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">proc &#20986;&#26632;&#65306;factorial &#36816;&#31639;&#31526;&#21495; -&gt; proc</span>
+  <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">apply factorial</span>
+  <span style="color: #696969;">(</span>test <span style="color: #696969;">(</span>op primitive-procedure?<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg proc<span style="color: #696969;">))</span>
+  <span style="color: #696969;">(</span>branch <span style="color: #696969;">(</span>label primitive-branch11<span style="color: #696969;">))</span>
+  compiled-branch10
+  <span style="color: #696969;">(</span>assign continue <span style="color: #696969;">(</span>label after-call9<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">after-call9 -&gt; continue</span>
+  <span style="color: #696969;">(</span>assign val <span style="color: #696969;">(</span>op compiled-procedure-entry<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg proc<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">factorial &#30340;&#36816;&#31639;&#20837;&#21475;&#28857; -&gt; val</span>
+  <span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>reg val<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#25191;&#34892; factorial&#30340;&#36816;&#31639;&#20837;&#21475;&#28857;&#65292;&#30456;&#24403;&#20110;&#25191;&#34892; (factorial (- 1 n))</span>
+  primitive-branch11
+  <span style="color: #696969;">(</span>assign val <span style="color: #696969;">(</span>op apply-primitive-procedure<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg proc<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg argl<span style="color: #696969;">))</span>
+
+  after-call9 <span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">val now contains result of (factorial (- n 1))</span>
+  <span style="color: #696969;">(</span>restore argl<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#20174;&#26632;&#20013;&#24674;&#22797; (n)  -&gt; argl</span>
+  <span style="color: #696969;">(</span>assign argl <span style="color: #696969;">(</span>op cons<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg val<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg argl<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">(n (factorial (- n 1))) -&gt; argl</span>
+  <span style="color: #696969;">(</span>restore proc<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#20174;&#26632;&#20013;&#24674;&#22797; (* &#36816;&#31639;&#31526;) -&gt; proc</span>
+  <span style="color: #696969;">(</span>restore continue<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#24674;&#22797; continue (next) -&gt; proc</span>
+  <span style="color: #696969;">(</span>test <span style="color: #696969;">(</span>op primitive-procedure?<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg proc<span style="color: #696969;">))</span>
+  <span style="color: #696969;">(</span>branch <span style="color: #696969;">(</span>label primitive-branch14<span style="color: #696969;">))</span>
+  compiled-branch13
+  <span style="color: #696969;">(</span>assign val <span style="color: #696969;">(</span>op compiled-procedure-entry<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg proc<span style="color: #696969;">))</span>
+  <span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>reg val<span style="color: #696969;">))</span>
+  primitive-branch14
+  <span style="color: #696969;">(</span>assign val <span style="color: #696969;">(</span>op apply-primitive-procedure<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg proc<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg argl<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#25191;&#34892; (* n (factorial (- n 1)))</span>
+  <span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>reg continue<span style="color: #696969;">))</span>
+  after-call12
+  after-if3
+  after-lambda1
+  <span style="color: #696969;">(</span>perform <span style="color: #696969;">(</span>op define-variable!<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>const factorial<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg val<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg env<span style="color: #696969;">))</span>
+  <span style="color: #696969;">(</span>assign val <span style="color: #696969;">(</span>const ok<span style="color: #696969;">))))</span>
+</pre>
+</div>
+
+<pre class="example">
+    注意：围绕着谓词的还有实际生成的对 continue 和 env 的 save 和 restore
+
+    因为谓词里的过程调用要修改它们，两个分支里的过程调用和 return连接都需要它们
+</pre>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
