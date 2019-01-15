@@ -1,3 +1,5 @@
+(load "compiler")
+
 (compile
  '(define (factorial n)
     (if (= n 1)
@@ -36,13 +38,13 @@
 
 ;;   (restore env)
 ;;   (restore continue)
-  
+
 ;;   (test (op false?) (reg val)) ;; 测试 (= n 1) 是否为假
 ;;   (branch (label false-branch4)) ;; 假的话，继续下次递归调用
 ;;   true-branch5 ;; return 1 
 ;;   (assign val (const 1))
 ;;   (goto (reg continue))
-  
+
 ;;   false-branch4
 ;;   ;; compute and return (* (factorial (- n 1)) n) 
 ;;   (assign proc (op lookup-variable-value) (const *) (reg env)) ;; *运算符 -> proc
@@ -51,7 +53,7 @@
 ;;   (assign val (op lookup-variable-value) (const n) (reg env)) ;; n 常量 -> val 
 ;;   (assign argl (op list) (reg val)) ;; (n) -> argl 
 ;;   (save argl) ;; argl 入栈
-  
+
 ;;   ;; compute (factorial (- n 1)), which is the other argument for *
 ;;   (assign proc (op lookup-variable-value) (const factorial) (reg env)) ;; factorial 运算符号 -> proc 
 ;;   (save proc) ;; proc入栈
@@ -69,7 +71,7 @@
 ;;   (goto (reg val))
 ;;   primitive-branch8
 ;;   (assign val (op apply-primitive-procedure) (reg proc) (reg argl)) ;; 计算 (- n 1)
-  
+
 ;;   after-call6 ;; val now contains result of (- n 1)
 ;;   (assign argl (op list) (reg val)) ;; ((- n 1)) -> argl 
 ;;   (restore proc) ;; proc 出栈：factorial 运算符号 -> proc
@@ -82,7 +84,7 @@
 ;;   (goto (reg val)) ;; 执行 factorial的运算入口点，相当于执行 (factorial (- 1 n)) 
 ;;   primitive-branch11
 ;;   (assign val (op apply-primitive-procedure) (reg proc) (reg argl))
-  
+
 ;;   after-call9 ;;  val now contains result of (factorial (- n 1))  
 ;;   (restore argl) ;; 从栈中恢复 (n)  -> argl 
 ;;   (assign argl (op cons) (reg val) (reg argl)) ;; (n (factorial (- n 1))) -> argl 
