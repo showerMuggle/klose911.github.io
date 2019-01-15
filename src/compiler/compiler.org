@@ -1114,26 +1114,26 @@
   #+END_EXAMPLE
 
 * 优化
-现在考虑一种可能的代码优化，优化变量查找
+  现在考虑一种可能的代码优化，优化变量查找
 
 ** 词法地址
-#+BEGIN_EXAMPLE
-  至今生成的代码用求值器机器的 lookup-variable-value查找变量，一个个框架顺序查找
+   #+BEGIN_EXAMPLE
+     至今生成的代码用求值器机器的 lookup-variable-value查找变量，一个个框架顺序查找
 
-  如果框架嵌套很深或变量很多，代价非常高
-#+END_EXAMPLE
+     如果框架嵌套很深或变量很多，代价非常高
+   #+END_EXAMPLE
 
-考虑某过程应用里求值 (* x y z) 时的情况，lookup-variable-value 每次查找 x 时都要确定 x 不是 y 或 z （第一个框架里） 也不是 a, b, c, d或e（第二个框架）
-#+BEGIN_SRC scheme
+   考虑某过程应用里求值 (* x y z) 时的情况，lookup-variable-value 每次查找 x 时都要确定 x 不是 y 或 z （第一个框架里） 也不是 a, b, c, d或e（第二个框架）
+   #+BEGIN_SRC scheme
   (let ((x 3) (y 4))
     (lambda (a b c d e)
       (let ((y (* a b x))
 	    (z (+ c d x)))
 	(* x y z))))
-#+END_SRC
+   #+END_SRC
 
-let 是 lambda的语法包装，等价于：
-#+BEGIN_SRC scheme
+   let 是 lambda的语法包装，等价于：
+   #+BEGIN_SRC scheme
   ((lambda (x y)
      (lambda (a b c d e)
        ((lambda (y z) (* x y z))
@@ -1141,50 +1141,166 @@ let 是 lambda的语法包装，等价于：
 	(+ c d x))))
    3
    4)
-#+END_SRC
+   #+END_SRC
 
-假定没有 define 而只有 lambda 建立变量约束。采用词法作用域规则，表达式运行时环境的结构与其出现所在的过程的词法结构一样。编译器分析
-这个表达式时就知道过程应用时(* x y z)里的 x 总会在 *当前框架外面第二个框架* 找到，而且是 *框架里第二项* 
+   假定没有 define 而只有 lambda 建立变量约束。采用词法作用域规则，表达式运行时环境的结构与其出现所在的过程的词法结构一样。编译器分析
+   这个表达式时就知道过程应用时(* x y z)里的 x 总会在 *当前框架外面第二个框架* 找到，而且是 *框架里第二项* 
 
-利用这一事实，可实现一个新变量查找过程 lexical-address-lookup：
-+ 参数：
-  + 一个环境
-  + 一个词法地址，词法地址由两个数组成：
-    + 框架号：描述要跳过几个框架
-    + 移位数：描述在框架里应跳过几个变量
-+ 返回：当前环境里找出存在给定词法地址处的变量值
+   利用这一事实，可实现一个新变量查找过程 lexical-address-lookup：
+   + 参数：
+     + 一个环境
+     + 一个词法地址，词法地址由两个数组成：
+       + 框架号：描述要跳过几个框架
+       + 移位数：描述在框架里应跳过几个变量
+   + 返回：当前环境里找出存在给定词法地址处的变量值
 
-+ 如果把 _lexical-address-lookup_ 操作加进前面的机器，就可以在 *编译生成的代码* 里用它 *引用变量*
-+ 还可以用一个新操作 _lexical-address-set!_
+   + 如果把 _lexical-address-lookup_ 操作加进前面的机器，就可以在 *编译生成的代码* 里用它 *引用变量*
+   + 还可以用一个新操作 _lexical-address-set!_
 
-为生成这种代码，编译一个 *变量引用* 时就必须 *确定变量的词法地址* 。变量在程序里的词法地址依赖于具体变量在代码里出现的位置
+   为生成这种代码，编译一个 *变量引用* 时就必须 *确定变量的词法地址* 。变量在程序里的词法地址依赖于具体变量在代码里出现的位置
 
-#+BEGIN_EXAMPLE
-  ((lambda (x y)
-     (lambda (a b c d e)
-       ((lambda (y z) <e1>)
-	<e2>
-	(+ c d x))))
-   3
-   4)
+   #+BEGIN_EXAMPLE
+     ((lambda (x y)
+	(lambda (a b c d e)
+	  ((lambda (y z) <e1>)
+	   <e2>
+	   (+ c d x))))
+      3
+      4)
 
-  表达式<e1>：
-  变量 x 的地址是 (2,0)，向回两个框架里的最前面一个变量
-  y 的地址是(0,0)
-  c的地址是(1,2)
+     表达式<e1>：
+     变量 x 的地址是 (2,0)，向回两个框架里的最前面一个变量
+     y 的地址是(0,0)
+     c的地址是(1,2)
 
-  表达式<e2>：
-  变量 x 的地址是 (1,0)
-  y的地址是(1,1)
-  c的地址是(0,2)
-#+END_EXAMPLE
+     表达式<e2>：
+     变量 x 的地址是 (1,0)
+     y的地址是(1,1)
+     c的地址是(0,2)
+   #+END_EXAMPLE
 
-编译器要生成使用词法地址的代码：
-+ 维持一个称为 _编译时环境_ 的数据结构，其中保存各种变化的轨迹，说明在程序执行到特定变量访问操作时，各变量出现在运行环境的哪个框架的哪个位置
-+ 编译时环境也用框架的表，框架是变量表（无值，编译时不可能算值）。把这种环境作为compile的另一参数，与原有参数一起传给代码生成器
-+ 对compile的最高层调用给一个 *空编译时环境* 
-  + 编译 lambda体时， _compile-lambda-body_  用一个 *包含该过程的所有变量的框架扩充* 当时的编译时环境
-     + 构成lambda体的表达式序列在 *扩充后的环境* 里编译
-     + 编译中每一点， _compile-variable_ 和 _compile-assignment_ 都用这个环境生成出 *正确的词法地址* 
+   编译器要生成使用词法地址的代码：
+   + 维持一个称为 _编译时环境_ 的数据结构，其中保存各种变化的轨迹，说明在程序执行到特定变量访问操作时，各变量出现在运行环境的哪个框架的哪个位置
+   + 编译时环境也用框架的表，框架是变量表（无值，编译时不可能算值）。把这种环境作为compile的另一参数，与原有参数一起传给代码生成器
+   + 对compile的最高层调用给一个 *空编译时环境* 
+     + 编译 lambda体时， _compile-lambda-body_  用一个 *包含该过程的所有变量的框架扩充* 当时的编译时环境
+       + 构成lambda体的表达式序列在 *扩充后的环境* 里编译
+       + 编译中每一点， _compile-variable_ 和 _compile-assignment_ 都用这个环境生成出 *正确的词法地址* 
 
 * 编译与解释的互连
+  #+BEGIN_EXAMPLE
+    假设已定义好显式控制求值器，包括必要的操作
+  #+END_EXAMPLE
+
+  下面实现一个过程 _compile-and-go_ ：
+  1. 编译一个 Scheme表达式
+  2. 将目标代码装入求值器机器
+  3. 启动该机器
+  4. 在求值器的全局环境里运行这一代码
+  5. 打印结果
+  6. 再次进入求值器的驱动循环
+
+  此外要修改求值器，使解释性的表达式除能调用 _其他编译代码_ 外，也能调用 _编译后的过程_ 
+
+  #+BEGIN_EXAMPLE
+    (compile-and-go
+     '(define (factorial n)
+	(if (= n 1)
+	    1
+	    (* (factorial (- n 1)) n))))
+
+     ;;; EC-Eval value:
+    ok
+     ;;; EC-Eval input:
+    (factorial 5)
+    ;;; EC-Eval value:
+    120
+  #+END_EXAMPLE
+  这样就可以将编译后的过程放进机器，并用求值器调用它们了
+
+** 识别编译后的过程
+   为使求值器能处理编译后的过程，需要修改位于 apply-dispatch的代码，使它能 *识别* _编译后的过程_ （与基本过程和复合过程具有同等地位），并将 *控制* 直接传到 *编译后代码的入口点* ：
+
+   #+BEGIN_SRC scheme
+  apply-dispatch 
+  (test (op primitive-procedure?) (reg proc))
+  (branch (label primitive-apply))
+  (test (op compound-procedure?) (reg proc))  
+  (branch (label compound-apply))
+  (test (op compiled-procedure?) (reg proc)) ;; 识别编译后的过程  
+  (branch (label compiled-apply))
+  (goto (label unknown-procedure-type))
+  compiled-apply
+  ;; 求值器时候 apply-dispatch 处继续点位于堆栈顶。而编译代码的入口点却期望继续点在continue寄存器中
+  (restore continue) ;; 执行编译代码前必须恢复 continue
+  (assign val (op compiled-procedure-entry) (reg proc))
+  (goto (reg val))
+   #+END_SRC
+
+   注意：求值器在 apply-dispatch 处继续点位于堆栈顶，而编译代码的入口点却期望继续点在 continue 里。因此，执行编译代码前必须 *恢复 continue* 
+
+** 调用编译后的入口点 
+   为在启动求值器机器时能运行一些编译代码，在求值器机器开始加一条 branch 指令，如果寄存器 flag 被设置，就要求机器转向一个新入口点 
+   #+BEGIN_SRC scheme
+    (branch (label external-entry))      ; branches if flag is set
+  read-eval-print-loop
+    (perform (op initialize-stack))
+    ...
+   #+END_SRC
+
+   external-entry入口 ：执行 val 寄存器中编译完毕后的指令序列位置处的代码
+
+   #+BEGIN_SRC scheme
+  ;; 假设 val 寄存器包含了一个指令序列的位置，改指令序列执行后会把结果放在 val 寄存器，并以 (goto (reg continue)) 结束
+  external-entry 
+  (perform (op initialize-stack)) ;; 初始化栈
+  (assign env (op get-global-environment)) ;; 设置环境
+  (assign continue (label print-result)) ;; 设置执行完后的 continue 寄存器为 print-result 
+  (goto (reg val) ;; 执行 val 对应位置的治疗序列
+   #+END_SRC
+
+** 编译并启动
+   现在已经可以按下面方式编译过程的定义 ，执行编译后的代码，然后运行读入-求值-打印循环
+
+   #+BEGIN_SRC scheme
+  (define (compile-and-go expression) 
+    (let ((instructions
+	   ;; 将编译器生成的目标代码转换到求值器寄存器机器的可执行指令
+	   (assemble (statements
+		      (compile expression 'val 'return)) ;; 目标寄存器： val 寄存器， 连接描述方式：return 
+		     eceval)))
+      (set! the-global-environment (setup-environment))
+      (set-register-contents! eceval 'val instructions) ;; 设置 val寄存器 : 指向指令的表
+      (set-register-contents! eceval 'flag true) ;; 设置flag标志：使求值器转向入口点 external-entry
+      (start eceval))) ;; 启动寄存机器模拟器
+   #+END_SRC
+
+   为将编译器生成的目标代码转换到求值器寄存器机器的可执行指令：
+   + 用来自寄存器机器模拟器的过程assemble
+     + 用目标 val和 连接return去编译表达式：使编译后代码能将结果放入 val 并返回 continue里的地址
+   + 最后设置 val寄存器使之指向指令的表
+   + 设置 flag 使求值器转向入口点 external-entry
+   + 启动求值器
+
+* 总结
+  #+BEGIN_EXAMPLE
+    Scheme语言或其他高级语言都是机器语言的有效抽象
+  #+END_EXAMPLE
+  + 解释器：把所用 _机器_ 提升到 _源程序层_ 
+    + 解释器能很好支持交互式的程序开发和排错，因为程序执行细节以这套抽象方式组织起来，程序员容易理解
+  + 编译器：把 _源程序_ 降到 _机器语言层_
+    + 编译代码更快，因为程序在机器语言层面执行
+    + 编译器可以做各种跨高层抽象的优化
+
+  #+BEGIN_EXAMPLE
+    解释和编译可以相互替代，这产生了把一种语言移植到新计算机的不同策略
+  #+END_EXAMPLE
+
+  假定要在一种新机器上实现Lisp，可以有以下几种不同的策略：
+  1. 把 _显式控制求值器_  *逐条翻译* 到新机器
+  2. 修改编译器的 *代码生成器* ，使之生成新计算机的代码
+     + 这样可以在原机器上的编译器编译要运行的Lisp程序，将它与新机器上编译后的运行库动态连接，就可以在新机器上运行该程序
+  3. 编译前面的编译器，然后在新机器上运行生成的编译器，编译并运行其他Lisp程序
+
+
+

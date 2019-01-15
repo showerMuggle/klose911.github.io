@@ -285,7 +285,14 @@ for the JavaScript code in this tag.
 <li><a href="#org299101f">词法地址</a></li>
 </ul>
 </li>
-<li><a href="#orgadcee4b">编译与解释的互连</a></li>
+<li><a href="#orgadcee4b">编译与解释的互连</a>
+<ul>
+<li><a href="#org2eec499">识别编译后的过程</a></li>
+<li><a href="#orge46dc18">调用编译后的入口点</a></li>
+<li><a href="#org97a7f8a">编译并启动</a></li>
+</ul>
+</li>
+<li><a href="#orgb4dbd4b">总结</a></li>
 </ul>
 </div>
 </div>
@@ -1811,9 +1818,9 @@ after-call15
 <h3 id="org299101f">词法地址</h3>
 <div class="outline-text-3" id="text-org299101f">
 <pre class="example">
-  至今生成的代码用求值器机器的 lookup-variable-value查找变量，一个个框架顺序查找
+     至今生成的代码用求值器机器的 lookup-variable-value查找变量，一个个框架顺序查找
 
-  如果框架嵌套很深或变量很多，代价非常高
+     如果框架嵌套很深或变量很多，代价非常高
 </pre>
 
 <p>
@@ -1911,6 +1918,177 @@ c的地址是(0,2)
 
 <div id="outline-container-orgadcee4b" class="outline-2">
 <h2 id="orgadcee4b">编译与解释的互连</h2>
+<div class="outline-text-2" id="text-orgadcee4b">
+<pre class="example">
+    假设已定义好显式控制求值器，包括必要的操作
+</pre>
+
+<p>
+下面实现一个过程 <span class="underline">compile-and-go</span> ：
+</p>
+<ol class="org-ol">
+<li>编译一个 Scheme表达式</li>
+<li>将目标代码装入求值器机器</li>
+<li>启动该机器</li>
+<li>在求值器的全局环境里运行这一代码</li>
+<li>打印结果</li>
+<li>再次进入求值器的驱动循环</li>
+</ol>
+
+<p>
+此外要修改求值器，使解释性的表达式除能调用 <span class="underline">其他编译代码</span> 外，也能调用 <span class="underline">编译后的过程</span> 
+</p>
+
+<pre class="example">
+(compile-and-go
+ '(define (factorial n)
+    (if (= n 1)
+	1
+	(* (factorial (- n 1)) n))))
+
+ ;;; EC-Eval value:
+ok
+ ;;; EC-Eval input:
+(factorial 5)
+;;; EC-Eval value:
+120
+</pre>
+<p>
+这样就可以将编译后的过程放进机器，并用求值器调用它们了
+</p>
+</div>
+
+<div id="outline-container-org2eec499" class="outline-3">
+<h3 id="org2eec499">识别编译后的过程</h3>
+<div class="outline-text-3" id="text-org2eec499">
+<p>
+为使求值器能处理编译后的过程，需要修改位于 apply-dispatch的代码，使它能 <b>识别</b> <span class="underline">编译后的过程</span> （与基本过程和复合过程具有同等地位），并将 <b>控制</b> 直接传到 <b>编译后代码的入口点</b> ：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme">apply-dispatch 
+<span style="color: #696969;">(</span>test <span style="color: #696969;">(</span>op primitive-procedure?<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg proc<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>branch <span style="color: #696969;">(</span>label primitive-apply<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>test <span style="color: #696969;">(</span>op compound-procedure?<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg proc<span style="color: #696969;">))</span>  
+<span style="color: #696969;">(</span>branch <span style="color: #696969;">(</span>label compound-apply<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>test <span style="color: #696969;">(</span>op compiled-procedure?<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg proc<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#35782;&#21035;&#32534;&#35793;&#21518;&#30340;&#36807;&#31243;  </span>
+<span style="color: #696969;">(</span>branch <span style="color: #696969;">(</span>label compiled-apply<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>label unknown-procedure-type<span style="color: #696969;">))</span>
+compiled-apply
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#27714;&#20540;&#22120;&#26102;&#20505; apply-dispatch &#22788;&#32487;&#32493;&#28857;&#20301;&#20110;&#22534;&#26632;&#39030;&#12290;&#32780;&#32534;&#35793;&#20195;&#30721;&#30340;&#20837;&#21475;&#28857;&#21364;&#26399;&#26395;&#32487;&#32493;&#28857;&#22312;continue&#23492;&#23384;&#22120;&#20013;</span>
+<span style="color: #696969;">(</span>restore continue<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#25191;&#34892;&#32534;&#35793;&#20195;&#30721;&#21069;&#24517;&#39035;&#24674;&#22797; continue</span>
+<span style="color: #696969;">(</span>assign val <span style="color: #696969;">(</span>op compiled-procedure-entry<span style="color: #696969;">)</span> <span style="color: #696969;">(</span>reg proc<span style="color: #696969;">))</span>
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>reg val<span style="color: #696969;">))</span>
+</pre>
+</div>
+
+<p>
+注意：求值器在 apply-dispatch 处继续点位于堆栈顶，而编译代码的入口点却期望继续点在 continue 里。因此，执行编译代码前必须 <b>恢复 continue</b> 
+</p>
+</div>
+</div>
+
+<div id="outline-container-orge46dc18" class="outline-3">
+<h3 id="orge46dc18">调用编译后的入口点</h3>
+<div class="outline-text-3" id="text-orge46dc18">
+<p>
+为在启动求值器机器时能运行一些编译代码，在求值器机器开始加一条 branch 指令，如果寄存器 flag 被设置，就要求机器转向一个新入口点 
+</p>
+<div class="org-src-container">
+<pre class="src src-scheme">  <span style="color: #696969;">(</span>branch <span style="color: #696969;">(</span>label external-entry<span style="color: #696969;">))</span>      <span style="color: #5f9ea0; font-style: italic;">; </span><span style="color: #5f9ea0; font-style: italic;">branches if flag is set</span>
+read-eval-print-loop
+  <span style="color: #696969;">(</span>perform <span style="color: #696969;">(</span>op initialize-stack<span style="color: #696969;">))</span>
+  ...
+</pre>
+</div>
+
+<p>
+external-entry入口 ：执行 val 寄存器中编译完毕后的指令序列位置处的代码
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#20551;&#35774; val &#23492;&#23384;&#22120;&#21253;&#21547;&#20102;&#19968;&#20010;&#25351;&#20196;&#24207;&#21015;&#30340;&#20301;&#32622;&#65292;&#25913;&#25351;&#20196;&#24207;&#21015;&#25191;&#34892;&#21518;&#20250;&#25226;&#32467;&#26524;&#25918;&#22312; val &#23492;&#23384;&#22120;&#65292;&#24182;&#20197; (goto (reg continue)) &#32467;&#26463;</span>
+external-entry 
+<span style="color: #696969;">(</span>perform <span style="color: #696969;">(</span>op initialize-stack<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#21021;&#22987;&#21270;&#26632;</span>
+<span style="color: #696969;">(</span>assign env <span style="color: #696969;">(</span>op get-global-environment<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#35774;&#32622;&#29615;&#22659;</span>
+<span style="color: #696969;">(</span>assign continue <span style="color: #696969;">(</span>label print-result<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#35774;&#32622;&#25191;&#34892;&#23436;&#21518;&#30340; continue &#23492;&#23384;&#22120;&#20026; print-result </span>
+<span style="color: #696969;">(</span>goto <span style="color: #696969;">(</span>reg val<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#25191;&#34892; val &#23545;&#24212;&#20301;&#32622;&#30340;&#27835;&#30103;&#24207;&#21015;</span>
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org97a7f8a" class="outline-3">
+<h3 id="org97a7f8a">编译并启动</h3>
+<div class="outline-text-3" id="text-org97a7f8a">
+<p>
+现在已经可以按下面方式编译过程的定义 ，执行编译后的代码，然后运行读入-求值-打印循环
+</p>
+
+<div class="org-src-container">
+<pre class="src src-scheme"><span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">define</span> <span style="color: #696969;">(</span><span style="color: #daa520; font-weight: bold;">compile-and-go</span> expression<span style="color: #696969;">)</span> 
+  <span style="color: #696969;">(</span><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #696969;">((</span>instructions
+         <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#23558;&#32534;&#35793;&#22120;&#29983;&#25104;&#30340;&#30446;&#26631;&#20195;&#30721;&#36716;&#25442;&#21040;&#27714;&#20540;&#22120;&#23492;&#23384;&#22120;&#26426;&#22120;&#30340;&#21487;&#25191;&#34892;&#25351;&#20196;</span>
+         <span style="color: #696969;">(</span>assemble <span style="color: #696969;">(</span>statements
+                    <span style="color: #696969;">(</span>compile expression 'val 'return<span style="color: #696969;">))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#30446;&#26631;&#23492;&#23384;&#22120;&#65306; val &#23492;&#23384;&#22120;&#65292; &#36830;&#25509;&#25551;&#36848;&#26041;&#24335;&#65306;return </span>
+                   eceval<span style="color: #696969;">)))</span>
+    <span style="color: #696969;">(</span>set! the-global-environment <span style="color: #696969;">(</span>setup-environment<span style="color: #696969;">))</span>
+    <span style="color: #696969;">(</span>set-register-contents! eceval 'val instructions<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#35774;&#32622; val&#23492;&#23384;&#22120; : &#25351;&#21521;&#25351;&#20196;&#30340;&#34920;</span>
+    <span style="color: #696969;">(</span>set-register-contents! eceval 'flag true<span style="color: #696969;">)</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#35774;&#32622;flag&#26631;&#24535;&#65306;&#20351;&#27714;&#20540;&#22120;&#36716;&#21521;&#20837;&#21475;&#28857; external-entry</span>
+    <span style="color: #696969;">(</span>start eceval<span style="color: #696969;">)))</span> <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#21551;&#21160;&#23492;&#23384;&#26426;&#22120;&#27169;&#25311;&#22120;</span>
+</pre>
+</div>
+
+<p>
+为将编译器生成的目标代码转换到求值器寄存器机器的可执行指令：
+</p>
+<ul class="org-ul">
+<li>用来自寄存器机器模拟器的过程assemble
+<ul class="org-ul">
+<li>用目标 val和 连接return去编译表达式：使编译后代码能将结果放入 val 并返回 continue里的地址</li>
+</ul></li>
+<li>最后设置 val寄存器使之指向指令的表</li>
+<li>设置 flag 使求值器转向入口点 external-entry</li>
+<li>启动求值器</li>
+</ul>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgb4dbd4b" class="outline-2">
+<h2 id="orgb4dbd4b">总结</h2>
+<div class="outline-text-2" id="text-orgb4dbd4b">
+<pre class="example">
+Scheme语言或其他高级语言都是机器语言的有效抽象
+</pre>
+<ul class="org-ul">
+<li>解释器：把所用 <span class="underline">机器</span> 提升到 <span class="underline">源程序层</span> 
+<ul class="org-ul">
+<li>解释器能很好支持交互式的程序开发和排错，因为程序执行细节以这套抽象方式组织起来，程序员容易理解</li>
+</ul></li>
+<li>编译器：把 <span class="underline">源程序</span> 降到 <span class="underline">机器语言层</span>
+<ul class="org-ul">
+<li>编译代码更快，因为程序在机器语言层面执行</li>
+<li>编译器可以做各种跨高层抽象的优化</li>
+</ul></li>
+</ul>
+
+<pre class="example">
+    解释和编译可以相互替代，这产生了把一种语言移植到新计算机的不同策略
+</pre>
+
+<p>
+假定要在一种新机器上实现Lisp，可以有以下几种不同的策略：
+</p>
+<ol class="org-ol">
+<li>把 <span class="underline">显式控制求值器</span>  <b>逐条翻译</b> 到新机器</li>
+<li>修改编译器的 <b>代码生成器</b> ，使之生成新计算机的代码
+<ul class="org-ul">
+<li>这样可以在原机器上的编译器编译要运行的Lisp程序，将它与新机器上编译后的运行库动态连接，就可以在新机器上运行该程序</li>
+</ul></li>
+<li>编译前面的编译器，然后在新机器上运行生成的编译器，编译并运行其他Lisp程序</li>
+</ol>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
