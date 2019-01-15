@@ -1,3 +1,5 @@
+(load "assembler")
+
 (define gcd-machine
   (make-machine
    '(a b t) ;; 寄存器列表
