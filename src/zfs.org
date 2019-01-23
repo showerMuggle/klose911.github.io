@@ -1,0 +1,293 @@
+#+TITLE: ZFS文件系统
+#+HTML_HEAD: <link rel="stylesheet" type="text/css" href="css/main.css" />
+#+OPTIONS: num:nil timestamp:nil
+* ZFS 简介 
+将 ZFS 称为文件系统有点名不副实，因为它在传统意义上不仅仅是个文件系统。ZFS 将 _逻辑卷管理器_ 的概念与功能丰富的和 _可大规模扩展_ 的文件系统结合起来。首先探索一些 ZFS 所基于的原则：
++ ZFS 使用 *池存储* 模型，而不是传统的基于卷的模型： ZFS 视存储为可根据需要动态分配（和缩减）的共享池。这优于传统模型，在传统模型中，文件系统位于卷上，使用独立卷管理器来管理这些资产
++ ZFS 内嵌入的是重要功能集
+  + 快照
+  + 即写即拷，克隆
+  + 连续完整性检查
+  + 通过 RAID-Z 的数据保护
++ 可以在 ZFS 卷的顶端使用其他的文件系统（如 ext4）：这意味着可以获得那些 ZFS 的功能，如独立文件系统中的快照（该文件系统可能并不直接支持它们）
+
+ZFS 不只是组成有用文件系统的功能集合。相反，它是 *构建出色文件系统* 的集成和 *补充功能* 的集合
+** 存储池 
+ZFS 合并了 *卷管理* 功能来提取 _底层物理存储设备_ 到文件系统：
++ ZFS 对存储池（zpools）进行操作，而不是直接查看物理块设备，存储池构建自 _虚拟驱动器_ ，可由驱动器或驱动器的一部分物理地进行表示
++ 可以动态构造这些池，甚至这些池正在活跃地使用时也可以
+** 即写即拷
+ZFS 使用 *即写即拷* 模型来管理存储中的数据。虽然这意味着数据永远不会写入到位（从来没有被覆盖），而是写入新块并更新元数据来引用数据。即写即拷有利的原因有多个，不仅仅是因为它可以启用的快照和克隆等一些功能：
++ 由于从来不覆盖数据，这可以更简单地确保存储 *永远不会处于不一致* 的状态：因为在新的写入操作完成以后较早的数据仍保留
++ 这允许 ZFS 基于 _事务_ ，且更容易实现类似原子操作等的功能
++ 文件系统的所有写入都成为 *顺序写入* （因为始终进行重新映射）：避免存储中的热点并利用顺序写入的性能（比随机写入更快）
+** 数据保护
+可以使用 ZFS 的众多保护方案之一来保护由虚拟设备组成的存储池：
++ _跨两个或多个设备_ (RAID 1)来对池进行镜像
++ 通过 _奇偶校验_ 来保护该池（类似于 RAID 5）
++ _跨动态带区宽度_ 来镜像池
+
+基于池中设备数量，ZFS 支持各种不同的的奇偶校验方案：
++ 通过 RAID-Z (RAID-Z 1) 来保护三个设备
++ 对于四个设备，可以使用 RAID-Z 2（双重奇偶校验，类似于 RAID6）
++ 对于更大的保护来说，可以将 RAID-Z 3 用于更大数量的磁盘进行三重奇偶校验
++ 为提高速度（不存在错误检测以外的数据保护），可以跨设备进行条带化（RAID 0）
++ 可以创建条带化镜像（来镜像条带化设备），类似于 RAID 10
+
+#+BEGIN_EXAMPLE
+  ZFS 的一个有趣属性随 RAID-Z、即写即拷事务和动态条带宽度的组合而来
+
+  在传统的 RAID 5 体系结构中，所有磁盘都必须在条带内具有其自己的数据，或者条带不一致
+  因为没有方法自动更新所有磁盘，所以这可能产生众所周知的 RAID 5 写入漏洞问题（其中在 RAID 集的驱动器中条带是不一致的）
+  假设 ZFS 处理事务且从不需要写入到位，则写入漏洞问题就消除了
+
+  此方法的另外一个便捷性体现在磁盘出现故障且需要重建时
+  传统的 RAID 5 系统使用来自该集中其他磁盘的数据来重建新驱动器的数据
+  RAID-Z 遍历可用的元数据以便只读取有关几何学的数据并避免读取磁盘上未使用的空间
+  随着磁盘变得更大以及重建次数的增加，此行为变得更加重要
+#+END_EXAMPLE
+** 校验和
+虽然数据保护提供了在故障时重新生成数据的能力，但是这并不涉及处于第一位的数据的有效性。ZFS 通过为写入的每个块的元数据生成 _32 位校验和_ （或 256 位散列）解决了此问题：
++ 在读取块时，将 *验证此校验和* 以避免静默数据损坏问题
++ 在有数据保护（镜像或 AID-Z）的卷中，可自动读取或 *重新生成备用数据* 
+
+在 ZFS 上校验和与元数据存储在一起，因此如果提供数据保护（RAID-Z） ，可以检测并更正错位写入
+** 快照和克隆
+由于 ZFS 的即写即拷性质，类似快照和克隆的功能变得易于提供。因为 ZFS 从不覆盖数据而是写入到新的位置，所以可以保护较早的数据（但是在不重要的情况下被标记为删除以逆转磁盘空间）：
++ 快照：旧块的保存以便及时维护给定实例中的文件系统状态。这种方法也是空间有效的，因为无需复制（除非重新写入文件系统中的所有数据）
+   + 克隆：一种快照形式，在其中获取可写入的快照。在这种情况下，由每一个克隆共享初始的未写入块，且被写入的块仅可用于特定文件系统克隆
+** 可变块大小
+传统的文件系统由匹配后端存储（512 字节）的静态大小的块组成。ZFS 为各种不同的使用实现了 _可变块大小_ （通常大小达到 128KB，但是您可以变更此值）：
++ 可变块大小的一个重要使用是 _压缩_ （因为压缩时的结果块大小理想情况下将小于初始大小）
+  + 除了提供更好的存储网络利用外，此功能也使存储系统中的 *浪费最小化* （因为传输更好的数据到存储需要更少的时间）
++ 支持可变块大小还意味着您可以针对所期望的特定工作量优化块大小，以便改进性能
+** 其他 
+ZFS 并入了许多其他功能，如 *重复数据删除* （最小化数据重复）、 *可配置的复制* 、 *加密* 、 *缓存管理的自适应更换缓存* 以及 *在线磁盘清理* （标识并修复在不使用保护时可以修复的潜在错误）。它通过巨大的可扩展性来实现该功能，支持 16 千兆兆个字节的可寻址存储（2^64 字节）
+* 入门
+**  单个磁盘存储池 
+在单个磁盘上创建一个简单， 非冗余的 ZFS， 使用 zpool 命令：
+
+#+BEGIN_SRC sh
+  $ zpool create example /dev/da0
+#+END_SRC
+
+可以通过 df 的输出查看新的存储池：
+#+BEGIN_SRC sh 
+  $ df
+
+  Filesystem  1K-blocks    Used    Avail Capacity  Mounted on
+  /dev/ad0s1a   2026030  235230  1628718    13%    /
+  devfs               1       1        0   100%    /dev
+  /dev/ad0s1d  54098308 1032846 48737598     2%    /usr
+  example      17547136       0 17547136     0%    /example
+#+END_SRC
+
+这份输出清楚的表明了 example 存储池不仅创建成功而且被挂载了。 能像访问普通的文件系统那样访问它， 就像以下例子中演示的那样，用户能够在上面创建文件并浏览：
+#+BEGIN_SRC sh 
+  $ cd /example
+  $ ls
+
+  $ touch testfile
+  $ ls -al
+  total 4
+  drwxr-xr-x   2 root  wheel    3 Aug 29 23:15 .
+  drwxr-xr-x  21 root  wheel  512 Aug 29 23:12 ..
+  -rw-r--r--   1 root  wheel    0 Aug 29 23:15 testfile
+#+END_SRC
+
+遗憾的是这个存储池并没有利用到 ZFS 的任何特性。 在这个存储池上创建一个文件系统，并启用压缩：
+#+BEGIN_SRC sh 
+  $ zfs create example/compressed
+  $ zfs set compression=gzip example/compressed
+#+END_SRC
+
+现在 example/compressed 是一个启用了压缩的 ZFS 文件系统了。 可以尝试复制一些大的文件到 /example/compressed
+
+使用这个命令可以禁用压缩：
+#+BEGIN_SRC sh 
+  $ zfs set compression=off example/compressed
+#+END_SRC
+
+使用如下的命令卸载这个文件系统，并用 df 工具确认：
+#+BEGIN_SRC sh 
+  $ zfs umount example/compressed
+  $ df
+
+  Filesystem  1K-blocks    Used    Avail Capacity  Mounted on
+  /dev/ad0s1a   2026030  235232  1628716    13%    /
+  devfs               1       1        0   100%    /dev
+  /dev/ad0s1d  54098308 1032864 48737580     2%    /usr
+  example      17547008       0 17547008     0%    /example
+#+END_SRC
+
+重新挂在这个文件系统使之能被访问， 并用 df 确认：
+#+BEGIN_SRC sh
+  $ zfs mount example/compressed
+  $ df
+
+  Filesystem         1K-blocks    Used    Avail Capacity  Mounted on
+  /dev/ad0s1a          2026030  235234  1628714    13%    /
+  devfs                      1       1        0   100%    /dev
+  /dev/ad0s1d         54098308 1032864 48737580     2%    /usr
+  example             17547008       0 17547008     0%    /example
+  example/compressed  17547008       0 17547008     0%    /example/compressed
+#+END_SRC
+
+存储池与文件系统也可通过 mount 的输出查看：
+#+BEGIN_SRC sh
+  $ mount
+
+  /dev/ad0s1a on / (ufs, local)
+  devfs on /dev (devfs, local)
+  /dev/ad0s1d on /usr (ufs, local, soft-updates)
+  example on /example (zfs, local)
+  example/data on /example/data (zfs, local)
+  example/compressed on /example/compressed (zfs, local)
+#+END_SRC
+
+正如前面所提到的，ZFS 文件系统， 在创建之后就能像普通的文件系统那样使用。然而， 还有很多其他的特性是可用的。在下面的例子中， 将创建一个新的文件系统，data。 并要在上面存储些重要的文件， 所以文件系统需要被设置成把每一个数据块都保存两份拷贝：
+#+BEGIN_SRC sh 
+  $ zfs create example/data
+  $ zfs set copies=2 example/data
+#+END_SRC
+
+现在可以再次使用 df 查看数据和空间的使用状况：
+#+BEGIN_SRC sh 
+  $ df
+
+  Filesystem         1K-blocks    Used    Avail Capacity  Mounted on
+  /dev/ad0s1a          2026030  235234  1628714    13%    /
+  devfs                      1       1        0   100%    /dev
+  /dev/ad0s1d         54098308 1032864 48737580     2%    /usr
+  example             17547008       0 17547008     0%    /example
+  example/compressed  17547008       0 17547008     0%    /example/compressed
+  example/data        17547008       0 17547008     0%    /example/data
+#+END_SRC
+
+注意：存储池上的 *每一个文件系统都有着相同数量的可用空间*  
+#+BEGIN_EXAMPLE
+  这就是在这些例子中使用 df 的原因， 是为了文件系统都是从相同的存储池取得它们所需的空间
+
+  ZFS 去掉了诸如卷和分区此类的概念， 并允许多个文件系统占用同一个存储池
+#+END_EXAMPLE
+
+不再需要文件系统与存储池的时候能像这样销毁它们：
+#+BEGIN_SRC sh 
+  $ zfs destroy example/compressed
+  $ zfs destroy example/data
+  $ zpool destroy example
+#+END_SRC
+** RAID-Z 
+磁盘无法避免的会坏掉和停止运转。 当这块磁盘坏掉的时候，上面的数据都将丢失。 一个避免因磁盘损坏而丢失数据的方法是使用 RAID。ZFS 在它的存储池设计中支持这样的特性。假设存在 3 个 SCSI 设备， da0， da1 和 da2 。 使用如下的命令创建一个 RAID-Z 存储池：
+
+#+BEGIN_SRC sh 
+  $ zpool create storage raidz da0 da1 da2
+#+END_SRC
+** 数据校验
+ZFS 使用 *校验和* (checksum) 来检查存储数据的完整性。 这时在文件系统创建时 *自动启用* 的，可使用以下的命令禁用：
+
+#+BEGIN_SRC sh 
+  $ zfs set checksum=off storage/home
+#+END_SRC
+
+这不是个明智的选择，因为校验和 不仅非常有用而且只需占用少量的存储空间。 并且启用它们也不会明显的消耗过多资源。 启用后就可以让 ZFS 使用校验和校验来检查数据的完整。 这个过程通常称为 _scrubbing_ 。 可以使用以下的命令检查 storage 存储池里数据的完整性：
+
+#+BEGIN_SRC sh 
+  $ zpool scrub storage
+#+END_SRC
+
+这个过程需花费相当长的时间，取决于存储的数据量。 而且 I/O 非常密集， 所以在任何时间只能执行一个这样的操作。 在 scrub 完成之后，状态就会被更新， 可使用如下的命令查看：
+
+#+BEGIN_SRC sh 
+  $ zpool status storage
+
+  pool: storage
+  state: ONLINE
+  scrub: scrub completed with 0 errors on Sat Aug 30 19:57:37 2008
+  config:
+
+  NAME        STATE     READ WRITE CKSUM
+  storage     ONLINE       0     0     0
+  raidz1    ONLINE       0     0     0
+  da0     ONLINE       0     0     0
+  da1     ONLINE       0     0     0
+  da2     ONLINE       0     0     0
+
+  errors: No known data errors
+#+END_SRC
+
+这个例子中完成时间非常的清楚。 这个特性可以帮助你在很长的一段时间内确保数据的完整
+* 管理
+ZFS 管理由两个工具组成：
++ zpool: 控制存储池和增加、删除、替换和管理磁盘
++ zfs: 增加、删除和管理文件系统和卷
+** zpool 
+*** 创建和销毁存储池
+创建一个ZFS寸尺池包含许多预先的设定，因为存储池的结构在创建之后是没法改变的。 最重要的决定是什么类型的虚拟磁盘(vdev)来构成物理磁盘。一旦存储池构建完毕后，绝大多数类型的虚拟磁盘不允许添加额外的物理磁盘，例外是镜像(mirrors)和条带（stripe: 可以从镜像升级）。尽管额外的虚拟磁盘可以被添加到存储池，但是存储池的布局在创建存储池之后仍然不会被改变。因此，在销毁和重建存储池之前必须备份 
+
+创建一个简单的镜像池：
+#+BEGIN_SRC sh 
+  $ zpool create mypool mirror /dev/ada1 /dev/ada2
+  $ zpool status
+
+  pool: mypool
+   state: ONLINE
+    scan: none requested
+  config:
+
+	  NAME        STATE     READ WRITE CKSUM
+	  mypool      ONLINE       0     0     0
+	    mirror-0  ONLINE       0     0     0
+	      ada1    ONLINE       0     0     0
+	      ada2    ONLINE       0     0     0
+
+  errors: No known data errors
+#+END_SRC
+
+多个虚拟磁盘可以被同时创建，之间用 _虚拟磁盘类型_ 来分割：
+
+#+BEGIN_SRC sh 
+  $ zpool create mypool mirror /dev/ada1 /dev/ada2 mirror /dev/ada3 /dev/ada4
+    pool: mypool
+   state: ONLINE
+    scan: none requested
+  config:
+
+	  NAME        STATE     READ WRITE CKSUM
+	  mypool      ONLINE       0     0     0
+	    mirror-0  ONLINE       0     0     0
+	      ada1    ONLINE       0     0     0
+	      ada2    ONLINE       0     0     0
+	    mirror-1  ONLINE       0     0     0
+	      ada3    ONLINE       0     0     0
+	      ada4    ONLINE       0     0     0
+
+  errors: No known data errors
+#+END_SRC
+
+存储池可以使用分区来构建，而不是使用整块硬盘，使用分区来创建 RAID-Z2 存储池：
+
+#+BEGIN_SRC sh 
+  $ zpool create mypool raidz2 /dev/ada0p3 /dev/ada1p3 /dev/ada2p3 /dev/ada3p3 /dev/ada4p3 /dev/ada5p3
+  $ zpool status
+
+    pool: mypool
+   state: ONLINE
+    scan: none requested
+  config:
+
+	  NAME        STATE     READ WRITE CKSUM
+	  mypool      ONLINE       0     0     0
+	    raidz2-0  ONLINE       0     0     0
+	      ada0p3  ONLINE       0     0     0
+	      ada1p3  ONLINE       0     0     0
+	      ada2p3  ONLINE       0     0     0
+	      ada3p3  ONLINE       0     0     0
+	      ada4p3  ONLINE       0     0     0
+	      ada5p3  ONLINE       0     0     0
+
+  errors: No known data errors
+
+#+END_SRC
+
+存储池可以被销毁来回收空间。 销毁存储池之间必须把

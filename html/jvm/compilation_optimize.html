@@ -1,0 +1,394 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>编译器优化</title>
+<meta name="generator" content="Org mode" />
+<meta name="author" content="Wu, Shanliang" />
+<style type="text/css">
+ <!--/*--><![CDATA[/*><!--*/
+  .title  { text-align: center;
+             margin-bottom: .2em; }
+  .subtitle { text-align: center;
+              font-size: medium;
+              font-weight: bold;
+              margin-top:0; }
+  .todo   { font-family: monospace; color: red; }
+  .done   { font-family: monospace; color: green; }
+  .priority { font-family: monospace; color: orange; }
+  .tag    { background-color: #eee; font-family: monospace;
+            padding: 2px; font-size: 80%; font-weight: normal; }
+  .timestamp { color: #bebebe; }
+  .timestamp-kwd { color: #5f9ea0; }
+  .org-right  { margin-left: auto; margin-right: 0px;  text-align: right; }
+  .org-left   { margin-left: 0px;  margin-right: auto; text-align: left; }
+  .org-center { margin-left: auto; margin-right: auto; text-align: center; }
+  .underline { text-decoration: underline; }
+  #postamble p, #preamble p { font-size: 90%; margin: .2em; }
+  p.verse { margin-left: 3%; }
+  pre {
+    border: 1px solid #ccc;
+    box-shadow: 3px 3px 3px #eee;
+    padding: 8pt;
+    font-family: monospace;
+    overflow: auto;
+    margin: 1.2em;
+  }
+  pre.src {
+    position: relative;
+    overflow: visible;
+    padding-top: 1.2em;
+  }
+  pre.src:before {
+    display: none;
+    position: absolute;
+    background-color: white;
+    top: -10px;
+    right: 10px;
+    padding: 3px;
+    border: 1px solid black;
+  }
+  pre.src:hover:before { display: inline;}
+  /* Languages per Org manual */
+  pre.src-asymptote:before { content: 'Asymptote'; }
+  pre.src-awk:before { content: 'Awk'; }
+  pre.src-C:before { content: 'C'; }
+  /* pre.src-C++ doesn't work in CSS */
+  pre.src-clojure:before { content: 'Clojure'; }
+  pre.src-css:before { content: 'CSS'; }
+  pre.src-D:before { content: 'D'; }
+  pre.src-ditaa:before { content: 'ditaa'; }
+  pre.src-dot:before { content: 'Graphviz'; }
+  pre.src-calc:before { content: 'Emacs Calc'; }
+  pre.src-emacs-lisp:before { content: 'Emacs Lisp'; }
+  pre.src-fortran:before { content: 'Fortran'; }
+  pre.src-gnuplot:before { content: 'gnuplot'; }
+  pre.src-haskell:before { content: 'Haskell'; }
+  pre.src-hledger:before { content: 'hledger'; }
+  pre.src-java:before { content: 'Java'; }
+  pre.src-js:before { content: 'Javascript'; }
+  pre.src-latex:before { content: 'LaTeX'; }
+  pre.src-ledger:before { content: 'Ledger'; }
+  pre.src-lisp:before { content: 'Lisp'; }
+  pre.src-lilypond:before { content: 'Lilypond'; }
+  pre.src-lua:before { content: 'Lua'; }
+  pre.src-matlab:before { content: 'MATLAB'; }
+  pre.src-mscgen:before { content: 'Mscgen'; }
+  pre.src-ocaml:before { content: 'Objective Caml'; }
+  pre.src-octave:before { content: 'Octave'; }
+  pre.src-org:before { content: 'Org mode'; }
+  pre.src-oz:before { content: 'OZ'; }
+  pre.src-plantuml:before { content: 'Plantuml'; }
+  pre.src-processing:before { content: 'Processing.js'; }
+  pre.src-python:before { content: 'Python'; }
+  pre.src-R:before { content: 'R'; }
+  pre.src-ruby:before { content: 'Ruby'; }
+  pre.src-sass:before { content: 'Sass'; }
+  pre.src-scheme:before { content: 'Scheme'; }
+  pre.src-screen:before { content: 'Gnu Screen'; }
+  pre.src-sed:before { content: 'Sed'; }
+  pre.src-sh:before { content: 'shell'; }
+  pre.src-sql:before { content: 'SQL'; }
+  pre.src-sqlite:before { content: 'SQLite'; }
+  /* additional languages in org.el's org-babel-load-languages alist */
+  pre.src-forth:before { content: 'Forth'; }
+  pre.src-io:before { content: 'IO'; }
+  pre.src-J:before { content: 'J'; }
+  pre.src-makefile:before { content: 'Makefile'; }
+  pre.src-maxima:before { content: 'Maxima'; }
+  pre.src-perl:before { content: 'Perl'; }
+  pre.src-picolisp:before { content: 'Pico Lisp'; }
+  pre.src-scala:before { content: 'Scala'; }
+  pre.src-shell:before { content: 'Shell Script'; }
+  pre.src-ebnf2ps:before { content: 'ebfn2ps'; }
+  /* additional language identifiers per "defun org-babel-execute"
+       in ob-*.el */
+  pre.src-cpp:before  { content: 'C++'; }
+  pre.src-abc:before  { content: 'ABC'; }
+  pre.src-coq:before  { content: 'Coq'; }
+  pre.src-groovy:before  { content: 'Groovy'; }
+  /* additional language identifiers from org-babel-shell-names in
+     ob-shell.el: ob-shell is the only babel language using a lambda to put
+     the execution function name together. */
+  pre.src-bash:before  { content: 'bash'; }
+  pre.src-csh:before  { content: 'csh'; }
+  pre.src-ash:before  { content: 'ash'; }
+  pre.src-dash:before  { content: 'dash'; }
+  pre.src-ksh:before  { content: 'ksh'; }
+  pre.src-mksh:before  { content: 'mksh'; }
+  pre.src-posh:before  { content: 'posh'; }
+  /* Additional Emacs modes also supported by the LaTeX listings package */
+  pre.src-ada:before { content: 'Ada'; }
+  pre.src-asm:before { content: 'Assembler'; }
+  pre.src-caml:before { content: 'Caml'; }
+  pre.src-delphi:before { content: 'Delphi'; }
+  pre.src-html:before { content: 'HTML'; }
+  pre.src-idl:before { content: 'IDL'; }
+  pre.src-mercury:before { content: 'Mercury'; }
+  pre.src-metapost:before { content: 'MetaPost'; }
+  pre.src-modula-2:before { content: 'Modula-2'; }
+  pre.src-pascal:before { content: 'Pascal'; }
+  pre.src-ps:before { content: 'PostScript'; }
+  pre.src-prolog:before { content: 'Prolog'; }
+  pre.src-simula:before { content: 'Simula'; }
+  pre.src-tcl:before { content: 'tcl'; }
+  pre.src-tex:before { content: 'TeX'; }
+  pre.src-plain-tex:before { content: 'Plain TeX'; }
+  pre.src-verilog:before { content: 'Verilog'; }
+  pre.src-vhdl:before { content: 'VHDL'; }
+  pre.src-xml:before { content: 'XML'; }
+  pre.src-nxml:before { content: 'XML'; }
+  /* add a generic configuration mode; LaTeX export needs an additional
+     (add-to-list 'org-latex-listings-langs '(conf " ")) in .emacs */
+  pre.src-conf:before { content: 'Configuration File'; }
+
+  table { border-collapse:collapse; }
+  caption.t-above { caption-side: top; }
+  caption.t-bottom { caption-side: bottom; }
+  td, th { vertical-align:top;  }
+  th.org-right  { text-align: center;  }
+  th.org-left   { text-align: center;   }
+  th.org-center { text-align: center; }
+  td.org-right  { text-align: right;  }
+  td.org-left   { text-align: left;   }
+  td.org-center { text-align: center; }
+  dt { font-weight: bold; }
+  .footpara { display: inline; }
+  .footdef  { margin-bottom: 1em; }
+  .figure { padding: 1em; }
+  .figure p { text-align: center; }
+  .inlinetask {
+    padding: 10px;
+    border: 2px solid gray;
+    margin: 10px;
+    background: #ffffcc;
+  }
+  #org-div-home-and-up
+   { text-align: right; font-size: 70%; white-space: nowrap; }
+  textarea { overflow-x: auto; }
+  .linenr { font-size: smaller }
+  .code-highlighted { background-color: #ffff00; }
+  .org-info-js_info-navigation { border-style: none; }
+  #org-info-js_console-label
+    { font-size: 10px; font-weight: bold; white-space: nowrap; }
+  .org-info-js_search-highlight
+    { background-color: #ffff00; color: #000000; font-weight: bold; }
+  .org-svg { width: 90%; }
+  /*]]>*/-->
+</style>
+<link rel="stylesheet" type="text/css" href="css/main.css" />
+<script type="text/javascript">
+/*
+@licstart  The following is the entire license notice for the
+JavaScript code in this tag.
+
+Copyright (C) 2012-2018 Free Software Foundation, Inc.
+
+The JavaScript code in this tag is free software: you can
+redistribute it and/or modify it under the terms of the GNU
+General Public License (GNU GPL) as published by the Free Software
+Foundation, either version 3 of the License, or (at your option)
+any later version.  The code is distributed WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU GPL for more details.
+
+As additional permission under GNU GPL version 3 section 7, you
+may distribute non-source (e.g., minimized or compacted) forms of
+that code without the copy of the GNU GPL normally required by
+section 4, provided you include this license notice and a URL
+through which recipients can access the Corresponding Source.
+
+
+@licend  The above is the entire license notice
+for the JavaScript code in this tag.
+*/
+<!--/*--><![CDATA[/*><!--*/
+ function CodeHighlightOn(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(null != target) {
+     elem.cacheClassElem = elem.className;
+     elem.cacheClassTarget = target.className;
+     target.className = "code-highlighted";
+     elem.className   = "code-highlighted";
+   }
+ }
+ function CodeHighlightOff(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(elem.cacheClassElem)
+     elem.className = elem.cacheClassElem;
+   if(elem.cacheClassTarget)
+     target.className = elem.cacheClassTarget;
+ }
+/*]]>*///-->
+</script>
+</head>
+<body>
+<div id="org-div-home-and-up">
+ <a accesskey="h" href="thread_safe.html"> UP </a>
+ |
+ <a accesskey="H" href="jvm.html"> HOME </a>
+</div><div id="content">
+<h1 class="title">编译器优化</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#orgfc90955">Javac编译器</a>
+<ul>
+<li><a href="#org685aff3">Javac的源码与调试</a></li>
+<li><a href="#org2f762e4">解析与填充符号表</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<p>
+Java语言的 <b>编译期</b> 其实是一段 <span class="underline">不确定</span> 的操作过程，因为它可能是：
+</p>
+<ul class="org-ul">
+<li><b>前端</b> 编译器: 把 <span class="underline">java文件</span> 转化为 <span class="underline">class文件</span> 的过程</li>
+<li><b>后端</b> 运行期编译器（JIT编译器）: 把 <span class="underline">字节码</span> 转化为 <span class="underline">机器码</span> 的过程</li>
+<li><b>静态提前</b> 编译器（AOT编译器）：直接把 <span class="underline">java文件</span> 编译成 <span class="underline">本地机器代码</span> 的过程</li>
+</ul>
+
+<p>
+下面列举了这3类编译过程中一些比较有代表性的编译器：
+</p>
+<ol class="org-ol">
+<li>前端编译器：
+<ul class="org-ul">
+<li>Sun的Javac</li>
+<li>Eclipse JDT中的增量式编译器</li>
+</ul></li>
+<li>JIT编译器：
+<ul class="org-ul">
+<li>HotSpot VM的C1编译器</li>
+<li>HotSpot VM的C2编译器</li>
+</ul></li>
+<li>AOT编译器：
+<ul class="org-ul">
+<li>GNU Compiler for the Java(GCJ)</li>
+<li>Excelsior JET</li>
+</ul></li>
+</ol>
+
+<pre class="example">
+  这3类过程中最符合大家对Java程序编译认知的应该是第一类
+  这里提到的“编译期”和“编译器”都仅限于第一类编译过程
+
+  把第二类编译过程留到以后中讨论
+</pre>
+
+<p>
+限制了编译范围后，对于 <span class="underline">优化</span> 二字的定义就需要宽松一些，因为Javac这类编译器对代码的运行效率几乎没有任何优化措施。虚拟机设计团队把对性能的优化集中到了后端的即时编译器中，这样可以让那些不是由Javac产生的Class文件（如JRuby、Groovy等语言的Class文件）也同样能享受到编译器优化所带来的好处。但是Javac做了许多针对Java语言编码过程的优化措施来改善程序员的编码风格和提高编码效率。相当多新生的Java语法特性，都是靠编译器的 <b>语法糖</b> 来实现，而不是依赖虚拟机的底层改进来支持，可以说：
+</p>
+<ul class="org-ul">
+<li><span class="underline">即时编译器</span> 在运行期的优化过程对于 <b>程序运行</b> 来说更重要</li>
+<li><span class="underline">前端编译器</span> 在编译期的优化过程对于 <b>程序编码</b> 来说关系更加密切</li>
+</ul>
+
+<div id="outline-container-orgfc90955" class="outline-2">
+<h2 id="orgfc90955">Javac编译器</h2>
+<div class="outline-text-2" id="text-orgfc90955">
+<p>
+分析源码是了解一项技术的实现内幕最有效的手段，Javac编译器不像HotSpot虚拟机那样使用C++语言（包含C少量C语言）实现，它本身就是一个由Java语言编写的程序，这为纯Java的程序员了解它的编译过程带来了很大的便利
+</p>
+</div>
+
+<div id="outline-container-org685aff3" class="outline-3">
+<h3 id="org685aff3">Javac的源码与调试</h3>
+<div class="outline-text-3" id="text-org685aff3">
+<p>
+Javac的源码存放在JDK_SRC_HOME/langtools/src/share/classes/com/sun/tools/javac中，除了JDK自身的API外，就只用了JDK_SRC_HOME/langtools/src/share/classes/com/sum/*里面的代码，调试环境建立起来简单方便，因为基本上不需要处理依赖关系
+</p>
+
+<p>
+导入了Javac的源码后，就可以运行 <span class="underline">com.sun.tools.javac.Main</span> 的 <b>main()</b> 方法来执行编译了，与命令行中使用的Javac的命令没有什么区别
+</p>
+
+<pre class="example">
+  虚拟机规范严格定义了Class文件的格式
+
+  《JVM虚拟机规范（第二版）》中，虽然有专门的一章“Compiling for the Java Virtual Machine”，
+  但都是以举例的形式描述，并没有如何把Java源码文件转变为Class文件的编译过程进行十分严格的定义，
+  这导致Class文件编译在某种程度上是与具体JDK实现相关的
+
+  在一些极端情况，可能出现一段代码Javac编译器可以编译，但是ECJ编译器就不可以编译的问题
+</pre>
+
+<p>
+从Sun Javac的代码来看，编译过程大致可以分为3个过程，分别是：
+</p>
+<ol class="org-ol">
+<li><b>解析与填充符号表</b> 过程</li>
+<li>插入式注解处理器的 <b>注解处理</b> 过程</li>
+<li>分析与 <b>字节码生成</b> 过程</li>
+</ol>
+
+<p>
+这三个步骤之间的关系与交互顺序如图所示：
+</p>
+
+<div class="figure">
+<p><img src="pic/javac-compilation.jpg" alt="javac-compilation.jpg" width="70%" /> 
+</p>
+</div>
+
+<p>
+Javac编译动作的入口是 <b>com.sun.tools.javac.main.JavaCompiler</b> 类，上述3个过程的代码逻辑集中在这个类的 <span class="underline">compile()</span> 和 <span class="underline">compile2()</span> 方法中，其中主体代码如图所示，整个编译最关键的处理就由图中标注的8个方法来完成：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/JavaCompiler.jpg" alt="JavaCompiler.jpg" width="70%" /> 
+</p>
+</div>
+
+
+<div class="figure">
+<p><img src="pic/JavaCompiler.png" alt="JavaCompiler.png" width="70%" /> 
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org2f762e4" class="outline-3">
+<h3 id="org2f762e4">解析与填充符号表</h3>
+</div>
+</div>
+</div>
+<div id="postamble" class="status">
+
+		  <br/>
+		  <div class='ds-thread'></div>
+		  <script>
+		  var duoshuoQuery = {short_name:'klose911'};
+		  (function() {
+					  var dsThread = document.getElementsByClassName('ds-thread')[0];
+					  dsThread.setAttribute('data-thread-key', document.title);
+					  dsThread.setAttribute('data-title', document.title);
+					  dsThread.setAttribute('data-url', window.location.href);
+					  var ds = document.createElement('script');
+					  ds.type = 'text/javascript';ds.async = true;
+					  ds.src = (document.location.protocol == 'https:' ? 'https:' : 'http:') + '//static.duoshuo.com/embed.js';
+					  ds.charset = 'UTF-8';
+					  (document.getElementsByTagName('head')[0] 
+						|| document.getElementsByTagName('body')[0]).appendChild(ds);
+					  })();
+		  </script>
+		  <script>
+		  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+			(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+			m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+			})(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+		  ga('create', 'UA-90850421-1', 'auto');
+		  ga('send', 'pageview');
+		  </script>
+</div>
+</body>
+</html>

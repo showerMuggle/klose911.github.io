@@ -1,0 +1,69 @@
+#+TITLE: 编译器优化
+#+HTML_HEAD: <link rel="stylesheet" type="text/css" href="css/main.css" />
+#+HTML_LINK_UP: thread_safe.html   
+#+HTML_LINK_HOME: jvm.html
+#+OPTIONS: num:nil timestamp:nil ^:nil
+
+Java语言的 *编译期* 其实是一段 _不确定_ 的操作过程，因为它可能是：
++ *前端* 编译器: 把 _java文件_ 转化为 _class文件_ 的过程
++ *后端* 运行期编译器（JIT编译器）: 把 _字节码_ 转化为 _机器码_ 的过程
++ *静态提前* 编译器（AOT编译器）：直接把 _java文件_ 编译成 _本地机器代码_ 的过程
+
+下面列举了这3类编译过程中一些比较有代表性的编译器：
+1. 前端编译器：
+   + Sun的Javac
+   + Eclipse JDT中的增量式编译器
+2. JIT编译器：
+   + HotSpot VM的C1编译器
+   + HotSpot VM的C2编译器
+3. AOT编译器：
+   + GNU Compiler for the Java(GCJ)
+   + Excelsior JET
+
+#+BEGIN_EXAMPLE
+  这3类过程中最符合大家对Java程序编译认知的应该是第一类
+  这里提到的“编译期”和“编译器”都仅限于第一类编译过程
+
+  把第二类编译过程留到以后中讨论
+#+END_EXAMPLE
+
+限制了编译范围后，对于 _优化_ 二字的定义就需要宽松一些，因为Javac这类编译器对代码的运行效率几乎没有任何优化措施。虚拟机设计团队把对性能的优化集中到了后端的即时编译器中，这样可以让那些不是由Javac产生的Class文件（如JRuby、Groovy等语言的Class文件）也同样能享受到编译器优化所带来的好处。但是Javac做了许多针对Java语言编码过程的优化措施来改善程序员的编码风格和提高编码效率。相当多新生的Java语法特性，都是靠编译器的 *语法糖* 来实现，而不是依赖虚拟机的底层改进来支持，可以说：
++ _即时编译器_ 在运行期的优化过程对于 *程序运行* 来说更重要
++ _前端编译器_ 在编译期的优化过程对于 *程序编码* 来说关系更加密切
+
+* Javac编译器
+ 分析源码是了解一项技术的实现内幕最有效的手段，Javac编译器不像HotSpot虚拟机那样使用C++语言（包含C少量C语言）实现，它本身就是一个由Java语言编写的程序，这为纯Java的程序员了解它的编译过程带来了很大的便利
+
+** Javac的源码与调试 
+Javac的源码存放在JDK_SRC_HOME/langtools/src/share/classes/com/sun/tools/javac中，除了JDK自身的API外，就只用了JDK_SRC_HOME/langtools/src/share/classes/com/sum/*里面的代码，调试环境建立起来简单方便，因为基本上不需要处理依赖关系
+
+导入了Javac的源码后，就可以运行 _com.sun.tools.javac.Main_ 的 *main()* 方法来执行编译了，与命令行中使用的Javac的命令没有什么区别
+
+#+BEGIN_EXAMPLE
+  虚拟机规范严格定义了Class文件的格式
+
+  《JVM虚拟机规范（第二版）》中，虽然有专门的一章“Compiling for the Java Virtual Machine”，
+  但都是以举例的形式描述，并没有如何把Java源码文件转变为Class文件的编译过程进行十分严格的定义，
+  这导致Class文件编译在某种程度上是与具体JDK实现相关的
+
+  在一些极端情况，可能出现一段代码Javac编译器可以编译，但是ECJ编译器就不可以编译的问题
+#+END_EXAMPLE
+
+从Sun Javac的代码来看，编译过程大致可以分为3个过程，分别是：
+1.  *解析与填充符号表* 过程
+2. 插入式注解处理器的 *注解处理* 过程
+3. 分析与 *字节码生成* 过程
+
+这三个步骤之间的关系与交互顺序如图所示：
+     #+ATTR_HTML: image :width 70% 
+     [[file:pic/javac-compilation.jpg]] 
+
+ Javac编译动作的入口是 *com.sun.tools.javac.main.JavaCompiler* 类，上述3个过程的代码逻辑集中在这个类的 _compile()_ 和 _compile2()_ 方法中，其中主体代码如图所示，整个编译最关键的处理就由图中标注的8个方法来完成：
+
+     #+ATTR_HTML: image :width 70% 
+     [[file:pic/JavaCompiler.jpg]] 
+
+     #+ATTR_HTML: image :width 70% 
+     [[file:pic/JavaCompiler.png]] 
+
+** 解析与填充符号表
