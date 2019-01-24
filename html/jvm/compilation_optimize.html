@@ -241,9 +241,24 @@ for the JavaScript code in this tag.
 <li><a href="#orgfc90955">Javac编译器</a>
 <ul>
 <li><a href="#org685aff3">Javac的源码与调试</a></li>
-<li><a href="#org2f762e4">解析与填充符号表</a></li>
+<li><a href="#org2f762e4">解析与填充符号表</a>
+<ul>
+<li><a href="#orgaeb8ad5">词法、语法分析</a></li>
+<li><a href="#orgf8e3287">填充符号表</a></li>
 </ul>
 </li>
+<li><a href="#org751c3ce">注解处理器</a></li>
+<li><a href="#org54f0b0f">语义分析与字节码生成</a>
+<ul>
+<li><a href="#org5939ccf">标注检查</a></li>
+<li><a href="#org29a3911">数据及控制流分析</a></li>
+<li><a href="#org4ed6a32">解语法糖</a></li>
+<li><a href="#org47e7ab9">字节码生成</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#org217839f">语法糖</a></li>
 </ul>
 </div>
 </div>
@@ -359,7 +374,314 @@ Javac编译动作的入口是 <b>com.sun.tools.javac.main.JavaCompiler</b> 类�
 
 <div id="outline-container-org2f762e4" class="outline-3">
 <h3 id="org2f762e4">解析与填充符号表</h3>
+<div class="outline-text-3" id="text-org2f762e4">
+<p>
+解析步骤由 <span class="underline">parseFiles()</span>  方法完成，解析步骤包括了经典程序编译原理中的 <b>词法分析</b> 和 <b>语法分析</b> 两个过程 
+</p>
 </div>
+
+<div id="outline-container-orgaeb8ad5" class="outline-4">
+<h4 id="orgaeb8ad5">词法、语法分析</h4>
+<div class="outline-text-4" id="text-orgaeb8ad5">
+<p>
+词法分析：将源代码的 <span class="underline">字符流</span> 转变为 <span class="underline">标记</span> (Token) 集合
+</p>
+<ul class="org-ul">
+<li>单个字符是程序编写过程的最小元素，而标记则是 <b>编译过程的最小元素</b></li>
+<li>关键字、变量名、字面量、运算符都可以成为标记</li>
+<li>在 Javac 的源码中词法分析过程由 <b>com.sun.tools.javac.parser.Scanner</b> 类来实现</li>
+</ul>
+
+<pre class="example">
+  如 “int a=b+2” 这句代码包含了 6 个标记，分别是 int、a、=、b、+、2
+
+  虽然关键字 int 由 3 个字符构成，但是它只是一个 Token，不可再拆分
+</pre>
+<p>
+语法分析：根据 <span class="underline">Token 序列</span> 构造 <span class="underline">抽象语法树</span> 的过程
+</p>
+<ul class="org-ul">
+<li>抽象语法树(AST)：一种用来 <b>描述程序代码语法结构</b> 的树形表示方式
+<ul class="org-ul">
+<li>语法树的每一个节点都代表着程序代码中的一个语法结构(Construct)</li>
+</ul></li>
+<li>在 Javac 的源码中，语法分析过程由 <b>com.sun.tools.javac.parser.Parser</b> 类实现</li>
+<li>这个阶段产出的抽象语法树由 <b>com.sun.tools.javac.tree.JCTree</b> 类表示</li>
+</ul>
+<pre class="example">
+  例如 包 、 类型 、 修饰符 、 运算符 、 接口 、 返回值 甚至 代码注释 等都可以是一个语法结构
+</pre>
+
+<p>
+下图是根据 Eclipse AST View 插件分析出来的某段代码的抽象语法树视图，可以通过这张图对抽象语法树有一个直观的认识：
+</p>
+
+<div class="figure">
+<p><img src="pic/javac-ast.jpg" alt="javac-ast.jpg" width="70%" /> 
+</p>
+</div>
+
+<p>
+经过这个步骤之后，编译器就基本不会再对源码文件进行操作了，后续的操作都建立在抽象语法树之上
+</p>
+</div>
+</div>
+
+<div id="outline-container-orgf8e3287" class="outline-4">
+<h4 id="orgf8e3287">填充符号表</h4>
+<div class="outline-text-4" id="text-orgf8e3287">
+<p>
+完成了语法分析和词法分析之后，下一步就是填充符号表的过程，也就是 <b>enterTrees()</b> 方法（过程 1.2）所做的事情：
+</p>
+<ul class="org-ul">
+<li>符号表(Symbol Table)：由一组 <b>符号地址</b> 和 <b>符号信息</b> 构成的表格，可以把它想象成哈希表中 K-V 值对的形式</li>
+<li>符号表中所登记的信息在编译的不同阶段都要用到：
+<ul class="org-ul">
+<li><span class="underline">语义分析</span> 中，符号表所登记的内容将用于 <b>语义检查</b> （如检查一个名字的使用和原先的说明是否一致）和产生 <b>中间代码</b></li>
+<li><span class="underline">目标代码</span> 生成阶段，当对符号名进行地址分配时， 符号表是 <b>地址分配的依据</b></li>
+</ul></li>
+</ul>
+
+<pre class="example">
+  实际上符号表不一定是哈希表实现，可以是有序符号表、树状符号表、栈结构符号表等
+</pre>
+
+<p>
+在 Javac 源代码中，填充符号表的过程由 <b>com.sun.tools.javac.comp.Enter</b> 类实现：
+</p>
+<ul class="org-ul">
+<li>此过程的出口是一个待处理列表（To Do List），包含了：
+<ul class="org-ul">
+<li>每一个编译单元的抽象语法树的顶级节点</li>
+<li>package-info.java（如果存在的话）的顶级节点</li>
+</ul></li>
+</ul>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org751c3ce" class="outline-3">
+<h3 id="org751c3ce">注解处理器</h3>
+<div class="outline-text-3" id="text-org751c3ce">
+<pre class="example">
+   在JDK1.5之后，Java语言提供了对 注解 (Annotation)的支持
+
+  这些注解与普通的Java代码一样，是在 运行期间 发挥作用的
+</pre>
+
+<p>
+在JDK1.6中实现了 <span class="underline">JSR-269</span> 规范，提供了一组 <b>插入式注解处理器的标准API</b> 在 <b>编译期间对注解</b> 进行处理，可以把它看做是一组 <span class="underline">编译器的插件</span> 
+</p>
+<ul class="org-ul">
+<li>在这些插件里面，可以 <span class="underline">读取</span> 、 <span class="underline">修改</span> 、 <span class="underline">添加</span> <b>抽象语法树</b> 中的 <b>任意元素</b></li>
+<li>如果这些插件在处理注解期间对语法树进行了修改，编译器将回到解析及填充符号表的过程重新处理，直到所有插入式注解处理器都没有再对语法树进行修改为止：每一次循环称为一个Round</li>
+</ul>
+
+<pre class="example">
+  有了编译器注解处理的标准API后，代码才有可能干涉编译器的行为
+
+  由于语法树中的任意元素，甚至包括代码注释都可以在插件之中访问到，所以通过插入式注解处理器实现的插件在功能上有很大的发挥空间
+
+  只要有足够的创意，程序员可以使用插入式注解处理器来实现许多原本只能在编码中完成的事情
+</pre>
+
+<p>
+在Javac源码中，插入式注解处理器的初始化过程是在 <span class="underline">initPorcessAnnotations()</span> 方法中完成的，而它的执行过程则是在 <span class="underline">processAnnotations()</span> 方法中完成的，这个方法判断是否还有新的注解处理器需要执行，如果有的话，通过 <b>com.sun.tools.javac.processing.JavacProcessingEnvironment</b> 类的 <span class="underline">doProcessing()</span> 方法生成一个新的JavaCompiler对象对编译的后续步骤进行处理
+</p>
+</div>
+</div>
+
+<div id="outline-container-org54f0b0f" class="outline-3">
+<h3 id="org54f0b0f">语义分析与字节码生成</h3>
+<div class="outline-text-3" id="text-org54f0b0f">
+<p>
+语法分析之后，编译器获得了程序代码的抽象语法树表示，语法树能表示一个结构正确的源程序的抽象，但无法保证源程序是符合逻辑的。而语义分析的主要任务是对 <b>结构上正确的源程序</b> 进行 <b>上下文有关性质的审查</b> ，如进行 <span class="underline">类型审查</span> 。举个例子，假设有如下的 3 个变量定义语句：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-java"><span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">a</span> = 1;  
+<span style="color: #98f5ff;">boolean</span> <span style="color: #4eee94;">b</span> = <span style="color: #ffd700;">false</span>;  
+<span style="color: #98f5ff;">char</span> <span style="color: #4eee94;">c</span> = 2; 
+</pre>
+</div>
+
+<p>
+后续可能出现的赋值运算：
+</p>
+<div class="org-src-container">
+<pre class="src src-java"><span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">d</span> = a + c;  
+<span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">d</span> = b + c;  
+<span style="color: #98f5ff;">char</span> <span style="color: #4eee94;">d</span> = a + c; 
+</pre>
+</div>
+
+<p>
+后续代码中如果出现了如上 3 种赋值运算的话，那它们都能构成结构正确的语法树，但是只有第 1 种的写法在语义上是没有问题的，能够通过编译，其余两种在 Java 语言中是不合逻辑的，无法编译
+</p>
+
+<pre class="example">
+  是否合乎语义逻辑必须限定在语言与具体的上下文环境之中才有意义
+
+  如在 C 语言中，a、b、c 的上下文定义不变，第 2、3 种写法都是可以正确编译
+</pre>
+<p>
+Javac 的编译过程中，语义分析过程分为 <b>标注检查</b> 以及 <b>数据及控制流分析</b> 两个步骤，分别由 <span class="underline">attribute()</span> 和 <span class="underline">flow()</span> 方法（对应图中过程 3.1 和过程 3.2）完成
+</p>
+</div>
+
+<div id="outline-container-org5939ccf" class="outline-4">
+<h4 id="org5939ccf">标注检查</h4>
+<div class="outline-text-4" id="text-org5939ccf">
+<p>
+标注检查步骤检查的内容包括诸如：
+</p>
+<ul class="org-ul">
+<li><span class="underline">变量使用前是否已被声明</span></li>
+<li><span class="underline">变量与赋值之间的数据类型</span> 是否能够匹配等</li>
+</ul>
+
+<p>
+还有一个重要的动作称为 <b>常量折叠</b> ，如果在代码中写了如下定义：
+</p>
+<div class="org-src-container">
+<pre class="src src-java"><span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">a</span> = 1 + 2;  
+</pre>
+</div>
+
+<p>
+那么在语法树上仍然能看到字面量 <span class="underline">1</span> 、 <span class="underline">2</span>  以及操作符 <span class="underline">+</span> ，但是在经过常量折叠之后，它们将会被折叠为字面量 <span class="underline">3</span> ，如图所示，这个插入式表达式的值已经在语法树上标注出来了： <span class="underline">ConstantExpressionValue:3</span>  。由于编译期间进行了常量折叠，所以在代码里面定义  <span class="underline">a=1+2</span>  比起直接定义 <span class="underline">a=3</span> ，并不会增加程序运行期哪怕仅仅一个 CPU 指令的运算量：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/javac-constant-expression.jpg" alt="javac-constant-expression.jpg" width="70%" /> 
+</p>
+</div>
+
+<p>
+标注检查步骤在 Javac 源码中的实现类是 <b>com.sun.tools.javac.comp.Attr</b> 类和 <b>com.sun.tools.javac.comp.Check</b> 类
+</p>
+</div>
+</div>
+
+<div id="outline-container-org29a3911" class="outline-4">
+<h4 id="org29a3911">数据及控制流分析</h4>
+<div class="outline-text-4" id="text-org29a3911">
+<p>
+数据及控制流分析：对 <b>程序上下文逻辑更进一步的验证</b> ，它可以检测出：
+</p>
+<ul class="org-ul">
+<li>程序局部变量是在使用前是否有赋值</li>
+<li>方法的每条路径是否都有返回值</li>
+<li>是否所有的受查异常都被正确处理了等问题</li>
+</ul>
+
+<p>
+编译时期的数据及控制流分析与类加载时数据及控制流分析的目的基本上是一致的，但校验范围有所区别，有一些校验只有在编译期或运行期才能进行。下面举一个关于 final 修饰符的数据及控制流分析的例子：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-java"><span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">&#20195;&#30721;&#28165;&#21333;10-1  final&#35821;&#20041;&#26657;&#39564;</span>
+<span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">&#26041;&#27861;&#19968;&#24102;&#26377;final&#20462;&#39280;</span>
+<span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">foo</span>(<span style="color: #00bfff; font-weight: bold;">final</span> <span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">arg</span>){
+    <span style="color: #00bfff; font-weight: bold;">final</span> <span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">var</span> = 0;
+    <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">do something</span>
+}
+
+<span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">&#26041;&#27861;&#20108;&#27809;&#26377;final&#20462;&#39280;</span>
+<span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">foo</span>(<span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">arg</span>){
+    <span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">var</span> = 0;
+    <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">do something</span>
+}
+</pre>
+</div>
+<p>
+在这两个foo()方法中，第一种方法的参数和局部变量定义使用了final修饰符，而第二种方法则没有
+</p>
+<ul class="org-ul">
+<li>在代码编写的时程序肯定会受到final修饰符的影响，不能再改变arg和var变量的值，但是 <b>这两段代码编译出来的Class文件是没有任何一点区别的</b></li>
+</ul>
+<pre class="example">
+  局部变量与字段（实例变量、类变量）是有区别的，它在常量池中没有CONSTANT_Fieldref_info的符号引用
+  自然就没有访问标志（Access_Flags）的信息，甚至可能连名称都不会保留下来（取决于编译时的选项）
+  自然在Class文件中不可能知道一个局部变量是不是声明为final了
+
+  因此，将局部变量声明为final，对运行期是没有影响的，变量的不变性仅仅由编译器在编译期间保障
+</pre>
+
+<p>
+在Javac的源码中，数据及控制流分析的入口是 <span class="underline">flow()</span> 方法（对应图中的过程3.2），具体操作有 <b>com.sun.tools.javac.comp.Flow</b> 类来完成
+</p>
+</div>
+</div>
+
+<div id="outline-container-org4ed6a32" class="outline-4">
+<h4 id="org4ed6a32">解语法糖</h4>
+<div class="outline-text-4" id="text-org4ed6a32">
+<pre class="example">
+语法糖（Syntactic Sugar），是由英国计算机科学家彼得・约翰・兰达（Perter J.Landin）发明的一个术语
+指在计算机语言中添加的某种语法，这种语法对语言的功能并没有影响，但是更方便程序员使用
+
+通常来说，使用语法糖能够增加程序的可读性，从而减少程序代码出错的机会
+
+Java 在现代编程语言之中属于 “低糖语言”（相对于 C# 及许多其他 JVM 语言来说），尤其是 JDK 1.5 之前的版本
+“低糖” 语法也是 Java 语言被怀疑已经 “落后” 的一个表面理由
+</pre>
+<p>
+Java 中最常用的语法糖主要是前面提到过的：
+</p>
+<ul class="org-ul">
+<li>泛型 : 并不一定都是语法糖实现，如 C# 的泛型就是直接由 CLR 支持的</li>
+<li>变长参数</li>
+<li>自动装箱 / 拆箱等</li>
+</ul>
+
+<p>
+虚拟机运行时不支持这些语法，它们在编译阶段还原回简单的基础语法结构，这个过程称为 <span class="underline">解语法糖</span> 
+</p>
+
+<p>
+在 Javac 的源码中，解语法糖的过程由 <span class="underline">desugar()</span> 方法触发，在 <b>com.sun.tools.javac.comp.TransTypes</b> 类和 <b>com.sun.tools.javac.comp.Lower</b>  类中完成 
+</p>
+</div>
+</div>
+<div id="outline-container-org47e7ab9" class="outline-4">
+<h4 id="org47e7ab9">字节码生成</h4>
+<div class="outline-text-4" id="text-org47e7ab9">
+<p>
+字节码生成是 Javac 编译过程的最后一个阶段，在 Javac 源码里面由 <b>com.sun.tools.javac.jvm.Gen</b> 类来完成。字节码生成阶段不仅仅是把前面各个步骤所生成的信息（语法树、符号表）转化成字节码写到磁盘中，编译器还进行了少量的 <b>代码添加和转换</b> 工作
+</p>
+
+<pre class="example">
+  例如，前面多次提到的实例构造器 _&lt;init&gt;()_ 方法和类构造器 _&lt;clinit&gt;()_ 方法就是在这个阶段添加到语法树之中的
+  注意：这里的实例构造器并不是指默认的构造函数
+  如果用户代码中没有提供任何构造函数，那编译器将会添加一个没有参数的、访问性（public、protected 或 private）与当前类一直的默认构造函数
+  这个工作在填充符号表阶段就已经完成，这两个构造器的产生过程实际上是一个代码收敛的过程
+
+  编译器会把语句块：
+  对于实力构造器而言是 “{}” 块，对于类构造器而言是 “static{}” 块
+  变量初始化（实力变量和类变量）
+
+  调用父类的实例构造器：仅仅是实例构造器，&lt;clinit&gt;() 方法中无须调用父类的 &lt;clinit&gt;() 方法，虚拟机会自动保证父类构造器的执行
+  但在 &lt;clinit&gt;() 方法中经常会生成调用 java.lang.Object 的 &lt;init&gt;() 方法的代码等操作收敛到 &lt;init&gt;() 和 &lt;clinit&gt;() 方法之中
+  并且保证一定是按先执行父类的实例构造器，然后初始化变量，最后执行语句块的顺序进行
+
+  上面所述的动作由 Gen.normalizeDef() 方法来实现
+
+  除了生成构造器以外，还有其他的一些代码替换工作用于优化程序的实现逻辑：
+  如把字符串的加操作替换为 StringBuffer 或 StringBuilder（取决于目标代码的版本是否大于或等于 JDK 1.5）的 append() 操作等
+</pre>
+
+<p>
+完成了对语法树的遍历和调整之后，就会把填充了所有所需信息的符号表交给 <b>com.sun.tools.javac.jvm.ClassWriter</b> 类，由这个类的 <span class="underline">writeClass()</span> 方法输出字节码， <b>生成最终的 Class 文件</b> ，到此为止整个编译过程宣告结束
+</p>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org217839f" class="outline-2">
+<h2 id="org217839f">语法糖</h2>
 </div>
 </div>
 <div id="postamble" class="status">
