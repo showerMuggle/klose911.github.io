@@ -258,7 +258,14 @@ for the JavaScript code in this tag.
 </li>
 </ul>
 </li>
-<li><a href="#org217839f">语法糖</a></li>
+<li><a href="#org217839f">语法糖</a>
+<ul>
+<li><a href="#orgbfffb1a">泛型与类型擦除</a></li>
+<li><a href="#orgb21c9cf">自动装箱、拆箱与遍历循环</a></li>
+<li><a href="#org6f66d3e">条件编译</a></li>
+</ul>
+</li>
+<li><a href="#orgcb16c62">插入式注解处理器</a></li>
 </ul>
 </div>
 </div>
@@ -682,6 +689,310 @@ Java 中最常用的语法糖主要是前面提到过的：
 
 <div id="outline-container-org217839f" class="outline-2">
 <h2 id="org217839f">语法糖</h2>
+<div class="outline-text-2" id="text-org217839f">
+<p>
+几乎各种语言或多或少都提供过一些语法糖来方便程序员的代码开发，这些语法糖虽然不会提供实质性的功能改进，但是它们或能提高效率，或能提升语法的严谨性，或能减少编码出错的机会。不过也有一种观点认为语法糖并不一定都是有益的，大量添加和使用 “含糖” 的语法，容易让程序员产生依赖，无法看清语法糖的糖衣背后，程序代码的真实面目
+</p>
+
+<p>
+总而言之，语法糖可以看做是编译器实现的一些 “小把戏”，这些 “小把戏” 可能会使得效率 “大提升”，但也应该去了解这些 “小把戏” 背后的真实世界，那样才能利用好它们，而不是被它们所迷惑
+</p>
+</div>
+
+<div id="outline-container-orgbfffb1a" class="outline-3">
+<h3 id="orgbfffb1a">泛型与类型擦除</h3>
+<div class="outline-text-3" id="text-orgbfffb1a">
+<p>
+泛型是 JDK 1.5 的一项新增特性，它的本质是 <b>参数化类型</b> (Parametersized Type)的应用，也就是说 <b>操作的数据类型被指定为一个参数</b> 。这种参数类型可以用在类、接口和方法的创建中，分别称为 <span class="underline">泛型类</span> 、 <span class="underline">泛型接口</span> 和 <span class="underline">泛型方法</span> 
+</p>
+
+<pre class="example">
+  泛型思想早在 C++ 语言的模板 (Template) 中就开始生根发芽
+
+  在 Java 语言处于还没有出现泛型的版本时，只能通过 Object 是所有类型的父类和类型强制转换两个特点的配合来实现类型泛化
+  例如，在哈希表的存取中，JDK 1.5 之前使用 HashMap 的 get() 方法，返回值就是一个 Object 对象
+  由于 Java 语言里面所有的类型都继承于 java.lang.Object，所以 Object 转型成任何对象都是有可能的
+  但是也因为有无限的可能性，就只有程序员和运行期的虚拟机才知道这个 Object 到底是什么类型的对象
+
+  在编译期间，编译器无法检查这个 Object 的强制转型是否成功
+  如果仅仅依赖程序员去保障这项操作的正确性，许多 ClassCastException 的风险就会转嫁到程序运行期之中
+</pre>
+<p>
+泛型技术在 C# 和 Java之中的使用方式看似相同，但实现上却有着根本性的分歧，C# 里面泛型无论是在程序源码中、编译后的 IL 中（Intermediate Language，中间语言，这时候泛型是一个占位符），或是运行期的 CLR 中，都是切实存在的， <b>List&lt;int&gt; 与 List&lt;String&gt; 就是两个不同的类型</b> ，它们在系统运行期生成，有自己的虚方法表和类型数据，这种实现称为 <span class="underline">类型膨胀</span> ，基于这种方法实现的泛型称为 <span class="underline">真实泛型</span> 
+</p>
+
+<p>
+Java 语言中的泛型则不一样，它 <b>只在程序源码中存在</b> ，在编译后的字节码文件中，就已经替换为原来的 <span class="underline">原生类型</span> (Raw Type)了，并且在相应的地方 <b>插入了强制类型</b> 代码，因此，对于运行期的 Java 语言来说， <b>ArrayList&lt;int&gt; 与 ArrayList&lt;String&gt; 就是同一个类</b> ，所以泛型技术实际上是 Java 语言的一颗语法糖，Java 语言中的泛型实现方法称为 <span class="underline">类型擦除</span> ，基于这种方法实现的泛型称为 <span class="underline">伪泛型</span> 
+</p>
+
+<p>
+下面代码是一段简单的 Java 泛型的例子，可以看一下它编译后的结果是怎样的：
+</p>
+<div class="org-src-container">
+<pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">static</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">main</span>(<span style="color: #98f5ff;">String</span>[] <span style="color: #4eee94;">args</span>) {  
+    <span style="color: #98f5ff;">Map</span>&lt;<span style="color: #98f5ff;">String</span>, <span style="color: #98f5ff;">String</span>&gt; <span style="color: #4eee94;">map</span> = <span style="color: #00bfff; font-weight: bold;">new</span> <span style="color: #98f5ff;">HashMap</span>&lt;&gt;();  
+    map.put(<span style="color: #deb887;">"hello"</span>, <span style="color: #deb887;">"&#20320;&#22909;"</span>);  
+    map.put(<span style="color: #deb887;">"how are you?"</span>, <span style="color: #deb887;">"&#21507;&#20102;&#27809;&#65311;"</span>);  
+    System.out.println(map.get(<span style="color: #deb887;">"hello"</span>));  
+    System.out.println(map.get(<span style="color: #deb887;">"how are you?"</span>));  
+}  
+</pre>
+</div>
+
+<p>
+把这段 Java 代码编译成 Class 文件，然后再用字节码反编译工具进行反编译后，将会发现泛型都不见了（用jd-gui 查看发现声明的时候泛型还在，其他地方就变成了强制类型转换），程序又变回了 Java 泛型出现之前的写法，泛型类型都变回了原生类型
+</p>
+
+<pre class="example">
+  当初 JDK 设计团队为什么选择类型擦除的方式来实现 Java 语言的泛型支持呢？是因为实现简单、兼容性考虑还是别的原因？
+
+  现在已不得而知，但确实有不少人对 Java 语言提供的伪泛型颇有微词
+
+  在当时众多的批评之中，有一些是比较表面的：
+  从性能上说泛型会由于强制转型操作和运行期缺少针对类型的优化等从而导致比 C# 的泛型慢一些，则是完全偏离了方向
+
+  姑且不论 Java 泛型是不是真的会比 C# 泛型慢，选择从性能的角度上评价用于提升语义准确性的泛型思想就不太恰当
+</pre>
+
+<p>
+通过擦除法来实现泛型丧事了一些泛型思想应有的优雅，例如：
+</p>
+<div class="org-src-container">
+<pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">class</span> <span style="color: #98f5ff;">GenericTypes</span> {  
+    <span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">static</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">method</span>(<span style="color: #98f5ff;">List</span>&lt;<span style="color: #98f5ff;">String</span>&gt; <span style="color: #4eee94;">list</span>) {  
+        System.out.println(<span style="color: #deb887;">"invoke method(List&lt;String&gt; list)"</span>);  
+    }  
+
+    <span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">static</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">method</span>(<span style="color: #98f5ff;">List</span>&lt;<span style="color: #98f5ff;">Integer</span>&gt; <span style="color: #4eee94;">list</span>) {  
+        System.out.println(<span style="color: #deb887;">"invoke method(List&lt;Integer&gt; list)"</span>);  
+    }  
+}  
+</pre>
+</div>
+
+<p>
+这段代码是不能被编译的，因为参数 List&lt;Integer&gt; 和 List&lt;String&gt; 编译之后都被擦除了，变成了一样的原生类型 List&lt;E&gt;，擦除动作导致这两种方法的特征签名变得一模一样。初步看来，无法重载的原因已经找到了，但真的就是如此吗？只能说，泛型擦除成相同的原生类型只是无法重载的其中一部分原因，请再接着看一看：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">class</span> <span style="color: #98f5ff;">GenericTypes</span> {  
+    <span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">static</span> <span style="color: #98f5ff;">String</span> <span style="color: #daa520; font-weight: bold;">method</span>(<span style="color: #98f5ff;">List</span>&lt;<span style="color: #98f5ff;">String</span>&gt; <span style="color: #4eee94;">list</span>) {  
+        System.out.println(<span style="color: #deb887;">"invoke method(List&lt;String&gt; list)"</span>);  
+        <span style="color: #00bfff; font-weight: bold;">return</span> <span style="color: #deb887;">""</span>;  
+    }
+
+    <span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">static</span> <span style="color: #98f5ff;">int</span> <span style="color: #daa520; font-weight: bold;">method</span>(<span style="color: #98f5ff;">List</span>&lt;<span style="color: #98f5ff;">Integer</span>&gt; <span style="color: #4eee94;">list</span>) {  
+        System.out.println(<span style="color: #deb887;">"invoke method(List&lt;Integer&gt; list)"</span>);  
+        <span style="color: #00bfff; font-weight: bold;">return</span> 1;  
+    }
+
+    <span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">static</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">main</span>(<span style="color: #98f5ff;">String</span>[] <span style="color: #4eee94;">args</span>) {  
+        method(<span style="color: #00bfff; font-weight: bold;">new</span> <span style="color: #98f5ff;">ArrayList</span>&lt;<span style="color: #98f5ff;">String</span>&gt;());  
+        method(<span style="color: #00bfff; font-weight: bold;">new</span> <span style="color: #98f5ff;">ArrayList</span>&lt;<span style="color: #98f5ff;">Integer</span>&gt;());  
+    }  
+
+}  
+</pre>
+</div>
+
+<pre class="example">
+invoke method(List&lt;String&gt; list)  
+invoke method(List&lt;Integer&gt; list) 
+
+</pre>
+
+<pre class="example">
+上面这个例子从JDK7开始已经无法编译
+</pre>
+<p>
+两者的差别是两个 method 方法添加了 <b>不同的返回值</b> ，由于这两个返回值的加入，方法重载居然成功了，即这段代码可以被编译和执行。这是对 Java 语言中返回值不参与重载选择的基本认知的挑战吗？
+</p>
+
+<pre class="example">
+  重载当然不是根据返回值来确定的
+
+  但所以这次能编译和执行成功，确实是因为两个 method() 方法加入了不同的返回值后才能共存在一个 Class 文件之中。
+
+  前面介绍 Class 文件方法表的数据结构时曾经提到过
+  方法重载要求方法具备不同的特征签名，返回值并不包含在方法的特征签名之中，所以返回值不参与重载选择
+
+  但是在 Class 文件格式之中，只要描述符不是完全一致的两个方法就可以共存
+  也就是说，两个方法如果有相同的名称和特征签名，但返回值不同，那它们也是可以合法地共存于一个 Class 文件中的
+</pre>
+
+<p>
+由于 Java 泛型的引入，各种场景（虚拟机解析、反射等）下的方法调用都有可能对原有的基础产生影响和新的需求，如在泛型类中如何获取传入的参数化类型等。因此，JCP 组织对虚拟机规范作出了相应的修改，引入了诸如 <span class="underline">Signature</span> 、 <span class="underline">LocalVariableTable</span> 等新的属性用于解决伴随而来的参数类型的识别问题，Signature是其中最重要的一项属性，它的作用就是 <b>存储一个方法在字节码层面的特征签名</b> ，这个属性中 <b>保存的参数类型并不是原生类型</b> ，而是包括了 <b>参数化类型的信息</b> 。修改后的虚拟机规范要求所有能识别 <span class="underline">49.0</span>  以上版本的 Class 文件的虚拟机都要能 <b>正确地识别 Signature 参数</b> 
+</p>
+
+<pre class="example">
+  从上面的例子可以看到擦除法对实际编码带来的影响
+
+  由于 List&lt;String&gt; 和 List&lt;Integer&gt; 擦除后是同一个类型，只能添加两个并不需要实际使用到的返回值才能完成重载
+
+  这是一种毫无优雅和美感可言的解决方案，并且存在一定语意上的混乱
+</pre>
+<p>
+另外，从 Signature 属性的出现还可以得出结论，擦除法所谓的擦除，仅仅是对 <b>方法的 Code 属性中的字节码进行擦除</b> ，实际上 <b>元数据中还是保留了泛型信息</b> ，这也是能通过 <span class="underline">反射手段</span> 取得 <span class="underline">参数化类型</span> 的根本依据
+</p>
+</div>
+</div>
+
+
+<div id="outline-container-orgb21c9cf" class="outline-3">
+<h3 id="orgb21c9cf">自动装箱、拆箱与遍历循环</h3>
+<div class="outline-text-3" id="text-orgb21c9cf">
+<p>
+从纯技术的角度来讲，自动装箱、自动拆箱与遍历循环（For each 循环）这些语法糖，无论是实现上还是思想上都不能和上文介绍的泛型相比，两者的难度和深度都有很大差距。来讲解它们只有一个理由：毫无疑问，它们是 Java 语言里使用得最多的语法糖。通过代码来看看这些语法糖在编译后会发生什么样的变化：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">static</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">main</span>(<span style="color: #98f5ff;">String</span>[] <span style="color: #4eee94;">args</span>) {  
+    <span style="color: #98f5ff;">List</span>&lt;<span style="color: #98f5ff;">Integer</span>&gt; <span style="color: #4eee94;">list</span> = Arrays.asList(1, 2, 3, 4);  
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#22914;&#26524;&#22312; JDK 1.8 &#20013;&#65292;&#36824;&#26377;&#21478;&#22806;&#19968;&#39063;&#35821;&#27861;&#31958;  </span>
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#33021;&#35753;&#19978;&#38754;&#36825;&#21477;&#20195;&#30721;&#36827;&#19968;&#27493;&#31616;&#20889;&#25104; List&lt;Integer&gt; list = [1, 2, 3, 4];  </span>
+    <span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">sum</span> = 0;  
+    <span style="color: #00bfff; font-weight: bold;">for</span> (<span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">i</span> : list) {  
+        sum += i;  
+    }  
+    System.out.println(sum);  
+}  
+</pre>
+</div>
+
+<p>
+这里总共包含了 <span class="underline">泛型</span> 、 <span class="underline">自动装箱</span> 、 <span class="underline">自动拆箱</span> 、 <span class="underline">遍历循环</span> 与 <span class="underline">变长参数</span> 5 种语法糖，下面代码则展示了它们在编译后的变化：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">static</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">main</span>(<span style="color: #98f5ff;">String</span>[] <span style="color: #4eee94;">args</span>) {
+        <span style="color: #98f5ff;">List</span> <span style="color: #4eee94;">list</span> = Arrays.asList(<span style="color: #00bfff; font-weight: bold;">new</span> <span style="color: #98f5ff;">Integer</span>[]{
+            Integer.valueOf(1),
+            Integer.valueOf(2),
+            Integer.valueOf(3),
+            Integer.valueOf(4)
+        });
+
+        <span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">sum</span> = 0;
+        <span style="color: #00bfff; font-weight: bold;">for</span>(<span style="color: #98f5ff;">Iterator</span> <span style="color: #4eee94;">localIterator</span> = list.iterator(); localIterator.hasNext();){
+        <span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">i</span> = ((<span style="color: #98f5ff;">Integer</span>) localIterator.next()).intValue();
+        sum += i;
+        }
+        System.out.println(sum);
+}
+</pre>
+</div>
+
+<ul class="org-ul">
+<li>泛型就不必说了</li>
+<li>自动装箱、拆箱在编译之后被转换成了对应的包装和还原方法，如本例中的 <span class="underline">Integer.valueOf()</span> 与 <span class="underline">Integer.intValue()</span> 方法</li>
+<li>遍历循环则把代码还原成了 <span class="underline">迭代器</span> 的实现，这也是为何遍历循环需要被遍历的类实现Iterable接口的原因</li>
+<li><p>
+变长参数，它在调用的时候变成了一个 <span class="underline">数组类型的参数</span> ，在变长参数出现之前，程序员就是使用数组来完成类似功能的
+</p>
+
+<p>
+这些语法糖虽然看起来很简单，但也不见得就没有任何值得注意的地方，下面代码演示了自动装箱的一些错误用法：
+</p></li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">static</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">main</span>(<span style="color: #98f5ff;">String</span>[] <span style="color: #4eee94;">args</span>) {  
+    <span style="color: #98f5ff;">Integer</span> <span style="color: #4eee94;">a</span> = 1;  
+    <span style="color: #98f5ff;">Integer</span> <span style="color: #4eee94;">b</span> = 2;  
+    <span style="color: #98f5ff;">Integer</span> <span style="color: #4eee94;">c</span> = 3;  
+    <span style="color: #98f5ff;">Integer</span> <span style="color: #4eee94;">d</span> = 3;  
+    <span style="color: #98f5ff;">Integer</span> <span style="color: #4eee94;">e</span> = 321;  
+    <span style="color: #98f5ff;">Integer</span> <span style="color: #4eee94;">f</span> = 321;  
+    <span style="color: #98f5ff;">Long</span> <span style="color: #4eee94;">g</span> = 3L;  
+    System.out.println(c == d); <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">true  </span>
+    System.out.println(e == f);  <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">false </span>
+    System.out.println(c == (a + b));  <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">true </span>
+    System.out.println(c.equals(a + b));  <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">true </span>
+    System.out.println(g == (a + b));  <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">true </span>
+    System.out.println(g.equals(a + b));  <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">false </span>
+}
+</pre>
+</div>
+
+<ul class="org-ul">
+<li>包装类的 <span class="underline">==</span> 运算在 <b>不遇到算术运算的情况下不会自动拆箱</b></li>
+<li>包装类的 <span class="underline">equals()</span> 方法 <b>不处理数据转型</b></li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-org6f66d3e" class="outline-3">
+<h3 id="org6f66d3e">条件编译</h3>
+<div class="outline-text-3" id="text-org6f66d3e">
+<pre class="example">
+许多程序设计语言都提供了条件编译的途径，如 C、C++ 中使用预处理器指示符（#ifdef）来完成条件编译
+
+C、C++ 的预处理其最初的任务是解决编译时的代码依赖关系（如非常常用的 #include 预处理命令）
+
+而在 Java 语言之中并没有使用预处理器，因为 Java 语言天然的编译方式
+编译器并非一个个地编译 Java 文件，而是将所有编译单元的语法树顶级节点输入到待处理列表后再进行编译
+因此各个文件直接能够互相提供符号信息，所以无须使用预处理器
+
+那 Java 语言是否有办法实现条件编译呢？
+</pre>
+
+<p>
+Java 语言当然也可以进行条件编译，方法就是使用 <b>条件为常量的 if 语法</b> 。如下面代码所示：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">static</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">main</span>(<span style="color: #98f5ff;">String</span>[] <span style="color: #4eee94;">args</span>) {  
+    <span style="color: #00bfff; font-weight: bold;">if</span> (<span style="color: #ffd700;">true</span>) {  
+        System.out.println(<span style="color: #deb887;">"block 1"</span>);  
+    } <span style="color: #00bfff; font-weight: bold;">else</span> {  
+        System.out.println(<span style="color: #deb887;">"block 2"</span>);  
+    }  
+} 
+</pre>
+</div>
+<p>
+此代码中的 if 语句不同于其他 Java 代码，它在编译阶段就会被 “运行”，生成的字节码之中之包括 <span class="underline">System.out.println("block 1");</span>  一条语句，并不会包含 if 语句及另外一个分子中的 <span class="underline">System.out.println("block 2);</span> 。上述代码编译后 Class 文件的反编译结果：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">static</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">main</span>(<span style="color: #98f5ff;">String</span>[] <span style="color: #4eee94;">args</span>) {  
+    System.out.println(<span style="color: #deb887;">"block 1"</span>);  
+} 
+</pre>
+</div>
+
+<p>
+只能使用 <b>条件为常量</b> 的 if 语句才能达到上述效果，如果使用常量与其他带有条件判断能力的语句搭配，则可能在控制流分析中提示错误，被拒绝编译，如下面代码所示的代码就会被编译器拒绝编译：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">static</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">main</span>(<span style="color: #98f5ff;">String</span>[] <span style="color: #4eee94;">args</span>) {  
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#32534;&#35793;&#22120;&#23558;&#20250;&#25552;&#31034; "Unreachable code"  </span>
+    <span style="color: #00bfff; font-weight: bold;">while</span> (<span style="color: #ffd700;">false</span>) {  
+        System.out.println(<span style="color: #deb887;">""</span>);  
+    }  
+} 
+</pre>
+</div>
+
+<p>
+Java语言中条件编译的实现，也是Java语言的一颗语法糖，根据布尔常量值的真假，编译器将会把 <b>分支中不成立的代码块消除掉</b> ，这一工作将在编译器解除语法糖阶段 <span class="underline">com.sun.tools.javac.comp.Lower</span> 类中完成
+</p>
+<pre class="example">
+  由于这种条件编译的实现方式使用了if语句，所以它必须遵循最基本的Java语法，只能写在方法体内部
+
+  因此它只能实现语句基本块(Block)级别的条件编译，而没有办法实现根据条件调整整个Java类的结构 
+</pre>
+
+<p>
+除了本节中介绍的泛型、自动装箱、自动拆箱、遍历循环、变长参数和条件编译之外，Java语言还有不少其他的语法糖，如 <span class="underline">内部类</span> 、 <span class="underline">枚举类</span> 、 <span class="underline">断言语句</span> 、对 <span class="underline">枚举和字符串的switch支持</span> （在JDK1.7中支持）、 <span class="underline">try语句中定义和关闭资源</span> （在JDK1.7中支持）等
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgcb16c62" class="outline-2">
+<h2 id="orgcb16c62">插入式注解处理器</h2>
 </div>
 </div>
 <div id="postamble" class="status">
