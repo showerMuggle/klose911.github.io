@@ -1,5 +1,110 @@
-·#+TITLE: 运行期优化
+#+TITLE: 运行期优化
 #+HTML_HEAD: <link rel="stylesheet" type="text/css" href="css/main.css" />
 #+HTML_LINK_UP: compilation_optimize.html   
 #+HTML_LINK_HOME: jvm.html
 #+OPTIONS: num:nil timestamp:nil ^:nil
+在部分的商用虚拟机 (Sun HotSpot, IBM J9) 中，Java程序最初是通过 _解释器_ 进行解释执行的，当虚拟机发现某个方法或代码块的运行特别频繁时，就会把这些代码认定为 *热点代码* 。为了提高热点代码的执行效率，在运行时， *虚拟机将会把这些代码编译成与本地平台相关的机器码，并进行各种层次的优化* ，完成这个任务的编译器称为 _即时编译器_ （Just In Time Compiler，下文中简称 _JIT编译器_ ）
+
+#+BEGIN_EXAMPLE
+    即时编译器并不是虚拟机必需的部分，Java虚拟机规范并没有规定Java虚拟机内必须要有即时编译器存在，更没有限定或指导即时编译器应该如何去实现
+
+    但是，即时编译器编译性能的好坏、代码优化程度的高低却是衡量一款商用虚拟机优秀与否的最关键的指标之一，它也是虚拟机中最核心且最能体现虚拟机技术水平的部分
+
+    由于Java虚拟机规范没有具体的约束规则去限制即时编译器应该如何实现，所以这部分功能完全是与虚拟机具体实现相关的内容
+
+    如无特殊说明，下面提及的编译器、即时编译器都是指HotSpot虚拟机内的即时编译器，虚拟机也是特指HotSpot虚拟机
+#+END_EXAMPLE
+* HotSpot虚拟机内的即时编译器
+  首先了解 HotSpot 虚拟机内的即时编译器的运作过程，同时，还要解决以下几个问题：
+  + 为何 HotSpot 虚拟机要使用解释器与编译器并存的架构？
+  + 为何 HotSpot 虚拟机要实现两个不同的即时编译器？
+  + 程序何时使用解释器执行？何时使用编译器执行？
+  + 哪些程序代码会被编译为本地代码？如何编译为本地代码？
+  + 如何从外部观察即时编译器的编译过程和编译结果？
+
+** 解释器 VS 编译器
+   尽管并不是所有的 Java 虚拟机都采用解释器与编译器并存的架构，但许多主流的商用虚拟机，如 HotSpot、J9 等，都同时包含解释器与编译器。解释器与编译器两者各有优势：
+   + 当程序需要 *迅速启动和执行* 的时候，解释器可以首先发挥作用，省去编译的时间，立即执行
+   + 在程序运行后，随着时间的推移，编译器逐渐发挥作用，把越来越多的代码编译成本地代码之后，可以获取更高的 *执行效率* 
+   + 当程序运行环境中内存资源限制较大（如部分嵌入式系统中），可以使用解释执行 *节约内存* ，反之可以使用编译执行来提升效率
+   + 解释器还可以作为编译器激进优化时的一个 *逃生门* ，让编译器根据概率选择一些大多数时候都能提升运行速度的优化手段
+     + 当激进优化的假设不成立，如加载了新类后类型继承结构出现变化、出现 _罕见陷阱_ 时可以通过 _逆优化_ 退回到解释状态继续执行
+
+   #+BEGIN_EXAMPLE
+     部分没有解释器的虚拟机中也会采用不进行激进优化的 C1 编译器担任 “逃生门” 的角色
+
+     在虚拟机中习惯将 Client Compiler 称为 C1，将 Server Compiler 称为 C2 
+   #+END_EXAMPLE
+
+   在整个虚拟机执行架构中，解释器与编译器经常配合工作，如图所示：
+   #+ATTR_HTML: image :width 70% 
+   [[file:pic/jvm-interpreter-compiler.jpg]] 
+
+   HotSpot虚拟机中内置了两个即时编译器，分别称为 _Client Compiler_ 和 _Server Compiler_ ，或者简称为 _C1编译器_ 和 _C2编译器_ （也叫Opto编译器）。目前主流的HotSpot虚拟机中，默认采用解释器与其中一个编译器直接配合的方式工作，程序使用哪个编译器，取决于 *虚拟机运行的模式* ，HotSpot虚拟机会根据自身版本与宿主机器的硬件性能自动选择运行模式，用户也可以使用 _-client_ 或 _-server_ 参数去强制指定虚拟机运行在Client模式或Server模式
+
+   无论采用的编译器是Client Compiler还是Server Compiler，解释器与编译器搭配使用的方式在虚拟机中称为 _混合模式_  ：
+   + 用户可以使用参数 _-Xint_ 强制虚拟机运行于 _解释模式_ ，这时编译器完全不介入工作， *全部代码都使用解释方式* 执行
+   + 可以使用参数 _-Xcomp_ 强制虚拟机运行于 *编译模式* ，这时将 *优先采用编译方式* 执行程序，但是解释器仍然要在编译无法进行的情况下介入执行过程
+
+   可以通过虚拟机的 _-version_ 命令的输出结果显示出这3种模式，如下面所示：
+   #+BEGIN_SRC sh 
+  C：\＞java -version
+  java version"1.6.0_22"
+  Java（TM）SE Runtime Environment（build 1.6.0_22-b04）
+  Dynamic Code Evolution 64-Bit Server VM（build 0.2-b02-internal，19.0-b04-internal,mixed mode）
+
+  C：\＞java -Xint-version
+  java version"1.6.0_22"
+  Java（TM）SE Runtime Environment（build 1.6.0_22-b04）
+  Dynamic Code Evolution 64-Bit Server VM（build 0.2-b02-internal，19.0-b04-internal,interpreted mode）
+
+  C：\＞java -Xcomp-version
+  java version"1.6.0_22"
+  Java（TM）SE Runtime Environment（build 1.6.0_22-b04）
+  Dynamic Code Evolution 64-Bit Server VM（build 0.2-b02-internal，19.0-b04-internal,compiled mode）
+   #+END_SRC
+   由于即时编译器编译本地代码需要占用程序运行时间，要编译出优化程度更高的代码，所花费的时间可能更长；而且想要编译出优化程度更高的代码，解释器可能还要替编译器收集性能监控信息，这对解释执行的速度也有影响。为了在程序启动响应速度与运行效率之间达到最佳平衡，HotSpot虚拟机还会逐渐启用 *分层编译* 的策略
+
+分层编译根据编译器编译、优化的规模与耗时，划分出不同的编译层次，其中包括：
+   + 第0层：程序解释执行，解释器 _不开启性能监控_ 功能 ，可触发第1层编译
+   + 第1层，也称为C1编译，将 _字节码_ 编译为 _本地代码_ ，进行简单、可靠的优化，如有必要将加入性能监控的逻辑
+   + 第2层（或2层以上），也称为C2编译，也是将字节码编译为本地代码，但是会 _启用一些编译耗时较长的优化_ ，甚至会根据性能监控信息进行一些 _不可靠的激进优化_ 
+
+   #+BEGIN_EXAMPLE
+     作为三大商用虚拟机之一的JRockit是个例外，它内部没有解释器，因此会存在“启动响应时间长”之类的缺点
+     但它主要是面向服务端的应用，这类应用一般不会重点关注启动时间
+
+     在虚拟机中习惯将Client Compiler称为C1，将Server Compiler称为C2。
+
+     在最新的Sun HotSpot中，已经去掉了-Xcomp参数。
+
+     Tiered Compilation在JDK 1.7之前需要使用-XX：+TieredCompilation参数来手动开启
+
+     如果不开启分层编译策略，而虚拟机又运行在Server模式，Server Compiler需要性能监控信息提供编译依据
+     则可以由解释器收集性能监控信息供Server Compiler使用
+   #+END_EXAMPLE
+
+   实施分层编译后，Client Compiler和Server Compiler将会同时工作，许多代码都可能会被多次编译：
+   + 用Client Compiler获取更高的编译速度
+   + 用Server Compiler来获取更好的编译质量
+   + 在解释执行的时候也无须再承担收集性能监控信息的任务
+
+
+
+** 编译对象与触发条件
+
+** 编译过程 
+
+** 查看与分析即时编译结果 
+
+* 编译优化技术 
+
+** 优化技术概览  
+
+** 公共子表达式消除 
+
+** 数组边界检查消除 
+
+** 方法内联 
+
+** 逃逸分析 
