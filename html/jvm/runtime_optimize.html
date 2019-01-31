@@ -241,18 +241,29 @@ for the JavaScript code in this tag.
 <li><a href="#org5355466">HotSpot虚拟机内的即时编译器</a>
 <ul>
 <li><a href="#org983329e">解释器 VS 编译器</a></li>
-<li><a href="#org0433967">编译对象与触发条件</a></li>
-<li><a href="#org380dfee">编译过程</a></li>
+<li><a href="#org0433967">编译对象与触发条件</a>
+<ul>
+<li><a href="#orgb216022">方法调用计数器</a></li>
+<li><a href="#org6c5b0d0">回边计数器</a></li>
+<li><a href="#orgfd84145">Java方法内存布局</a></li>
+</ul>
+</li>
+<li><a href="#org380dfee">编译过程</a>
+<ul>
+<li><a href="#org3ad2b60">Client Compiler</a></li>
+<li><a href="#org3675b90">Server Compiler</a></li>
+</ul>
+</li>
 <li><a href="#orgdcbfe18">查看与分析即时编译结果</a></li>
 </ul>
 </li>
-<li><a href="#orgeb17d60">编译优化技术</a>
+<li><a href="#org7350575">编译优化技术</a>
 <ul>
-<li><a href="#org3574620">优化技术概览</a></li>
-<li><a href="#org97dbc06">公共子表达式消除</a></li>
-<li><a href="#org9f799c8">数组边界检查消除</a></li>
-<li><a href="#orga9dad38">方法内联</a></li>
-<li><a href="#org48c9a38">逃逸分析</a></li>
+<li><a href="#orga20c407">优化技术概览</a></li>
+<li><a href="#orgcaf41b5">公共子表达式消除</a></li>
+<li><a href="#org8e772be">数组边界检查消除</a></li>
+<li><a href="#org10160d3">方法内联</a></li>
+<li><a href="#orgbae45cd">逃逸分析</a></li>
 </ul>
 </li>
 </ul>
@@ -387,43 +398,977 @@ Tiered Compilation在JDK 1.7之前需要使用-XX：+TieredCompilation参数来�
 </div>
 </div>
 
-
-
 <div id="outline-container-org0433967" class="outline-3">
 <h3 id="org0433967">编译对象与触发条件</h3>
+<div class="outline-text-3" id="text-org0433967">
+<p>
+在运行过程中会被即时编译器编译的 <span class="underline">热点代码</span> 有两类，即：
+</p>
+<ul class="org-ul">
+<li>被多次调用的方法</li>
+<li>被多次执行的循环体</li>
+</ul>
+
+<pre class="example">
+     前者很好理解，一个方法被调用得多了，方法体内代码执行的次数自然就多，它成为 热点代码 是理所当然的
+
+     而后者则为了解决一个方法只被调用过一次或少量的几次，但是方法体内部存在 循环次数较多的循环体 内部存在 循环次数较多的循环体 的问题
+     这样循环次数较多的循环体的问题，这样循环体的代码也被重复执行多次，因此这些代码也应该认为是 “热点代码”
+</pre>
+
+<ul class="org-ul">
+<li>第一种情况，由于是由方法调用触发的编译，因此编译器理所当然地会以整个方法作为编译对象，这种编译也是虚拟机中标准的 JIT 编译方式</li>
+<li>第二种情况，尽管编译动作是由循环体所触发的，但编译器依然会以 <b>整个方法</b> （而不是单独的循环体）作为编译对象。这种编译方式因为编译发生在方法执行过程之中，因此形象地称之为 <span class="underline">栈上替换</span> （简称为 OSR 编译，即方法栈帧还在栈上，方法就被替换了）</li>
+</ul>
+
+<pre class="example">
+     在上面的文字描述中，无论是 “多次执行的方法”，还是 “多次执行的代码块”，所谓“多次”都不是一个具体、严谨的用语，那到底多少次才算“多次”呢？
+
+     还有一个问题，就是虚拟机如何统计一个方法或一段代码被执行过多少次呢？
+
+     解决了这两个问题，也就回答了即时编译被触发的条件
+</pre>
+
+<p>
+判断一段代码是不是热点代码，是不是需要触发即时编译，这样的行为称为 <b>热点探测</b> ，其实进行热点探测并不一定要知道方法具体被调用了多少次，目前主要的热点探测判定方式有两种，分别如下。
+</p>
+<ul class="org-ul">
+<li>基于 <span class="underline">采样</span> 的热点探测：采用这种方法的虚拟机会 <b>周期性地检查各个线程的栈顶</b> ，如果发现某个（或某些）方法经常出现在栈顶，那这个方法就是 <b>热点方法</b> 
+<ul class="org-ul">
+<li>好处： <b>实现简单、高效</b> ，还可以 <b>很容易地获取方法调用</b> 关系（将调用堆栈展开即可）</li>
+<li>缺点： <b>很难精确</b> 地确认一个方法的热度，容易因为受到 <span class="underline">线程阻塞</span> 或别的外界因素的影响而扰乱热点探测</li>
+</ul></li>
+<li>基于 <span class="underline">计数器</span> 的热点探测：采用这种方法的虚拟机会为每个方法（甚至是代码块）建立计数器，统计方法的执行次数，如果执行次数超过一定的阈值就认为它是 “热点方法”
+<ul class="org-ul">
+<li>实现起来 <b>麻烦</b> 一些，需要为每个方法建立并维护计数器，而且 <b>不能直接获取到方法的调用</b> 关系</li>
+<li>统计结果相对来说更加 <b>精确</b> 和严谨</li>
+</ul></li>
+</ul>
+
+<pre class="example">
+     还有其他热点代码的探测方式，如基于“踪迹”（Trace）的热点探测再最近相当流行
+
+     像 Firefox 中的 TraceMonkey 和 Dalvik 中新的 JIT 编译器都用了这种热点探测方式
+</pre>
+
+<p>
+在 HotSpot 虚拟机中使用的是第二种，基于计数器的热点探测方法，因此它为每个方法准备了两类计数器
+</p>
+<ol class="org-ol">
+<li><span class="underline">方法调用</span> 计数器</li>
+<li><span class="underline">回边</span> 计数器</li>
+</ol>
+
+<p>
+在确定虚拟机运行参数的前提下，这两个计数器都有一个确定的 <span class="underline">阈值</span> ， <b>当计数器超过阈值溢出了，就会触发 JIT 编译</b> 
+</p>
+</div>
+
+<div id="outline-container-orgb216022" class="outline-4">
+<h4 id="orgb216022">方法调用计数器</h4>
+<div class="outline-text-4" id="text-orgb216022">
+<p>
+顾名思义，这个计数器就用于 <b>统计方法被调用的次数</b> ，它的默认阈值：
+</p>
+<ul class="org-ul">
+<li>Client 模式下：1500 次</li>
+<li>Server 模式下：10 000 次</li>
+</ul>
+
+<p>
+这个阈值可以通过虚拟机参数 <span class="underline">-XX:CompileThreshold</span> 来人为设定
+</p>
+
+<p>
+当一个方法被调用时，首先检查该方法是否存在被 JIT 编译过的版本：
+</p>
+<ul class="org-ul">
+<li>如果存在，则优先使用编译后的本地代码来执行</li>
+<li>如果不存在已被编译过的版本：
+<ul class="org-ul">
+<li>则将此方法的调用计数器值加 1</li>
+<li>判断 <span class="underline">方法调用计数器与回边计数器值之和</span> 是否超过 <span class="underline">方法调用计数器的阈值</span> ：
+<ul class="org-ul">
+<li>如果已超过阈值，那么将会 <b>向即时编译器提交一个该方法的代码编译请求</b></li>
+</ul></li>
+</ul></li>
+<li>如果不做任何设置，执行引擎 <b>并不会同步等待编译请求完成</b> ，而是 <span class="underline">继续进入解释器按照解释方式执行字节码</span> ，直到提交的请求被编译器编译完成</li>
+<li>当编译工作完成之后，这个 <b>方法调用入口地址就会被系统自动改成新的</b> ，下一次调用该方法时就会使用已编译的版本</li>
+</ul>
+
+<p>
+整个 JIT 编译的交互过程如图所示：
+</p>
+
+<div class="figure">
+<p><img src="pic/invocation-counter-jit.jpg" alt="invocation-counter-jit.jpg" width="70%" /> 
+</p>
+</div>
+
+<p>
+如果不做任何设置，方法调用计数器统计的并不是 <span class="underline">方法被调用的绝对次数</span> ，而是一个 <b>相对的执行频率</b> ，即 <span class="underline">一段时间之内方法被调用的次数</span> 。当超过一定的时间限度，如果方法的调用次数仍然不足以让它提交给即时编译器编译，那这个方法的 <span class="underline">调用计数器就会被减少一半</span> ，这个过程称为 <span class="underline">方法调用计数器热度的衰减</span> ，而这段时间就称为此 <span class="underline">方法统计的半衰周期</span> 。进行热度衰减的动作是在虚拟机 <span class="underline">进行垃圾收集时</span> 顺便进行的：
+</p>
+<ul class="org-ul">
+<li>使用虚拟机参数 <span class="underline">-XX:-UseCounterDecay</span> 来 <b>关闭热度衰减</b> ，让方法计数器统计方法调用的绝对次数，这样，只要系统运行时间足够长，绝大部分方法都会被编译成本地代码</li>
+<li>使用 <span class="underline">-XX:CounterHalfLifeTime</span> 参数设置 <b>半衰周期的时间</b> ，单位是秒</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-org6c5b0d0" class="outline-4">
+<h4 id="org6c5b0d0">回边计数器</h4>
+<div class="outline-text-4" id="text-org6c5b0d0">
+<p>
+回边计数器，它的作用是 <b>统计一个方法中循环体代码执行的次数</b> ，在 <span class="underline">字节码</span> 中遇到 <span class="underline">控制流向后跳转的指令</span> 称为 <span class="underline">回边</span> 。显然，建立回边计数器统计的目的就是为了 <b>触发 OSR 编译</b> 
+</p>
+
+<p>
+关于回边计数器的阈值，虽然 HotSpot 虚拟机也提供了一个 -XX:BackEdgeThreashold 供用户设置，但是当前的虚拟机实际上并未使用此参数。因此需要设置另外一个参数 <span class="underline">-XX:OnStackReplacePercentage</span> 来简介调整回边计数器的阈值，其计算公式如下：
+</p>
+<ul class="org-ul">
+<li>虚拟机运行在 Client 模式下，回边计数器阈值计算公式：</li>
+</ul>
+<pre class="example">
+      方法调用计数器阈值 * OSR 比率 / 100
+
+      其中OSR比率的默认值为 140
+</pre>
+<ul class="org-ul">
+<li>虚拟机运行在 Server 模式下，回边计数器阈值的计算公式为：</li>
+</ul>
+<pre class="example">
+      方法调用计数器阈值 * (OSR 比率 - 解释器监控比率)  / 100
+
+      其中OSR比率的默认值为 140，解释器监控比率的默认值为 33，如果都取默认值，那 Server 模式虚拟机回边计数器的阈值为 10700
+</pre>
+
+<p>
+当解释器遇到一条回边指令时，会先查找将要执行的代码片段是否有已经编译好的版本：
+</p>
+<ul class="org-ul">
+<li>如果有，它将会有限执行已编译的代码</li>
+<li>没有：回边计数器的值加 1
+<ul class="org-ul">
+<li>判断方法调用 <span class="underline">计数器与回边计数器之和</span> 是否超过 <span class="underline">回边计数器的阈值</span> 
+<ul class="org-ul">
+<li>当超过阈值的时候，将会提交一个 OSR 编译请求，并且把 <span class="underline">回边计数器的值降低一些</span> ，以便继续在解释器中执行循环，等待编译器输出编译结果</li>
+</ul></li>
+</ul></li>
+</ul>
+
+<p>
+整个执行过程如图所示：
+</p>
+
+<div class="figure">
+<p><img src="pic/backtrace-counter-jit.jpg" alt="backtrace-counter-jit.jpg" width="70%" /> 
+</p>
+</div>
+
+<ul class="org-ul">
+<li>与方法计数器不同， 回边计数器 <b>没有计数热度衰减</b> 的过程，因此这个计数器统计的就是该方法循环执行的绝对次数</li>
+<li>当计数器溢出的时候，它还会把 <b>方法计数器的值也调整到溢出状态</b> ，这样下次再进入该方法的时候就会执行标准编译过程</li>
+</ul>
+
+<pre class="example">
+      最后需要提醒一点：上面的图示都仅仅描述了Client VM的即时编译方式，对于Server VM来说，执行情况会比上面的描述更复杂一些
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orgfd84145" class="outline-4">
+<h4 id="orgfd84145">Java方法内存布局</h4>
+<div class="outline-text-4" id="text-orgfd84145">
+<p>
+从理论上了解过编译对象和编译触发条件后，再从HotSpot虚拟机的源码中观察一下，在MethodOop.hpp（一个methodOop对象代表了一个Java方法）中，定义了 <b>Java方法在虚拟机中的内存布局</b> ，如下所示：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">|------------------------------------------------------|</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">| header                                               |</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">| klass                                                |</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">|------------------------------------------------------|</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">| constMethodOop                 (oop)                 |</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">|------------------------------------------------------|</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">| methodData                     (oop)                 |</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">| interp_invocation_count                              |</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">|------------------------------------------------------|</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">| access_flags                                         |</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">| vtable_index                                         |</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">|------------------------------------------------------|</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">| result_index (C++ interpreter only)                  |</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">|------------------------------------------------------|</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">| method_size             | max_stack                  |</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">| max_locals              | size_of_parameters         |</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">|------------------------------------------------------|</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">|intrinsic_id|   flags    |  throwout_count            |</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">|------------------------------------------------------|</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">| num_breakpoints         |  (unused)                  |</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">|------------------------------------------------------|</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">| &lt;strong&gt;invocation_counter&lt;/strong&gt;                                |</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">| &lt;strong&gt;backedge_counter&lt;/strong&gt;                                  |</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">|------------------------------------------------------|</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">|           prev_time (tiered only, 64 bit wide)       |</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">|                                                      |</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">|------------------------------------------------------|</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">|                  rate (tiered)                       |</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">|------------------------------------------------------|</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">| code                           (pointer)             |</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">| i2i                            (pointer)             |</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">| adapter                        (pointer)             |</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">| &lt;strong&gt;from_compiled_entry&lt;/strong&gt;         (pointer)             |</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">| &lt;strong&gt;from_interpreted_entry&lt;/strong&gt;     (pointer)             |</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">|------------------------------------------------------|</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">| native_function       (present only if native)       |</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">| signature_handler     (present only if native)       |</span>
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">|------------------------------------------------------|</span>
+</pre>
+</div>
+
+<p>
+在这个内存布局中，一行长度为 32 bit，从中可以清楚地看到：
+</p>
+<ul class="org-ul">
+<li><span class="underline">方法调用计数器</span> (invocation_counter) 和 <span class="underline">回边计数器</span> (backedge_counter) 所在的位置和长度</li>
+<li><span class="underline">from_compiled_entry</span> 和 <span class="underline">from_interpreted_entry</span> 这两个方法的入口</li>
+</ul>
+</div>
+</div>
 </div>
 
 <div id="outline-container-org380dfee" class="outline-3">
 <h3 id="org380dfee">编译过程</h3>
+<div class="outline-text-3" id="text-org380dfee">
+<p>
+在默认设置下，无论是 <span class="underline">方法调用</span> 产生的 <span class="underline">即时编译</span> 请求，还是 <span class="underline">OSR</span> 编译请求，虚拟机在代码编译器还未完成之前，都仍然将按照 <b>解释方式</b> 继续执行，而编译动作则在 <b>后台的编译线程</b> 中进行。用户可以通过参数 <span class="underline">-XX:-BackgroundCompilation</span> 来 <b>禁止后台编译</b> ，在禁止后台编译后，一旦达到JIT的编译条件， <b>执行线程向虚拟机提交编译请求后将会一直等待</b> ，直到编译过程完成后再开始执行编译器输出的本地代码
+</p>
+
+<p>
+那么在后台执行编译的过程中，编译器做了什么事情呢？Server Compiler和Client Compiler两个编译器的编译过程是不一样的
+</p>
+</div>
+
+<div id="outline-container-org3ad2b60" class="outline-4">
+<h4 id="org3ad2b60">Client Compiler</h4>
+<div class="outline-text-4" id="text-org3ad2b60">
+<p>
+对于Client Compiler来说，它是一个简单快速的 <span class="underline">三段式</span> 编译器，主要的关注点在于 <b>局部性的优化</b> ，而放弃了许多耗时较长的全局优化手段
+</p>
+<ol class="org-ol">
+<li><b>平台独立的前端</b> 将 <span class="underline">字节码</span> 构造成一种 <span class="underline">高级中间代码</span> 表示(HIR)：HIR使用 <span class="underline">静态单分配</span> (SSA) 的形式来代表代码值，这可以使得一些在HIR的构造过程之中和之后进行的优化动作更容易实现。HIR之前编译器会在字节码上完成一部分 <b>基础优化</b> ：
+<ul class="org-ul">
+<li>方法内联</li>
+<li>常量传播</li>
+<li>&#x2026;&#x2026;</li>
+</ul></li>
+<li><b>平台相关的后端</b> 从 <span class="underline">HIR</span> 中产生 <span class="underline">低级中间代码</span> (LIR)，而在此之前会在HIR上完成另外一些优化，以便让HIR达到更高效的代码表示形式：
+<ul class="org-ul">
+<li>空值检查消除</li>
+<li>范围检查消除</li>
+<li>&#x2026;&#x2026;</li>
+</ul></li>
+<li><b>平台相关的后端</b> 使用 <span class="underline">线性扫描算法</span> 在LIR上 <b>分配寄存器</b> ，并在LIR上做 <span class="underline">窥孔</span> 优化，然后产生 <span class="underline">机器代码</span></li>
+</ol>
+
+<p>
+Client Compiler的大致执行过程如图所示：
+</p>
+
+<div class="figure">
+<p><img src="pic/client-jit.jpg" alt="client-jit.jpg" width="70%" /> 
+</p>
+</div>
+</div>
+</div>
+
+
+<div id="outline-container-org3675b90" class="outline-4">
+<h4 id="org3675b90">Server Compiler</h4>
+<div class="outline-text-4" id="text-org3675b90">
+<p>
+Server Compiler则是专门面向服务端的典型应用并为服务端的性能配置特别调整过的编译器，也是一个充分优化过的高级编译器，几乎能达到GNU C++编译器使用-O2参数时的优化强度：
+</p>
+<ul class="org-ul">
+<li>执行所有 <b>经典的优化</b> 动作：
+<ul class="org-ul">
+<li>无用代码消除</li>
+<li>循环展开</li>
+<li>循环表达式外提</li>
+<li>消除公共子表达式</li>
+<li>常量传播</li>
+<li>基本块重排序</li>
+<li>&#x2026;&#x2026;</li>
+</ul></li>
+<li>实施一些与 <b>Java语言特性密切</b> 相关的优化技术：
+<ul class="org-ul">
+<li>范围检查消除</li>
+<li>空值检查消除</li>
+</ul></li>
+<li>可能根据解释器或Client Compiler提供的 <span class="underline">性能监控</span> 信息，进行一些 <b>不稳定的激进优化</b> ：
+<ul class="org-ul">
+<li>守护内联</li>
+<li>分支频率预测</li>
+<li>&#x2026;&#x2026;</li>
+</ul></li>
+</ul>
+
+<pre class="example">
+      这里涉及了许多编译原理和代码优化中的概念名词，没有这方面基础的读者，阅读起来会感觉到抽象和理论化
+
+      有这种感觉并不奇怪，JIT编译过程本来就是一个虚拟机中最体现技术水平也是最复杂的部分，不可能以较短的篇幅就介绍得很详细，
+
+      另外，这个过程对Java开发来说是透明的，程序员平时无法感知它的存在
+</pre>
+
+<p>
+Server Compiler的寄存器分配器是一个 <span class="underline">全局图着色分配器</span> ，它可以充分利用某些处理器架构（如RISC）上的 <span class="underline">大寄存器集合</span> 。以即时编译的标准来看，Server Compiler无疑是比较缓慢的，但它的编译速度依然远远超过传统的静态优化编译器，而且它相对于Client Compiler编译输出的代码质量有所提高，可以减少本地代码的执行时间，从而抵消了额外的编译时间开销，所以也有很多非服务端的应用选择使用Server模式的虚拟机运行
+</p>
+</div>
+</div>
 </div>
 
 <div id="outline-container-orgdcbfe18" class="outline-3">
 <h3 id="orgdcbfe18">查看与分析即时编译结果</h3>
+<div class="outline-text-3" id="text-orgdcbfe18">
+<p>
+一般来说，虚拟机的即时编译过程对用户程序是完全透明的，虚拟机通过解释执行代码还是编译执行代码，对于用户来说并没有什么影响（执行结果没有影响，速度上会有很大差别），在大多数情况下用户也没有必要知道。但是虚拟机也提供了一些参数用来 <b>输出即时编译和某些优化手段</b> （如方法内联）的执行状况
+</p>
+
+<p>
+先看下测试代码：
+</p>
+<div class="org-src-container">
+<pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">static</span> <span style="color: #00bfff; font-weight: bold;">final</span> <span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">NUM</span> = 15000;
+
+<span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">static</span> <span style="color: #98f5ff;">int</span> <span style="color: #daa520; font-weight: bold;">doubleValue</span>(<span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">i</span>) {
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#36825;&#20010;&#31354;&#24490;&#29615;&#29992;&#20110;&#21518;&#38754;&#28436;&#31034;JIT&#20195;&#30721;&#20248;&#21270;&#36807;&#31243;</span>
+    <span style="color: #00bfff; font-weight: bold;">for</span>(<span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">j</span>=0; j&lt;100000; j++);  
+    <span style="color: #00bfff; font-weight: bold;">return</span> i * 2;
+}
+
+<span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">static</span> <span style="color: #98f5ff;">long</span> <span style="color: #daa520; font-weight: bold;">calcSum</span>() {
+    <span style="color: #98f5ff;">long</span> <span style="color: #4eee94;">sum</span> = 0;
+    <span style="color: #00bfff; font-weight: bold;">for</span> (<span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">i</span> = 1; i &lt;= 100; i++) {
+        sum += doubleValue(i);
+    }
+    <span style="color: #00bfff; font-weight: bold;">return</span> sum;
+}
+
+<span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">static</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">main</span>(<span style="color: #98f5ff;">String</span>[] <span style="color: #4eee94;">args</span>) {
+    <span style="color: #00bfff; font-weight: bold;">for</span> (<span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">i</span> = 0; i &lt; <span style="color: #98f5ff;">NUM</span>; i++) {
+        calcSum();
+    }
+}
+</pre>
+</div>
+
+<p>
+运行这段代码，并且确认这段代码是否触发了即时编译，要知道某个方法是否被编译过，可以使用参数 <span class="underline">-XX:+PrintCompilation</span> 要求虚拟机在即时编译时将 <span class="underline">被编译成本地代码的方法名称</span> 打印出来，如下面所示：其中带有“%”的输出说明是由回边计数器触发的OSR编译
+</p>
+
+<pre class="example">
+VM option'+PrintCompilation'
+310 1 java.lang.String：charAt（33 bytes）
+329 2 org.fenixsoft.jit.Test：calcSum（26 bytes）
+329 3 org.fenixsoft.jit.Test：doubleValue（4 bytes）
+332 1%org.fenixsoft.jit.Test：main@5（20 bytes）
+</pre>
+
+<p>
+从输出的确认信息中可以确认 <span class="underline">main()</span> 、 <span class="underline">calcSum()</span> 和 <span class="underline">doubleValue()</span> 方法已经被编译，还可以加上参数 <span class="underline">-XX:+PrintInlining</span> 要求虚拟机输出方法内联信息，如下面所示：
+</p>
+
+<pre class="example">
+VM option'+PrintCompilation'
+VM option'+PrintInlining'
+273 1 java.lang.String：charAt（33 bytes）
+291 2 org.fenixsoft.jit.Test：calcSum（26 bytes）
+@9 org.fenixsoft.jit.Test：doubleValue inline（hot）
+294 3 org.fenixsoft.jit.Test：doubleValue（4 bytes）
+295 1%org.fenixsoft.jit.Test：main@5（20 bytes）
+@5 org.fenixsoft.jit.Test：calcSum inline（hot）
+@9 org.fenixsoft.jit.Test：doubleValue inline（hot）
+</pre>
+
+<p>
+输出中可以看到方法 <span class="underline">doubleValue()</span> 被内联编译到 <span class="underline">calcSum()</span> 中，而 <span class="underline">calcSum()</span> 又被内联编译到方法 <span class="underline">main()</span> 中，所以虚拟机再次执行 main() 方法的时候，calcSum() 和doubleValue() 方法都不会再被调用，它们的代码逻辑都被直接内联到main() 方法中了 （当然 main方法不会被再次调用，这里只是假设）
+</p>
+
+<p>
+除了查看哪些方法被编译之外，还可以进一步查看即时编译器生成的机器码内容，不过如果虚拟机输出一串0和1，对于阅读来说是没有意义的，机器码必须反汇编成基本的汇编语言才可能被阅读。虚拟机提供了一组通用的反汇编接口，可以接入各种平台下的反汇编适配器来使用，如使用32位80x86平台则选用hsdis-i386适配器，其余平台的适配器还有hsdis-amd64、hsdis-sparc和hsdis-sparcv9等，可以下载或自己编译出反汇编适配器，然后将其放置在JRE/bin/client或/server目录下，只要与jvm.dll的路径相同即可被虚拟机调用。在为虚拟机安装了反汇编适配器之后，就可以使用 <span class="underline">-XX:+PrintAssembly</span> 参数要求虚拟机打印编译方法的汇编代码了
+</p>
+
+<p>
+如果没有HSDIS插件支持，也可以使用 <span class="underline">-XX:+PrintOptoAssembly</span> （用于Server VM）或 <span class="underline">-XX:+PrintLIR</span> （用于Client VM）来输出比较接近最终结果的中间代码表示，被编译后部分反汇编，使用 <span class="underline">-XX:+PrintOptoAssembly</span> 的输出结果如下面所示：
+</p>
+
+<pre class="example">
+……
+000 B1：#N1＜-BLOCK HEAD IS JUNK Freq：1
+000 pushq rbp
+subq rsp，#16#Create frame
+nop#nop for patch_verified_entry
+006 movl RAX,RDX#spill
+008 sall RAX，#1
+00a addq rsp，16#Destroy frame
+popq rbp
+testl rax，[rip+#offset_to_poll_page]#Safepoint：poll for GC
+……
+
+从阅读角度来说，使用 -XX:+PrintOptoAssembly 参数输出的伪汇编结果包含了更多的信息（主要是注释）
+利于阅读并理解虚拟机JIT编译器的优化结果
+
+使用-XX:+PrintAssembly参数输出反汇编信息需要Debug或者FastDebug版的虚拟机才能直接支持
+如果使用Product版的虚拟机，则需要加入参数-XX:+UnlockDiagnosticVMOptions打开虚拟机诊断模式后才能使用
+</pre>
+
+<p>
+如果除了本地代码的生成结果外，还想再进一步跟踪本地代码生成的具体过程，那还可以使用参数 <span class="underline">-XX:+PrintCFGToFile</span> （使用Client Compiler）或 <span class="underline">-XX:PrintIdealGraphFile</span> （使用Server Compiler）令虚拟机将编译过程中各个阶段的数据（例如，对C1编译器来说，包括 <span class="underline">字节码</span> 、 <span class="underline">HIR生成</span> 、 <span class="underline">LIR生成</span> 、 <span class="underline">寄存器分配过程</span> 、 <span class="underline">本地代码</span> 生成等数据）输出到文件中。然后使用 <span class="underline">Java HotSpot Client Compiler Visualizer</span> （用于分析Client Compiler）或 <span class="underline">Ideal Graph Visualizer</span> （用于分析Server Compiler）打开这些数据文件进行分析
+</p>
+
+<p>
+Server Compiler的中间代码表示是一种名为 <span class="underline">Ideal</span> 的 <span class="underline">SSA形式程序依赖图</span> ，在运行Java程序的JVM参数中加入 <span class="underline">-XX:PrintIdealGraphLevel=2 -XX:PrintIdealGraphFile=ideal.xml</span> ，编译后将产生一个名为 <span class="underline">ideal.xml</span> 的文件，它包含了Server Compiler编译代码的过程信息，可以使用Ideal Graph Visualizer对这些信息进行分析
+</p>
+
+<p>
+Ideal Graph Visualizer加载ideal.xml文件后，在Outline面板上将显示程序运行过程中编译过的方法列表，如图所示。这里列出的方法是测试代码，其中 <span class="underline">doubleValue()</span> 方法出现了两次，这是由于 <b>该方法的编译结果存在 <span class="underline">标准编译</span> 和 <span class="underline">OSR编译</span> 两个版本</b> 。在测试代码中特别为 <span class="underline">doubleValue()</span> 方法增加了一个空循环，这个循环对方法的运算结果不会产生影响，但如果没有任何优化，执行空循环会占用CPU时间，到今天还有许多程序设计的入门教程把 <b>空循环当做程序延时</b> 的手段来介绍，在Java中这样的做法真的能起到延时的作用吗？ 
+</p>
+
+
+<div class="figure">
+<p><img src="pic/idea-graph-visualizer.jpg" alt="idea-graph-visualizer.jpg" width="70%" /> 
+</p>
+</div>
+
+<p>
+展开方法根节点，可以看到下面罗列了方法优化过程的各个阶段的Ideal图，先打开 <span class="underline">After Parsing</span> 这个阶段。JIT编译器在编译一个Java方法时，首先要把字节码解析成某种中间表示形式，然后才可以继续做分析和优化，最终生成代码。_After Parsing_ 就是Server Compiler刚完成解析，还没有做任何优化时的Ideal图表示。在打开这个图后，每一个方块就代表了一个程序的基本块，基本块的特点是只有 <span class="underline">唯一的一个入口</span> 和 <span class="underline">唯一的一个出口</span> ，只要基本块中 <b>第一条指令执行了，那么基本块内所有执行都会按照顺序仅执行一次</b> 
+</p>
+
+<p>
+doubleValue() 方法虽然只有简单的两行字，但是按基本块划分后，形成的图形结构要比想象中复杂得多，这一方面是要满足Java语言所定义的安全需要（如类型安全、空指针检查）和Java虚拟机的运作需要（如Safepoint轮询），另一方面是由于有些程序代码中一行语句就可能形成好几个基本块（例如循环）。例子中的doubleValue() 方法，如果忽略语言安全检查的基本块，可以简单理解为按顺序执行了以下几件事情：
+</p>
+<ol class="org-ol">
+<li>程序入口，建立栈帧</li>
+<li>设置j=0，进行Safepoint轮询，跳转到 4 的条件检查</li>
+<li>执行j++</li>
+<li>条件检查，如果j＜100000，跳转到 3</li>
+<li><p>
+设置i=i*2，进行Safepoint轮询，函数返回
+</p>
+
+
+<div class="figure">
+<p><img src="pic/basic-block-1.jpg" alt="basic-block-1.jpg" width="60%" /> 
+</p>
+</div></li>
+</ol>
+
+<p>
+以上几个步骤，反映到Ideal Graph Visualizer的图上，就是下图所示的内容。这样要看空循环是否优化，或者何时优化，只要观察代表循环的基本块是否消除，或者何时消除就可以了
+</p>
+
+
+<div class="figure">
+<p><img src="pic/basic-block-2.jpg" alt="basic-block-2.jpg" width="40%" /> 
+</p>
+</div>
+
+<p>
+要观察到这一点，可以在Outline面板上右键点击 <span class="underline">Difference to current graph</span> ，让软件自动分析指定阶段与当前打开的Ideal图之间的差异，如果基本块被消除了，将会以红色显示。对 <span class="underline">After Parsing</span> 和 <span class="underline">PhaseIdealLoop 1</span> 阶段的Ideal图进行差异分析，发现在 <span class="underline">PhaseIdealLoop 1</span> 阶段循环操作被消除了，如下图所示：这也就说明 <b>空循环实际上是不会被执行的</b>  
+</p>
+
+
+<div class="figure">
+<p><img src="pic/basic-block-3.jpg" alt="basic-block-3.jpg" width="40%" /> 
+</p>
+</div>
+
+<p>
+从 <span class="underline">After Parsing</span> 阶段开始，一直到最后的 <span class="underline">Final Code</span> 阶段，可以看到 doubleValue() 方法的Ideal图从繁到简的变迁过程，这也是Java虚拟机在尽力优化代码的过程。到了最后的 <span class="underline">Final Code</span> 阶段，不仅 <span class="underline">空循环</span> 的开销消除了，许多 <span class="underline">语言安全</span> 和 <span class="underline">Safepoint轮询</span> 的操作也一起消除了，因为编译器判断 <b>即使不做这些安全保障，虚拟机也不会受到威胁</b> 
+</p>
+</div>
 </div>
 </div>
 
-<div id="outline-container-orgeb17d60" class="outline-2">
-<h2 id="orgeb17d60">编译优化技术</h2>
-<div class="outline-text-2" id="text-orgeb17d60">
+<div id="outline-container-org7350575" class="outline-2">
+<h2 id="org7350575">编译优化技术</h2>
+<div class="outline-text-2" id="text-org7350575">
+<pre class="example">
+Java 程序员有一个共识，以编译方式执行本地代码比解释方式更快，之所以有这样的共识，除去虚拟机解释执行字节码时额外消耗时间的原因外
+
+还有一个很重要的原因就是虚拟机设计团队几乎把对代码的所有优化措施都集中在了即时编译器之中
+
+在 JDK 1.3 之后，javac 就去除了 -O 选项，不会生成任何字节码级别的优化代码了
+
+因此一般来说，即时编译器产生的本地代码会比 javac 产生的字节码更加优秀
+</pre>
+
+<p>
+下面将介绍一些 HotSpot 虚拟机的即时编译器在生成代码时采用的代码优化技术
+</p>
 </div>
-<div id="outline-container-org3574620" class="outline-3">
-<h3 id="org3574620">优化技术概览</h3>
+<div id="outline-container-orga20c407" class="outline-3">
+<h3 id="orga20c407">优化技术概览</h3>
+<div class="outline-text-3" id="text-orga20c407">
+<p>
+在 Sun 官方的 Wiki 上，HotSpot 虚拟机设计团队列出了一个相对比较全面的、在即时编译器中采用的优化技术列表，见表 11-1），其中有不少经典编译器的优化手段，也有许多针对 Java 语言（准确地说是针对运行在 Java 虚拟机上的所有语言）本身进行的优化技术：
+</p>
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 1:</span> 即时编译技术优化一览</caption>
+
+<colgroup>
+<col  class="org-left" />
+
+<col  class="org-left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="org-left">类型</td>
+<td class="org-left">优化策略</td>
+</tr>
+
+<tr>
+<td class="org-left">编译器策略</td>
+<td class="org-left">延迟编译</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">分层编译</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">栈上替换</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">延迟优化</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">程序依赖图表示</td>
+</tr>
+
+<tr>
+<td class="org-left">基于性能监控的优化技术</td>
+<td class="org-left">乐观空值断言</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">乐观类型断言</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">乐观类型增强</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">乐观数组长度增强</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">裁剪未被选择的分支</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">乐观的多态内联</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">分支频率预测</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">调用频率预测</td>
+</tr>
+
+<tr>
+<td class="org-left">基于证据的优化技术</td>
+<td class="org-left">精确类型推断</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">内存值推断</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">内存值跟踪</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">常量拆叠</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">重组</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">操作符退化</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">空值检查消除</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">类型检测退化</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">类型检测消除</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">代数化简</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">公共子表达式消除</td>
+</tr>
+
+<tr>
+<td class="org-left">数据流敏感重写</td>
+<td class="org-left">条件常量传播</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">基于流承载的类型缩减转换</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">无用代码清除</td>
+</tr>
+
+<tr>
+<td class="org-left">语言相关的优化技术</td>
+<td class="org-left">类型继承关系分析</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">去虚拟机化</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">符号常量传播</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">自动装箱传播</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">逃逸分析</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">锁清除</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">锁膨胀</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">清除反射</td>
+</tr>
+
+<tr>
+<td class="org-left">内存及代码位置变换</td>
+<td class="org-left">表达式提升</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">表达式下沉</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">冗余存储消除</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">相邻存储合并</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">交汇点分离</td>
+</tr>
+
+<tr>
+<td class="org-left">循环变换</td>
+<td class="org-left">循环展开</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">循环剥离</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">安全点消除</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">迭代范围分离</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">范围检查消除</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">循环向量化</td>
+</tr>
+
+<tr>
+<td class="org-left">全局代码调整</td>
+<td class="org-left">内联</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">全局代码外提</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">基于热度的代码布局</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">Switch调整</td>
+</tr>
+
+<tr>
+<td class="org-left">控制流图变换</td>
+<td class="org-left">本地代码编排</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">本地代码封包</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">延迟槽填充</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">着色图寄存器分配</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">线性扫描寄存器分配</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">复写聚合</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">常量分裂</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">复写移除</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">地址模式匹配</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">指令窥孔优化</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">基于确定有限状态机的代码生成</td>
+</tr>
+</tbody>
+</table>
+
+<p>
+为了消除对这些优化技术的陌生感，先举一个简单的例子，即通过大家熟悉的Java代码变化来展示其中几种优化技术是如何发挥作用的（仅使用Java代码来表示而已）。首先从原始代码开始，如下所示：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">static</span> <span style="color: #00bfff; font-weight: bold;">class</span> <span style="color: #98f5ff;">B</span>{
+    <span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">value</span>;
+    <span style="color: #00bfff; font-weight: bold;">final</span> <span style="color: #98f5ff;">int</span> <span style="color: #daa520; font-weight: bold;">get</span>() {
+        <span style="color: #00bfff; font-weight: bold;">return</span> value;
+    }
+}
+<span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">foo</span>() {
+    y = b.get();
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">...do stuff...</span>
+    z = b.get();
+    sum = y + z;
+}
+</pre>
 </div>
 
-<div id="outline-container-org97dbc06" class="outline-3">
-<h3 id="org97dbc06">公共子表达式消除</h3>
+<pre class="example">
+     这些代码优化变换是建立在代码的某种中间表示或机器码之上的，绝不是建立在Java 源码之上的
+
+     为了展示方便，使用了 Java 语言的语法来表示这些优化技术所发挥的作用
+</pre>
+
+<p>
+上面代码已经非常简单了，但是仍然有许多优化的余地：
+</p>
+<ul class="org-ul">
+<li><span class="underline">方法内联</span> ，方法内联的重要性要高于其他优化措施，它的主要目的有两个：
+<ul class="org-ul">
+<li><b>去除方法调用的成本</b> ：如建立栈帧等</li>
+<li><b>其他优化建立良好的基础</b></li>
+</ul></li>
+</ul>
+
+<p>
+方法内联膨胀之后可以便于在更大范围上采取后续的优化手段，从而获取更好的优化效果。因此，各种编译器一般都会把内联优化放在优化序列的最靠前位置。内联后的代码如下所示：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">foo</span>() {
+    y = b.value;
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">...do stuff...</span>
+    z = b.value;
+    sum = y + z;
+}
+</pre>
 </div>
 
-<div id="outline-container-org9f799c8" class="outline-3">
-<h3 id="org9f799c8">数组边界检查消除</h3>
+<ul class="org-ul">
+<li><span class="underline">冗余访问消除</span> ，假设代码中间注释掉的 “do stuff&#x2026;” 所代表的操作不会改变 b.value 的值，那就可以把 <span class="underline">z = b.value</span> 替换为 <span class="underline">z = y</span> ，因为上一句 <span class="underline">y = b.value</span> 已经保证了变量 <span class="underline">y</span> 与 <span class="underline">b.value</span> 是一致的，这样就可以 <b>不再去访问对象 b 的局部变量</b> 了。如果把 b.value 看做是一个表达式，那也可以把这项优化看成是 <span class="underline">公共子表达式消除</span> ，优化后的代码如下所示</li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">foo</span>() {
+    y = b.value;
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">...do stuff...</span>
+    z = y;
+    sum = y + z;
+}
+</pre>
 </div>
 
-<div id="outline-container-orga9dad38" class="outline-3">
-<h3 id="orga9dad38">方法内联</h3>
+<ul class="org-ul">
+<li><span class="underline">复写传播</span> ，因为在这段程序的逻辑中并没有必要使用一个额外的变量 <span class="underline">z</span> ，它与变量 <span class="underline">y</span> 是完全相等的，因此可以使用  <span class="underline">y</span> 来代替 <span class="underline">z</span> 。复写传播之后程序如下所示：</li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">foo</span>() {
+    y = b.value;
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">...do stuff...</span>
+    y = y;
+    sum = y + y;
+}
+</pre>
 </div>
 
-<div id="outline-container-org48c9a38" class="outline-3">
-<h3 id="org48c9a38">逃逸分析</h3>
+<ul class="org-ul">
+<li><span class="underline">无用代码消除</span> 。无用代码可能是永远不会被执行的代码，也可能是完全没有意义的代码，因此，它又形象地称为 “Dead Code”，在上面代码 <span class="underline">y = y</span> 是没有意义的，把它消除后的程序如代码如下所示：</li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">foo</span>() {
+    y = b.value;
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">...do stuff...</span>
+    sum = y + y;
+}
+</pre>
+</div>
+
+<pre class="example">
+     经过四次优化之后，最后的代码与最初的代码所达到的效果是一致的
+
+     但是前者比后者省略了许多语句（体现在字节码和机器码指令上的差距会更大），执行效率也会更高
+
+     编译器的这些优化技术实现起来也许比较复杂，但是要理解它们的行为对于一个普通的程序员来说是没有困难的
+</pre>
+
+<p>
+接下来，将继续查看如下的几项最有代表性的优化技术是如何运作的，它们分别是：
+</p>
+<ul class="org-ul">
+<li>语言无关的经典优化技术之一： <span class="underline">公共子表达式消除</span></li>
+<li>语言相关的经典优化技术之一： <span class="underline">数组范围检查消除</span></li>
+<li>最重要的优化技术之一： <span class="underline">方法内联</span></li>
+<li>最前沿的优化技术之一： <span class="underline">逃逸分析</span></li>
+</ul>
+</div>
+</div>
+<div id="outline-container-orgcaf41b5" class="outline-3">
+<h3 id="orgcaf41b5">公共子表达式消除</h3>
+</div>
+
+<div id="outline-container-org8e772be" class="outline-3">
+<h3 id="org8e772be">数组边界检查消除</h3>
+</div>
+
+<div id="outline-container-org10160d3" class="outline-3">
+<h3 id="org10160d3">方法内联</h3>
+</div>
+
+<div id="outline-container-orgbae45cd" class="outline-3">
+<h3 id="orgbae45cd">逃逸分析</h3>
+<div class="outline-text-3" id="text-orgbae45cd">
+<p>
+<a href="compilation_optimize.html">Previous：编译器优化</a>
+</p>
+
+<p>
+<a href="jvm.html">Home：目录</a>
+</p>
+</div>
 </div>
 </div>
 </div>
