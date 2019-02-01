@@ -262,7 +262,11 @@ for the JavaScript code in this tag.
 <li><a href="#orga20c407">优化技术概览</a></li>
 <li><a href="#orgcaf41b5">公共子表达式消除</a></li>
 <li><a href="#org8e772be">数组边界检查消除</a></li>
-<li><a href="#org10160d3">方法内联</a></li>
+<li><a href="#org10160d3">方法内联</a>
+<ul>
+<li><a href="#org8b983d8">虚方法内联</a></li>
+</ul>
+</li>
 <li><a href="#orgbae45cd">逃逸分析</a></li>
 </ul>
 </li>
@@ -1348,19 +1352,282 @@ Java 程序员有一个共识，以编译方式执行本地代码比解释方式
 </div>
 <div id="outline-container-orgcaf41b5" class="outline-3">
 <h3 id="orgcaf41b5">公共子表达式消除</h3>
+<div class="outline-text-3" id="text-orgcaf41b5">
+<p>
+公共子表达式消除是一个普遍应用于各种编译器的经典优化技术，它的含义是： <b>如果一个表达式 E 已经计算过了，并且从先前的计算到现在 E 中所有变量的值都没有发生变化，那么 E 的这次出现就成为了公共子表达式</b> 。对于这种表达式，没有必要花时间再对它进行计算，只需要直接用前面计算过的表达式结果代替 E 就可以了。如果这种优化仅限于 <span class="underline">程序的基本块内</span> ，便称为  <span class="underline">局部</span> 公共子表达式消除 ，如果这种优化的范围涵盖了多个基本块，那就称为 <span class="underline">全局</span> 公共子表达式消除。举个简单的例子来说明它的优化过程，假设存在如下代码： 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-java"><span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">d</span> = (c * b) * 12 + a + (a + b * c);
+</pre>
+</div>
+<p>
+如果这段代码交给 Javac 编译器则不会进行任何优化，那生成的代码将如下所示，是完全遵照 Java 源码的写法直译而成的：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">iload_2     // b
+imul        // &#35745;&#31639;b * c
+bipush 12   // &#25512;&#20837;12
+imul        // &#35745;&#31639;&#65288;c * b&#65289;*12
+iload_1     // a
+iadd        // &#35745;&#31639;&#65288;c * b&#65289;*12+a
+iload_1     // a
+iload_2     // b
+iload_3     // c
+imul        // &#35745;&#31639;b * c
+iadd        // &#35745;&#31639;a+b * c
+iadd        // &#35745;&#31639;&#65288;c * b&#65289;*12+a+&#65288;a+b * c&#65289;
+istore 4
+</pre>
+</div>
+<p>
+当这段代码进入到虚拟机即时编译器后，它将进行如下优化：编译器检测到  <span class="underline">c*b</span> 与 <span class="underline">b*c</span> 是一样的表达式，而且在计算期间 <b>b 与 c 的值是不变的</b> 。因此，这条表达式就可能被视为： 
+</p>
+<div class="org-src-container">
+<pre class="src src-java"><span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">d</span> = E * 12 + a + (a + E);
+</pre>
 </div>
 
+<p>
+这时，编译器还可能（取决于那种虚拟机的编译器以及具体的上下文而定）进行另外一种优化： <span class="underline">代数化简</span> ，把表达式变为： 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-java"><span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">d</span> = E * 13 + a * 2;
+</pre>
+</div>
+
+<p>
+表达式进行变换之后，再计算起来就可以节省一些时间了
+</p>
+</div>
+</div>
 <div id="outline-container-org8e772be" class="outline-3">
 <h3 id="org8e772be">数组边界检查消除</h3>
+<div class="outline-text-3" id="text-org8e772be">
+<p>
+<span class="underline">数组边界检查消除</span> 是即时编译器中的一项语言相关的经典优化技术
+</p>
+<pre class="example">
+Java 语言是一门动态安全的语言，对数组的读写访问也不像 C、C++ 那样在本质上是裸指针操作
+
+如果有一个数组 foo[]，在 Java 语言中访问数组元素 foo[i] 的时候系统将会自动进行上下界的范围检查
+
+即检查 i 必须满足 i &gt;= 0 &amp;&amp; i &lt; foo.length 这个条件，否则将会抛出一个运行时异常：java.lang.ArrayIndexOutOfBoundsException
+
+这对软件开发者来说是一件很好的事情，即使程序员没有专门编写防御代码，也可以避免大部分的溢出攻击
+
+但是对于虚拟机的执行子系统来说，每次数组元素的读写都带有一次隐含的条件判定操作
+对于拥有大量数组访问的程序代码，这无疑也是一种性能负担
+</pre>
+
+<p>
+无论如何，为了安全，数组边界检查肯定是必须做的，但数组边界是不是必须在运行期间 <span class="underline">一次不漏地检查</span> 则是可以“商量”的事情：
+</p>
+<ul class="org-ul">
+<li>数组下标是一个常量，如 foo[3]，只要在编译期根据 <span class="underline">数组流分析</span> 来确定 foo.length 的值，并判断下标 3 没有越界，执行的时候就无须判断了</li>
+<li>数组访问发生在循环之中，并且使用 <span class="underline">循环遍历</span> 来进行数组访问，如果编译器只要通过数据流分析就可以 <b>判定循环变量的取值范围永远在区间[0, foo.length)</b> 之内，那在整个循环中就可以把数组的上下界检查消除，这可以节省很多次的条件判断操作</li>
+</ul>
+
+<pre class="example">
+     将这个数组边界检查的例子放在更高的角度来看，大量的安全检查令编写 Java 程序比编写 C/C++ 程序容易很多
+     如数组越界会得到 ArrayIndexOutOfBoundsException 异常，空指针访问会得到 NullPointException，除数为零会得到 ArithmeticException 等
+
+     在 C/C++ 程序中出现类似的问题，一不小心就会出现 Segment Fault 信号
+     或者 Windows 编程中常见的 “xxx 内存不能为 Read/Wrie” 之类的提示处理不好程序就和直接崩溃退出了
+
+     但这些安全检查也导致了相同的程序，Java 要比 C/C++ 做更多的事情（各种检查判断），这些事情就成为一种隐式开销
+</pre>
+<p>
+除了如数组边界检查优化这种尽可能把运行期检查提到编译期完成的思路之外，另外还有一种避免思路： <span class="underline">隐式异常处理</span> ，Java 中空指针检查和算术运算中除数为零的检查都采用了这种思路。举个例子，例如程序中访问一个对象（假设对象叫 foo）的某个属性（假设属性叫 value），那以 Java 伪代码来表示虚拟机访问 foo.value 的过程如下：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">if</span> (foo != <span style="color: #ffd700;">null</span>) {
+    <span style="color: #00bfff; font-weight: bold;">return</span> foo.value;
+    <span style="color: #00bfff; font-weight: bold;">else</span> {
+        <span style="color: #00bfff; font-weight: bold;">throw</span> <span style="color: #00bfff; font-weight: bold;">new</span> <span style="color: #98f5ff;">NullPointException</span>();
+    }
+}
+</pre>
+</div>
+
+<p>
+在使用隐式异常优化之后，虚拟机会把上面伪代码所表示的访问过程变为如下伪代码：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">try</span> {
+    <span style="color: #00bfff; font-weight: bold;">return</span> foo.value;
+} <span style="color: #00bfff; font-weight: bold;">catch</span> (segment_fault) {
+    uncommon_trap();
+}
+</pre>
+</div>
+
+<p>
+虚拟机会注册一个  <span class="underline">Segment Fault 信号</span> 的 <b>异常处理器</b> （伪代码中的 uncommon_trap()），这样当 foo 不为空的时候，对 value 的访问是不会额外消耗一次对 foo 判空的开销的。代价就是当 foo 真的为空时，必须转入到 <span class="underline">异常处理器</span> 中恢复并抛出 NullPointException 异常，这个过程必须从 <b>用户态转到内核态中处理，结束后再回到用户态</b> ，速度远比一次判空检查慢。 <b>当 foo 极少为空的时候，隐式异常优化是值得的</b> ，但假如 foo 经常为空的话，这样的优化反而会让程序更慢，还好 HotSpot 虚拟机足够 “聪明”，它会根据 <span class="underline">运行期收集到的 Profile 信息自动选择最优方案</span> 
+</p>
+
+<pre class="example">
+     与语言相关的其他消除操作还有不少，如自动装箱消除、安全点消除、消除反射等
+</pre>
+</div>
 </div>
 
 <div id="outline-container-org10160d3" class="outline-3">
 <h3 id="org10160d3">方法内联</h3>
+<div class="outline-text-3" id="text-org10160d3">
+<p>
+_方法内联_，它是编译器最重要的优化手段之一，除了 <b>消除方法调用的成本</b> 之外，它更重要的意义是 <b>为其他优化手段建立良好的基础</b> ，如下面所示的简单例子就揭示了内联对其他优化手段的意义：事实上 testInline() 方法的内部全部都是无用的代码，如果不做内联，后续即使进行了无用代码消除的优化，也无法发现任何 "Dead Code" ，因为如果分开来看，foo() 和 testInline() 两个方法里面的操作都可能是有意义的
+</p>
+
+<div class="org-src-container">
+<pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">static</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">foo</span> (<span style="color: #98f5ff;">Object</span> <span style="color: #4eee94;">obj</span>) {
+    <span style="color: #00bfff; font-weight: bold;">if</span> (obj != <span style="color: #ffd700;">null</span>) {
+        System.out.println(<span style="color: #deb887;">"do something"</span>);
+    }
+}
+
+<span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">static</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">testInline</span>(<span style="color: #98f5ff;">String</span>[]<span style="color: #4eee94;">args</span>) {
+    <span style="color: #98f5ff;">Object</span> <span style="color: #4eee94;">obj</span> = <span style="color: #ffd700;">null</span>;
+    foo (obj);
+}
+</pre>
 </div>
 
+<pre class="example">
+     方法内联的优化行为看起来很简单，不过是把目标方法的代码 “复制” 到发起调用的方法之中，避免发生真实的方法调用而已
+
+     但实际上 Java 虚拟机中的内联过程远远没有那么简单，因为如果不是即时编译器做了一些特别的努力
+
+     按照经典编译原理的优化理论，大多数的 Java 方法都无法进行内联
+</pre>
+
+<p>
+无法内联的原因：只有使用 <b>invokespecial</b> 指令调用的 <span class="underline">私有方法</span> 、 <span class="underline">实例构造器</span> 、 <span class="underline">父类方法</span> 以及使用 <b>invokestatic</b> 指令进行调用的 <span class="underline">静态方法</span> 才是在 <b>编译期进行解析</b> 的，除了上述 4 种方法之外，其他的 Java 方法调用都需要在 <b>运行时进行方法接收者的多态选择</b> ，并且都可能 <b>存在多于一个版本的方法接收者</b> 。简而言之，Java 语言中默认的实例方法是 <b>虚方法</b> 
+</p>
+
+<pre class="example">
+     最多再除去被 final 修饰的方法这种特殊情况，尽管它使用 invokevirtual 指令调用，但也是非虚方法，Java 语言规范中明确说明了这点
+</pre>
+
+<p>
+对于一个虚方法，编译期做内联的时候根本就 <b>无法确定应该使用哪个方法版本</b> ，如果代码中把  <span class="underline">b.get()</span> 内联为 <span class="underline">b.value</span> 为例的话，就是不依赖上下文就无法确定 b 的实际类型是什么。假如有 ParentB 和 SubB 两个具有继承关系的类，并且子类重写了父类的 get() 方法，那么，是要执行父类的 get() 方法还是子类的 get() 方法，需要在运行期才能确定，编译期无法得出结论 
+</p>
+</div>
+
+
+<div id="outline-container-org8b983d8" class="outline-4">
+<h4 id="org8b983d8">虚方法内联</h4>
+<div class="outline-text-4" id="text-org8b983d8">
+<pre class="example">
+      由于 Java 语言提倡使用面向对象的编程方式进行编程，而 Java 对象的方法默认就是虚方法
+      因此 Java 间接鼓励了程序员使用大量的虚方法来完成程序逻辑
+
+      根据上面的分析，如果内联与虚方法之间产生 “矛盾”，那该怎么办呢？
+
+      是不是为了提高执行性能，就要到处使用 final 关键字去修饰方法呢
+</pre>
+
+<p>
+为了解决虚方法的内联问题，Java 虚拟机设计团队想了很多办法，首先是引入了一种名为 <span class="underline">类型继承关系分析</span> 的技术，这是一种基于整个应用程序的类型分析技术，它用于确定在目前已加载的类中： <span class="underline">某个接口是否有多于一种的实现</span> ， <span class="underline">某个类是否存在子类</span> 、 <span class="underline">子类是否为抽象类</span> 等信息
+</p>
+<ul class="org-ul">
+<li>编译器在进行内联时，如果是非虚方法，那么直接进行内联就可以了，这时候的内联是有稳定前提保障的</li>
+<li>如果遇到虚方法，则会向 CHA 查询此方法在当前程序下是否有多个目标版本可供选择，如果查询结果只有一个版本，那也可以进行内联，不过这种内联就属于激进优化，需要预留一个 <span class="underline">逃生门</span> ，称为 <b>守护内联</b> 
+<ul class="org-ul">
+<li>如果程序的后续执行过程中，虚拟机一直没有加载到会令这个方法的接收者的继承关系发生变化的类，那这个内联优化的代码就可以一直使用下去</li>
+<li>如果加载了导致继承关系发生变化的新类，那就需要抛弃已经编译的代码，退回到解释状态执行，或者重新进行编译</li>
+</ul></li>
+<li>如果向 CHA 查询出来的结果是多个版本的目标方法可供选择，则编译器还将会进行最后一次努力，使用 <span class="underline">内联缓存</span> 来完成方法内联，这是一个建立在目标方法正常入口之前的缓存，它的工作原理大致是：
+<ul class="org-ul">
+<li>在未发生方法调用之前，内联缓存状态为空</li>
+<li>当第一次调用发生后，缓存记录下方法接收者的版本信息</li>
+<li>以后每次进行方法调用时都比较接收者版本：
+<ul class="org-ul">
+<li>如果以后进来的每次调用的方法接收者版本都是一样的，那这个内联还可以一直用下去</li>
+<li>如果发生了方法接收者不一致的情况，就说明程序真正使用了虚方法的多态特性，这时才会 <b>取消内联</b> ，查找虚方法表进行 <span class="underline">方法分派</span></li>
+</ul></li>
+</ul></li>
+</ul>
+
+<pre class="example">
+      在许多情况下虚拟机进行的内联都是一种激进优化
+
+      除了内联之外，对于出现概率很小（通过经验数据或解释器收集到的性能监控信息确定概率大小）的隐式异常
+      和使用概率很小的分支等都可以被激进优化 “移除”
+
+      如果真的出现了小概率事件，这时才会从 “逃生门” 回到解释状态重新执行
+
+      激进优化的手段在高性能的商用虚拟机中很常见
+</pre>
+</div>
+</div>
+</div>
 <div id="outline-container-orgbae45cd" class="outline-3">
 <h3 id="orgbae45cd">逃逸分析</h3>
 <div class="outline-text-3" id="text-orgbae45cd">
+<p>
+<span class="underline">逃逸分析</span> 是目前 Java 虚拟机中比较前沿的优化技术，它与类型继承关系分析一样，并不是直接优化代码的手段，而是 <b>为其他优化手段提供依据的分析技术</b> 。基本行为就是 <b>分析对象动态作用域</b> ：
+</p>
+<ul class="org-ul">
+<li><span class="underline">方法逃逸</span> ：当一个对象在方法中被定义后，它可能被外部方法所引用，例如作为调用参数传递到其他方法中</li>
+<li><span class="underline">线程逃逸</span> ：还有可能被外部线程访问到，譬如赋值给类变量或可以在其他线程中访问的实例变量</li>
+</ul>
+
+<p>
+如果能证明一个对象 <b>不会逃逸到方法或线程之外</b> ，也就是别的方法或线程无法通过任何途径访问到这个对象，则可能为这个变量进行一些高效的优化：
+</p>
+<ul class="org-ul">
+<li><b>栈上分配</b> ：Java 虚拟机中，在 Java 堆上分配创建对象的内存空间几乎是 Java 程序员都清楚的常识了，Java 堆中的对象对于各个线程都是共享和可见的，只要持有这个对象的引用，就可以访问堆中存储的对象数据。虚拟机的垃圾收集系统可以回收堆中不再使用的对象，但回收动作无论是筛选可回收对象，还是回收和整理内存都需要耗费时间。如果确定一个对象不会逃逸出方法之外，那让这个对象在栈上分配内存将会是一个很不错的注意，对象所占用的内存空间就可以随栈帧出栈而销毁。在一般应用中，不会逃逸的局部对象所占的比例很大，如果能使用栈上分配，那大量的对象就会随着方法的结束而自动销毁了， <b>垃圾收集系统的压力将会小很多</b></li>
+<li><b>同步消除</b> ：线程同步本身是一个相对耗时的过程，如果逃逸分析能够确定一个变量不会逃逸出线程，无法被其他线程访问，那这个变量的读写肯定就不会有竞争，对这个 <b>变量实施的同步措施也就可以消除掉</b></li>
+<li><b>标量替换</b> ： <span class="underline">标量</span> 是指 <b>一个数据已经无法再分解成更小的数据来表示</b> 了
+<ul class="org-ul">
+<li>Java 虚拟机中的原始数据类型（ <span class="underline">int</span> 、 <span class="underline">long</span> 等数值类型以及 <span class="underline">reference</span> 类型等）都不能再进一步分解，它们就可以称为标量</li>
+<li>如果一个数据可以继续分解，那它就称作 <b>聚合量</b> ，Java 中的对象就是最典型的聚合量</li>
+<li>如果把一个 <span class="underline">Java 对象拆散，根据程序访问的情况，将其使用到的成员变量恢复原始类型</span> 来访问就叫做 <b>标量替换</b></li>
+<li>如果逃逸分析证明一个对象不会被外部访问，并且这个对象可以被拆散的话，那程序真正执行的时候将 <b>可能不创建这个对象</b> ，而改为 <b>直接创建它的若干个被这个方法使用到的成员变量</b> 来代替。将对象拆分后，除了可以让 <b>对象的成员变量在栈上</b> （栈上存储的数据，有很大的概率会被虚拟机分配至物理机器的寄存器中存储）分配和读写之外，还可以为后续进一步的优化手段创建条件</li>
+</ul></li>
+</ul>
+
+<pre class="example">
+	  关于逃逸分析的论文在 1999 年就已经发表，但直到 Sun JDK 1.6 才实现了逃逸分析
+	  而且直到现在这项优化尚未足够成熟，仍有很大的改进余地
+
+	  不成熟的原因主要是不能保证逃逸分析的性能收益必定高于它的消耗：
+	  如果要完全准确地判断一个对象是否会逃逸，需要进行数据流敏感的一系列复杂分析，从而确定程序各个分支执行时对此对象的影响
+	  这是一个相对高耗时的过程，如果分析完后发现没有几个不逃逸的对象，那这些运行期耗用的时间久白白浪费了
+	  所以目前虚拟机只能采用不那么准确，但时间压力相对较小的算法来完成逃逸分析
+
+	  还有一点是，基于逃逸分析的一些优化手段，如上面提到的 “栈上分配”
+	  由于 HotSpot 虚拟机目前的实现方式导致栈上分配实现起来比较复杂，因此在 HotSpot 中暂时还没有做这项优化
+
+	  在测试结果中，实施逃逸分析后的程序在 Micro Benchmarks 中往往能运行出不错的成绩
+	  但是在实际的应用程序，尤其是大型程序中反而发现实施逃逸分析可能出现效果不稳定的情况
+	  或因分析过程耗时但却无法有效判别出非逃逸对象而导致性能（即时编译的收益）有所下降
+
+	  所以在很长的一段时间里，即时是 Server Compiler，也默认不开启逃逸分析
+	  甚至在某些版本（如 JDK 1.6 Update 18）中还曾经短暂地完全禁止了这项优化
+</pre>
+<p>
+如果有需要，并且确认对程序运行有益，可以使用参数  <span class="underline">-XX:+DoEscapeAnalysis</span> 来手动 <span class="underline">开启逃逸分析</span> ，开启之后：
+</p>
+<ul class="org-ul">
+<li>通过参数  <span class="underline">-XX:+PrintEscapeAnalysis</span> 来 <span class="underline">查看分析结果</span> 。有了逃逸分析支持之后：
+<ul class="org-ul">
+<li>使用参数 <span class="underline">-XX:+EliminateAllocations</span> 来 <span class="underline">开启标量替换</span></li>
+<li>使用 <span class="underline">+XX:+EliminateLocks</span> 来 <span class="underline">开启同步消除</span></li>
+<li>使用参数 <span class="underline">-XX:+PrintEliminateAllocations</span> 来 <span class="underline">查看标量的替换情况</span></li>
+</ul></li>
+</ul>
+
+<pre class="example">
+     尽管目前逃逸分析的技术仍不失十分成熟，但是它却是即时编译器优化技术的一个重要发展方向
+
+     在今后的虚拟机中，逃逸分析技术肯定会支撑起一系列实用有效的优化技术
+</pre>
 <p>
 <a href="compilation_optimize.html">Previous：编译器优化</a>
 </p>
