@@ -270,6 +270,7 @@ for the JavaScript code in this tag.
 <li><a href="#orgbae45cd">逃逸分析</a></li>
 </ul>
 </li>
+<li><a href="#org6c19630">Java与C/C++的编译器对比</a></li>
 </ul>
 </div>
 </div>
@@ -1628,6 +1629,75 @@ _方法内联_，它是编译器最重要的优化手段之一，除了 <b>消�
 
      在今后的虚拟机中，逃逸分析技术肯定会支撑起一系列实用有效的优化技术
 </pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org6c19630" class="outline-2">
+<h2 id="org6c19630">Java与C/C++的编译器对比</h2>
+<div class="outline-text-2" id="text-org6c19630">
+<pre class="example">
+大多数程序员都认为C/C++会比Java语言快，甚至觉得从Java语言诞生以来“执行速度缓慢”的帽子就应当扣在它的头顶
+
+这种观点的出现是由于Java刚出现的时候即时编译技术还不成熟，主要靠解释器执行的Java语言性能确实比较低下
+
+但目前即时编译技术已经十分成熟，Java语言有可能在速度上与C/C++一争高下吗？
+
+要想知道这个问题的答案，必须从两者的编译器谈起
+
+Java与C/C++的编译器对比实际上代表了最经典的即时编译器与静态编译器的对比，很大程度上也决定了Java与C/C++的性能对比的结果
+因为无论是C/C++还是Java代码，最终编译之后被机器执行的都是本地机器码
+
+哪种语言的性能更高，除了它们自身的API库实现得好坏以外，其余的比较就成了一场“拼编译器”和“拼输出代码质量”的游戏
+
+当然，这种比较也是剔除了开发效率的片面对比，语言间孰优孰劣、谁快谁慢的问题都是很难有结果的争论
+
+下面就回到正题，看看这两种语言的编译器各有何种优势
+</pre>
+<p>
+Java虚拟机的 <span class="underline">即时编译器</span> 与C/C++的 <span class="underline">静态优化编译器</span> 相比，可能会由于下列这些原因而导致输出的本地代码有一些劣势（下面列举的也包括一些虚拟机执行子系统的性能劣势）：
+</p>
+<ol class="org-ol">
+<li>即时编译器运行 <b>占用的是用户程序的运行时间</b> ，具有很大的时间压力，它能提供的优化手段也严重受制于编译成本。如果编译速度不能达到要求，那用户将在启动程序或程序的某部分察觉到重大延迟，这点使得即时编译器不敢随便引入大规模的优化技术，而编译的时间成本在静态优化编译器中并不是主要的关注点</li>
+<li>Java语言是 <span class="underline">动态的类型安全</span> 语言，这就意味着需要由 <b>虚拟机来确保程序不会违反语言语义或访问非结构化内存</b> 。从实现层面上看，这就意味着虚拟机必须频繁地进行动态检查，如实例方法访问时检查空指针、数组元素访问时检查上下界范围、类型转换时检查继承关系等。对于这类程序代码没有明确写出的检查行为，尽管编译器会努力进行优化，但是总体上仍然要消耗不少的运行时间</li>
+<li>Java语言中虽然没有virtual关键字，但是使用 <b>虚方法的频率却远远大于C/C++语言</b> ，这意味着运行时对方法接收者进行多态选择的频率要远远大于C/C++语言，也意味着即时编译器在进行一些优化（如前面提到的 <span class="underline">方法内联</span> ）时的难度要远大于C/C++的静态优化编译器</li>
+<li>Java语言是可以 <span class="underline">动态扩展</span> 的语言， <b>运行时加载新的类可能改变程序类型的继承关系</b> ，这使得很多全局的优化都难以进行，因为编译器无法看见程序的全貌，许多全局的优化措施都只能以 <span class="underline">激进优化</span> 的方式来完成，编译器不得不时刻注意并随着类型的变化而在运行时撤销或重新进行一些优化</li>
+<li>Java语言中对象的 <b>内存分配都是堆上进行的</b> ，只有方法中的局部变量才能在栈上分配。而C/C++的对象则有多种内存分配方式，既可能在堆上分配，又可能在栈上分配，如果可以在栈上分配线程私有的对象，将减轻内存回收的压力。另外，C/C++中主要由 <span class="underline">用户程序代码来回收分配的内存</span> ，这就不存在无用对象筛选的过程，因此 <b>效率上（仅指运行效率，排除了开发效率）也比垃圾收集机制要高</b></li>
+</ol>
+
+<pre class="example">
+上面说了一大堆Java语言相对C/C++的劣势，不是说Java就真的不如C/C++了
+
+Java语言的这些性能上的劣势都是为了换取开发效率上的优势而付出的代价：
+动态安全、动态扩展、垃圾回收这些“拖后腿”的特性都为Java语言的开发效率做出了很大贡献
+</pre>
+
+<p>
+还有许多优化是Java的即时编译器能做而C/C++的静态优化编译器不能做或者不好做的。例如，在C/C++中， <span class="underline">别名分析</span> 的难度就要远高于Java。Java的类型安全保证了在类似如下代码中，只要ClassA和ClassB没有继承关系，那对象objA和objB就绝不可能是同一个对象，即 <b>不会是同一块内存两个不同别名</b> ：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-java"><span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">foo</span>(<span style="color: #98f5ff;">ClassA</span> <span style="color: #4eee94;">objA</span>, <span style="color: #98f5ff;">ClassB</span> <span style="color: #4eee94;">objB</span>) {
+    objA.x=123;
+    objB.y=456;
+
+    <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">&#21482;&#35201;objB.y&#19981;&#26159;objA.x&#30340;&#21035;&#21517;&#65292;&#19979;&#38754;&#23601;&#21487;&#20197;&#20445;&#35777;&#36755;&#20986;&#20026;123</span>
+    print(objA.x);
+}
+</pre>
+</div>
+
+<p>
+确定了objA和objB并非对方的别名后，许多与数据依赖相关的优化才可以进行（ <span class="underline">重排序</span> 、 <span class="underline">变量代换</span> ）
+</p>
+<pre class="example">
+    具体到上面的例子中，就是无须担心objB.y其实与objA.x指向同一块内存，这样就可以安全地确定打印语句中的objA.x为123
+</pre>
+
+<p>
+Java编译器另外一个红利是由它的动态性所带来的，由于 <b>C/C++编译器所有优化都在编译期完成，以运行期性能监控为基础的优化措施它都无法进行</b> ，如 <span class="underline">调用频率预测</span> 、 <span class="underline">分支频率预测</span> 、 <span class="underline">裁剪未被选择的分支</span> 等，这些都会成为Java语言独有的性能优势
+</p>
+
 <p>
 <a href="compilation_optimize.html">Previous：编译器优化</a>
 </p>
@@ -1635,7 +1705,6 @@ _方法内联_，它是编译器最重要的优化手段之一，除了 <b>消�
 <p>
 <a href="jvm.html">Home：目录</a>
 </p>
-</div>
 </div>
 </div>
 </div>
