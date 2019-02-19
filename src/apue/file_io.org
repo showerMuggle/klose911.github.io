@@ -2,31 +2,33 @@
 #+HTML_HEAD: <link rel="stylesheet" type="text/css" href="css/main.css" />
 #+HTML_LINK_UP: standard.html   
 #+HTML_LINK_HOME: apue.html
-#+OPTIONS: num:nil timestamp:nil ^:nil *:nil
-大多数UNIX文件I/O只需用到5个函数：open、read、write、lseek以及close。这些函数经常被称之为不带缓存的I/O，指的是每个read和write都调用内核中的一个系统调用。然后说明不同缓存器长度对read和write函数的影响
+#+OPTIONS: num:nil timestamp:nil ^:nil 
+大多数UNIX文件I/O只需用到5个函数： _open_ 、 _read_ 、 _write_ 、 _lseek_ 以及 _close_ 。这些函数经常被称之为 *不带缓存的I/O* ，指的是每个read和write都调用内核中的一个系统调用。然后说明不同缓存器长度对read和write函数的影响
 
 接着将通过传送给open函数的参数来讨论原子操作这个概念，以及在多个进程间如何共享文件，并涉及内核的有关数据结构
 
-最后将说明dup、fcntl和ioctl函数
+最后将说明 _dup_ 、 _fcntl_ 和 _ioctl_ 函数
 
 * 文件描述符
-  对于内核而言，所有打开文件都由文件描述符引用。文件描述符是一个非负整数。当打开一个现存文件或创建一个新文件时，内核向进程返回一个文件描述符。当读、写一个文件时，用open或creat返回的文件描述符标识该文件，将其作为参数传送给read或write
+  对于内核而言， *所有打开文件都由文件描述符引用* 。文件描述符是一个 _非负整数_ 。当 _打开_ 一个现存文件或 _创建_ 一个新文件时，内核向进程 *返回* 一个文件描述符。当读、写一个文件时，用 _open_ 或 _creat_ 返回的文件描述符标识该文件，将其作为 *参数* 传送给 _read_ 或 _write_ 
   
-  文件描述符的范围是0~OPEN_MAX
+#+BEGIN_EXAMPLE
+  文件描述符的范围是 0 ~ OPEN_MAX
+#+END_EXAMPLE
   
 ** shell 
-+ 文件描述符0与进程的标准输入相结合
-+ 文件描述符1与标准输出相结合
-+ 文件描述符2与标准出错输出相结合
++ 文件描述符0：进程的 _标准输入_ 相结合
++ 文件描述符1： _标准输出_ 相结合
++ 文件描述符2： _标准出错输出_ 相结合
   
 ** 常量定义
-   在<unistd.h>中定义以下常量来标识标准文件描述符
-+ STDIN_FILENO:  0
-+ STDOUT_FILENO: 1
-+ STDERR_FILENO: 2
+   在 _<unistd.h>_ 中定义以下常量来标识标准文件描述符
++ *STDIN_FILENO* :  0
++ *STDOUT_FILENO* : 1
++ *STDERR_FILENO* : 2
   
 ** 设备文件
-   标准输入、标准输出和标准出错对应的设备文件注册在目录/dev中，文件名分别为stdin.stdout,stderr。它们实际上分别是指向/proc/self/fd/0,/proc/self/fd/1,/proc/self/fd/2的软链接
+   标准输入、标准输出和标准出错对应的设备文件注册在目录 _/dev_ 中，文件名分别为 _stdin_ , _stdout_ , _stderr_ 。它们实际上分别是指向 */proc/self/fd/0* , */proc/self/fd/1* , */proc/self/fd/2* 的软链接
    #+BEGIN_SRC sh
      $ cd /dev/
      /dev $ ls -l std*
@@ -36,7 +38,7 @@
      lrwxrwxrwx 1 root root 15 Jan 20  2017 stdout -> /proc/self/fd/1
    #+END_SRC
    
-   虚拟目录/proc/self/fd中记录了当前进程所打开的文件描述符。可以看到在xfce4-terminal中，实际文件描述符指向/dev/pts/虚拟字符设备
+   虚拟目录 */proc/self/fd* 中记录了当前进程所打开的文件描述符。在xfce4-terminal中可以看到，实际文件描述符指向 _/dev/pts/_ 虚拟字符设备
    #+BEGIN_SRC sh
   /proc/self/fd $ ls -l
 
@@ -46,7 +48,7 @@
   lrwx------ 1 klose klose 64 Jan 19 21:54 2 -> /dev/pts/0
   lrwx------ 1 klose klose 64 Jan 19 22:20 255 -> /dev/pts/0
    #+END_SRC
-   对于守护进程，　0、1、2都是链接到/dev/null的，这说明守护进程不会跟任何的接口进行交互！
+   对于 *守护进程* ，　0、1、2都是链接到 _/dev/null_ 的，这说明 *守护进程不会跟任何的接口进行交互* 
    
 * open函数
   以oflag指定的方式打开字符串filename指定的文件
