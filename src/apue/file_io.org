@@ -157,32 +157,34 @@
 #+BEGIN_SRC C
   #include <unistd.h>
   /**
-     设置文件指针的位置
-
-     filedes：文件描述符
-     offset：文件位置偏移量，单位是字节数
-     whence：从哪里开始计算偏移量
-
-     成功时返回0
-     失败时返回-1，并设置errorno
-  ,*/
+   ,* 设置文件指针的位置
+   ,*
+   ,* filedes：文件描述符
+   ,* offset：文件位置偏移量，单位是字节数
+   ,* whence：从哪里开始计算偏移量
+   ,*
+   ,* 成功：返回相对于文件开始处的偏移量（字节），失败：返回-1，并设置errorno
+   ,*
+   ,*/
   off_t lseek(int filedes, off_t offset, int whence);
 #+END_SRC
 ** off_t 
-off_t通常定义为一个word的长度，32位机器是long类型，4个byte长度
+off_t通常定义为一个字的长度：32位机器是long类型，4个字节(byte)长度
 ** 参数
 对参数offset的解释与参数whence的值有关:
-+ 若whence是SEEK_SET，则将该文件的位移量设置为距文件开始处offset个字节。offset为非负
-+ 若whence是SEEK_CUR，则将该文件的位移量设置为其当前值加offset。offset可为正或负
-+ 若whence是SEEK_END，则将该文件的位移量设置为文件长度加offset。offset可为正或负
++ 若whence是 *SEEK_SET* ：将该文件的位移量设置为 *距文件开始处offset个字节* ，offset为非负
++ 若whence是 *SEEK_CUR* ：将该文件的位移量设置为其 *当前值加offset* ，offset可为正或负
++ 若whence是SEEK_END：则将该文件的位移量设置为 *文件长度加offset* ，offset可为正或负
 
 ** 返回值
-+ 成功时将返回相对于文件开始处的偏移量(可能是负数)
-+ 失败返回-1，并设置errno
++ 成功：返回 *相对于 _文件开始处_ 的偏移量* (可能是负数)
++ 失败：返回 -1，并设置errno
 
-因为lseek可以返回负数，所以判断lseek是否执行成功，最好用返回值是否为-1来进行判断
+#+BEGIN_EXAMPLE
+  因为lseek可以返回负数，所以判断lseek是否执行成功，最好用返回值是否为 -1 来进行判断
+#+END_EXAMPLE
 *** 测试是否支持文件偏移
-在文件是FIFO、管道或者套接字时，lseek将失败并设置errno为ESPIPE(Illegal seek)
+在文件是FIFO、管道或者套接字时，lseek将失败并设置errno为 _ESPIPE_ (Illegal seek)
     #+BEGIN_SRC C
       #include <sys/types.h>
       #include <unistd.h>
@@ -197,12 +199,11 @@ off_t通常定义为一个word的长度，32位机器是long类型，4个byte长
                       printf("seek OK \n"); 
 
               exit(EXIT_SUCCESS);
-
       }
     #+END_SRC
 
 *** 文件空洞
-文件位移量可以大于文件的当前长度,在这种情况下,对该文件的下一次写将延长该文件，并在文件中构成一个空调,这一点是允许的。位于文件中但没有写过的字节都被读为0
+文件位移量可以大于文件的当前长度，在这种情况下，对该文件的下一次写将延长该文件，并在文件中构成一个空洞，这一点是允许的。位于文件中但没有写过的字节都被读为0
 
 #+BEGIN_SRC C
   #include <sys/types.h>
