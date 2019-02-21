@@ -261,7 +261,7 @@ for the JavaScript code in this tag.
 </li>
 <li><a href="#org8768303">access函数</a>
 <ul>
-<li><a href="#org32df57e">mode参数</a></li>
+<li><a href="#org50d3a0b">mode参数</a></li>
 <li><a href="#org9233caa">access函数实例</a></li>
 </ul>
 </li>
@@ -272,11 +272,7 @@ for the JavaScript code in this tag.
 </li>
 <li><a href="#orgf215bca">chmod和fchmod函数</a>
 <ul>
-<li><a href="#orgae9d043">mode参数</a>
-<ul>
-<li><a href="#org10e8655">S_ISVTX</a></li>
-</ul>
-</li>
+<li><a href="#org09acf9f">mode参数</a></li>
 <li><a href="#org2ca121e">chmod实例</a></li>
 <li><a href="#org9c6fef3">自动忽略某些权限常数</a></li>
 </ul>
@@ -303,7 +299,7 @@ for the JavaScript code in this tag.
 <li><a href="#org171a6ac">连接</a>
 <ul>
 <li><a href="#org37b1aba">硬连接</a></li>
-<li><a href="#org98f6a57">符号连接</a></li>
+<li><a href="#org5a58462">符号连接</a></li>
 <li><a href="#orgeda9192">目录连接</a></li>
 </ul>
 </li>
@@ -316,7 +312,7 @@ for the JavaScript code in this tag.
 </li>
 <li><a href="#org84c2359">remove函数</a></li>
 <li><a href="#orga836988">rename函数</a></li>
-<li><a href="#org2138cf2">符号连接</a>
+<li><a href="#org84d95cd">符号连接</a>
 <ul>
 <li><a href="#orgb13baaa">函数对符号连接的处理</a></li>
 <li><a href="#org9f3319c">符号连接循环</a></li>
@@ -369,61 +365,70 @@ for the JavaScript code in this tag.
 </ul>
 </div>
 </div>
-<p>
-首先从stat函数开始逐个说明stat结构的每一个成员以了解文件的所有属性，然后将说明修改这些属性的各个函数(更改所有者,更改许可权等)，接着更详细地察看UNIX文件系统的结构以及符号连接，最后介绍对目录进行操作的各个函数并且开发了一个以降序遍历目录层次结构的函数
-</p>
+<pre class="example">
+  首先从stat函数开始逐个说明stat结构的每一个成员以了解文件的所有属性
+
+  然后将说明修改这些属性的各个函数(更改所有者,更改许可权等)
+
+  接着更详细地察看UNIX文件系统的结构以及符号连接
+
+  最后介绍对目录进行操作的各个函数并且开发了一个以降序遍历目录层次结构的函数
+</pre>
 
 <div id="outline-container-org939a83c" class="outline-2">
 <h2 id="org939a83c">stat、fstat和lstat函数</h2>
 <div class="outline-text-2" id="text-org939a83c">
 <p>
-获取一个文件的详细信息可以使用stat函数组：
+<b>获取一个文件的详细信息</b> 可以使用 <span class="underline">stat</span> 函数组：
 </p>
 <div class="org-src-container">
 <pre class="src src-C"><span style="color: #ffd700;">#include</span> <span style="color: #deb887;">&lt;sys/types.h&gt;</span>
 <span style="color: #ffd700;">#include</span> <span style="color: #deb887;">&lt;sys/stat.h&gt;</span>
 
 <span style="color: #ffebcd;">/**</span>
-<span style="color: #ffebcd;">   &#26681;&#25454;&#25991;&#20214;&#36335;&#24452;&#21517;&#33719;&#21462;&#25991;&#20214;&#30340;&#35814;&#32454;&#20449;&#24687;</span>
-
-<span style="color: #ffebcd;">   pathname&#65306;&#25991;&#20214;&#36335;&#24452;&#21517;</span>
-<span style="color: #ffebcd;">   buf&#65306;&#25351;&#21521;&#25991;&#20214;&#20449;&#24687;&#32467;&#26500;&#20307;stat&#21464;&#37327;&#30340;&#25351;&#38024;</span>
-
-<span style="color: #ffebcd;">   &#36820;&#22238;&#65306;&#27491;&#30830;&#36820;&#22238;0&#65292;&#20986;&#38169;&#36820;&#22238;-1</span>
-<span style="color: #ffebcd;">*/</span>
+<span style="color: #ffebcd;"> *  &#26681;&#25454;&#25991;&#20214;&#36335;&#24452;&#21517;&#33719;&#21462;&#25991;&#20214;&#30340;&#35814;&#32454;&#20449;&#24687;</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> * pathname: &#25991;&#20214;&#36335;&#24452;&#21517;</span>
+<span style="color: #ffebcd;"> * buf: &#25351;&#21521;&#25991;&#20214;&#20449;&#24687;&#32467;&#26500;&#20307;stat&#21464;&#37327;&#30340;&#25351;&#38024;</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> *  &#25104;&#21151;&#65306;&#36820;&#22238; 0&#65292;&#20986;&#38169;&#65306;&#36820;&#22238; -1</span>
+<span style="color: #ffebcd;"> * </span>
+<span style="color: #ffebcd;"> */</span>
 <span style="color: #98f5ff;">int</span> <span style="color: #daa520; font-weight: bold;">stat</span>(<span style="color: #00bfff; font-weight: bold;">const</span> <span style="color: #98f5ff;">char</span>* <span style="color: #4eee94;">pathname</span>, <span style="color: #00bfff; font-weight: bold;">struct</span> <span style="color: #98f5ff;">stat</span>* <span style="color: #4eee94;">buf</span>);
 
 <span style="color: #ffebcd;">/**</span>
-<span style="color: #ffebcd;">   &#26681;&#25454;&#25991;&#20214;&#25551;&#36848;&#31526;&#33719;&#21462;&#25991;&#20214;&#30340;&#35814;&#32454;&#20449;&#24687;</span>
-
-<span style="color: #ffebcd;">   filedes&#65306;&#25991;&#20214;&#25551;&#36848;&#31526;&#21495;</span>
-<span style="color: #ffebcd;">   buf&#65306;&#25351;&#21521;&#25991;&#20214;&#20449;&#24687;&#32467;&#26500;&#20307;stat&#21464;&#37327;&#30340;&#25351;&#38024;</span>
-
-<span style="color: #ffebcd;">   &#36820;&#22238;&#65306;&#27491;&#30830;&#36820;&#22238;0&#65292;&#20986;&#38169;&#36820;&#22238;-1</span>
-<span style="color: #ffebcd;">*/</span>
+<span style="color: #ffebcd;"> * &#26681;&#25454;&#25991;&#20214;&#25551;&#36848;&#31526;&#33719;&#21462;&#25991;&#20214;&#30340;&#35814;&#32454;&#20449;&#24687;</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> * filedes: &#25991;&#20214;&#25551;&#36848;&#31526;&#21495;</span>
+<span style="color: #ffebcd;"> * buf: &#25351;&#21521;&#25991;&#20214;&#20449;&#24687;&#32467;&#26500;&#20307;stat&#21464;&#37327;&#30340;&#25351;&#38024;</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> * &#25104;&#21151;&#65306;&#36820;&#22238; 0&#65292;&#20986;&#38169;&#65306;&#36820;&#22238; -1</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> */</span>
 <span style="color: #98f5ff;">int</span> <span style="color: #daa520; font-weight: bold;">fstat</span>(<span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">filedes</span>, <span style="color: #00bfff; font-weight: bold;">struct</span> <span style="color: #98f5ff;">stat</span>* <span style="color: #4eee94;">buf</span>);  
 
 
 <span style="color: #ffebcd;">/**</span>
-<span style="color: #ffebcd;">   &#36820;&#22238;&#38142;&#25509;&#25991;&#20214;&#30340;&#26377;&#20851;&#20449;&#24687;,&#32780;&#19981;&#26159;&#30001;&#35813;&#38142;&#25509;&#24341;&#29992;&#30340;&#25991;&#20214;&#30340;&#20449;&#24687;</span>
-
-<span style="color: #ffebcd;">   pathname&#65306;&#25991;&#20214;&#36335;&#24452;&#21517;</span>
-<span style="color: #ffebcd;">   buf&#65306;&#25351;&#21521;&#25991;&#20214;&#20449;&#24687;&#32467;&#26500;&#20307;stat&#21464;&#37327;&#30340;&#25351;&#38024;</span>
-
-<span style="color: #ffebcd;">   &#36820;&#22238;&#65306;&#27491;&#30830;&#36820;&#22238;0&#65292;&#20986;&#38169;&#36820;&#22238;-1</span>
-<span style="color: #ffebcd;">*/</span>
+<span style="color: #ffebcd;"> * &#36820;&#22238;&#38142;&#25509;&#25991;&#20214;&#30340;&#26377;&#20851;&#20449;&#24687;,&#32780;&#19981;&#26159;&#30001;&#35813;&#38142;&#25509;&#24341;&#29992;&#30340;&#25991;&#20214;&#30340;&#20449;&#24687;</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> * pathname&#65306;&#25991;&#20214;&#36335;&#24452;&#21517;</span>
+<span style="color: #ffebcd;"> * buf&#65306;&#25351;&#21521;&#25991;&#20214;&#20449;&#24687;&#32467;&#26500;&#20307;stat&#21464;&#37327;&#30340;&#25351;&#38024;</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> * &#25104;&#21151;&#65306;&#36820;&#22238; 0&#65292;&#20986;&#38169;&#65306;&#36820;&#22238; -1</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> */</span>
 <span style="color: #98f5ff;">int</span> <span style="color: #daa520; font-weight: bold;">lstat</span>(<span style="color: #00bfff; font-weight: bold;">const</span> <span style="color: #98f5ff;">char</span>* <span style="color: #4eee94;">pathname</span>, <span style="color: #00bfff; font-weight: bold;">struct</span> <span style="color: #98f5ff;">stat</span>* <span style="color: #4eee94;">buf</span>);
 </pre>
 </div>
 <p>
-使用stat函数最多的可能是ls -l命令，用其可以获得有关一个文件的所有信息
+使用stat函数最多的可能是 <span class="underline">ls -l</span> 命令，用其可以获得有关一个文件的所有信息
 </p>
 </div>
 <div id="outline-container-org6bcc4ec" class="outline-3">
 <h3 id="org6bcc4ec">stat结构</h3>
 <div class="outline-text-3" id="text-org6bcc4ec">
 <p>
-stat结构给出了Unix下文件(目录)各种属性的相关信息
+stat结构给出了Unix下 <b>文件(目录)各种属性</b> 的相关信息
 </p>
 <div class="org-src-container">
 <pre class="src src-C"><span style="color: #00bfff; font-weight: bold;">struct</span> <span style="color: #98f5ff;">stat</span>  
@@ -432,7 +437,7 @@ stat结构给出了Unix下文件(目录)各种属性的相关信息
     <span style="color: #98f5ff;">ino_t</span> <span style="color: #4eee94;">st_ino</span>; <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">inode&#30340;&#33410;&#28857;&#21495;  </span>
     <span style="color: #98f5ff;">dev_t</span> <span style="color: #4eee94;">st_dev</span>; <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">&#35774;&#22791;&#21495;  </span>
     <span style="color: #98f5ff;">dev_t</span> <span style="color: #4eee94;">st_rdev</span>; <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">&#29305;&#27530;&#35774;&#22791;&#21495;  </span>
-    <span style="color: #98f5ff;">nlink_t</span> <span style="color: #4eee94;">st_nlink</span>; <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">&#36830;&#25509;&#25968;  </span>
+    <span style="color: #98f5ff;">nlink_t</span> <span style="color: #4eee94;">st_nlink</span>; <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">&#30828;&#38142;&#25509;&#25968;  </span>
     <span style="color: #98f5ff;">uid_t</span> <span style="color: #4eee94;">st_uid</span>; <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">&#25991;&#20214;&#25152;&#26377;&#32773;  </span>
     <span style="color: #98f5ff;">gid_t</span> <span style="color: #4eee94;">st_gid</span>; <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">&#25991;&#20214;&#25152;&#23646;&#32452;  </span>
     <span style="color: #98f5ff;">off_t</span> <span style="color: #4eee94;">st_st_size</span>; <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">&#25991;&#20214;&#30340;&#23383;&#33410;&#25968;  </span>
@@ -450,7 +455,7 @@ stat结构给出了Unix下文件(目录)各种属性的相关信息
 <div id="outline-container-orgc53ef75" class="outline-2">
 <h2 id="orgc53ef75">文件类型</h2>
 <div class="outline-text-2" id="text-orgc53ef75">
-<ol class="org-ol">
+<ul class="org-ul">
 <li>普通文件</li>
 <li>目录</li>
 <li>字符特殊设备：某些类型的设备，终端等</li>
@@ -458,7 +463,7 @@ stat结构给出了Unix下文件(目录)各种属性的相关信息
 <li>FIFO管道：进程间的通信</li>
 <li>Socket套接字：主要是进程间的网络通信，也可以是同一台机器不同进程间通信</li>
 <li>符号链接：文件指向另一个文件</li>
-</ol>
+</ul>
 </div>
 <div id="outline-container-org33a6be8" class="outline-3">
 <h3 id="org33a6be8">文件类型测试宏</h3>
@@ -515,7 +520,7 @@ stat结构给出了Unix下文件(目录)各种属性的相关信息
 </table>
 
 <p>
-文件类型信息包含在stat解构的st_mode成员内，以其为参数调用以下宏进行测试，如果返回为真则说明是此种文件类型
+文件类型信息包含在stat结构的 <b>st_mode</b> 成员内，以其为参数调用以下宏进行测试，如果返回为真则说明是此种文件类型
 </p>
 <div class="org-src-container">
 <pre class="src src-C"><span style="color: #ffd700;">#include</span> <span style="color: #deb887;">&lt;sys/types.h&gt;</span>
@@ -623,9 +628,9 @@ stat结构给出了Unix下文件(目录)各种属性的相关信息
 </table>
 
 <ul class="org-ul">
-<li>实际用户ID和实际组ID这两个字段在登录时取自口令文件中的登录项。通常在一个登录会话期间这些值并不改变，但是超级用户进程有方法改变它们</li>
-<li>有效用户ID，有效组ID以及添加组ID决定了文件访问权</li>
-<li>保存的设置-用户-ID和设置-组-ID在执行一个程序时包含了有效用户ID和有效组ID的副本</li>
+<li><span class="underline">实际用户ID</span> 和 <span class="underline">实际组ID</span> 这两个字段在 <b>登录时取自口令文件中的登录项</b> 。通常在一个登录会话期间这些值并不改变，但是 <b>超级用户进程有方法改变它们</b></li>
+<li><span class="underline">有效用户ID</span> ， <span class="underline">有效组ID</span> 以及 <span class="underline">添加组ID</span> 决定了 <b>文件访问权</b></li>
+<li>保存的 <span class="underline">设置-用户-ID</span> 和 <span class="underline">设置-组-ID</span> 在 <b>执行一个程序</b> 时包含了 <b>有效用户ID和有效组ID的副本</b></li>
 </ul>
 
 <p>
@@ -637,11 +642,19 @@ stat结构给出了Unix下文件(目录)各种属性的相关信息
 <h3 id="org0e94ffc">设置-用户-ID和设置-组-ID</h3>
 <div class="outline-text-3" id="text-org0e94ffc">
 <p>
-每个文件有一个所有者和组所有者。所有者由stat结构中的st_uid表示，组所有者则由st_gid成员表示。 
+每个文件有一个所有者和组所有者。所有者由stat结构中的 <b>st_uid</b> 表示，组所有者则由 <b>st_gid</b> 成员表示。 
 </p>
 
 <p>
-当执行一个程序文件时，进程的有效用户ID通常就是实际用户ID，有效组ID通常是实际组ID。但是可以在st_mode中设置一个特殊标志，其定义是“当执行此文件时，将进程的有效用户ID设置为文件的所有者(st_uid)”。与此相类似，在文件方式字中可以设置另一位,它使得执行此文件的进程的有效组ID设置为文件的组所有者(st_gid)。这两位被称之为设置-用户-ID(set-user-ID)位和设置-组-ID(set-group-ID)位。这两位可用常数S_ISUID和S_ISGID测试
+当执行一个程序文件时，进程的 <span class="underline">有效用户ID</span> 通常就是 <span class="underline">实际用户ID</span> ， <span class="underline">有效组ID</span> 通常是 <span class="underline">实际组ID</span> 。但是可以在 <b>st_mode中设置一个特殊标志</b> ，其定义是 <b>当执行此文件时，将 <span class="underline">进程的有效用户ID</span> 设置为 <span class="underline">文件的所有者</span> (st_uid)</b> 
+</p>
+
+<pre class="example">
+  与此相类似，在文件方式字中可以设置另一位，它使得执行此文件的进程的有效组ID设置为文件的组所有者(st_gid)
+</pre>
+
+<p>
+这两位被称之为 <b>设置-用户-ID</b> (set-user-ID)位和 <b>设置-组-ID</b> (set-group-ID)位。这两位可用常数 <b>S_ISUID</b> 和 <b>S_ISGID</b> 测试
 </p>
 </div>
 </div>
@@ -650,7 +663,7 @@ stat结构给出了Unix下文件(目录)各种属性的相关信息
 <h3 id="org8d2a7c9">文件存取许可权</h3>
 <div class="outline-text-3" id="text-org8d2a7c9">
 <p>
-Unix对文件定义了三组用户权限，分别对应为属主用户(user)、组用户(group)、其它用户(other)，每组用户各有自己对此文件的读、写、执行权限。权限值以八进制的形式表示,也记录在stat结构的st_mode字段中
+Unix对文件定义了三组用户权限，分别对应为 <b>宿主用户</b> (user)、 <b>组用户</b> (group)、 <b>其它用户</b> (other)，每组用户各有自己对此文件的 <b>读</b> 、 <b>写</b> 、 <b>执行</b> 权限。权限值以 <span class="underline">八进制</span> 的形式表示,也记录在stat结构的 <b>st_mode</b> 字段中
 </p>
 
 <table border="1" cellspacing="0" cellpadding="6" rules="groups" frame="boader">
@@ -722,13 +735,13 @@ Unix对文件定义了三组用户权限，分别对应为属主用户(user)、�
 <h4 id="orgf359cc0">存取权限规则</h4>
 <div class="outline-text-4" id="text-orgf359cc0">
 <ul class="org-ul">
-<li>用名字打开任一类型的文件时，对该名字中包含的每一个目录，包括它可能隐含的当前工作目录都应具有执行许可权。</li>
-<li>对于一个文件的读许可权决定了是否能够打开该文件进行读操作。这对应于open函数的O_RDONLY和O_RDWR标志</li>
-<li>对于一个文件的写许可权决定了我们是否能够打开该文件进行写操作。这对应于open函数的O_WRONLY和O_RDWR标志</li>
-<li>为了在open函数中对一个文件指定O_TRUNC标志，必须对该文件具有写许可权</li>
-<li>为了在一个目录中创建一个新文件，必须对该目录具有写许可权和执行许可权</li>
-<li>为了删除一个文件，必须对包含该文件的目录具有写许可权和执行许可权。对该文件本身则不需要有读、写许可权</li>
-<li>如果用6个exec函数中的任何一个执行某个文件，都必须对该文件具有执行许可权</li>
+<li>用名字打开任一类型的文件时，对该名字中包含的 <span class="underline">每一个目录</span> ，包括它可能 <b>隐含的当前工作目录</b> 都应具有 <span class="underline">执行</span> 许可权。</li>
+<li>对于一个 <span class="underline">文件的读许可权</span> 决定了是否能够 <b>打开该文件进行读操作</b> ：这对应于open函数的 <b>O_RDONLY</b> 和 <b>O_RDWR</b> 标志</li>
+<li>对于一个 <span class="underline">文件的写许可权</span> 决定了是否能够 <b>打开该文件进行写操作</b> ：这对应于open函数的 <b>O_WRONLY</b> 和 <b>O_RDWR</b> 标志</li>
+<li>为在open函数中对一个文件指定 <b>O_TRUNC</b> 标志，必须对该文件具有 <span class="underline">写</span> 许可权</li>
+<li>为了在一个 <b>目录中创建一个新文件</b> ，必须对 <span class="underline">该目录</span> 具有 <span class="underline">写</span> 许可权 和 <span class="underline">执行</span> 许可权</li>
+<li>为了 <b>删除一个文件</b> ，必须对 <span class="underline">包含该文件的目录</span> 具有 <span class="underline">写</span> 许可权和 <span class="underline">执行</span> 许可权。 <b>对该文件本身则不需要有读、写许可权</b></li>
+<li>如果用6个exec函数中的任何一个 <span class="underline">执行某个文件</span> ，都必须对 <span class="underline">该文件</span> 具有 <span class="underline">执行</span> 许可权</li>
 </ul>
 </div>
 </div>
@@ -737,30 +750,30 @@ Unix对文件定义了三组用户权限，分别对应为属主用户(user)、�
 <h4 id="orgab96a4c">存取权限测试</h4>
 <div class="outline-text-4" id="text-orgab96a4c">
 <p>
-适当的存取许可权位指的是： 
+适当的 <span class="underline">存取许可权位</span> 指的是： 
 </p>
 <ul class="org-ul">
-<li>若进程为读而打开该文件，则相应读位应为1</li>
-<li>若进程为写而打开该文件，则相应写位应为1</li>
-<li>若进程将执行该文件，则相应执行位应为1</li>
+<li>若进程为 <span class="underline">读而打开</span> 该文件，则相应 <b>读位应为1</b></li>
+<li>若进程为 <span class="underline">写而打开</span> 该文件，则相应 <b>写位应为1</b></li>
+<li>若进程将 <span class="underline">执行</span> 该文件，则相应 <b>执行位应为1</b></li>
 </ul>
 
 <p>
-进程每次打开、创建或删除一个文件时，内核就进行文件存取许可权测试，而这种测试可能涉及文件的所有者(st_uid和st_gid)，进程的有效ID(有效用户ID和有效组ID)以及进程的添加组ID(若支持的话)。两个所有者ID是文件的性质，而有效ID和添加组ID则是进程的性质。内核进行的测试是:
+进程每次 <span class="underline">打开</span> 、 <span class="underline">创建</span> 或 <span class="underline">删除</span> 一个文件时，内核就进行 <b>文件存取许可权测试</b> ，而这种测试可能涉及 <span class="underline">文件的所有者</span> (st_uid和st_gid)， <span class="underline">进程的有效ID</span> (有效用户ID和有效组ID)以及 <span class="underline">进程的添加组ID</span> (若支持的话)。两个所有者ID是文件的性质，而有效ID和添加组ID则是进程的性质。内核进行的测试是:
 </p>
 <ol class="org-ol">
-<li>若进程的有效用户ID是0(超级用户)，则允许存取。这给予了超级用户对文件系统进行处理的最充分的自由</li>
-<li>若进程的有效用户ID等于文件的所有者ID(也就是该进程拥有此文件):
+<li>若 <b>进程的有效用户ID是0</b> (超级用户)，则允许存取。这给予了超级用户对文件系统进行处理的最充分的自由</li>
+<li>若 <b>进程的有效用户ID等于文件的所有者ID</b> (也就是该进程拥有此文件):
 <ul class="org-ul">
-<li>若适当的所有者存取许可权位被设置，则允许存取</li>
+<li>若 <b>适当的所有者存取许可权位被设置</b> ，则允许存取</li>
 <li>否则拒绝存取</li>
 </ul></li>
-<li>若进程的有效组ID或进程的添加组ID之一等于文件的组ID:
+<li>若 <b>进程的有效组ID或进程的添加组ID之一等于文件的组ID</b> :
 <ul class="org-ul">
-<li>若适当的组存取许可权位被设置，则允许存取</li>
+<li>若 <b>适当的组存取许可权位被设置</b> ，则允许存取</li>
 <li>否则拒绝存取</li>
 </ul></li>
-<li>若适当的其他用户存取许可权位被设置，则允许存取，否则拒绝存取</li>
+<li>若 <b>适当的其他用户存取许可权位被设置</b> ，则允许存取，否则拒绝存取</li>
 </ol>
 </div>
 </div>
@@ -769,15 +782,15 @@ Unix对文件定义了三组用户权限，分别对应为属主用户(user)、�
 <h4 id="org5f99e11">新文件和目录的所有权</h4>
 <div class="outline-text-4" id="text-org5f99e11">
 <p>
-创建新文件和目录的用户ID被设置为进程的有效用户ID
+创建新文件和目录的用户ID被设置为 <b>进程的有效用户ID</b> 
 </p>
 
 <p>
 关于组ID，POSIX.1允许选择下列之一作为新文件和目录的组ID： 
 </p>
 <ol class="org-ol">
-<li>新文件的组ID可以是进程的有效组ID</li>
-<li>新文件的组ID可以是它所在目录的组ID</li>
+<li>新文件的组ID可以是 <span class="underline">进程的有效组ID</span></li>
+<li>新文件的组ID可以是它 <span class="underline">所在目录的组ID</span></li>
 </ol>
 </div>
 </div>
@@ -793,21 +806,22 @@ access函数：按实际用户ID和实际组ID测试存取权限
 <div class="org-src-container">
 <pre class="src src-C"><span style="color: #ffd700;">#include</span> <span style="color: #deb887;">&lt;unistd.h&gt;</span>
 <span style="color: #ffebcd;">/**</span>
-<span style="color: #ffebcd;">   &#25353;&#23454;&#38469;&#29992;&#25143;ID&#21644;&#23454;&#38469;&#32452;ID&#36827;&#34892;&#23384;&#21462;&#35768;&#21487;&#26435;&#27979;&#35797;</span>
-
-<span style="color: #ffebcd;">   pathname&#65306;&#25991;&#20214;&#21517;&#36335;&#24452;</span>
-<span style="color: #ffebcd;">   mode: &#23384;&#21462;&#26435;&#38480;</span>
-
-<span style="color: #ffebcd;">   return: &#33509;&#25317;&#26377;&#26435;&#38480;&#21017;&#20026;0&#65292;&#26080;&#26435;&#38480;&#25110;&#20986;&#38169;&#21017;&#20026;-1&#65292;&#26681;&#25454;errorno&#36827;&#34892;&#21028;&#26029;</span>
+<span style="color: #ffebcd;"> * &#25353;&#23454;&#38469;&#29992;&#25143;ID&#21644;&#23454;&#38469;&#32452;ID&#36827;&#34892;&#23384;&#21462;&#35768;&#21487;&#26435;&#27979;&#35797;</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> * pathname&#65306;&#25991;&#20214;&#21517;&#36335;&#24452;</span>
+<span style="color: #ffebcd;"> * mode: &#23384;&#21462;&#26435;&#38480;</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> * &#33509;&#25317;&#26377;&#26435;&#38480;&#65306;&#36820;&#22238;0&#65306;&#26080;&#26435;&#38480;&#25110;&#20986;&#38169;&#65306;&#36820;&#22238;-1&#65292;&#26681;&#25454;errno&#36827;&#34892;&#21028;&#26029;</span>
+<span style="color: #ffebcd;"> * </span>
 <span style="color: #ffebcd;"> */</span>
 <span style="color: #98f5ff;">int</span> <span style="color: #daa520; font-weight: bold;">access</span>(<span style="color: #00bfff; font-weight: bold;">const</span> <span style="color: #98f5ff;">char</span> *<span style="color: #4eee94;">pathname</span>, <span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">mode</span>);
 </pre>
 </div>
 </div>
 
-<div id="outline-container-org32df57e" class="outline-4">
-<h4 id="org32df57e">mode参数</h4>
-<div class="outline-text-4" id="text-org32df57e">
+<div id="outline-container-org50d3a0b" class="outline-4">
+<h4 id="org50d3a0b">mode参数</h4>
+<div class="outline-text-4" id="text-org50d3a0b">
 <table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
 <caption class="t-above"><span class="table-number">Table 4:</span> access函数中的mode常数，取自&lt;unistd.h&gt;</caption>
 
@@ -882,25 +896,38 @@ access函数：按实际用户ID和实际组ID测试存取权限
 <h3 id="org68420fe">umask函数</h3>
 <div class="outline-text-3" id="text-org68420fe">
 <p>
-umask函数为进程设置文件方式创建mask值。当该进程结束时，mask值仍保持原来系统中的值不变
+umask函数 <b>为进程设置文件方式创建mask值</b> 
 </p>
+
+<pre class="example">
+   当该进程结束时，mask值仍保持原来系统中的值不变
+</pre>
+
 <div class="org-src-container">
 <pre class="src src-C"><span style="color: #ffd700;">#include</span> <span style="color: #deb887;">&lt;sys/stat.h&gt;</span>
 <span style="color: #ffd700;">#include</span> <span style="color: #deb887;">&lt;sys/type.h&gt;</span>
 
 <span style="color: #ffebcd;">/**</span>
-<span style="color: #ffebcd;">   &#20026;&#36827;&#31243;&#35774;&#32622;&#25991;&#20214;&#26041;&#24335;&#21019;&#24314;&#23631;&#34109;&#23383;,&#24182;&#36820;&#22238;&#20197;&#21069;&#30340;&#20540;</span>
-
-<span style="color: #ffebcd;">   cmask&#65306;&#35774;&#32622;&#36827;&#31243;&#30340;mask&#20540;&#65292;&#30001;&#34920;4-4&#20013;&#30340;9&#20010;&#24120;&#25968;(S_IRUSR,S_IWUSR&#31561;)&#36880;&#20301;&#8220;&#25110;&#8221;&#26500;&#25104;&#30340;</span>
-
-<span style="color: #ffebcd;">   return&#65306;&#36820;&#22238;&#24403;&#21069;&#36827;&#31243;&#30340;mask&#20540;&#65292;&#26080;&#20986;&#38169;&#36820;&#22238;</span>
+<span style="color: #ffebcd;"> * &#20026;&#36827;&#31243;&#35774;&#32622;&#25991;&#20214;&#26041;&#24335;&#21019;&#24314;&#23631;&#34109;&#23383;,&#24182;&#36820;&#22238;&#20197;&#21069;&#30340;&#20540;</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> * cmask&#65306;&#35774;&#32622;&#36827;&#31243;&#30340;mask&#20540;&#65292;&#30001;&#34920;4-4&#20013;&#30340;9&#20010;&#24120;&#25968;(S_IRUSR,S_IWUSR&#31561;)&#36880;&#20301;&#8220;&#25110;&#8221;&#26500;&#25104;&#30340;</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> * &#25104;&#21151;&#65306;&#36820;&#22238;&#24403;&#21069;&#36827;&#31243;&#30340;mask&#20540;&#65288;&#26080;&#20986;&#38169;&#36820;&#22238;&#65289;</span>
+<span style="color: #ffebcd;"> * </span>
 <span style="color: #ffebcd;"> */</span>
 <span style="color: #98f5ff;">mode_t</span> <span style="color: #daa520; font-weight: bold;">umask</span>(<span style="color: #98f5ff;">mode_t</span> <span style="color: #4eee94;">cmask</span>);
 </pre>
 </div>
+
 <p>
-从创建文件时指定的权限中减掉umask中指定的权限。比如进程创建文件时指定的用户权限是:777(rwxrwxrwx)，而指定的umask指定的值是022，则该进程创建的文件的权限就是755(rwxr-xr-x)
+从 <span class="underline">创建文件时指定的权限</span> 中 <span class="underline">减掉umask中指定的权限</span> 
 </p>
+
+<pre class="example">
+     比如进程创建文件时指定的用户权限是:777(rwxrwxrwx)，而指定的umask指定的值是022
+
+     则该进程创建的该文件的权限就是755(rwxr-xr-x)
+</pre>
 </div>
 
 <div id="outline-container-org2f3aac5" class="outline-4">
@@ -946,31 +973,32 @@ chmod/fchmod函数：改变文件访问权限
 <span style="color: #ffd700;">#include</span> <span style="color: #deb887;">&lt;sys/types.h&gt;</span>
 
 <span style="color: #ffebcd;">/**</span>
-<span style="color: #ffebcd;">   &#26681;&#25454;&#25991;&#20214;&#36335;&#24452;&#21517;&#25913;&#21464;&#25991;&#20214;&#23384;&#21462;&#26435;&#38480;</span>
-
-<span style="color: #ffebcd;">   filename&#65306;&#25991;&#20214;&#36335;&#24452;&#21517;</span>
-<span style="color: #ffebcd;">   mode_t&#65306;&#25991;&#20214;&#23384;&#21462;&#26435;&#38480;</span>
-
-<span style="color: #ffebcd;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;0&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
-<span style="color: #ffebcd;">*/</span>
+<span style="color: #ffebcd;"> * &#26681;&#25454;&#25991;&#20214;&#36335;&#24452;&#21517;&#25913;&#21464;&#25991;&#20214;&#23384;&#21462;&#26435;&#38480;</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> * filename: &#25991;&#20214;&#36335;&#24452;&#21517;</span>
+<span style="color: #ffebcd;"> * mode_t: &#25991;&#20214;&#23384;&#21462;&#26435;&#38480;</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> * &#25104;&#21151;&#65306;&#36820;&#22238; 0&#65292;&#22833;&#36133;&#65306;&#36820;&#22238; -1</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> */</span>
 <span style="color: #98f5ff;">int</span> <span style="color: #daa520; font-weight: bold;">chmod</span>(<span style="color: #00bfff; font-weight: bold;">const</span> <span style="color: #98f5ff;">char</span> *<span style="color: #4eee94;">filename</span>, <span style="color: #98f5ff;">mode_t</span> <span style="color: #4eee94;">mode</span>);
 
 <span style="color: #ffebcd;">/**</span>
-<span style="color: #ffebcd;">   &#26681;&#25454;&#25991;&#20214;&#25551;&#36848;&#31526;&#25913;&#21464;&#25991;&#20214;&#23384;&#21462;&#26435;&#38480;</span>
-
-<span style="color: #ffebcd;">   filedes&#65306;&#25991;&#20214;&#25551;&#36848;&#31526;</span>
-<span style="color: #ffebcd;">   mode_t&#65306;&#25991;&#20214;&#23384;&#21462;&#26435;&#38480;</span>
-
-<span style="color: #ffebcd;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;0&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
-<span style="color: #ffebcd;">*/</span>
+<span style="color: #ffebcd;"> * &#26681;&#25454;&#25991;&#20214;&#25551;&#36848;&#31526;&#25913;&#21464;&#25991;&#20214;&#23384;&#21462;&#26435;&#38480;</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> * filedes: &#25991;&#20214;&#25551;&#36848;&#31526;</span>
+<span style="color: #ffebcd;"> * mode_t: &#25991;&#20214;&#23384;&#21462;&#26435;&#38480;</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> * return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;0&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
+<span style="color: #ffebcd;"> */</span>
 <span style="color: #98f5ff;">int</span> <span style="color: #daa520; font-weight: bold;">fchmod</span>(<span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">filedes</span>, <span style="color: #98f5ff;">mode_t</span> <span style="color: #4eee94;">mode</span>);
 </pre>
 </div>
 </div>
 
-<div id="outline-container-orgae9d043" class="outline-4">
-<h4 id="orgae9d043">mode参数</h4>
-<div class="outline-text-4" id="text-orgae9d043">
+<div id="outline-container-org09acf9f" class="outline-4">
+<h4 id="org09acf9f">mode参数</h4>
+<div class="outline-text-4" id="text-org09acf9f">
 <p>
 参数mode：根据表4-6中所示常数的位运算获得
 </p>
@@ -1068,23 +1096,23 @@ chmod/fchmod函数：改变文件访问权限
 </tr>
 </tbody>
 </table>
-</div>
 
-<div id="outline-container-org10e8655" class="outline-5">
-<h5 id="org10e8655">S_ISVTX</h5>
-<div class="outline-text-5" id="text-org10e8655">
-<p>
-如果一个可执行程序文件的这一位被设置了，在该程序第一次执行并结束时，该程序正文的一个文本被保存在交换区。(程序的正文部分是机器指令部分)，这使得下次执行该程序时能较快地将其装入内存区。其原因是：在交换区，该文件是被连续存放的，而在一般的UNIX文件系统中，文件的各数据块很可能是随机存放的。现今较新的UNIX系统大多数都具有虚存系统以及快速文件系统，所以不再需要使用这种技术
-</p>
-</div>
-</div>
-</div>
+<pre class="example">
+  如果一个可执行程序文件的 S_ISVTX 这位被设置了，在该程序第一次执行并结束时，该程序正文的一个文本被保存在交换区
 
+  程序的正文部分是机器指令部分，这使得下次执行该程序时能较快地将其装入内存区
+
+  其原因是：在交换区，该文件是被连续存放的，而在一般的UNIX文件系统中，文件的各数据块很可能是随机存放的
+
+  现今较新的UNIX系统大多数都具有虚存系统以及快速文件系统，所以不再需要使用这种技术
+</pre>
+</div>
+</div>
 <div id="outline-container-org2ca121e" class="outline-4">
 <h4 id="org2ca121e">chmod实例</h4>
 <div class="outline-text-4" id="text-org2ca121e">
 <p>
-根据foo的当前状态设置其许可权。为此先调用stat获得其当前许可权，然后修改它。显式地打开了设置-组-ID位、关闭了组-执行位。最后直接修改bar的权限
+根据foo的当前状态设置其许可权。为此先调用stat获得其当前许可权，然后修改它。显式地打开了 <span class="underline">设置-组-ID位</span> 、关闭了 <span class="underline">组-执行位</span> 。最后直接修改bar的权限
 </p>
 <div class="org-src-container">
 <pre class="src src-C"><span style="color: #ffd700;">#include</span> <span style="color: #deb887;">&lt;sys/types.h&gt;</span>
@@ -1111,10 +1139,14 @@ chmod/fchmod函数：改变文件访问权限
 }
 </pre>
 </div>
-<ul class="org-ul">
-<li>ls命令将组-执行许可权表示为l</li>
-<li>chmod函数更新的只是i节点最近一次被更改的时间，而ls-l列出的是最后修改文件内容的时间</li>
-</ul>
+
+<pre class="example">
+ls命令将 组-执行许可权 表示为 -l
+
+chmod函数更新的只是i节点最近一次被更改的时间
+
+而 ls -l 列出的是最后修改文件内容的时间
+</pre>
 </div>
 </div>
 
@@ -1122,9 +1154,17 @@ chmod/fchmod函数：改变文件访问权限
 <h4 id="org9c6fef3">自动忽略某些权限常数</h4>
 <div class="outline-text-4" id="text-org9c6fef3">
 <ol class="org-ol">
-<li>如果我们试图设置普通文件的S_ISVTX，而且又没有超级用户优先权，那么mode中的粘住位自动被关闭。这意味着只有超级用户才能设置普通文件的粘住位。这样做的理由是可以防止不怀好意的用户设置粘住位，并试图以此方式填满交换区</li>
-<li>新创建文件的组ID可能不是调用进程所属的组。特别地如果新文件的组ID不等于进程的有效组ID或者进程添加组ID中的一个，以及进程没有超级用户优先数，那么设置-组-ID位自动被关闭。这就防止了用户创建一个设置-组-ID文件，而该文件是由并非该用户所属的组拥有的</li>
+<li>如果试图设置 <span class="underline">普通文件的S_ISVTX</span> ，而且又 <span class="underline">没有超级用户</span> 优先权，那么mode中的 <b>粘住位自动被关闭</b></li>
 </ol>
+<pre class="example">
+  只有超级用户才能设置普通文件的粘住位。这样做的理由是可以防止不怀好意的用户设置粘住位，并试图以此方式填满交换区
+</pre>
+<ol class="org-ol">
+<li>新创建文件的组ID可能不是调用进程所属的组。特别地如果 <span class="underline">新文件的组ID</span> 不等于 <span class="underline">进程的有效组ID或者进程添加组ID中的一个</span> ，以及进程 <span class="underline">没有超级用户</span> 优先权，那么 <b>设置-组-ID位自动被关闭</b></li>
+</ol>
+<pre class="example">
+  防止了用户创建一个设置-组-ID文件，而该文件是由并非该用户所属的组拥有的
+</pre>
 </div>
 </div>
 </div>
@@ -1141,64 +1181,68 @@ chown函数组：更改文件的用户ID和组ID
 <span style="color: #ffd700;">#include</span> <span style="color: #deb887;">&lt;unistd.h&gt;</span>
 
 <span style="color: #ffebcd;">/**</span>
-<span style="color: #ffebcd;">   &#26681;&#25454;&#25991;&#20214;&#36335;&#24452;&#21517;&#26356;&#25913;&#29992;&#25143;ID&#21644;&#32452;ID</span>
-
-<span style="color: #ffebcd;">   pathname&#65306;&#25991;&#20214;&#36335;&#24452;&#21517;</span>
-<span style="color: #ffebcd;">   owner&#65306;&#29992;&#25143;ID</span>
-<span style="color: #ffebcd;">   group&#65306;&#32452;ID</span>
-
-<span style="color: #ffebcd;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;0&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
-<span style="color: #ffebcd;">*/</span>
+<span style="color: #ffebcd;"> * &#26681;&#25454;&#25991;&#20214;&#36335;&#24452;&#21517;&#26356;&#25913;&#29992;&#25143;ID&#21644;&#32452;ID</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> * pathname: &#25991;&#20214;&#36335;&#24452;&#21517;</span>
+<span style="color: #ffebcd;"> * owner: &#29992;&#25143;ID</span>
+<span style="color: #ffebcd;"> * group: &#32452;ID</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> * return: &#33509;&#25104;&#21151;&#21017;&#20026; 0&#65292;&#33509;&#20986;&#38169;&#21017;&#20026; -1</span>
+<span style="color: #ffebcd;"> */</span>
 <span style="color: #98f5ff;">int</span> <span style="color: #daa520; font-weight: bold;">chown</span>(<span style="color: #00bfff; font-weight: bold;">const</span> <span style="color: #98f5ff;">char</span>* <span style="color: #4eee94;">pathname</span>, <span style="color: #98f5ff;">uid_t</span> <span style="color: #4eee94;">owner</span>, <span style="color: #98f5ff;">gid_t</span> <span style="color: #4eee94;">group</span>);
 
 <span style="color: #ffebcd;">/**</span>
-<span style="color: #ffebcd;">   &#26681;&#25454;&#25171;&#24320;&#30340;&#25991;&#20214;&#25551;&#36848;&#31526;&#26356;&#25913;&#29992;&#25143;ID&#21644;&#32452;ID</span>
-
-<span style="color: #ffebcd;">   filedes&#65306;&#25991;&#20214;&#25551;&#36848;&#31526;</span>
-<span style="color: #ffebcd;">   owner&#65306;&#29992;&#25143;ID</span>
-<span style="color: #ffebcd;">   group&#65306;&#32452;ID</span>
-
-<span style="color: #ffebcd;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;0&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
-<span style="color: #ffebcd;">*/</span>
+<span style="color: #ffebcd;"> * &#26681;&#25454;&#25171;&#24320;&#30340;&#25991;&#20214;&#25551;&#36848;&#31526;&#26356;&#25913;&#29992;&#25143;ID&#21644;&#32452;ID</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> * filedes: &#25991;&#20214;&#25551;&#36848;&#31526;</span>
+<span style="color: #ffebcd;"> * owner: &#29992;&#25143;ID</span>
+<span style="color: #ffebcd;"> * group: &#32452;ID</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> * return: &#33509;&#25104;&#21151;&#21017;&#20026; 0&#65292;&#33509;&#20986;&#38169;&#21017;&#20026; -1</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> */</span>
 <span style="color: #98f5ff;">int</span> <span style="color: #daa520; font-weight: bold;">fchown</span>(<span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">filedes</span>, <span style="color: #98f5ff;">uid_t</span> <span style="color: #4eee94;">owner</span>, <span style="color: #98f5ff;">gid_t</span> <span style="color: #4eee94;">group</span>);
 
 <span style="color: #ffebcd;">/**</span>
-<span style="color: #ffebcd;">   &#20462;&#25913;&#38142;&#25509;&#25991;&#20214;&#26412;&#36523;&#30340;&#26356;&#25913;&#29992;&#25143;ID&#21644;&#32452;ID&#65292;&#32780;&#19981;&#26159;&#25152;&#25351;&#21521;&#30340;&#25991;&#20214;</span>
-
-<span style="color: #ffebcd;">   pathname&#65306;&#25991;&#20214;&#36335;&#24452;&#21517;</span>
-<span style="color: #ffebcd;">   owner&#65306;&#29992;&#25143;ID</span>
-<span style="color: #ffebcd;">   group&#65306;&#32452;ID</span>
-
-<span style="color: #ffebcd;">   return&#65306;&#33509;&#25104;&#21151;&#21017;&#20026;0&#65292;&#33509;&#20986;&#38169;&#21017;&#20026;-1</span>
-<span style="color: #ffebcd;">*/</span>
+<span style="color: #ffebcd;"> * &#20462;&#25913;&#38142;&#25509;&#25991;&#20214;&#26412;&#36523;&#30340;&#26356;&#25913;&#29992;&#25143;ID&#21644;&#32452;ID&#65292;&#32780;&#19981;&#26159;&#25152;&#25351;&#21521;&#30340;&#25991;&#20214;</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> * pathname: &#25991;&#20214;&#36335;&#24452;&#21517;</span>
+<span style="color: #ffebcd;"> * owner: &#29992;&#25143;ID</span>
+<span style="color: #ffebcd;"> * group: &#32452;ID</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> * return: &#33509;&#25104;&#21151;&#21017;&#20026; 0&#65292;&#33509;&#20986;&#38169;&#21017;&#20026; -1</span>
+<span style="color: #ffebcd;"> * </span>
+<span style="color: #ffebcd;"> */</span>
 <span style="color: #98f5ff;">int</span> <span style="color: #daa520; font-weight: bold;">lchown</span>(<span style="color: #00bfff; font-weight: bold;">const</span> <span style="color: #98f5ff;">char</span>* <span style="color: #4eee94;">pathname</span>, <span style="color: #98f5ff;">uid_t</span> <span style="color: #4eee94;">owner</span>, <span style="color: #98f5ff;">gid_t</span> <span style="color: #4eee94;">group</span>);
 
 </pre>
 </div>
+
+<p>
+如果这些函数由非超级用户进程调用，则在成功返回时，该文件的 <span class="underline">设置-用户-ID位</span> 和 <span class="underline">设置-组-ID位</span> 都被 <b>清除</b> 
+</p>
 </div>
 
 <div id="outline-container-orged8beff" class="outline-4">
 <h4 id="orged8beff">chown限制</h4>
 <div class="outline-text-4" id="text-orged8beff">
 <p>
-若_POSIX_CHOWN_RESTRICTED系统配置常量对指定的文件起作用，则
+若 <b>_POSIX_CHOWN_RESTRICTED</b> 系统配置常量对指定的文件起作用，则
 </p>
-<ol class="org-ol">
-<li>只有超级用户进程能更改该文件的用户ID</li>
-<li>若满足下列条件，一个非超级用户进程可以更改该文件的组ID:
 <ul class="org-ul">
-<li>进程拥有此文件(其有效用户ID等于该文件的用户ID)</li>
-<li>参数owner等于文件的用户ID，参数group等于进程的有效组ID或进程的添加组ID之一</li>
-</ul></li>
-</ol>
+<li>只有 <b>超级用户</b> 进程能 <b>更改该文件的用户ID</b></li>
+<li>若满足下列条件，一个 <span class="underline">非超级用户进程</span> 可以更改该文件的组ID:
+<ol class="org-ol">
+<li><b>进程拥有此文件</b> (其 <span class="underline">有效用户ID</span> 等于 <span class="underline">该文件的用户ID</span> )</li>
+<li><span class="underline">参数owner</span> 等于 <span class="underline">文件的用户ID</span> ， <span class="underline">参数group</span> 等于 <span class="underline">进程的有效组ID</span> 或 <span class="underline">进程的添加组ID</span> 之一</li>
+</ol></li>
+</ul>
 
-<p>
-也就是说当_POSIX_CHOWN_RESTRICTED有效时，不能更改其他用户的文件的用户ID。你可以更改你所拥用的文件的组ID，但只能改到你所属于的组
-</p>
+<pre class="example">
+  当_POSIX_CHOWN_RESTRICTED有效时，不能更改其他用户的文件的用户ID
 
-<p>
-如果这些函数由非超级用户进程调用，则在成功返回时，该文件的设置-用户-ID位和设置-组-ID位都被清除
-</p>
+  只可以更改你所拥有的文件的组ID，但只能改到你所属的组
+</pre>
 </div>
 </div>
 </div>
@@ -1399,9 +1443,9 @@ i节点：包含有关文件的大部分信息，比如文件类型，文件访�
 </div>
 </div>
 
-<div id="outline-container-org98f6a57" class="outline-4">
-<h4 id="org98f6a57">符号连接</h4>
-<div class="outline-text-4" id="text-org98f6a57">
+<div id="outline-container-org5a58462" class="outline-4">
+<h4 id="org5a58462">符号连接</h4>
+<div class="outline-text-4" id="text-org5a58462">
 <p>
 该文件的实际内容(在数据块中)包含了该符号连接所指向的文件的名字
 </p>
@@ -1628,9 +1672,9 @@ rename函数：修改文件或者目录名字
 </div>
 </div>
 
-<div id="outline-container-org2138cf2" class="outline-3">
-<h3 id="org2138cf2">符号连接</h3>
-<div class="outline-text-3" id="text-org2138cf2">
+<div id="outline-container-org84d95cd" class="outline-3">
+<h3 id="org84d95cd">符号连接</h3>
+<div class="outline-text-3" id="text-org84d95cd">
 <p>
 符号连接是对一个文件的间接指针，而硬连接直接指向文件的i节点
 </p>
