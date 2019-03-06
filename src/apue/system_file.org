@@ -3,10 +3,19 @@
 #+HTML_LINK_UP: stdio.html   
 #+HTML_LINK_HOME: apue.html
 #+OPTIONS: num:nil timestamp:nil ^:nil
-有很多操作需要使用一些与系统有关的数据文件，例如，口令文件/etc/passwd和组文件/etc/group就是经常由多种程序使用的两个文件。用户每次登录入UNIX系统，以及每次执行ls -l命令时都要使用口令文件。对于这些数据文件的可移植函数是本章的主题。本章也包括了系统标识函数、时间和日期函数等
+
+#+BEGIN_EXAMPLE
+  有很多操作需要使用一些与系统有关的数据文件，例如：
+
+  口令文件/etc/passwd和组文件/etc/group就是经常由多种程序使用的两个文件
+
+  用户每次登录入UNIX系统，以及每次执行 ls -l 命令时都要使用口令文件
+#+END_EXAMPLE
+
+对于这些数据文件的 *可移植函数* 是本章的主题。本章也包括了 _系统标识函数_ 、 _时间和日期函数_ 等
 
 * passwd文件
-  UNIX口令文件包含了表6-1中所示的各字段，这些字段包含在<pwd.h>中定义的passwd结构中
+  UNIX口令文件包含了表6-1中所示的各字段，这些字段包含在 _<pwd.h>_ 中定义的 _passwd_ 结构中
 
   #+CAPTION: /etc/passwd文件中的字段
   #+ATTR_HTML: :border 1 :rules all :frame boader
@@ -20,7 +29,7 @@
   | 初始shell       | char *pw_shell    | •       |
 
 
-  口令文件是/etc/passwd，这是是一个文本文件。每一行包含表6-1中所示的7个字段，字段之间用冒号相分隔
+  口令文件是 _/etc/passwd_ ，这是是一个文本文件。每一行包含表6-1中所示的7个字段，字段之间用冒号相分隔
 
   #+BEGIN_SRC sh
   $ cat /etc/passwd
@@ -30,113 +39,140 @@
   stevens:3hKVD8R58r9Fx:224:20:Richard Stevens:/home/stevens:/bin/ksh
   #+END_SRC
 
-  + 通常有一个登录项，其用户名为root，其用户ID是0(超级用户)
-  + 现代的Unix系统此文件往往不包含加密后的密码，而是存放在/etc/shadow中
-  + 口令文件中的某些字段可能是空。如果密码口令字段为空，这通常就意味着该用户没有口令。nobody有两个空白字段：注释字段和初始shell字段。空白注释字段不产生任何影响。空白shell字段则表示取系统默认值，通常是/bin/bash
-  + 支持finger(1)命令的某些UNIX系统支持注释字段中的附加信息。其中，各部分之间都用逗号分隔：用户姓名，办公室地点，办公室电话号码，家庭电话号码
-  + 如果里面注册的某个用户只打算用于守护进程之类而不打算给予登录shell,应将其Home目录字段设置为/dev/null 或者/bin/false等
+  + 通常有一个登录项，其用户名为 *root* ，其用户 *ID是0* (超级用户)
+  + 现代的Unix系统此文件往往不包含加密后的密码，而是存放在 */etc/shadow* 中
+  + 口令文件中的某些字段可能是空
+    + 如果密码口令字段为空，这通常就意味着 _该用户没有口令_
+    + 空白注释字段不产生任何影响
+    + 空白shell字段则表示取系统默认值，通常是 _/bin/sh_ 
+  + 支持finger(1)命令的某些UNIX系统支持 _注释字段中的附加信息_ 。其中，各部分之间都用 _逗号_ 分隔：
+    + 用户姓名
+    + 办公室地点
+    + 办公室电话号码
+    + 家庭电话号码
+  + 如果里面注册的某个用户只打算用于 *守护进程* 之类而 *不打算给予登录shell* ，应将其 _Home目录字段_ 设置为 _/dev/null_ 或者 _/bin/false_ 等
 
 ** getpwuid, getpwnam
-   + getpwuid：根据用户id获取passwd记录
-   + getpwnam：根据用户登录名获取passwd记录
+   + _getpwuid_ ：根据用户id *获取passwd记录* 
+   + _getpwnam_ ：根据用户登录名 *获取passwd记录* 
    #+BEGIN_SRC C
-  #include <sys/types.h>
-  #include <pwd.h>
-  /**
-     根据用户id获取passwd记录
+     #include <sys/types.h>
+     #include <pwd.h>
+     /**
+      ,* 根据用户id获取passwd记录
+      ,* 
+      ,* uid: 用户id
+      ,*
+      ,* return: 若成功则为 指向passwd结构的指针，若出错则为 NULL
+      ,*
+      ,*/
+     struct passwd *getpwuid(uid_t uid);
 
-     uid：用户id
-
-     return：若成功则为指向passwd结构的指针，若出错则为NULL
-  ,*/
-  struct passwd *getpwuid(uid_t uid);
-
-  /**
-     根据用户登录名获取passwd记录
-
-     name：用户登录名
-
-     return：若成功则为指向passwd结构的指针，若出错则为NULL
-  ,*/
-  struct passwd *getpwnam(const char *name);
+     /**
+      ,* 根据用户登录名获取passwd记录
+      ,*
+      ,* name: 用户登录名
+      ,*
+      ,* return: 若成功则为 指向passwd结构的指针，若出错则为 NULL
+      ,*
+     ,*/
+     struct passwd *getpwnam(const char *name);
    #+END_SRC
-   这两个函数都返回一个指向passwd结构的指针，该结构通常是在相关函数内的静态变量，只要调用相关函数，其内容就会被重写!
+   这两个函数都返回一个指向passwd结构的指针，该结构通常是在 _相关函数内的静态变量_ ， *只要调用相关函数，其内容就会被重写!* 
 
-   getpwuid由ls(1)程序使用，以便将包含在一个i节点中的数值用户ID映照为用户登录名。getpwnam在键入登录名时由login(1)程序使用
+   #+BEGIN_EXAMPLE
+     getpwuid由ls(1)程序使用，以便将包含在一个i节点中的数值用户ID映照为用户登录名
+
+     getpwnam在键入登录名时由login(1)程序使用
+   #+END_EXAMPLE
 
 ** getpwent,setpwent,endpwent
    有些程序要查看整个口令文件。下列三个函数则可用于此：
-   - getpwent：返回passwd文件下一个记录项
-   - setpwent：重置getpwent的当前位置到最开始
-   - endpwent：关闭getpwent打开的文件
-     #+BEGIN_SRC C
+   - getpwent：返回 *passwd文件* 下一个 *记录项* 
+   - setpwent： *重置* getpwent的当前位置到最开始
+   - endpwent： *关闭* getpwent打开的文件
+     #+BEGIN_SRC c
        #include <sys/types.h>
        #include <pwd.h>
 
        /**
-	  返回passwd文件下一个记录项
-
-	  return：若成功则为指向passwd结构的指针，若出错或到达文件尾端则为NULL
-       ,*/
+	,* 返回passwd文件下一个记录项
+	,*
+	,* return: 若成功则为指向 passwd结构的指针，若出错或到达文件尾端则为 NULL
+	,*
+	,*/
        struct passwd *getpwent(void);
 
        /**
-	  重置getpwent的当前位置到最开始
-       ,*/
+	,* 重置getpwent的当前位置到最开始
+	,*
+	,*/
        void setpwent(void);
 
        /**
-	  关闭getpwent打开的文件
-       ,*/
+	,* 关闭getpwent打开的文件
+	,*
+	,*/
        void endpwent(void);
      #+END_SRC
-   在使用getpwent查看完口令文件后，一定要调用endpwent关闭这些文件。getpwent知道什么时间它应当打开它所使用的文件，但是它并不能知道何时关闭这些文件
+   在使用getpwent查看完口令文件后， *一定要调用endpwent关闭这些文件* 
+
+   #+BEGIN_EXAMPLE
+     getpwent知道什么时间它应当打开它所使用的文件，但是它并不能知道何时关闭这些文件
+   #+END_EXAMPLE 
 
 *** getpwnam的简易实现
-    在开始处调用setpwent是保护性的措施，以便在调用者在此之前已经调用过getpwent的情况下，重置有关文件使它们定位到文件开始处。getpwnam和getpwuid完成后不应使有关文件仍处于打开状态，所以应调用endpwent关闭它们
-    #+BEGIN_SRC C
-      #include <sys/types.h>
-      #include <pwd.h>
-      #include <stddef.h>
-      #include <string.h>
+    1. 在开始处调用setpwent是保护性的措施，以便在调用者在此之前已经调用过getpwent的情况下
+    2. 重置有关文件使它们定位到文件开始处
+    3. getpwnam和getpwuid完成后不应使有关文件仍处于打开状态，所以应调用endpwent关闭它们
+       #+BEGIN_SRC C
+	  #include <sys/types.h>
+	  #include <pwd.h>
+	  #include <stddef.h>
+	  #include <string.h>
 
-      static struct passwd *retrievePasswd(const char *name);
+	  static struct passwd *retrievePasswd(const char *name);
 
-      int main(void) 
-      {
-              char name[] = "klose";
-              struct passwd *ptr;
-              ptr = retrievePasswd(name);
+	  int main(void) 
+	  {
+		  char name[] = "klose";
+		  struct passwd *ptr;
+		  ptr = retrievePasswd(name);
 
-              if(NULL == ptr)
-                      err_sys("error retrieve passwd entry");
+		  if(NULL == ptr)
+			  err_sys("error retrieve passwd entry");
 
-              printf("work directory %s\n", ptr->pw_dir);
-              printf("login shell  %s\n", ptr->pw_shell);
+		  printf("work directory %s\n", ptr->pw_dir);
+		  printf("login shell  %s\n", ptr->pw_shell);
 
-              exit(0);
-              
-      }
+		  exit(0);
 
-      struct passwd *retrievePasswd(const char *name)
-      {
-              struct passwd *ptr;
-              setpwent();
+	  }
 
-              while((ptr = getpwent()) != NULL)
-                      if(0 == strcmp(name, ptr->pw_name) )
-                              break;
+	  struct passwd *retrievePasswd(const char *name)
+	  {
+		  struct passwd *ptr;
+		  setpwent();
 
-              endpwent();
-              return ptr;
-              
-      }
-    #+END_SRC
+		  while((ptr = getpwent()) != NULL)
+			  if(0 == strcmp(name, ptr->pw_name) )
+				  break;
+
+		  endpwent();
+		  return ptr;
+
+	  }
+       #+END_SRC
 
 ** shadow文件
-   某些系统将加密口令存放在另一个通常称为阴影口令shadow的文件中。该文件至少要包含用户名和加密口令。与该口令相关的其他信息也可存放在该文件中。例如，具有阴影口令的系统经常要求用户在一定时间间隔后选择一个新口令，这被称之为口令时效，选择新口令的时间间隔长度经常也存放在阴影口令文件中
+   某些系统将加密口令存放在另一个通常称为阴影口令 *shadow* 的文件中。该文件至少要包含 _用户名_ 和 _加密口令_ 
 
-   阴影口令文件不应是一般用户可以读取的。仅有少数几个程序需要存取加密口令文件，例如login(1)和passwd(1)，这些程序常常设置-用户-ID为root。有了阴影口令后，普通口令文件/etc/passwd可由各用户自由读取
+   #+BEGIN_EXAMPLE
+     与该口令相关的其他信息也可存放在该文件中
+
+     例如，具有阴影口令的系统经常要求用户在一定时间间隔后选择一个新口令，这被称之为口令时效
+     选择新口令的时间间隔长度经常也存放在阴影口令文件中
+   #+END_EXAMPLE
 
    shadow文件相关接口：
    #+BEGIN_SRC C
@@ -148,6 +184,13 @@
   void endspent(void);
    #+END_SRC
 
+   #+BEGIN_EXAMPLE
+     阴影口令文件不应是一般用户可以读取的。仅有少数几个程序需要存取加密口令文件
+
+     例如login(1)和passwd(1)，这些程序常常设置-用户-ID为root
+
+     有了阴影口令后，普通口令文件/etc/passwd可由各用户自由读取
+   #+END_EXAMPLE
 * group文件
   UNIX组文件包含了表6-2中所示字段，这些字段包含在<grp.h>中所定义的group结构中
 
@@ -159,7 +202,7 @@
   | 数字组ID            | int gr_gid       | •       |
   | 指向各用户名指针的数组 | char **gr_mem    | •       |
 
-  字段gr_mem是一个指针数组，其中的指针各指向一个属于该组的用户名。该数组以null结尾
+  字段 _gr_mem_ 是一个 _指针数组_ ，其中的指针 *各指向一个属于该组的用户名* 。该数组以 _null_ 结尾
   #+BEGIN_SRC sh
   $ cat /etc/group
 
@@ -171,37 +214,39 @@
   #+END_SRC
 
 ** getgrgid, getgrnam 
-   + getgrgid：根据组id获取group记录
-   + getgrnam：根据组名字获取group记录
+   + _getgrgid_ ：根据组id 获取group记录 
+   + _getgrnam_ ：根据组名字获取group记录
      #+BEGIN_SRC C
-	#include <sys/types.h>
-	#include <grp.h>
+       #include <sys/types.h>
+       #include <grp.h>
 
-	/**
-	   根据组id获取group记录
-
-	   gid：组id
-
-	   return：若成功则为指向group结构的指针，若出错则为NULL
+       /**
+	,* 根据组id获取group记录
+	,*
+	,* gid: 组id
+	,*
+	,* return: 若成功则为 指向group结构的指针，若出错则为 NULL
+	,*
 	,*/
-	struct group *getgrgid(gid_t gid);
+       struct group *getgrgid(gid_t gid);
 
 
-	/**
-	   根据组名字获取group记录
-
-	   name：组名字
-
-	   return：若成功则为指向group结构的指针，若出错则为NULL
+       /**
+	,* 根据组名字获取group记录
+	,*
+	,* name: 组名字
+	,*
+	,* return: 若成功则为指向 group结构的指针，若出错则为 NULL
+	,*
 	,*/
-	struct group *getgrnam(const char *name);
+       struct group *getgrnam(const char *name);
      #+END_SRC
-   如同对口令文件进行操作的函数一样,这两个函数通常也返回指向一个静态变量的指针,在每次调用时都重写该静态变量！
+   如同对口令文件进行操作的函数一样，这两个函数通常也返回 _指向一个静态变量的指针_ ,在 *每次调用时都重写该静态变量！* 
 
 ** getgrent, setgrent, endgrent
-   - getgrent：返回group文件下一个记录项
-   - setgrent：重置getgrent的当前位置到最开始
-   - endgrent：关闭getgrent打开的文件
+   - getgrent：返回group文件 _下一个记录项_ 
+   - setgrent： *重置* getgrent的当前位置到最开始
+   - endgrent： *关闭* getgrent打开的文件
      #+BEGIN_SRC C
 	#include <sys/types.h>
 	#include <grp.h>
@@ -210,46 +255,52 @@
 	void setgrent(void);
 	void endgrent(void);
      #+END_SRC
-   调用getgrent后必须记得使用endgrent关闭！
+
+   #+BEGIN_EXAMPLE
+     类似地调用getgrent后必须记得使用endgrent关闭！
+   #+END_EXAMPLE
 
 ** 附加组ID
-   现代的Unix系统一个用户一般可以属于多个组，以下函数用来支持这种特性：
-   - getgroups：读取当前进程所属用户附加组ID表
-   - setgroups：设置当前进程所属用户附加组ID表
-   - initgroups：初始化用户附加组ID表
+   现代的Unix系统 *一个用户一般可以属于多个组* ，以下函数用来支持这种特性：
+   -  _getgroups_ ： *读取*  _当前进程所属用户_ 附加组ID表 
+   - _setgroups_ ： *设置* _当前进程所属用户_ 附加组ID表
+   - _initgroups_ ： *初始化* _用户附加组ID表_ 
    #+BEGIN_SRC C
-  #include <sys/types.h>
-  #include <unistd.h>
+     #include <sys/types.h>
+     #include <unistd.h>
 
-  /**
-     读取当前进程所属用户的附加组id表，并返回实际读取的附加组id数量
+     /**
+      ,* 读取当前进程所属用户的附加组id表
+      ,*
+      ,* gidsetsize: 最多添加到grouplist的附加组数量，如果为0，则grouplist不做修改
+      ,* grouplist: 附加组ID的数组
+      ,*
+      ,* return：若成功则为 实际读取的附加组ID数量，若出错则为 -1
+      ,*
+      ,*/
+     int getgroups(int gidsetsize, gid_t grouplist][);
 
-     gidsetsize：最多添加到grouplist的附加组数量，如果为0，则grouplist不做修改
-     grouplist：附加组ID的数组
+     /**
+      ,* 设置当前进程所属用户的附加组id表
+      ,*
+      ,* ngroup: grouplist中的元素个数
+      ,* grouplist: 要设置的附加组ID的数组
+      ,*
+      ,* return: 成功返回 0，失败返回 -1
+      ,*
+      ,*/
+     int setgroups(int ngroups, const gid_t grouplist[]);
 
-     return：若成功则为实际读取的附加组ID数量，若出错则为-1
-  ,*/
-  int getgroups(int gidsetsize, gid_t grouplist][);
-
-  /**
-     设置当前进程所属用户的附加组id表，并返回实际设置的附加组id数量
-
-     ngroup：grouplist中的元素个数
-     grouplist：要设置的附加组ID的数组
-
-     return：成功返回0，失败返回-1
-  ,*/
-  int setgroups(int ngroups, const gid_t grouplist[]);
-
-  /**
-     初始化用户附加组id表
-
-     username：用户登录名
-     basegid：用户默认主组ID
-
-     return：成功返回0，失败返回-1   
-  ,*/
-  int initgroups(const char *username, gid_t basegid);
+     /**
+      ,* 初始化用户附加组id表
+      ,*
+      ,* username: 用户登录名
+      ,* basegid: 用户默认主组ID
+      ,*
+      ,* return: 成功返回 0，失败返回 -1   
+      ,*
+      ,*/
+     int initgroups(const char *username, gid_t basegid);
    #+END_SRC
 
 * 其他数据文件
