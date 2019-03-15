@@ -262,6 +262,7 @@ for the JavaScript code in this tag.
 </li>
 <li><a href="#orgc5131bf">终止进程</a>
 <ul>
+<li><a href="#org6a3708a">僵尸进程</a></li>
 <li><a href="#orgf3bbdf0">wait</a>
 <ul>
 <li><a href="#orgc1a2890">wait实例</a></li>
@@ -344,15 +345,14 @@ for the JavaScript code in this tag.
 </ul>
 </div>
 </div>
-<p>
-本章介绍Unix的进程控制：
-</p>
-<ul class="org-ul">
-<li>创建新进程、执行程序和进程终止</li>
-<li>进程的实际、有效和保存的用户和组ID</li>
-<li>解释器文件和system函数</li>
-<li>进程会计机制</li>
-</ul>
+<pre class="example">
+  本章介绍Unix的进程控制：
+
+  创建新进程、执行程序和进程终止
+  进程的实际、有效和保存的用户和组ID
+  解释器文件和system函数
+  进程会计机制
+</pre>
 
 <div id="outline-container-org34a6756" class="outline-2">
 <h2 id="org34a6756">进程标识</h2>
@@ -834,59 +834,100 @@ pid = 19471, glob = 7, var = 88
 进程有三种正常终止法及两种异常终止法：
 </p>
 <ul class="org-ul">
-<li>正常终止:
+<li><span class="underline">正常</span> 终止:
 <ol class="org-ol">
-<li>在main函数内执行return语句，这等效于调用exit</li>
-<li>调用exit函数，其操作包括调用各终止处理程序(终止处理程序在调用atexit函数时登录)，然后关闭所有标准I/O流等。但因为并不处理文件描述符、多进程(父、子进程)以及作业控制，所以这一定义对UNIX系统而言是不完整的</li>
-<li>调用_exit系统调用函数，此函数由exit调用，它处理UNIX特定的细节。_exit是由POSIX.1说明的</li>
+<li>在main函数内执行 <span class="underline">return语句</span> ，这等效于 <b>调用exit</b></li>
+<li><span class="underline">调用exit</span> 函数，其操作
+<ul class="org-ul">
+<li>调用各终止处理程序(终止处理程序在调用 <span class="underline">atexit</span> 函数时注册)</li>
+<li>关闭所有标准I/O流等</li>
+<li>但因为并不处理 <span class="underline">文件描述符</span> 、 <span class="underline">多进程</span> (父、子进程)以及 <span class="underline">作业控制</span> ，所以 <b>这一定义对UNIX系统而言是不完整的</b></li>
+</ul></li>
+<li>调用 <b>_exit系统调用</b> 函数，此函数由exit调用，它 <b>处理UNIX特定的细节</b> 。_exit是由POSIX.1说明的</li>
 </ol></li>
-<li>异常终止:
+<li><span class="underline">异常</span> 终止:
 <ol class="org-ol">
-<li>调用abort产生SIGABRT信号，是下一种异常终止的一种特例</li>
-<li>当进程接收到某个信号时。进程本身(例如调用abort函数)、其他进程和内核都能产生传送到某一进程的信号(例如进程越出其地址空间访问存储单元，或者除以0)，内核就会为该进程产生相应的信号</li>
+<li>调用 <span class="underline">abort</span> 产生 <span class="underline">SIGABRT</span> 信号，是下一种 <b>异常终止的一种特例</b></li>
+<li>当进程 <span class="underline">接收到某个信号</span></li>
 </ol></li>
 </ul>
 
+<pre class="example">
+     进程本身，例如：调用abort函数
+
+     其他进程和内核都能产生传送到某一进程的信号，例如： 进程越出其地址空间访问存储单元，或者除以0
+
+     内核就会为该进程产生相应的信号
+</pre>
 <p>
-不管进程如何终止，最后都会执行内核中的同一段代码。这段代码为相应进程关闭所有打开的文件描述符，释放它所使用的存储器等等
+不管进程如何终止，最后都会执行 <span class="underline">内核中的同一段代码</span> ：为相应进程关闭所有打开的文件描述符，释放它所使用的存储器等等
 </p>
 
-<p>
-对上述任意一种终止情形，我们都希望终止进程能够通知其父进程它是如何终止的。对于exit和_exit，这是依靠传递给它们的退出状态参数来实现的。在异常终止情况，内核(不是进程本身)产生一个指示其异常终止原因的终止状态。注意这里使用了退出状态和终止状态两个不同术语，事实上最后调用_exit函数时内核会将退出状态转化为终止状态
-</p>
+<pre class="example">
+     对上述任意一种终止情形，都希望终止进程能够通知其父进程它是如何终止的
+
+     对于exit和_exit，这是依靠传递给它们的“退出状态”参数来实现的
+     在异常终止情况，内核(不是进程本身)产生一个指示其异常终止原因的“终止状态”
+
+     注意：这里使用了“退出状态：和“终止状态”两个不同术语
+     事实上最后调用 _exit 函数时内核会将 ”退出状态“转化为”终止状态“
+</pre>
 
 <p>
-在任意一种情况下，该终止进程的父进程都能用wait或waitpid函数取得其终止状态
+在任意一种情况下， <b>该终止进程的父进程</b> 都能用 <span class="underline">wait</span> 或 <span class="underline">waitpid</span> 函数取得其 <b>终止状态</b> ：
+</p>
+<ul class="org-ul">
+<li>如果 <b>父进程在子进程之前终止</b> ，对于其父进程已经终止的所有进程，它们的 <b>父进程都改变为init进程</b> 。这些进程由init进程领养。其操作过程大致是：
+<ul class="org-ul">
+<li>在一个进程终止时， <span class="underline">内核</span> 逐个 <b>检查</b> <span class="underline">所有活动进程</span> ，以判断它是否是正要终止的进程的子进程</li>
+<li>如果是则该进程的 <b>父进程ID就更改为1</b> (init进程的ID)</li>
+<li>这种处理方法保证了每个进程有一个父进程</li>
+</ul></li>
+<li>如果 <b>子进程在父进程之前终止</b> ， <b>内核为 <span class="underline">每个终止子进程</span> 保存了一定量的信息</b> ，所以当终止进程的父进程调用wait或waitpid时，可以得到有关信息
+<ul class="org-ul">
+<li>这种信息至少包括：
+<ul class="org-ul">
+<li>进程ID</li>
+<li>该进程的 <span class="underline">终止状态</span></li>
+<li>该进程使用的CPU时间总量</li>
+</ul></li>
+<li>内核可以 <b>释放</b> 终止进程所使用的 <span class="underline">所有存储器</span> ， <b>关闭</b> 其 <span class="underline">所有打开文件</span></li>
+</ul></li>
+</ul>
+</div>
+
+<div id="outline-container-org6a3708a" class="outline-4">
+<h4 id="org6a3708a">僵尸进程</h4>
+<div class="outline-text-4" id="text-org6a3708a">
+<p>
+一个 <span class="underline">已经终止</span> ，但是其 <b>父进程尚未对其进行善后处理</b> ( <span class="underline">获取终止子进程的有关信息</span> 、 <span class="underline">释放它仍占用的资源</span> )的进程被称为 <b>僵尸进程</b> 。 <span class="underline">ps(1)</span> 命令会将僵尸进程状态打印为Z
 </p>
 
-<p>
-如果父进程在子进程之前终止，对于其父进程已经终止的所有进程，它们的父进程都改变为init进程。这些进程由init进程领养。其操作过程大致是：在一个进程终止时，内核逐个检查所有活动进程，以判断它是否是正要终止的进程的子进程，如果是则该进程的父进程ID就更改为1(init进程的ID)。这种处理方法保证了每个进程有一个父进程
-</p>
+<pre class="example">
+      一个由init进程领养的进程终止时不会变成一个僵尸进程
 
-<p>
-如果子进程在父进程之前终止，那么父进程又如何能在做相应检查时得到子进程的终止状态呢？内核为每个终止子进程保存了一定量的信息，所以当终止进程的父进程调用wait或waitpid时，可以得到有关信息。这种信息至少包括进程ID、该进程的终止状态、以及该进程使用的CPU时间总量。内核可以释放终止进程所使用的所有存储器，关闭其所有打开文件
-</p>
+      因为init 被编写成只要有一个子进程终止，init就会调用一个 wait函数 取得其终止状态
 
-<p>
-一个已经终止，但是其父进程尚未对其进行善后处理(获取终止子进程的有关信息、释放它仍占用的资源)的进程被称为僵尸进程。ps(1)命令会将僵尸进程状态打印为Z
-</p>
-
-<p>
-一个由init进程领养的进程终止时不会变成一个僵尸进程，因为init被编写成只要有一个子进程终止，init就会调用一个wait函数取得其终止状态。这样也就防止了在系统中有很多僵尸进程
-</p>
+      这样也就防止了在系统中有很多僵尸进程
+</pre>
+</div>
 </div>
 
 <div id="outline-container-orgf3bbdf0" class="outline-4">
 <h4 id="orgf3bbdf0">wait</h4>
 <div class="outline-text-4" id="text-orgf3bbdf0">
 <p>
-当一个进程正常或异常终止时，内核就向其父进程发送SIGCHLD信号。因为子进程终止是个异步事件，所以这种信号也是内核向父进程发的异步通知。父进程可以忽略该信号，或者提供一个该信号发生时即被调用执行的函数。对于这种信号的系统默认动作是忽略它。现在我们只需要知道的是调用wait的进程可能会:
+当一个进程正常或异常终止时， <b>内核就向其父进程发送 <span class="underline">SIGCHLD</span> 信号</b> 。因为子进程终止是个 <span class="underline">异步事件</span> ，所以这种信号也是 <b>内核向父进程发的异步通知</b> 。父进程可以 <span class="underline">忽略</span> 该信号，或者 <span class="underline">提供一个该信号发生时即被调用执行的函数</span> 。对于这种信号的 <b>系统默认动作是忽略</b> 它
+</p>
+
+<p>
+现在只需要知道的是调用wait的进程可能会:
 </p>
 <ul class="org-ul">
-<li>如果其所有子进程都还在运行：阻塞调用wait的进程</li>
-<li>如果一个子进程已终止，并且正等待父进程存取其终止状态：带子进程的终止状态立即返回</li>
+<li>如果其 <span class="underline">所有子进程都还在运行</span> ： <b>阻塞</b> 调用wait的进程</li>
+<li>如果一个 <span class="underline">子进程已终止</span> ，并且 <span class="underline">正等待父进程</span> 存取其 <span class="underline">终止状态</span> ： 立即返回 <b>带子进程的终止状态</b></li>
 <li><p>
-如果它没有任何子进程：出错立即返回
+如果它 <span class="underline">没有任何子进程</span> ： <b>出错</b> 立即返回
 </p>
 
 <div class="org-src-container">
@@ -894,21 +935,33 @@ pid = 19471, glob = 7, var = 88
 <span style="color: #ffd700;">#include</span> <span style="color: #deb887;">&lt;sys/wait.h&gt;</span>
 
 <span style="color: #ffebcd;">/**</span>
-<span style="color: #ffebcd;">   &#38459;&#22622;&#31561;&#24453;&#30452;&#21040;&#26377;&#19968;&#20010;&#23376;&#36827;&#31243;&#36864;&#20986;&#65292;&#24182;&#23558;&#23376;&#36827;&#31243;&#30340;&#32456;&#27490;&#29366;&#24577;&#35760;&#24405;&#21040;status&#22788;</span>
-
-<span style="color: #ffebcd;">   status&#65306;&#25972;&#24418;&#25351;&#38024;&#65292;&#35760;&#24405;&#23376;&#36827;&#31243;&#30340;&#32456;&#27490;&#29366;&#24577;&#65292;&#22914;&#26524;&#19981;&#20851;&#24515;&#32456;&#27490;&#29366;&#24577;&#65292;&#21017;&#21487;&#23558;&#35813;&#21442;&#25968;&#25351;&#23450;&#20026;&#31354;&#25351;&#38024;</span>
-
-<span style="color: #ffebcd;">   return&#65306;&#33509;&#25104;&#21151;&#36820;&#22238;&#32456;&#27490;&#23376;&#36827;&#31243;&#30340;PID&#65292;&#33509;&#20986;&#38169;&#36820;&#22238;-1</span>
+<span style="color: #ffebcd;"> * &#38459;&#22622;&#31561;&#24453;&#30452;&#21040;&#26377;&#19968;&#20010;&#23376;&#36827;&#31243;&#36864;&#20986;&#65292;&#24182;&#23558;&#23376;&#36827;&#31243;&#30340;&#32456;&#27490;&#29366;&#24577;&#35760;&#24405;&#21040;status&#22788;</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> * status: &#25972;&#24418;&#25351;&#38024;&#65292;&#35760;&#24405; &#23376;&#36827;&#31243;&#30340;&#32456;&#27490;&#29366;&#24577;&#65292;&#22914;&#26524;&#19981;&#20851;&#24515;&#32456;&#27490;&#29366;&#24577;&#65292;&#21017;&#21487;&#23558;&#35813;&#21442;&#25968;&#25351;&#23450;&#20026; &#31354;&#25351;&#38024;</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> * return: &#33509;&#25104;&#21151;&#36820;&#22238;&#32456;&#27490; &#23376;&#36827;&#31243;&#30340;PID&#65292;&#33509;&#20986;&#38169;&#36820;&#22238; -1</span>
+<span style="color: #ffebcd;"> *</span>
 <span style="color: #ffebcd;"> */</span>
 <span style="color: #98f5ff;">pid_t</span> <span style="color: #daa520; font-weight: bold;">wait</span>(<span style="color: #98f5ff;">int</span> *<span style="color: #4eee94;">status</span>);
 </pre>
 </div>
 <p>
-status是一个整型指针。如果status不是一个空指针，则终止进程的终止状态就存放在它所指向的单元内。如果不关心终止状态，则可将该参数指定为空指针
-</p>
+status是一个 <span class="underline">整型指针</span> ：
+</p></li>
+<li>如果status <span class="underline">不是一个空指针</span> ，则 <span class="underline">终止进程的终止状态</span> 就 <b>存放</b> 在它所 <span class="underline">指向的单元</span> 内</li>
+<li>如果 <b>不关心终止状态</b> ，则可将该参数指定为 <span class="underline">空指针</span></li>
+</ul>
+
+<pre class="example">
+status状态整形字是由实现定义的，其中
+
+某些位表示退出状态(正常返回)
+其他位则指示信号编号(异常返回)
+有一位指示是否产生了一个core文件等等
+</pre>
 
 <p>
-status状态整形字是由实现定义的。其中某些位表示退出状态(正常返回)，其他位则指示信号编号(异常返回)，有一位指示是否产生了一个core文件等等。POSIX.1规定终止状态用定义在&lt;sys/wait.h&gt;中的各个宏来查看。有三个互斥的宏可用来取得进程终止的原因，基于它们中哪一个值是真,就可选用其他宏来取得终止状态、信号编号等。这些都在表8-1中给出：
+POSIX.1规定：终止状态用定义在 <span class="underline">&lt;sys/wait.h&gt;</span> 中有三个互斥的宏可用来取得 <span class="underline">进程终止的原因</span> ，基于它们中哪一个值是真,就可选用其他宏来取得 <span class="underline">终止状态</span> 、 <span class="underline">信号编号</span> 等。这些都在表8-1中给出：
 </p>
 <table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
 <caption class="t-above"><span class="table-number">Table 1:</span> 检查wait和waitpid所返回的终止状态的宏</caption>
@@ -925,29 +978,32 @@ status状态整形字是由实现定义的。其中某些位表示退出状态(�
 </tr>
 
 <tr>
-<td class="org-left">WIFEXITED(status)</td>
-<td class="org-left">如果子进程是正常终止则为真，执行WEXITSTATUS(status)获得子进程传送给exit或_exit参数的低8位</td>
+<td class="org-left"><span class="underline">WIFEXITED</span> (status)</td>
+<td class="org-left">如果子进程是 <b>正常</b> 终止则为真，执行 <span class="underline">WEXITSTATUS</span> (status)获得子进程传送给exit或_exit参数的 <span class="underline">低8位</span></td>
 </tr>
 
 <tr>
-<td class="org-left">WIFSIGNALED(status)</td>
-<td class="org-left">如果子进程是异常终止则为真，执行WTERMSIG(status)获得子进程终止的信号编号。另外SVR4和4.3+BSD(非POSIX.1)定义宏: WCOREDUMP(status)若已产生终止进程的core文件则返回真</td>
+<td class="org-left"><span class="underline">WIFSIGNALED</span> (status)</td>
+<td class="org-left">如果子进程是 <b>异常</b> 终止则为真，执行 <span class="underline">WTERMSIG</span> (status)获得子进程 <span class="underline">终止的信号编号</span> 。另外SVR4和4.3+BSD(非POSIX.1)定义宏:  <span class="underline">WCOREDUMP</span> (status)若已 <span class="underline">产生终止进程的core文件</span> 则返回真</td>
 </tr>
 
 <tr>
-<td class="org-left">WIFSTOPPED(status)</td>
-<td class="org-left">如果是子进程的状态是暂停则为真，执行WSTOPSIG(status)获得使子进程暂停的信号编号</td>
+<td class="org-left"><span class="underline">WIFSTOPPED</span> (status)</td>
+<td class="org-left">如果是子进程的状态是 <b>暂停</b> 则为真，执行 <span class="underline">WSTOPSIG</span> (status)获得使子进程 <span class="underline">暂停的信号编号</span></td>
 </tr>
 </tbody>
-</table></li>
-</ul>
+</table>
 </div>
 <div id="outline-container-orgc1a2890" class="outline-5">
 <h5 id="orgc1a2890">wait实例</h5>
 <div class="outline-text-5" id="text-orgc1a2890">
 <p>
-pr_exit使用表8-1中的宏以打印进程的终止状态。注意如果定义了WCOREDUMP，则此函数也处理该宏
+pr_exit使用表8-1中的宏以打印进程的终止状态
 </p>
+
+<pre class="example">
+       注意：如果定义了WCOREDUMP，则此函数也处理该宏
+</pre>
 <div class="org-src-container">
 <pre class="src src-C"><span style="color: #ffd700;">#include</span> <span style="color: #deb887;">&lt;sys/types.h&gt;</span>
 <span style="color: #ffd700;">#include</span> <span style="color: #deb887;">&lt;wait.h&gt;</span>
@@ -1030,9 +1086,12 @@ abnormal termination, signal number = 6 <span style="color: #5f9ea0; font-style:
 abnormal termination, signal number = 8 <span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">SIGFPE</span>
 </pre>
 </div>
-<p>
-不幸的是没有一种可移植的方法将WTERMSIG得到的信号编号映射为说明性的名字。必须查看&lt;signal.h&gt;头文件才能知道SIGABRT的值是6，SIGFPE的值是8
-</p>
+
+<pre class="example">
+       不幸的是：没有一种可移植的方法将 WTERMSIG 得到的信号编号映射为说明性的名字
+
+       必须查看&lt;signal.h&gt;头文件才能知道 SIGABRT 的值是 6， SIGFPE 的值是 8
+</pre>
 </div>
 </div>
 </div>
@@ -1040,21 +1099,22 @@ abnormal termination, signal number = 8 <span style="color: #5f9ea0; font-style:
 <h4 id="org401c51e">waitpid</h4>
 <div class="outline-text-4" id="text-org401c51e">
 <p>
-waitpid：可以指定子进程的PID，并设置相关阻塞选项
+waitpid：可以 <b>指定子进程的PID</b> ，并 <b>设置相关阻塞选项</b> 
 </p>
 <div class="org-src-container">
 <pre class="src src-C"><span style="color: #ffd700;">#include</span> <span style="color: #deb887;">&lt;sys/types.h&gt;</span>
 <span style="color: #ffd700;">#include</span> <span style="color: #deb887;">&lt;sys/wait.h&gt;</span>
 
 <span style="color: #ffebcd;">/**</span>
-<span style="color: #ffebcd;">   wait&#30340;&#25193;&#23637;&#29256;&#26412;&#65292;&#21487;&#20197;&#25351;&#23450;&#23376;&#36827;&#31243;pid&#65292;&#20197;&#21450;&#30456;&#20851;&#38459;&#22622;&#36873;&#39033;</span>
-
-<span style="color: #ffebcd;">   pid&#65306;&#23376;&#36827;&#31243;pid</span>
-<span style="color: #ffebcd;">   status&#65306;&#23384;&#20648;&#32456;&#27490;&#29366;&#24577;&#30340;&#25351;&#38024;</span>
-<span style="color: #ffebcd;">   options&#65306;&#38459;&#22622;&#36873;&#39033;</span>
-
-<span style="color: #ffebcd;">   return&#65306;&#33509;&#25104;&#21151;&#36820;&#22238;&#32456;&#27490;&#23376;&#36827;&#31243;&#30340;PID&#65292;&#33509;&#20986;&#38169;&#36820;&#22238;-1</span>
-<span style="color: #ffebcd;">*/</span>
+<span style="color: #ffebcd;"> * wait&#30340;&#25193;&#23637;&#29256;&#26412;&#65292;&#21487;&#20197;&#25351;&#23450;&#23376;&#36827;&#31243;pid&#65292;&#20197;&#21450;&#30456;&#20851;&#38459;&#22622;&#36873;&#39033;</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> * pid: &#23376;&#36827;&#31243;pid</span>
+<span style="color: #ffebcd;"> * status: &#23384;&#20648;&#32456;&#27490;&#29366;&#24577;&#30340;&#25351;&#38024;</span>
+<span style="color: #ffebcd;"> * options: &#38459;&#22622;&#36873;&#39033;</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> * return: &#33509;&#25104;&#21151;&#36820;&#22238;&#32456;&#27490; &#23376;&#36827;&#31243;&#30340;PID&#65292;&#33509;&#20986;&#38169;&#36820;&#22238; -1</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> */</span>
 <span style="color: #98f5ff;">pid_t</span> <span style="color: #daa520; font-weight: bold;">waitpid</span>(<span style="color: #98f5ff;">pid_t</span> <span style="color: #4eee94;">pid</span>, <span style="color: #98f5ff;">int</span> *<span style="color: #4eee94;">status</span>, <span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">options</span>);
 </pre>
 </div>
@@ -1078,28 +1138,28 @@ pid参数与其值有关：
 
 <tr>
 <td class="org-left">pid == -1</td>
-<td class="org-left">等待任一子进程，与wait等效</td>
+<td class="org-left">等待 <span class="underline">任一子进程</span> ，与wait等效</td>
 </tr>
 
 <tr>
 <td class="org-left">pid &gt; 0</td>
-<td class="org-left">等待其进程ID与pid相等的子进程</td>
+<td class="org-left">等待其进程 <span class="underline">ID与pid相等</span> 的子进程</td>
 </tr>
 
 <tr>
 <td class="org-left">pid == 0</td>
-<td class="org-left">等待其组ID等于调用进程的组ID的任一子进程</td>
+<td class="org-left">等待其 <span class="underline">组ID</span> 等于 <span class="underline">调用进程的组ID</span> 的 <span class="underline">任一子进程</span></td>
 </tr>
 
 <tr>
 <td class="org-left">pid &lt; -1</td>
-<td class="org-left">等待其组ID等于pid的绝对值的任一子进程</td>
+<td class="org-left">等待其 <span class="underline">组ID</span> 等于 <span class="underline">pid的绝对值的任一子进程</span></td>
 </tr>
 </tbody>
 </table>
 
 <p>
-options参数或者是0，或者是下表中常数的逐位或运算
+options 参数或者是 0，或者是下表中常数的逐位 <span class="underline">或运算</span> 
 </p>
 <table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
 <caption class="t-above"><span class="table-number">Table 3:</span> waitpid的option参数</caption>
@@ -1116,18 +1176,18 @@ options参数或者是0，或者是下表中常数的逐位或运算
 </tr>
 
 <tr>
-<td class="org-left">WNOHANG</td>
-<td class="org-left">如果pid指定的子进程并不立即可用，则waitpid不阻塞，直接返回值为0</td>
+<td class="org-left"><span class="underline">WNOHANG</span></td>
+<td class="org-left">如果pid指定的子进程并不立即可用，则 <b>waitpid不阻塞</b> ，直接返回值为 <span class="underline">0</span></td>
 </tr>
 
 <tr>
-<td class="org-left">WUNTRACED</td>
-<td class="org-left">如果实现支持作业控制，则由pid指定的任一子进程状态已暂停，并且其状态自暂停以来还未报告过，则返回其状态。WIFSTOPPED宏确定返回值是否对应于一个暂停子进程</td>
+<td class="org-left"><span class="underline">WUNTRACED</span></td>
+<td class="org-left">如果实现 <span class="underline">支持作业控制</span> ，则由pid指定的任一子进程 <span class="underline">状态已暂停</span> ，并且 <b>其状态自暂停以来还未报告过</b> ，则返回 <span class="underline">其状态</span> 。 <span class="underline">WIFSTOPPED</span> 宏确定返回值是否对应于一个 <span class="underline">暂停</span> 子进程</td>
 </tr>
 
 <tr>
 <td class="org-left">0</td>
-<td class="org-left">阻塞并等待pid指定的子进程终止</td>
+<td class="org-left"><b>阻塞</b> 并 <b>等待</b> pid指定的子进程终止</td>
 </tr>
 </tbody>
 </table>
@@ -1136,17 +1196,29 @@ options参数或者是0，或者是下表中常数的逐位或运算
 因此waitpid函数提供了wait函数没有提供的三个功能:
 </p>
 <ol class="org-ol">
-<li>waitpid等待一个特定的进程(而wait则返回任一终止子进程的状态)</li>
-<li>waitpid提供了一个wait的非阻塞版本。只是希望取得一个子进程的状态，但不想阻塞</li>
-<li>waitpid支持作业控制(以WUNTRACED选择项)</li>
+<li>waitpid <b>等待一个特定的进程</b> (而wait则返回 <span class="underline">任一终止子进程</span> 的状态)</li>
+<li>waitpid提供了一个wait的 <b>非阻塞版本</b> 
+<ul class="org-ul">
+<li>只是希望取得一个子进程的状态，但不想阻塞</li>
+</ul></li>
+<li>waitpid支持 <b>作业控制</b> (以 <span class="underline">WUNTRACED</span> 选择项)</li>
 </ol>
 </div>
 
 <div id="outline-container-org40a9698" class="outline-5">
 <h5 id="org40a9698">waitpid实例</h5>
 <div class="outline-text-5" id="text-org40a9698">
+<pre class="example">
+       如果一个进程要fork一个子进程，但不要求它等待子进程终止，也不希望子进程处于僵死状态直到父进程终止
+</pre>
 <p>
-如果一个进程要fork一个子进程，但不要求它等待子进程终止，也不希望子进程处于僵死状态直到父进程终止。这可以通过调用fork两次来实现：第一个fork子线程提前终止，使得由它fork的第二个子进程被init托管，这样第二个子进程结束会自动被init进程调用wait处理，同时主进程只需要等待第一个子进程终止即可
+这可以通过 <b>调用fork两次</b> 来实现：
+</p>
+<ul class="org-ul">
+<li><span class="underline">第一个fork子线程</span> <b>提前终止</b> ，使得由它 <span class="underline">fork的第二个子进程</span> 被 <span class="underline">init</span> 托管</li>
+<li><span class="underline">第二个子进程</span> 结束会 <b>自动被 <span class="underline">init</span> 进程调用 <span class="underline">wait</span> 处理</b></li>
+<li><p>
+<span class="underline">主进程</span> 只需要 <b>等待</b> <span class="underline">第一个子进程终止</span> 即可
 </p>
 <div class="org-src-container">
 <pre class="src src-C"><span style="color: #ffd700;">#include</span> <span style="color: #deb887;">&lt;sys/types.h&gt;</span>
@@ -1191,10 +1263,16 @@ options参数或者是0，或者是下表中常数的逐位或运算
 
 $ second child parent pid = 1 <span style="color: #5f9ea0; font-style: italic;">#</span><span style="color: #5f9ea0; font-style: italic;">&#31532;&#19968;&#20010;fork&#30340;&#23376;&#36827;&#31243;&#32456;&#27490;&#20102;&#65292;&#23427;&#30340;&#23376;&#36827;&#31243;&#34987;init&#36827;&#31243;&#25176;&#31649;</span>
 </pre>
-</div>
-<p>
-在第二个子进程中调用sleep是为了保证在打印父进程ID时第一个子进程已终止。在fork之后，父、子进程都可继续执行，但无法预知哪一个会先执行。如果不使第二个子进程睡眠，则在fork之后它可能比其父进程先执行，于是它打印的父进程ID将是创建它的父进程，而不是init进程
-</p>
+</div></li>
+</ul>
+
+<pre class="example">
+       在第二个子进程中调用 sleep 是为了保证在打印父进程ID时第一个子进程已终止
+
+       在fork之后，父、子进程都可继续执行，但无法预知哪一个会先执行
+
+       如果不使第二个子进程睡眠，则在fork之后它可能比其父进程先执行，于是它打印的父进程ID将是创建它的父进程，而不是init进程
+</pre>
 </div>
 </div>
 </div>
@@ -1203,8 +1281,18 @@ $ second child parent pid = 1 <span style="color: #5f9ea0; font-style: italic;">
 <h4 id="org18b13ff">wait3和wait4</h4>
 <div class="outline-text-4" id="text-org18b13ff">
 <p>
-wait3和wait4这两个函数比wait和waitpid分别要多一个参数rusage，该参数用于内核返回由终止进程及其所有子进程使用的资源信息摘要，包括用户CPU时间总量、系统CPU时间总量、缺页次数、接收到信号的次数等。这些资源信息只包括终止子进程，并不包括处于停止状态的子进程
+<span class="underline">wait3</span> 和 <span class="underline">wait4</span> 这两个函数比 <span class="underline">wait</span> 和 <span class="underline">waitpid</span> 分别要多一个参数 <b>rusage</b> ，该参数用于内核返回由 <b>终止进程及其所有子进程使用的资源信息摘要</b> ，包括：
 </p>
+<ul class="org-ul">
+<li>用户CPU时间总量</li>
+<li>系统CPU时间总量</li>
+<li>缺页次数</li>
+<li>接收到信号的次数等</li>
+</ul>
+
+<pre class="example">
+    这些资源信息只包括终止子进程，并不包括处于停止状态的子进程
+</pre>
 
 <div class="org-src-container">
 <pre class="src src-C"><span style="color: #ffd700;">#include</span> <span style="color: #deb887;">&lt;sys/types.h&gt;</span>
@@ -1213,26 +1301,28 @@ wait3和wait4这两个函数比wait和waitpid分别要多一个参数rusage，�
 <span style="color: #ffd700;">#include</span> <span style="color: #deb887;">&lt;sys/wait.h&gt;</span>
 
 <span style="color: #ffebcd;">/**</span>
-<span style="color: #ffebcd;">   &#31561;&#24453;&#20219;&#19968;&#36827;&#31243;&#32456;&#27490;&#65292;&#24182;&#36820;&#22238;&#32456;&#27490;&#23376;&#36827;&#31243;&#20351;&#29992;&#30340;&#36164;&#28304;&#25688;&#35201;</span>
-
-<span style="color: #ffebcd;">   status&#65306;&#23384;&#20648;&#23376;&#36827;&#31243;&#30340;&#32456;&#27490;&#29366;&#24577;&#30340;&#25351;&#38024;</span>
-<span style="color: #ffebcd;">   options&#65306;&#38459;&#22622;&#36873;&#39033;</span>
-<span style="color: #ffebcd;">   rusage&#65306;&#23384;&#20648;&#32456;&#27490;&#23376;&#36827;&#31243;&#20351;&#29992;&#30340;&#36164;&#28304;&#25688;&#35201;&#30340;&#32467;&#26500;&#25351;&#38024;</span>
-
-<span style="color: #ffebcd;">   return&#65306;&#33509;&#25104;&#21151;&#36820;&#22238;&#32456;&#27490;&#23376;&#36827;&#31243;&#30340;PID&#65292;&#33509;&#20986;&#38169;&#36820;&#22238;-1</span>
-<span style="color: #ffebcd;">*/</span>
+<span style="color: #ffebcd;"> * &#31561;&#24453;&#20219;&#19968;&#36827;&#31243;&#32456;&#27490;&#65292;&#24182;&#36820;&#22238;&#32456;&#27490;&#23376;&#36827;&#31243;&#20351;&#29992;&#30340;&#36164;&#28304;&#25688;&#35201;</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> * status: &#23384;&#20648;&#23376;&#36827;&#31243;&#30340; &#32456;&#27490;&#29366;&#24577;&#30340;&#25351;&#38024;</span>
+<span style="color: #ffebcd;"> * options: &#38459;&#22622;&#36873;&#39033;</span>
+<span style="color: #ffebcd;"> * rusage: &#23384;&#20648; &#32456;&#27490;&#23376;&#36827;&#31243; &#20351;&#29992;&#30340;&#36164;&#28304;&#25688;&#35201; &#30340;&#32467;&#26500;&#25351;&#38024;</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> * return: &#33509;&#25104;&#21151;&#36820;&#22238; &#32456;&#27490;&#23376;&#36827;&#31243;&#30340;PID&#65292;&#33509;&#20986;&#38169;&#36820;&#22238; -1</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> */</span>
 <span style="color: #98f5ff;">pid_t</span> <span style="color: #daa520; font-weight: bold;">wait3</span>(<span style="color: #98f5ff;">int</span> *<span style="color: #4eee94;">status</span>, <span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">options</span>, <span style="color: #00bfff; font-weight: bold;">struct</span> <span style="color: #98f5ff;">rusage</span> *<span style="color: #4eee94;">rusage</span>);
 
 <span style="color: #ffebcd;">/**</span>
-<span style="color: #ffebcd;">   &#31561;&#24453;&#25351;&#23450;&#23376;&#36827;&#31243;&#32456;&#27490;&#65292;&#24182;&#36820;&#22238;&#32456;&#27490;&#23376;&#36827;&#31243;&#20351;&#29992;&#30340;&#36164;&#28304;&#25688;&#35201;</span>
-
-<span style="color: #ffebcd;">   pid&#65306;&#25351;&#23450;&#23376;&#36827;&#31243;ID</span>
-<span style="color: #ffebcd;">   status&#65306;&#23384;&#20648;&#23376;&#36827;&#31243;&#30340;&#32456;&#27490;&#29366;&#24577;&#30340;&#25351;&#38024;</span>
-<span style="color: #ffebcd;">   options&#65306;&#38459;&#22622;&#36873;&#39033;</span>
-<span style="color: #ffebcd;">   rusage&#65306;&#23384;&#20648;&#32456;&#27490;&#23376;&#36827;&#31243;&#20351;&#29992;&#30340;&#36164;&#28304;&#25688;&#35201;&#30340;&#32467;&#26500;&#25351;&#38024;</span>
-
-<span style="color: #ffebcd;">   return&#65306;&#33509;&#25104;&#21151;&#36820;&#22238;&#32456;&#27490;&#23376;&#36827;&#31243;&#30340;PID&#65292;&#33509;&#20986;&#38169;&#36820;&#22238;-1</span>
-<span style="color: #ffebcd;">*/</span>
+<span style="color: #ffebcd;"> * &#31561;&#24453;&#25351;&#23450;&#23376;&#36827;&#31243;&#32456;&#27490;&#65292;&#24182;&#36820;&#22238;&#32456;&#27490;&#23376;&#36827;&#31243;&#20351;&#29992;&#30340;&#36164;&#28304;&#25688;&#35201;</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> * pid: &#25351;&#23450; &#23376;&#36827;&#31243;ID</span>
+<span style="color: #ffebcd;"> * status: &#23384;&#20648;&#23376;&#36827;&#31243;&#30340; &#32456;&#27490;&#29366;&#24577; &#30340;&#25351;&#38024;</span>
+<span style="color: #ffebcd;"> * options: &#38459;&#22622;&#36873;&#39033;</span>
+<span style="color: #ffebcd;"> * rusage&#65306;&#23384;&#20648; &#32456;&#27490;&#23376;&#36827;&#31243; &#20351;&#29992;&#30340;&#36164;&#28304;&#25688;&#35201; &#30340;&#32467;&#26500;&#25351;&#38024;</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> * return&#65306;&#33509;&#25104;&#21151;&#36820;&#22238; &#32456;&#27490;&#23376;&#36827;&#31243;&#30340;PID&#65292;&#33509;&#20986;&#38169;&#36820;&#22238; -1</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> */</span>
 <span style="color: #98f5ff;">pid_t</span> <span style="color: #daa520; font-weight: bold;">wait4</span>(<span style="color: #98f5ff;">pid_t</span> <span style="color: #4eee94;">pid</span>, <span style="color: #98f5ff;">int</span> *<span style="color: #4eee94;">status</span>, <span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">options</span>, <span style="color: #00bfff; font-weight: bold;">struct</span> <span style="color: #98f5ff;">rusage</span> *<span style="color: #4eee94;">rusage</span>);
 </pre>
 </div>
@@ -1310,9 +1400,10 @@ wait3和wait4这两个函数比wait和waitpid分别要多一个参数rusage，�
 </tr>
 </tbody>
 </table>
-<p>
-对Linux而言，wait4是wait家族各个函数的系统调用入口，其它几个函数都基于wait4重新实现
-</p>
+
+<pre class="example">
+      对Linux而言，wait4是wait家族各个函数的系统调用入口，其它几个函数都基于wait4重新实现
+</pre>
 </div>
 </div>
 </div>
@@ -1321,28 +1412,42 @@ wait3和wait4这两个函数比wait和waitpid分别要多一个参数rusage，�
 <h3 id="org60355d6">竞争条件</h3>
 <div class="outline-text-3" id="text-org60355d6">
 <p>
-当多个进程都企图对共享数据进行某种处理，而最后的结果又取决于进程运行的顺序时，这就产生了竞态条件。如果在fork之后的某种逻辑显式或隐式地依赖于在fork之后是父进程先运行还是子进程先运行，那么fork函数就会是竞态条件活跃的孳生地。通常无法预料哪一个进程先运行。即使知道哪一个进程先运行，那么在该进程开始运行后所发生的事情也依赖于系统负载以及内核的调度算法
+当多个进程都企图对 <b>共享数据</b> 进行某种处理，而 <b>最后的结果</b> 又取决于 <b>进程运行的顺序</b> 时，这就产生了 <span class="underline">竞态</span> 条件。如果在 <span class="underline">fork之后</span> 的 <span class="underline">某种逻辑</span> <span class="underline">显式或隐式</span> 地 <b>依赖</b> 于在fork之后是 <span class="underline">父进程先运行</span> 还是 <span class="underline">子进程先运行</span> ，那么 <b>fork函数就会是竞态条件</b> 活跃的孳生地
 </p>
 
-<p>
-例如在waitpid的实例中，当第二个子进程打印其父进程ID时就可以看到了一个潜在的竞态条件。如果第二个子进程在第一个子进程之前运行，则其父进程将会是第一个子进程。但是如果第一个子进程先运行，并有足够的时间到达并执行exit，则第二个子进程的父进程就是init。即使在程序中调用sleep，这也不保证什么。如果系统负担很重，那么在第二个子进程从sleep返回时，可能第一个子进程还没有得到机会运行。这种形式的问题很难排除，因为在大部分时间，这种问题并不出现
-</p>
+<pre class="example">
+     通常无法预料哪一个进程先运行。即使知道哪一个进程先运行，那么在该进程开始运行后所发生的事情也依赖于系统负载以及内核的调度算法
 
-<p>
-如果一个进程希望等待一个子进程终止，则它必须调用wait函数。如果一个进程要等待其父进程终止，则可使用下列轮询的循环:
+     例如在waitpid的实例中，当第二个子进程打印其父进程ID时就可以看到了一个潜在的竞态条件
+     如果第二个子进程在第一个子进程之前运行，则其父进程将会是第一个子进程
+     但是如果第一个子进程先运行，并有足够的时间到达并执行exit，则第二个子进程的父进程就是init
+     即使在程序中调用sleep，这也不保证什么。如果系统负担很重，那么在第二个子进程从sleep返回时，可能第一个子进程还没有得到机会运行
+
+     这种形式的问题很难排除，因为在大部分时间，这种问题并不出现
+</pre>
+<ul class="org-ul">
+<li>如果一个进程希望等待一个子进程终止，则它必须调用 <span class="underline">wait</span> 函数</li>
+<li><p>
+如果一个进程要等待其父进程终止，则可使用下列 <span class="underline">轮询</span> :
 </p>
 <div class="org-src-container">
 <pre class="src src-C"><span style="color: #00bfff; font-weight: bold;">while</span>(getppid() != 1) <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">&#29238;&#36827;&#31243;&#32456;&#27490;&#65292;&#23376;&#36827;&#31243;&#30001;init&#36827;&#31243;&#25176;&#31649;</span>
     sleep(1);
 </pre>
-</div>
-<p>
-但轮询的问题是它浪费了CPU时间，因为调用者每隔1秒都被唤醒，然后进行条件测试
-</p>
+</div></li>
+</ul>
+
+<pre class="example">
+     但轮询的问题是它浪费了CPU时间，因为调用者每隔1秒都被唤醒，然后进行条件测试
+</pre>
 
 <p>
-为了避免竞态条件和定期询问，在多个进程之间需要有某种形式的信号机制。在UNIX中可以使用信号机制和各种形式的进程间通信
+为了避免竞态条件和定期询问，在多个进程之间需要有某种形式的 <b>信号</b> 机制
 </p>
+
+<pre class="example">
+   在UNIX中可以使用信号机制和各种形式的进程间通信
+</pre>
 </div>
 
 <div id="outline-container-orgf36c2f2" class="outline-4">
@@ -1403,8 +1508,7 @@ $ output from child
 下面的代码会保证父进程比子进程先打印
 </p>
 <div class="org-src-container">
-<pre class="src src-C"><span style="color: #98f5ff;">int</span>
-<span style="color: #daa520; font-weight: bold;">main</span>(<span style="color: #98f5ff;">void</span>)
+<pre class="src src-C"><span style="color: #98f5ff;">int</span> <span style="color: #daa520; font-weight: bold;">main</span>(<span style="color: #98f5ff;">void</span>)
 {
     <span style="color: #98f5ff;">pid_t</span>   <span style="color: #4eee94;">pid</span>;
 
@@ -1423,9 +1527,10 @@ $ output from child
 }
 </pre>
 </div>
-<p>
-以后会用信号量来实现五个例程TELL_WAIT、TELL_PARENT、TELL_CHILD、WAIT_PARENT以及WAIT_CHILD
-</p>
+
+<pre class="example">
+      以后会用信号量来实现五个例程TELL_WAIT、TELL_PARENT、TELL_CHILD、WAIT_PARENT以及WAIT_CHILD
+</pre>
 </div>
 </div>
 </div>

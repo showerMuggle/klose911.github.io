@@ -3,11 +3,15 @@
 #+HTML_LINK_UP: env.html   
 #+HTML_LINK_HOME: apue.html
 #+OPTIONS: num:nil timestamp:nil ^:nil 
-本章介绍Unix的进程控制：
-+ 创建新进程、执行程序和进程终止
-+ 进程的实际、有效和保存的用户和组ID
-+ 解释器文件和system函数
-+ 进程会计机制
+
+#+BEGIN_EXAMPLE
+  本章介绍Unix的进程控制：
+
+  创建新进程、执行程序和进程终止
+  进程的实际、有效和保存的用户和组ID
+  解释器文件和system函数
+  进程会计机制
+#+END_EXAMPLE
   
 * 进程标识
   每个进程都有一个 *非负整型* 的 *唯一* 进程ID。因为进程ID标识符总是唯一的，常将其用做 *其他标识符的一部分* 以保证其唯一性：
@@ -358,58 +362,106 @@
      因为写时复制技术的普及，实际上 vfork 已经是个 _过时的_ 函数， *尽量避免使用vfork* 
 ** 终止进程
    进程有三种正常终止法及两种异常终止法：
-   + 正常终止:
-     1. 在main函数内执行return语句，这等效于调用exit
-     2. 调用exit函数，其操作包括调用各终止处理程序(终止处理程序在调用atexit函数时登录)，然后关闭所有标准I/O流等。但因为并不处理文件描述符、多进程(父、子进程)以及作业控制，所以这一定义对UNIX系统而言是不完整的
-     3. 调用_exit系统调用函数，此函数由exit调用，它处理UNIX特定的细节。_exit是由POSIX.1说明的
-   + 异常终止:
-     1. 调用abort产生SIGABRT信号，是下一种异常终止的一种特例
-     2. 当进程接收到某个信号时。进程本身(例如调用abort函数)、其他进程和内核都能产生传送到某一进程的信号(例如进程越出其地址空间访问存储单元，或者除以0)，内核就会为该进程产生相应的信号
+   + _正常_ 终止:
+     1. 在main函数内执行 _return语句_ ，这等效于 *调用exit* 
+     2. _调用exit_ 函数，其操作
+	+ 调用各终止处理程序(终止处理程序在调用 _atexit_ 函数时注册)
+	+ 关闭所有标准I/O流等
+	+ 但因为并不处理 _文件描述符_ 、 _多进程_ (父、子进程)以及 _作业控制_ ，所以 *这一定义对UNIX系统而言是不完整的* 
+     3. 调用 *_exit系统调用* 函数，此函数由exit调用，它 *处理UNIX特定的细节* 。_exit是由POSIX.1说明的
+   + _异常_ 终止:
+     1. 调用 _abort_ 产生 _SIGABRT_ 信号，是下一种 *异常终止的一种特例* 
+     2. 当进程 _接收到某个信号_ 
 
-   不管进程如何终止，最后都会执行内核中的同一段代码。这段代码为相应进程关闭所有打开的文件描述符，释放它所使用的存储器等等
+   #+BEGIN_EXAMPLE
+     进程本身，例如：调用abort函数
 
-   对上述任意一种终止情形，我们都希望终止进程能够通知其父进程它是如何终止的。对于exit和_exit，这是依靠传递给它们的退出状态参数来实现的。在异常终止情况，内核(不是进程本身)产生一个指示其异常终止原因的终止状态。注意这里使用了退出状态和终止状态两个不同术语，事实上最后调用_exit函数时内核会将退出状态转化为终止状态
+     其他进程和内核都能产生传送到某一进程的信号，例如： 进程越出其地址空间访问存储单元，或者除以0
 
-   在任意一种情况下，该终止进程的父进程都能用wait或waitpid函数取得其终止状态
+     内核就会为该进程产生相应的信号
+   #+END_EXAMPLE
+   不管进程如何终止，最后都会执行 _内核中的同一段代码_ ：为相应进程关闭所有打开的文件描述符，释放它所使用的存储器等等
 
-   如果父进程在子进程之前终止，对于其父进程已经终止的所有进程，它们的父进程都改变为init进程。这些进程由init进程领养。其操作过程大致是：在一个进程终止时，内核逐个检查所有活动进程，以判断它是否是正要终止的进程的子进程，如果是则该进程的父进程ID就更改为1(init进程的ID)。这种处理方法保证了每个进程有一个父进程
+   #+BEGIN_EXAMPLE
+     对上述任意一种终止情形，都希望终止进程能够通知其父进程它是如何终止的
 
-   如果子进程在父进程之前终止，那么父进程又如何能在做相应检查时得到子进程的终止状态呢？内核为每个终止子进程保存了一定量的信息，所以当终止进程的父进程调用wait或waitpid时，可以得到有关信息。这种信息至少包括进程ID、该进程的终止状态、以及该进程使用的CPU时间总量。内核可以释放终止进程所使用的所有存储器，关闭其所有打开文件
+     对于exit和_exit，这是依靠传递给它们的“退出状态”参数来实现的
+     在异常终止情况，内核(不是进程本身)产生一个指示其异常终止原因的“终止状态”
 
-   一个已经终止，但是其父进程尚未对其进行善后处理(获取终止子进程的有关信息、释放它仍占用的资源)的进程被称为僵尸进程。ps(1)命令会将僵尸进程状态打印为Z
+     注意：这里使用了“退出状态：和“终止状态”两个不同术语
+     事实上最后调用 _exit 函数时内核会将 ”退出状态“转化为”终止状态“
+   #+END_EXAMPLE
 
-   一个由init进程领养的进程终止时不会变成一个僵尸进程，因为init被编写成只要有一个子进程终止，init就会调用一个wait函数取得其终止状态。这样也就防止了在系统中有很多僵尸进程
+   在任意一种情况下， *该终止进程的父进程* 都能用 _wait_ 或 _waitpid_ 函数取得其 *终止状态* ：
+   + 如果 *父进程在子进程之前终止* ，对于其父进程已经终止的所有进程，它们的 *父进程都改变为init进程* 。这些进程由init进程领养。其操作过程大致是：
+     + 在一个进程终止时， _内核_ 逐个 *检查* _所有活动进程_ ，以判断它是否是正要终止的进程的子进程
+     + 如果是则该进程的 *父进程ID就更改为1* (init进程的ID)
+     + 这种处理方法保证了每个进程有一个父进程
+   + 如果 *子进程在父进程之前终止* ， *内核为 _每个终止子进程_ 保存了一定量的信息* ，所以当终止进程的父进程调用wait或waitpid时，可以得到有关信息
+     + 这种信息至少包括：
+       + 进程ID
+       + 该进程的 _终止状态_
+       + 该进程使用的CPU时间总量
+     + 内核可以 *释放* 终止进程所使用的 _所有存储器_ ， *关闭* 其 _所有打开文件_ 
+
+*** 僵尸进程
+    一个 _已经终止_ ，但是其 *父进程尚未对其进行善后处理* ( _获取终止子进程的有关信息_ 、 _释放它仍占用的资源_ )的进程被称为 *僵尸进程* 。 _ps(1)_ 命令会将僵尸进程状态打印为Z
+
+    #+BEGIN_EXAMPLE
+      一个由init进程领养的进程终止时不会变成一个僵尸进程
+
+      因为init 被编写成只要有一个子进程终止，init就会调用一个 wait函数 取得其终止状态
+
+      这样也就防止了在系统中有很多僵尸进程
+    #+END_EXAMPLE
 
 *** wait
-    当一个进程正常或异常终止时，内核就向其父进程发送SIGCHLD信号。因为子进程终止是个异步事件，所以这种信号也是内核向父进程发的异步通知。父进程可以忽略该信号，或者提供一个该信号发生时即被调用执行的函数。对于这种信号的系统默认动作是忽略它。现在我们只需要知道的是调用wait的进程可能会:
-    + 如果其所有子进程都还在运行：阻塞调用wait的进程
-    + 如果一个子进程已终止，并且正等待父进程存取其终止状态：带子进程的终止状态立即返回
-    + 如果它没有任何子进程：出错立即返回
+    当一个进程正常或异常终止时， *内核就向其父进程发送 _SIGCHLD_ 信号* 。因为子进程终止是个 _异步事件_ ，所以这种信号也是 *内核向父进程发的异步通知* 。父进程可以 _忽略_ 该信号，或者 _提供一个该信号发生时即被调用执行的函数_ 。对于这种信号的 *系统默认动作是忽略* 它
+
+    现在只需要知道的是调用wait的进程可能会:
+    + 如果其 _所有子进程都还在运行_ ： *阻塞* 调用wait的进程
+    + 如果一个 _子进程已终止_ ，并且 _正等待父进程_ 存取其 _终止状态_ ： 立即返回 *带子进程的终止状态* 
+    + 如果它 _没有任何子进程_ ： *出错* 立即返回
 
       #+BEGIN_SRC C
-	  #include <sys/types.h>
-	  #include <sys/wait.h>
+	#include <sys/types.h>
+	#include <sys/wait.h>
 
-	  /**
-	     阻塞等待直到有一个子进程退出，并将子进程的终止状态记录到status处
-
-	     status：整形指针，记录子进程的终止状态，如果不关心终止状态，则可将该参数指定为空指针
-
-	     return：若成功返回终止子进程的PID，若出错返回-1
-	   ,*/
-	  pid_t wait(int *status);
+	/**
+	 ,* 阻塞等待直到有一个子进程退出，并将子进程的终止状态记录到status处
+	 ,*
+	 ,* status: 整形指针，记录 子进程的终止状态，如果不关心终止状态，则可将该参数指定为 空指针
+	 ,*
+	 ,* return: 若成功返回终止 子进程的PID，若出错返回 -1
+	 ,*
+	 ,*/
+	pid_t wait(int *status);
       #+END_SRC
-      status是一个整型指针。如果status不是一个空指针，则终止进程的终止状态就存放在它所指向的单元内。如果不关心终止状态，则可将该参数指定为空指针
+      status是一个 _整型指针_ ：
+    + 如果status _不是一个空指针_ ，则 _终止进程的终止状态_ 就 *存放* 在它所 _指向的单元_ 内
+    + 如果 *不关心终止状态* ，则可将该参数指定为 _空指针_ 
 
-      status状态整形字是由实现定义的。其中某些位表示退出状态(正常返回)，其他位则指示信号编号(异常返回)，有一位指示是否产生了一个core文件等等。POSIX.1规定终止状态用定义在<sys/wait.h>中的各个宏来查看。有三个互斥的宏可用来取得进程终止的原因，基于它们中哪一个值是真,就可选用其他宏来取得终止状态、信号编号等。这些都在表8-1中给出：
-      #+CAPTION: 检查wait和waitpid所返回的终止状态的宏
-      #+ATTR_HTML: :border 1 :rules all :frame boader
-      | 宏                  | 说明                                                                                                                                                            |
-      | WIFEXITED(status)   | 如果子进程是正常终止则为真，执行WEXITSTATUS(status)获得子进程传送给exit或_exit参数的低8位                                                          |
-      | WIFSIGNALED(status) | 如果子进程是异常终止则为真，执行WTERMSIG(status)获得子进程终止的信号编号。另外SVR4和4.3+BSD(非POSIX.1)定义宏: WCOREDUMP(status)若已产生终止进程的core文件则返回真 |
-      | WIFSTOPPED(status)  | 如果是子进程的状态是暂停则为真，执行WSTOPSIG(status)获得使子进程暂停的信号编号                                                                                  |
+    #+BEGIN_EXAMPLE
+      status状态整形字是由实现定义的，其中
+
+      某些位表示退出状态(正常返回)
+      其他位则指示信号编号(异常返回)
+      有一位指示是否产生了一个core文件等等
+    #+END_EXAMPLE
+
+    POSIX.1规定：终止状态用定义在 _<sys/wait.h>_ 中有三个互斥的宏可用来取得 _进程终止的原因_ ，基于它们中哪一个值是真,就可选用其他宏来取得 _终止状态_ 、 _信号编号_ 等。这些都在表8-1中给出：
+    #+CAPTION: 检查wait和waitpid所返回的终止状态的宏
+    #+ATTR_HTML: :border 1 :rules all :frame boader
+    | 宏                  | 说明                                                                                                                                                            |
+    | _WIFEXITED_ (status) | 如果子进程是 *正常* 终止则为真，执行 _WEXITSTATUS_ (status)获得子进程传送给exit或_exit参数的 _低8位_                                               |
+    | _WIFSIGNALED_ (status) | 如果子进程是 *异常* 终止则为真，执行 _WTERMSIG_ (status)获得子进程 _终止的信号编号_ 。另外SVR4和4.3+BSD(非POSIX.1)定义宏:  _WCOREDUMP_ (status)若已 _产生终止进程的core文件_ 则返回真 |
+    | _WIFSTOPPED_ (status) | 如果是子进程的状态是 *暂停* 则为真，执行 _WSTOPSIG_ (status)获得使子进程 _暂停的信号编号_                                                                       |
 **** wait实例
-     pr_exit使用表8-1中的宏以打印进程的终止状态。注意如果定义了WCOREDUMP，则此函数也处理该宏
+     pr_exit使用表8-1中的宏以打印进程的终止状态
+
+     #+BEGIN_EXAMPLE
+       注意：如果定义了WCOREDUMP，则此函数也处理该宏
+     #+END_EXAMPLE
      #+BEGIN_SRC C
        #include <sys/types.h>
        #include <wait.h>
@@ -485,122 +537,152 @@
   abnormal termination, signal number = 6 # SIGABRT
   abnormal termination, signal number = 8 # SIGFPE
      #+END_SRC
-     不幸的是没有一种可移植的方法将WTERMSIG得到的信号编号映射为说明性的名字。必须查看<signal.h>头文件才能知道SIGABRT的值是6，SIGFPE的值是8
+
+     #+BEGIN_EXAMPLE
+       不幸的是：没有一种可移植的方法将 WTERMSIG 得到的信号编号映射为说明性的名字
+
+       必须查看<signal.h>头文件才能知道 SIGABRT 的值是 6， SIGFPE 的值是 8
+     #+END_EXAMPLE
 *** waitpid
-    waitpid：可以指定子进程的PID，并设置相关阻塞选项
+    waitpid：可以 *指定子进程的PID* ，并 *设置相关阻塞选项* 
     #+BEGIN_SRC C
-  #include <sys/types.h>
-  #include <sys/wait.h>
+      #include <sys/types.h>
+      #include <sys/wait.h>
 
-  /**
-     wait的扩展版本，可以指定子进程pid，以及相关阻塞选项
-
-     pid：子进程pid
-     status：存储终止状态的指针
-     options：阻塞选项
-
-     return：若成功返回终止子进程的PID，若出错返回-1
-  ,*/
-  pid_t waitpid(pid_t pid, int *status, int options);
+      /**
+       ,* wait的扩展版本，可以指定子进程pid，以及相关阻塞选项
+       ,*
+       ,* pid: 子进程pid
+       ,* status: 存储终止状态的指针
+       ,* options: 阻塞选项
+       ,*
+       ,* return: 若成功返回终止 子进程的PID，若出错返回 -1
+       ,*
+       ,*/
+      pid_t waitpid(pid_t pid, int *status, int options);
     #+END_SRC
     
     pid参数与其值有关：
     #+CAPTION: waitpid的pid参数
     #+ATTR_HTML: :border 1 :rules all :frame boader
     | pid取值 | 说明 | 
-    | pid == -1 | 等待任一子进程，与wait等效 |
-    |pid > 0 | 等待其进程ID与pid相等的子进程 | 
-    | pid == 0 | 等待其组ID等于调用进程的组ID的任一子进程 |
-    | pid < -1 | 等待其组ID等于pid的绝对值的任一子进程 |
+    | pid == -1 | 等待 _任一子进程_ ，与wait等效 |
+    |pid > 0 | 等待其进程 _ID与pid相等_ 的子进程 | 
+    | pid == 0 | 等待其 _组ID_ 等于 _调用进程的组ID_ 的 _任一子进程_  |
+    | pid < -1 | 等待其 _组ID_ 等于 _pid的绝对值的任一子进程_  |
     
-    options参数或者是0，或者是下表中常数的逐位或运算
+    options 参数或者是 0，或者是下表中常数的逐位 _或运算_ 
     #+CAPTION: waitpid的option参数
     #+ATTR_HTML: :border 1 :rules all :frame boader
     | 常量      | 说明                                                                                                                                                |
-    | WNOHANG   | 如果pid指定的子进程并不立即可用，则waitpid不阻塞，直接返回值为0                                                             |
-    | WUNTRACED | 如果实现支持作业控制，则由pid指定的任一子进程状态已暂停，并且其状态自暂停以来还未报告过，则返回其状态。WIFSTOPPED宏确定返回值是否对应于一个暂停子进程 |
-    | 0         | 阻塞并等待pid指定的子进程终止                                                                                                                                      |
+    | _WNOHANG_  | 如果pid指定的子进程并不立即可用，则 *waitpid不阻塞* ，直接返回值为 _0_                                                      |
+    | _WUNTRACED_ | 如果实现 _支持作业控制_ ，则由pid指定的任一子进程 _状态已暂停_ ，并且 *其状态自暂停以来还未报告过* ，则返回 _其状态_ 。 _WIFSTOPPED_ 宏确定返回值是否对应于一个 _暂停_ 子进程 |
+    | 0         |  *阻塞* 并 *等待* pid指定的子进程终止                                                                                                                              |
     
     因此waitpid函数提供了wait函数没有提供的三个功能:
-    1. waitpid等待一个特定的进程(而wait则返回任一终止子进程的状态)
-    2. waitpid提供了一个wait的非阻塞版本。只是希望取得一个子进程的状态，但不想阻塞
-    3. waitpid支持作业控制(以WUNTRACED选择项)
+    1. waitpid *等待一个特定的进程* (而wait则返回 _任一终止子进程_ 的状态)
+    2. waitpid提供了一个wait的 *非阻塞版本* 
+       + 只是希望取得一个子进程的状态，但不想阻塞
+    3. waitpid支持 *作业控制* (以 _WUNTRACED_ 选择项)
 
 **** waitpid实例
-     如果一个进程要fork一个子进程，但不要求它等待子进程终止，也不希望子进程处于僵死状态直到父进程终止。这可以通过调用fork两次来实现：第一个fork子线程提前终止，使得由它fork的第二个子进程被init托管，这样第二个子进程结束会自动被init进程调用wait处理，同时主进程只需要等待第一个子进程终止即可
-     #+BEGIN_SRC C
-       #include <sys/types.h>
-       #include <sys/wait.h>
-       #include "apue.h"
+     #+BEGIN_EXAMPLE
+       如果一个进程要fork一个子进程，但不要求它等待子进程终止，也不希望子进程处于僵死状态直到父进程终止
+     #+END_EXAMPLE
+     这可以通过 *调用fork两次* 来实现：
+     + _第一个fork子线程_ *提前终止* ，使得由它 _fork的第二个子进程_ 被 _init_ 托管
+     + _第二个子进程_ 结束会 *自动被 _init_ 进程调用 _wait_ 处理* 
+     + _主进程_ 只需要 *等待* _第一个子进程终止_ 即可
+       #+BEGIN_SRC C
+	   #include <sys/types.h>
+	   #include <sys/wait.h>
+	   #include "apue.h"
 
-       int main(void)
-       {
-               //进程p
-               pid_t pid;
+	   int main(void)
+	   {
+		   //进程p
+		   pid_t pid;
 
-               if( ( pid = fork() ) < 0)
-                       err_sys("1. fork error");
-               else if (0 == pid) { //子进程1，它的父进程是进程p
-                       if( ( pid = fork() ) < 0)
-                               err_sys("2.fork error");
-                       else if(pid > 0) //子进程1 
-                               exit(0); //结束子进程1
+		   if( ( pid = fork() ) < 0)
+			   err_sys("1. fork error");
+		   else if (0 == pid) { //子进程1，它的父进程是进程p
+			   if( ( pid = fork() ) < 0)
+				   err_sys("2.fork error");
+			   else if(pid > 0) //子进程1 
+				   exit(0); //结束子进程1
 
-                       /*
-                         这是子进程2，它的父进程原本是子进程1，但是因为子进程正常终止了，所以由init进程托管
-                       ,*/
-                       sleep(2);
-                       printf("second child parent pid = %d\n", getppid());
-                       exit(0); //当子进程2终止时，init进程会调用wait清理子进程2
-               }
+			   /*
+			     这是子进程2，它的父进程原本是子进程1，但是因为子进程正常终止了，所以由init进程托管
+			   ,*/
+			   sleep(2);
+			   printf("second child parent pid = %d\n", getppid());
+			   exit(0); //当子进程2终止时，init进程会调用wait清理子进程2
+		   }
 
-               //进程p阻塞等待子进程1终止，并清理子进程1
-               if(waitpid(pid, NULL, 0) != pid)
-                       err_sys("waitpid error"); 
+		   //进程p阻塞等待子进程1终止，并清理子进程1
+		   if(waitpid(pid, NULL, 0) != pid)
+			   err_sys("waitpid error"); 
 
-               //进程p终止
-               exit(0);
-       }
-     #+END_SRC
-     测试：
-     #+BEGIN_SRC sh
-  $ ./src/process/zombieAvoid
+		   //进程p终止
+		   exit(0);
+	   }
+       #+END_SRC
+       测试：
+       #+BEGIN_SRC sh
+      $ ./src/process/zombieAvoid
 
-  $ second child parent pid = 1 #第一个fork的子进程终止了，它的子进程被init进程托管
-     #+END_SRC
-     在第二个子进程中调用sleep是为了保证在打印父进程ID时第一个子进程已终止。在fork之后，父、子进程都可继续执行，但无法预知哪一个会先执行。如果不使第二个子进程睡眠，则在fork之后它可能比其父进程先执行，于是它打印的父进程ID将是创建它的父进程，而不是init进程
-     
+      $ second child parent pid = 1 #第一个fork的子进程终止了，它的子进程被init进程托管
+       #+END_SRC
+
+     #+BEGIN_EXAMPLE
+       在第二个子进程中调用 sleep 是为了保证在打印父进程ID时第一个子进程已终止
+
+       在fork之后，父、子进程都可继续执行，但无法预知哪一个会先执行
+
+       如果不使第二个子进程睡眠，则在fork之后它可能比其父进程先执行，于是它打印的父进程ID将是创建它的父进程，而不是init进程
+     #+END_EXAMPLE
+
 *** wait3和wait4
-    wait3和wait4这两个函数比wait和waitpid分别要多一个参数rusage，该参数用于内核返回由终止进程及其所有子进程使用的资源信息摘要，包括用户CPU时间总量、系统CPU时间总量、缺页次数、接收到信号的次数等。这些资源信息只包括终止子进程，并不包括处于停止状态的子进程
-    
+    _wait3_ 和 _wait4_ 这两个函数比 _wait_ 和 _waitpid_ 分别要多一个参数 *rusage* ，该参数用于内核返回由 *终止进程及其所有子进程使用的资源信息摘要* ，包括：
+    + 用户CPU时间总量
+    + 系统CPU时间总量
+    + 缺页次数
+    + 接收到信号的次数等
+
+    #+BEGIN_EXAMPLE
+    这些资源信息只包括终止子进程，并不包括处于停止状态的子进程
+    #+END_EXAMPLE
+
     #+BEGIN_SRC C
-  #include <sys/types.h>
-  #include <sys/time.h>
-  #include <sys/resources.h>
-  #include <sys/wait.h>
+      #include <sys/types.h>
+      #include <sys/time.h>
+      #include <sys/resources.h>
+      #include <sys/wait.h>
 
-  /**
-     等待任一进程终止，并返回终止子进程使用的资源摘要
+      /**
+       ,* 等待任一进程终止，并返回终止子进程使用的资源摘要
+       ,*
+       ,* status: 存储子进程的 终止状态的指针
+       ,* options: 阻塞选项
+       ,* rusage: 存储 终止子进程 使用的资源摘要 的结构指针
+       ,*
+       ,* return: 若成功返回 终止子进程的PID，若出错返回 -1
+       ,*
+       ,*/
+      pid_t wait3(int *status, int options, struct rusage *rusage);
 
-     status：存储子进程的终止状态的指针
-     options：阻塞选项
-     rusage：存储终止子进程使用的资源摘要的结构指针
-
-     return：若成功返回终止子进程的PID，若出错返回-1
-  ,*/
-  pid_t wait3(int *status, int options, struct rusage *rusage);
-
-  /**
-     等待指定子进程终止，并返回终止子进程使用的资源摘要
-
-     pid：指定子进程ID
-     status：存储子进程的终止状态的指针
-     options：阻塞选项
-     rusage：存储终止子进程使用的资源摘要的结构指针
-
-     return：若成功返回终止子进程的PID，若出错返回-1
-  ,*/
-  pid_t wait4(pid_t pid, int *status, int options, struct rusage *rusage);
+      /**
+       ,* 等待指定子进程终止，并返回终止子进程使用的资源摘要
+       ,*
+       ,* pid: 指定 子进程ID
+       ,* status: 存储子进程的 终止状态 的指针
+       ,* options: 阻塞选项
+       ,* rusage：存储 终止子进程 使用的资源摘要 的结构指针
+       ,*
+       ,* return：若成功返回 终止子进程的PID，若出错返回 -1
+       ,*
+       ,*/
+      pid_t wait4(pid_t pid, int *status, int options, struct rusage *rusage);
     #+END_SRC
     表8-4中列出了各个wait函数所支持的不同的参数：
     
@@ -611,22 +693,41 @@
     | waitpid | •   | •       |        | •     | •    | •       |
     | wait3   |     | •       | •      |       | •    | •       |
     | wait4   | •   | •       | •      |       | •    | •       |
-    对Linux而言，wait4是wait家族各个函数的系统调用入口，其它几个函数都基于wait4重新实现
-    
+
+    #+BEGIN_EXAMPLE
+      对Linux而言，wait4是wait家族各个函数的系统调用入口，其它几个函数都基于wait4重新实现
+    #+END_EXAMPLE
+
 ** 竞争条件
-   当多个进程都企图对共享数据进行某种处理，而最后的结果又取决于进程运行的顺序时，这就产生了竞态条件。如果在fork之后的某种逻辑显式或隐式地依赖于在fork之后是父进程先运行还是子进程先运行，那么fork函数就会是竞态条件活跃的孳生地。通常无法预料哪一个进程先运行。即使知道哪一个进程先运行，那么在该进程开始运行后所发生的事情也依赖于系统负载以及内核的调度算法
+   当多个进程都企图对 *共享数据* 进行某种处理，而 *最后的结果* 又取决于 *进程运行的顺序* 时，这就产生了 _竞态_ 条件。如果在 _fork之后_ 的 _某种逻辑_ _显式或隐式_ 地 *依赖* 于在fork之后是 _父进程先运行_ 还是 _子进程先运行_ ，那么 *fork函数就会是竞态条件* 活跃的孳生地
    
-   例如在waitpid的实例中，当第二个子进程打印其父进程ID时就可以看到了一个潜在的竞态条件。如果第二个子进程在第一个子进程之前运行，则其父进程将会是第一个子进程。但是如果第一个子进程先运行，并有足够的时间到达并执行exit，则第二个子进程的父进程就是init。即使在程序中调用sleep，这也不保证什么。如果系统负担很重，那么在第二个子进程从sleep返回时，可能第一个子进程还没有得到机会运行。这种形式的问题很难排除，因为在大部分时间，这种问题并不出现
-   
-   如果一个进程希望等待一个子进程终止，则它必须调用wait函数。如果一个进程要等待其父进程终止，则可使用下列轮询的循环:
-   #+BEGIN_SRC C
-  while(getppid() != 1) //父进程终止，子进程由init进程托管
-          sleep(1);
-   #+END_SRC
-   但轮询的问题是它浪费了CPU时间，因为调用者每隔1秒都被唤醒，然后进行条件测试
-   
-   为了避免竞态条件和定期询问，在多个进程之间需要有某种形式的信号机制。在UNIX中可以使用信号机制和各种形式的进程间通信
-   
+   #+BEGIN_EXAMPLE
+     通常无法预料哪一个进程先运行。即使知道哪一个进程先运行，那么在该进程开始运行后所发生的事情也依赖于系统负载以及内核的调度算法
+
+     例如在waitpid的实例中，当第二个子进程打印其父进程ID时就可以看到了一个潜在的竞态条件
+     如果第二个子进程在第一个子进程之前运行，则其父进程将会是第一个子进程
+     但是如果第一个子进程先运行，并有足够的时间到达并执行exit，则第二个子进程的父进程就是init
+     即使在程序中调用sleep，这也不保证什么。如果系统负担很重，那么在第二个子进程从sleep返回时，可能第一个子进程还没有得到机会运行
+
+     这种形式的问题很难排除，因为在大部分时间，这种问题并不出现
+   #+END_EXAMPLE
+   + 如果一个进程希望等待一个子进程终止，则它必须调用 _wait_ 函数
+   + 如果一个进程要等待其父进程终止，则可使用下列 _轮询_ :
+     #+BEGIN_SRC C
+     while(getppid() != 1) //父进程终止，子进程由init进程托管
+	     sleep(1);
+     #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     但轮询的问题是它浪费了CPU时间，因为调用者每隔1秒都被唤醒，然后进行条件测试
+   #+END_EXAMPLE
+
+   为了避免竞态条件和定期询问，在多个进程之间需要有某种形式的 *信号* 机制
+
+   #+BEGIN_EXAMPLE
+   在UNIX中可以使用信号机制和各种形式的进程间通信
+   #+END_EXAMPLE
+
 *** 竞争条件实例
     输出两个字符串：一个由子进程输出，一个由父进程输出。因为输出依赖于内核使进程运行的顺序及每个进程运行的时间长度，所以该程序包含了一个竞态条件
     #+BEGIN_SRC C
@@ -675,27 +776,29 @@
     
     下面的代码会保证父进程比子进程先打印
     #+BEGIN_SRC C
-  int
-  main(void)
-  {
-      pid_t   pid;
+      int main(void)
+      {
+	  pid_t   pid;
 
-  +   TELL_WAIT();
+      +   TELL_WAIT();
 
-      if ((pid = fork()) < 0) {
-          err_sys("fork error");
-      } else if (pid == 0) {
-  +       WAIT_PARENT();      /* parent goes first */
-          charatatime("output from child\n");
-      } else {
-          charatatime("output from parent\n");
-  +       TELL_CHILD(pid);
+	  if ((pid = fork()) < 0) {
+	      err_sys("fork error");
+	  } else if (pid == 0) {
+      +       WAIT_PARENT();      /* parent goes first */
+	      charatatime("output from child\n");
+	  } else {
+	      charatatime("output from parent\n");
+      +       TELL_CHILD(pid);
+	  }
+	  exit(0);
       }
-      exit(0);
-  }
     #+END_SRC
-    以后会用信号量来实现五个例程TELL_WAIT、TELL_PARENT、TELL_CHILD、WAIT_PARENT以及WAIT_CHILD
-    
+
+    #+BEGIN_EXAMPLE
+      以后会用信号量来实现五个例程TELL_WAIT、TELL_PARENT、TELL_CHILD、WAIT_PARENT以及WAIT_CHILD
+    #+END_EXAMPLE
+
 ** 执行程序
    当进程调用一种exec函数时，该进程完全由新程序代换，而新程序则从其main函数开始执行。调用exec并不创建新进程，因此进程ID并未改变。exec只是用另一个新程序替换了当前进程的正文、数据、堆和栈段
    
