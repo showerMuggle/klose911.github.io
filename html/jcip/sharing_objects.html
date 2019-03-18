@@ -241,15 +241,13 @@ for the JavaScript code in this tag.
 <li><a href="#org98548d2">可见性</a>
 <ul>
 <li><a href="#org7c68390">过时的变量</a></li>
-<li><a href="#org787dc33">64位变量可能非原子</a></li>
-<li><a href="#orgc4140ce">加锁保证可见</a></li>
 <li><a href="#org1045b41">volatile变量　</a></li>
 </ul>
 </li>
 <li><a href="#org85a41d9">this逃逸　</a></li>
 <li><a href="#org26c90f9">线程限制　</a>
 <ul>
-<li><a href="#org1172540">栈限制，变量申明在方法内　</a></li>
+<li><a href="#orgff05fdf">栈限制</a></li>
 <li><a href="#orgdc8cf1a">ThreadLocal类</a></li>
 </ul>
 </li>
@@ -270,7 +268,7 @@ for the JavaScript code in this tag.
 <h3 id="org7c68390">过时的变量</h3>
 <div class="outline-text-3" id="text-org7c68390">
 <p>
-一个线程修改了变量的值, 另一个线程并非总是能够及时获知最新的值
+一个线程 <span class="underline">修改了变量的值</span> ,  <span class="underline">另一个线程</span>  <b>并非</b> 总是能够 <b>及时获知最新的值</b> 
 </p>
 
 <div class="org-src-container">
@@ -292,23 +290,22 @@ for the JavaScript code in this tag.
 }
 </pre>
 </div>
+
+<ul class="org-ul">
+<li><span class="underline">64位变量</span> 可能 <span class="underline">非原子</span></li>
+<li><span class="underline">加锁</span> 可以保证 <span class="underline">可见</span></li>
+</ul>
 </div>
-</div>
-<div id="outline-container-org787dc33" class="outline-3">
-<h3 id="org787dc33">64位变量可能非原子</h3>
-</div>
-<div id="outline-container-orgc4140ce" class="outline-3">
-<h3 id="orgc4140ce">加锁保证可见</h3>
 </div>
 <div id="outline-container-org1045b41" class="outline-3">
 <h3 id="org1045b41">volatile变量　</h3>
 <div class="outline-text-3" id="text-org1045b41">
 <p>
-volatile无法保证操作的原子性, 只能保证变量的可见性!
+volatile <b>无法保证操作的原子性</b> , 只能 <b>保证变量的可见性</b> ：
 </p>
 <ol class="org-ol">
-<li>更改不依赖于当前值, 或者能够确保只会在单一线程中修改变量的值</li>
-<li>变量不需要与其他状态变量共同参与不变约束</li>
+<li>更改 <span class="underline">不依赖于当前值</span> , 或者能够确保 <span class="underline">只会在单一线程中修改变量的值</span></li>
+<li>变量 <span class="underline">不需要</span> 与 <span class="underline">其他状态变量</span> 共同参与 <span class="underline">不变约束</span></li>
 </ol>
 
 <div class="org-src-container">
@@ -326,39 +323,42 @@ volatile无法保证操作的原子性, 只能保证变量的可见性!
 <h2 id="org85a41d9">this逃逸　</h2>
 <div class="outline-text-2" id="text-org85a41d9">
 <p>
-在构造函数返回之前其他线程就持有该对象的引用　
+在 <b>构造函数返回之前 <span class="underline">其他线程</span> 就持有该对象的引用</b> 
 </p>
 
 <div class="org-src-container">
-<pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">class</span> <span style="color: #98f5ff;">ThisEscape</span> {  
+<pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">class</span> <span style="color: #98f5ff;">ThisEscape</span> {
+    <span style="color: #00bfff; font-weight: bold;">private</span> <span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">a</span> = 1;
     <span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #daa520; font-weight: bold;">ThisEscape</span>() {  
         <span style="color: #00bfff; font-weight: bold;">new</span> <span style="color: #98f5ff;">Thread</span>(<span style="color: #00bfff; font-weight: bold;">new</span> <span style="color: #98f5ff;">EscapeRunnable</span>()).start();  
-        <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">...  </span>
+        <span style="color: #00bfff; font-weight: bold;">this</span>.a = 2;
     }  
 
     <span style="color: #00bfff; font-weight: bold;">private</span> <span style="color: #00bfff; font-weight: bold;">class</span> <span style="color: #98f5ff;">EscapeRunnable</span> <span style="color: #00bfff; font-weight: bold;">implements</span> <span style="color: #98f5ff;">Runnable</span> {  
         <span style="color: #ffd700;">@Override</span>  
         <span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">run</span>() {  
-            <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#36890;&#36807;ThisEscape.this&#23601;&#21487;&#20197;&#24341;&#29992;&#22806;&#22260;&#31867;&#23545;&#35937;, &#20294;&#26159;&#27492;&#26102;&#22806;&#22260;&#31867;&#23545;&#35937;&#21487;&#33021;&#36824;&#27809;&#26377;&#26500;&#36896;&#23436;&#25104;, &#21363;&#21457;&#29983;&#20102;&#22806;&#22260;&#31867;&#30340;this&#24341;&#29992;&#30340;&#36867;&#36920;  </span>
+            <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#36890;&#36807;ThisEscape.this&#23601;&#21487;&#20197;&#24341;&#29992;&#22806;&#22260;&#31867;&#23545;&#35937;, &#20294;&#26159;&#27492;&#26102;&#22806;&#22260;&#31867;&#23545;&#35937;&#21487;&#33021;&#36824;&#27809;&#26377;&#26500;&#36896;&#23436;&#25104;, &#21363;&#21457;&#29983;&#20102;&#22806;&#22260;&#31867;&#30340;this&#24341;&#29992;&#30340;&#36867;&#36920;</span>
+            <span style="color: #00bfff; font-weight: bold;">this</span>.a += 1;
         }  
     }  
 </pre>
 </div>
 
-<p>
-使用一个private的构造器中启动线程或注册监听和public的工厂方法来调用构造器
-</p>
+<ol class="org-ol">
+<li>使用一个 <span class="underline">private的构造器</span> 中 <b>启动线程</b> 或 <b>注册监听</b></li>
+<li><span class="underline">public的工厂方法</span> 来调用构造器</li>
+</ol>
 
 
 <div class="org-src-container">
 <pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">class</span> <span style="color: #98f5ff;">ThisEscape</span> {  
     <span style="color: #00bfff; font-weight: bold;">private</span> <span style="color: #00bfff; font-weight: bold;">final</span> <span style="color: #98f5ff;">Thread</span> <span style="color: #4eee94;">t</span>;  
-    <span style="color: #00bfff; font-weight: bold;">private</span> <span style="color: #daa520; font-weight: bold;">ThisEscape</span>() {
-        t = <span style="color: #00bfff; font-weight: bold;">new</span> <span style="color: #98f5ff;">Thread</span>(<span style="color: #00bfff; font-weight: bold;">new</span> <span style="color: #98f5ff;">EscapeRunnable</span>());  
+    <span style="color: #00bfff; font-weight: bold;">private</span> <span style="color: #daa520; font-weight: bold;">ThisEscape</span>() { <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">private &#30340;&#26500;&#36896;&#22120;</span>
+        t = <span style="color: #00bfff; font-weight: bold;">new</span> <span style="color: #98f5ff;">Thread</span>(<span style="color: #00bfff; font-weight: bold;">new</span> <span style="color: #98f5ff;">EscapeRunnable</span>());  <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#21551;&#21160;&#32447;&#31243;</span>
         <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">...  </span>
     }  
 
-    <span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">static</span> <span style="color: #98f5ff;">ThisEscape</span> <span style="color: #daa520; font-weight: bold;">getInstance</span>() {
+    <span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">static</span> <span style="color: #98f5ff;">ThisEscape</span> <span style="color: #daa520; font-weight: bold;">getInstance</span>() { <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">public&#30340;&#24037;&#21378;&#26041;&#27861;&#26469;&#35843;&#29992;&#26500;&#36896;&#22120;</span>
         <span style="color: #98f5ff;">ThisEscape</span> <span style="color: #4eee94;">escape</span> = <span style="color: #00bfff; font-weight: bold;">new</span> <span style="color: #98f5ff;">ThisEscape</span>();
         escape.t.start();
         <span style="color: #00bfff; font-weight: bold;">return</span> escape;
@@ -367,7 +367,7 @@ volatile无法保证操作的原子性, 只能保证变量的可见性!
     <span style="color: #00bfff; font-weight: bold;">private</span> <span style="color: #00bfff; font-weight: bold;">class</span> <span style="color: #98f5ff;">EscapeRunnable</span> <span style="color: #00bfff; font-weight: bold;">implements</span> <span style="color: #98f5ff;">Runnable</span> {  
         <span style="color: #ffd700;">@Override</span>  
         <span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">run</span>() {  
-            <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#36890;&#36807;ThisEscape.this&#23601;&#21487;&#20197;&#24341;&#29992;&#22806;&#22260;&#31867;&#23545;&#35937;, &#27492;&#26102;&#21487;&#20197;&#20445;&#35777;&#22806;&#22260;&#31867;&#23545;&#35937;&#24050;&#32463;&#26500;&#36896;&#23436;&#25104;  </span>
+            <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#27492;&#26102;&#21487;&#20197;&#20445;&#35777;&#22806;&#22260;&#31867;&#23545;&#35937;&#24050;&#32463;&#26500;&#36896;&#23436;&#25104;  </span>
         }  
     }  
 }  
@@ -380,14 +380,19 @@ volatile无法保证操作的原子性, 只能保证变量的可见性!
 <h2 id="org26c90f9">线程限制　</h2>
 <div class="outline-text-2" id="text-org26c90f9">
 </div>
-<div id="outline-container-org1172540" class="outline-3">
-<h3 id="org1172540">栈限制，变量申明在方法内　</h3>
+<div id="outline-container-orgff05fdf" class="outline-3">
+<h3 id="orgff05fdf">栈限制</h3>
+<div class="outline-text-3" id="text-orgff05fdf">
+<p>
+变量申明在方法内　
+</p>
+</div>
 </div>
 <div id="outline-container-orgdc8cf1a" class="outline-3">
 <h3 id="orgdc8cf1a">ThreadLocal类</h3>
 <div class="outline-text-3" id="text-orgdc8cf1a">
 <p>
-线程不安全的JDBC Connection可以放在ThreadLocal里面　
+线程不安全的JDBC Connection可以放在 <span class="underline">ThreadLocal</span> 里面　
 </p>
 </div>
 </div>
@@ -396,17 +401,22 @@ volatile无法保证操作的原子性, 只能保证变量的可见性!
 <div id="outline-container-org4650576" class="outline-2">
 <h2 id="org4650576">不变对象</h2>
 <div class="outline-text-2" id="text-org4650576">
-<ol class="org-ol">
-<li>构造完成后所有属性无法改变，所有属性都是final</li>
-<li>不会出现this逃逸　</li>
-</ol>
+<p>
+构造完成后 <b>所有属性无法改变</b> ，所有属性都是 <span class="underline">final</span> 
+</p>
+
+<pre class="example">
+不会出现this逃逸　
+</pre>
 </div>
 
 <div id="outline-container-org8da9115" class="outline-3">
 <h3 id="org8da9115">volatile和不变对象进行同步</h3>
 <div class="outline-text-3" id="text-org8da9115">
-<p>
-当对象状态发生变化的时候，重新构造一个新的不变对象，用volatile保证每个新构造的不变对象可见性
+<ul class="org-ul">
+<li>当 <b>对象状态发生变化</b> 的时候， <b>重新构造一个新的不变对象</b></li>
+<li><p>
+用 <span class="underline">volatile</span> 保证每个 <span class="underline">新构造的不变对象</span> <b>可见性</b> 
 </p>
 
 <div class="org-src-container">
@@ -445,7 +455,8 @@ volatile无法保证操作的原子性, 只能保证变量的可见性!
 </div>
 <p>
 　
-</p>
+</p></li>
+</ul>
 </div>
 </div>
 </div>
@@ -454,11 +465,11 @@ volatile无法保证操作的原子性, 只能保证变量的可见性!
 <h2 id="org9a0ea61">安全发布　</h2>
 <div class="outline-text-2" id="text-org9a0ea61">
 <ol class="org-ol">
-<li>线程限制. 如果限制对象只可由单一的线程访问, 那么无论公开哪个成员, 都不会产生并发问题</li>
-<li>公开不可变成员. 如果对象的某个成员是不可变的, 那么公开该成员不会产生并发问题</li>
-<li>公开事实上的不可变成员. 如果对象的某个成员是可变的, 但约定访问该成员的所有线程不要去修改这个成员, 那么该成员是事实上不可变的. 这种场景下公开该成员不会产生并发问题</li>
-<li>公开线程安全的成员. 线程安全的成员内部会妥善并发问题, 因此公开线程安全的成员是恰当的</li>
-<li>公开可变的非线程安全的成员. 这就要求所有访问该成员的线程使用特定的锁进行同步</li>
+<li><span class="underline">线程限制</span> ：如果限制对象只可由单一的线程访问, 那么无论公开哪个成员, 都 <b>不会产生并发问题</b></li>
+<li><span class="underline">公开不可变成员</span> ：如果对象的某个成员是不可变的, 那么公开该成员 <b>不会产生并发问题</b></li>
+<li><span class="underline">公开事实上的不可变成员</span> ：如果对象的某个成员是可变的, 但 <b>约定访问该成员的所有线程不要去修改这个成员</b> , 那么该成员是事实上不可变的. 这种场景下公开该成员 <b>不会产生并发问题</b></li>
+<li><span class="underline">公开线程安全的成员</span> ：线程安全的成员 <b>内部会妥善并发</b> 问题, 因此公开线程安全的成员是恰当的</li>
+<li><span class="underline">公开可变的非线程安全的成员</span> ：这就要求所有访问该成员的线程使用 <b>特定的锁</b> 进行同步</li>
 </ol>
 
 <p>
