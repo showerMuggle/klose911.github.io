@@ -800,10 +800,16 @@
     #+END_EXAMPLE
 
 ** 执行程序
-   当进程调用一种exec函数时，该进程完全由新程序代换，而新程序则从其main函数开始执行。调用exec并不创建新进程，因此进程ID并未改变。exec只是用另一个新程序替换了当前进程的正文、数据、堆和栈段
-   
+   当进程调用一种 _exec_ 函数时，该进程 *完全由新程序* 代换，而新程序则从其 _main_ 函数开始执行
+
+   #+BEGIN_EXAMPLE
+     调用exec并不创建新进程，因此进程ID并未改变
+
+     exec 只是用另一个新程序替换了当前进程的 正文、数据、堆 和 栈段
+   #+END_EXAMPLE
+
 *** exec家族函数
-    exec家族函数：将指定的程序装入当前进程，使之替换掉当前进程大部分的上下文环境。一共6个变体，使用类似但形式不同的参数。
+    _exec_ 家族函数： *将指定的程序装入当前进程，使之替换掉当前进程大部分的上下文环境* 。一共6个变体，使用类似但形式不同的参数。
     #+BEGIN_SRC C
   #include <unistd.h>
 
@@ -814,50 +820,80 @@
   int execvp(const char *filename, char *const argv[]);
   int execve(const char *pathname, char *const argv[], char *const envp[]);
     #+END_SRC
-    这六个函数若出错则为-1，若成功则不返回
+    这六个函数若出错则为 _-1_ ，若成功则 _不返回_ 
     
-    + 字母p表示该函数取filename作为参数，并且用PATH环境变量寻找可执行文件，没有字母ｐ表示pathname路径名
-    + 字母l表示该函数取一个参数表，与字母v互斥，v表示该函数取一个argv[]
-    + 字母e表示该函数取envp[]数组，而不使用当前环境
-    #+CAPTION: 6个exec函数的参数区别
-    #+ATTR_HTML: :border 1 :rules all :frame boade
-    | 函数   | pathname | filename |   | 参数表 | argv[] |   | enviorn | envp[] |
-    | execl    | •        |          |   | •      |        |   | •       |        |
-    | execlp   |          | •        |   | •      |        |   | •       |        |
-    | execle   | •        |          |   | •      |        |   |         | •      |
-    | execv    | •        |          |   |        | •      |   | •       |        |
-    | execvp   |          | •        |   |        | •      |   | •       |        |
-    | execve   | •        |          |   |        | •      |   |         | •      |
-    | 字母表示 |          | p        |   | l      | v      |   |         | e      |
+    + *路径* ：
+      + 字母 _p_ ：该函数取 _filename_ 作为参数，并且用 _PATH环境变量_ *寻找* _可执行文件_
+      + _没有_ 字母 _ｐ_ ： _pathname_ 路径名
+    + *参数表* ：
+      + 字母 _l_ ： _*arg0_ 指针
+      + 字母 _v_ ： _*argv[]_ 数组
+      + 两种形式互斥
+    + *环境变量* 
+      + 字母 _e_ ： _*envp[]_ 数组
+      + _没有_ 字母 _e_ ： _不使用当前环境_ 
+      #+CAPTION: 6个exec函数的参数区别
+      #+ATTR_HTML: :border 1 :rules all :frame boade
+      | 函数   | pathname | filename |   | 参数表 | argv[] |   | enviorn | envp[] |
+      | execl    | •        |          |   | •      |        |   | •       |        |
+      | execlp   |          | •        |   | •      |        |   | •       |        |
+      | execle   | •        |          |   | •      |        |   |         | •      |
+      | execv    | •        |          |   |        | •      |   | •       |        |
+      | execvp   |          | •        |   |        | •      |   | •       |        |
+      | execve   | •        |          |   |        | •      |   |         | •      |
+      | 字母表示 |          | p        |   | l      | v      |   |         | e      |
 
-    在很多UNIX实现中，这六个函数中只有一个execve是内核的系统调用。另外五个只是库函数，它们最终都要调用execve系统调用。这六个函数之间的关系示于图8-2中：
+    #+BEGIN_EXAMPLE
+      在很多UNIX实现中，这六个函数中只有一个 execve 是内核的系统调用
+
+      另外五个只是库函数，它们最终都要调用execve系统调用
+    #+END_EXAMPLE
+    这六个函数之间的关系示于图8-2中：
     #+ATTR_HTML: image :width 90% 
     [[file:pic/exec-family.jpg]]
 **** exec进程特征
-     执行exec后进程还保持了原进程的下列特征:
-     + 进程ID和父进程ID
-     + 实际用户ID和实际组ID
-     + 添加组ID
-     + 进程组ID
-     + 对话期ID
-     + 控制终端
-     + 闹钟尚余留的时间
-     + 当前工作目录
-     + 根目录
-     + 文件方式创建屏蔽字
-     + 文件锁
-     + 进程信号屏蔽
-     + 未决信号
-     + 资源限制
+     执行 _exec后进程_ 还 *保持* 了原进程的下列特征:
+     + _进程ID_ 和 _父进程ID_ 
+     + _实际用户ID_ 和 _实际组ID_ 
+     + _添加组ID_ 
+     +  _进程组ID_ 
+     + _对话期ID_ 
+     + _控制终端_ 
+     + *闹钟尚余留* 的时间
+     + _当前工作目录_ 
+     + _根目录_ 
+     + *文件方式创建屏蔽字* 
+     + *文件锁* 
+     + *进程信号屏蔽* 
+     + *未决信号* 
+     + _资源限制_ 
      + tms_utime，tms_stime，tms_cutime以及tms_ustime值
 
-     对打开文件的处理与每个描述符的exec关闭标志值FD_CLOEXEC有关。进程中每个打开描述符都有一个exec关闭标志。若此标志设置，则在执行exec时关闭该描述符，否则该描述符仍打开。除非特地用fcntl设置了该标志，否则系统的默认操作是在exec后仍保持这种描述符打开
+     #+BEGIN_EXAMPLE
+     与fork进程相比较，子进程是不继承文件锁，未决信号集！！！
+     #+END_EXAMPLE
 
-     POSIX.1明确要求在exec时关闭打开目录流。这通常是由opendir函数实现的，它调用fcntl函数为对应于打开目录流的描述符设置exec关闭标志
+     对打开文件的处理与每个描述符的 _exec关闭标志值_ *FD_CLOEXEC* 有关。进程中每个 _打开描述符_ 都有一个 _exec关闭标志_ ：
+     + 若 _此标志设置_ ，则在执行 *exec时关闭该描述符* ，否则该描述符仍打开
+     + 除非 *特地用fcntl设置了该标志* ，否则系统的 _默认_ 操作是在 *exec后仍保持这种描述符打开* 
 
-     注意：在exec前后实际用户ID和实际组ID保持不变，而有效ID是否改变则取决于所执行程序的文件的设置-用户-ID位和设置-组-ID位是否设置。如果新程序的设置-用户-ID位已设置，则有效用户ID变成程序文件所有者的ID，否则有效用户ID不变。对组ID的处理方式与此相同！
+     #+BEGIN_EXAMPLE
+       POSIX.1明确要求在exec时关闭打开目录流
+
+       这通常是由 opendir 函数实现的，它调用fcntl函数为对应于打开目录流的描述符设置exec关闭标志
+     #+END_EXAMPLE
+
+     exec的进程  *有效ID* 是否改变则取决于 _所执行程序的文件_ 的 *设置-用户-ID位* 和 *设置-组-ID位* 是否设置：
+     + 如果新程序的 _设置-用户-ID位_ *已设置* ，则 _有效用户ID_ *变成* _程序文件所有者的ID_ 
+     + 否则： _有效用户ID_ *不变* 
+     + 对 _组ID_ 的处理方式与此相同
+
+     #+BEGIN_EXAMPLE
+       在exec前后 实际用户ID 和 实际组ID 保持不变
+     #+END_EXAMPLE
+
 **** exec实例
-     程序echoall是一个普通程序，回送其所有命令行参数及其全部环境表
+     程序 _echoall_ 是一个普通程序， *回送* 其所有 _命令行参数_ 及其全部 _环境表_ 
      #+BEGIN_SRC C
        #include <stdio.h>
 
@@ -877,7 +913,7 @@
        }
      #+END_SRC
      
-     调用execle要求一个路径名和一个特定的环境。下一个调用的是execlp用一个文件名，并将调用者的环境传送给新程序
+     调用execle要求一个 _路径名_ 和一个 _特定的环境_ 。下一个调用的是execlp用一个文件名，并将调用者的环境传送给新程序
      #+BEGIN_SRC C
   #include <sys/types.h>
   #include <sys/wait.h>
@@ -930,7 +966,13 @@
   # ...... 其他各种环境变量 
   _=./execExample
      #+END_SRC
-     注意：shell提示符号'$'出现在第二个exec打印"echo all"和"only 1 arg"之间，这是因为父进程并不等待该子进程结束
+
+     #+BEGIN_EXAMPLE
+       shell提示符号 '$' 出现在 第二个exec 打印 "echo all" 和 "only 1 arg" 之间
+
+       这是因为父进程并不等待该子进程结束
+     #+END_EXAMPLE
+
 * 更改用户ID和组ID
   + 通过fork创建的子进程，其实际用户ID和有效用户ID将继承自父进程
   + 用exec执行一个程序时，若该进程的程序文件有"保存设置-用户-ID"位，则其有效用户ID为"exec执行程序的文件所属用户的ID"，否则继承自exec之前的上下文
