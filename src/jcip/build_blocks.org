@@ -4,7 +4,14 @@
 #+HTML_LINK_UP: composing_objects.html
 #+HTML_LINK_HOME: jcip.html
 * 同步集合类
-  java提供了多种synchronized集合, 比如Vector, HashTable, Collections的synchronizedXxx方法的返回值. 这些集合封装了状态变量，对每个public方法添加synchronized关键字
+  java提供了多种 *synchronized* 集合：
+  + _Vector_ ,  _HashTable_
+  + _Collections_ 的 _synchronizedXxx_ 方法的返回值.
+
+  #+BEGIN_EXAMPLE
+  这些集合封装了状态变量，对每个 public 方法添加 synchronized 关键字
+  #+END_EXAMPLE
+
 ** 同步集合类的问题
    #+BEGIN_SRC java
       @NotThreadSafe
@@ -18,26 +25,36 @@
               list.remove(lastIndex);   
       }  
    #+END_SRC
-   假设Vector对象中含有10个元素, 多线程环境下可能出现这样的场景: 
-   线程1调用getLast方法, 计算得知lastIndex为9, 然后线程失去CPU使用权. 接着线程2调用deleteLast方法, 其lastIndex也为9, 线程2删除了第9个元素. 然后线程1重新获得CPU时间, 线程1会试图获取第9个元素, 但是该元素已经被线程2删除了, 此时将抛出ArrayIndexOutOfBoundsException异常
-   
-   对于列表的复合操作仍然需要额外的同步保证原子性
+   #+BEGIN_EXAMPLE
+     假设Vector对象中含有10个元素, 多线程环境下可能出现这样的场景: 
+
+     1. 线程1调用getLast方法, 计算得知 lastIndex 为9
+     2. 线程1失去CPU使用权
+     3. 线程2调用deleteLast方法, 其lastIndex也为9
+     4. 线程2删除了第9个元素
+     5. 线程1重新获得CPU时间, 线程1会试图获取第9个元素, 但是该元素已经被线程2删除了, 此时将抛出ArrayIndexOutOfBoundsException异常
+   #+END_EXAMPLE
+
+   对于 _列表的复合操作_ 仍然需要 *额外的同步* 保证原子性
 ** ConcurrentModificationException　
-   迭代集合时, 每个集合内部都拥有一个名为modCount的成员变量, 如果集合发生了变化, 就会更改modCount的值. 使用Iterator开始迭代时，会将modCount的赋值给expectedModCount, 在迭代过程中, 通过每次比较两者是否相等来判断集合是否在内部或被其它线程修改. 如果expectedModCount和modCount不相等, 将抛出ConcurrentModificationException异常　
-   
+   + 迭代集合时, 每个集合内部都拥有一个名为 _modCount_ 的成员变量, 如果集合发生了变化, 就会 *更改modCount的值* .
+   + 使用 _Iterator_ 开始迭代时，会将modCount的赋值给 _expectedModCount_ 
+     + 在迭代过程中, 通过 _每次比较两者是否相等_ 来判断集合 *是否在内部或被其它线程修改*
+     + 如果 _expectedModCount和modCount不相等_ , 将抛出 *ConcurrentModificationException* 异常　
+
+       #+BEGIN_SRC java
+     Iterator<Integer> it = list.iterator();  
+     while(it.hasNext()) {  
+	     System.out.println(it.next());  
+	     // remove操作会导致modCount的值被修改, 从而引发ConcurrentModificationException异常  
+	     list.remove(0);  
+     }  
+       #+END_SRC
+
+   + 可以使用 _并发集合类_
+   + 先同步的 _clone一份集合_ 然后对 _clone集合进行迭代_ ,  *clone的过程仍然需要同步* 
+
    #+BEGIN_SRC java
-  Iterator<Integer> it = list.iterator();  
-  while(it.hasNext()) {  
-          System.out.println(it.next());  
-          // remove操作会导致modCount的值被修改, 从而引发ConcurrentModificationException异常  
-          list.remove(0);  
-  }  
-   #+END_SRC
-   
-1. 可以使用同步集合类
-2. 先同步的clone一份集合然后对clone集合进行迭代, clone的过程仍然需要同步
-   
-#+BEGIN_SRC java
   ArrayList<Integer> listClone = null;  
   // clone时依然需要同步  
   synchronized (list) {  
@@ -47,67 +64,92 @@
   while (it.hasNext()) {  
           doSomething(it.next());  
   }  
-#+END_SRC
+   #+END_SRC
 
 * 并发集合类　
-- ConcurrentHashMap代替散列Map
-- CopyOnWriteArrayList代替同步List
-- CopyOnWriteArraySet代替同步Set
-- ConcurrentSkipListMap代替同步SortMap
-- ConcurrentSkipListSet代替同步SortSet
-  
+  - _ConcurrentHashMap_ 代替散列Map
+  - _CopyOnWriteArrayList_ 代替同步List
+  - _CopyOnWriteArraySet_ 代替同步Set
+  - _ConcurrentSkipListMap_ 代替同步SortMap
+  - _ConcurrentSkipListSet_ 代替同步SortSet
+
 ** ConcurrentHashMap
-1. ConcurrentHashMap具有更好的并发性能. ConcurrentHashMap是线程安全的, 但是其同步策略和SynchronizedMap有很大不同. ConcurrentHashMap在read时几乎不用加锁, 而write时使用的是细粒度的分段锁, ConcurrentHashMap甚至可以做到并发write 
-2. 由于ConcurrentHashMap的分段加锁机制, 使用ConcurrentHashMap类时, 调用方无法再自行加锁.
-3. 由于调用方无法自行加锁, 因此ConcurrentHashMap类提供了一些常见的复合操作
-   
-   #+BEGIN_SRC java
-     // 只有key不是集合中的键时才插入该键值对
-     V putIfAbsent(K key, V value); 
-     // 集合中存在该键值对时才删除
-     boolean remove(K key, V value); 
-     // 只有key和oldValue是集合中的键值对是才进行替换
-     boolean replace(K key, V oldValue, V newValue); 
-     // 只有key是集合中的key时才进行替换
-     V replace(K key, V newValue);
-   #+END_SRC
-   
-4. 迭代时不需要调用方进行额外的同步. ConcurrentHashMap使用的迭代器被称为weakly consistent(弱一致)迭代器, 弱一致迭代器不会在迭代期间抛出ConcurrentModificationException异常. 迭代开始后, 如果其他线程删除了ConcurrentHashMap集合的某个元素, 且被删除的元素尚未由next方法返回, 则该元素就不会被迭代器返回给调用方. 如果迭代开始后其他线程往ConcurrentHashMap集合中插入了新的元素, 那么新的元素可能会也可能不会被返回给调用方. 无论如何, 弱一致迭代器都保证不会将同一个元素多次返回给调用方 
-5. 调用ConcurrentHashMap对象的size, isEmpty等方法时(这些方法是针对整体Map的操作), 性能比较差. ConcurrentHashMap适合在要求高并发高性能的场合下使用, 在这些场景下, size或者isEmpty等方法用处不大, 这是可以接受的权衡
-   
+   + ConcurrentHashMap具有 *更好的并发性能* . ConcurrentHashMap是 *线程安全* 的, 但是其同步策略和SynchronizedMap有很大不同
+     + ConcurrentHashMap在 _read_ 时 *几乎不用加锁*
+     + _write_ 时使用的是 *细粒度的分段锁* ，甚至可以做到 *并发write* 
+   + 由于ConcurrentHashMap的 _分段加锁机制_ , 使用时 *调用方无法再自行加锁* 
+     + 因此ConcurrentHashMap类提供了一些常见的 _复合操作_
+
+     #+BEGIN_SRC java
+       // 只有key不是集合中的键时才插入该键值对
+       V putIfAbsent(K key, V value); 
+       // 集合中存在该键值对时才删除
+       boolean remove(K key, V value); 
+       // 只有key和oldValue是集合中的键值对是才进行替换
+       boolean replace(K key, V oldValue, V newValue); 
+       // 只有key是集合中的key时才进行替换
+       V replace(K key, V newValue);
+     #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     迭代时不需要调用方进行额外的同步. ConcurrentHashMap使用的迭代器被称为weakly consistent(弱一致)迭代器,
+
+     迭代开始后, 如果其他线程删除了ConcurrentHashMap集合的某个元素, 且被删除的元素尚未由next方法返回, 则该元素就不会被迭代器返回给调用方.
+     如果迭代开始后其他线程往ConcurrentHashMap集合中插入了新的元素, 那么新的元素可能会也可能不会被返回给调用方.
+
+     无论如何, 弱一致迭代器都保证不会将同一个元素多次返回给调用方，弱一致迭代器也不会在迭代期间抛出ConcurrentModificationException异常
+
+     调用ConcurrentHashMap对象的size, isEmpty等方法时(这些方法是针对整体Map的操作), 性能比较差
+     ConcurrentHashMap适合在要求高并发高性能的场合下使用, 在这些场景下, size或者isEmpty等方法用处不大, 这是可以接受的权衡
+   #+END_EXAMPLE
+
 ** CopyOnWriteArrayList 
-1. CopyOnWriteArrayList是线程安全的, 且处理读操作不需要进行同步和加锁. 所以读操作具有很好的并发性
-2. CopyOnWriteArrayList的每次写操作都会把底层的数组进行拷贝，然后对拷贝数组进行修改，代价很高，CopyOnWriteArrayList只适用于读操作频率远远大于写操作频率的场景
-3. CopyOnWriteArrayList无法在调用方进行额外加锁. 同时CopyOnWriteArrayList也提供了一些常用的复合操作, 如putIfAbsent等 
-   
-   #+BEGIN_SRC java
-     // Insert into map only if no value is mapped from K
-     V putIfAbsent(K key, V value);
-     // Remove only if K is mapped to V
-     boolean remove(K key, V value);
-     // Replace value only if K is mapped to oldValue
-     boolean replace(K key, V oldValue, V newValue);
-     // Replace value only if K is mapped to some value
-     V replace(K key, V newValue);
-   #+END_SRC
-   
-4. CopyOnWriteArrayList的迭代只能反应迭代开始时CopyOnWriteArrayList对象所持有的集合. 迭代期间不会抛出ConcurrentModificationException异常, 调用方不需要进行额外的加锁
-   
+   +  *线程安全* ：
+     + _处理读操作_  *不需要进行同步和加锁* . 所以读操作具有很好的并发性
+     + _每次写操作_ 都会把 *底层的数组进行拷贝* ，然后对拷贝数组进行修改，代价很高
+   + *无法在调用方进行额外加锁* ：但也提供了一些常用的复合操作, 如 _putIfAbsent_ 等 
+
+     #+BEGIN_SRC java
+       // Insert into map only if no value is mapped from K
+       V putIfAbsent(K key, V value);
+       // Remove only if K is mapped to V
+       boolean remove(K key, V value);
+       // Replace value only if K is mapped to oldValue
+       boolean replace(K key, V oldValue, V newValue);
+       // Replace value only if K is mapped to some value
+       V replace(K key, V newValue);
+     #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     CopyOnWriteArrayList的迭代只能反应迭代开始时所持有的集合.
+
+     迭代期间不会抛出ConcurrentModificationException异常, 调用方不需要进行额外的加锁
+
+     CopyOnWriteArrayList只适用于读操作频率远远大于写操作频率的场景
+   #+END_EXAMPLE
 * BlockingQueue接口 
-  BlockingQueue的容量可以是无限的, 也可以是有限的. 无限容量的BlockingQueue永远也不会发生队列已满的事件
+  BlockingQueue的 *容量* 可以是 _无限的_ , 也可以是有限的. 无限容量的BlockingQueue *永远也不会发生队列已满的事件* 
   
-+ put方法用于将数据放入队列, 如果队列已满, put方法所在的线程将阻塞, 直到队列不满 
-+ take方法用于从队列中取出数据, 如果队列为空, take方法所在的线程将阻塞, 直到队列不为空 
-+ offer用于将数据放入队列, 如果队列已满, 将最多等待指定的时间, offer返回true时说明数据成功入队, 否则说明没有成功
-+ poll用于从队列中取出数据, 如果队列为空, 最多等待指定的时间, poll返回值为null时说明没有取到数据
-  
-  
+  + _put_ 方法：用于 *将数据放入队列* 
+    + 如果 _队列已满_ ,  _put方法所在的线程_ 将 *阻塞* , 直到队列不满 
+  + _take_ 方法：用于从队列中 *取出数据* 
+    + 如果 _队列为空_ ,  _take方法所在的线程_ 将 *阻塞* , 直到队列不为空 
+  + _offer_ 方法：用于将 *数据放入队列* 
+    + 如果 _队列已满_ , 将 *最多等待* _指定的时间_
+    + 返回 _true_ ：说明 *数据成功入队* , 否则说明没有成功
+  + _poll_ 方法：从队列中 *取出数据* 
+    + 如果 _队列为空_ ,  *最多等待* _指定的时间_
+    + 返回值为 _null_ ：说明 *没有取到数据*
+
+
 ** 常见实现类 
-+ ArrayBlockingQueue底层使用循环数组实现
-+ LinkedBlockingQueue底层使用链表实现
-+ PriorityBlockingQueue则是一个可排序的阻塞队列, 可以按照元素的自然顺序(元素需要实现Comparable接口)或者指定的Comparator排序 
-+ SynchronousQueue不用保存元素到Queue，直接交付给消费线程
-  
+   + _ArrayBlockingQueue_ : 底层使用 *循环数组* 实现
+   + _LinkedBlockingQueue_ : 底层使用 *链表* 实现
+   + _PriorityBlockingQueue_ : 一个 *可排序* 的阻塞队列, 可以按照：
+     + _元素的自然顺序_ ：元素需要实现 _Comparable_ 接口
+     + 指定的 _Comparator_ 排序 
+   + _SynchronousQueue_ ： *不用保存元素到Queue* ，直接交付给消费线程
+
 ** 生产消费模式　
    生产者
    #+BEGIN_SRC java
@@ -169,14 +211,23 @@
    #+END_SRC
    
 * 同步工具类
-** 闭锁
-   闭锁相当于一个门, 当到达特定的状态之前, 门是关闭的, 此时所有线程将被阻塞, 只有到达了特定状态, 线程才能通过
-1. 计算直到所有的资源初始化才开始计算
-2. 服务直到依赖的服务启动完毕才启动
-3. 会话直到所有的参加者都就绪才开始
-CountDownLatch是闭锁的具体实现, CountDownLatch内部维护了一个计数器, 初始化CountDownLatch时需要指定计数器的初始值. 该初始值表示需要等待完成的事件的个数. 每调用一次countDown方法, 表示其中一个事件已经完成, 计数器的值将减一. 当计数器减为0时, 门才会打开
+** CountDownLatch
+   *闭锁* 相当于一个门,  当 _到达特定的状态_ 之前, 门是 *关闭* 的, 此时所有线程将被 *阻塞* , 只有到达了特定状态, 线程才能通过
+   1. 计算 _直到所有的资源初始化_ 才开始计算
+   2. 服务 _直到依赖的服务启动完毕_ 才启动
+   3. 会话 _直到所有的参加者都就绪_ 才开始
 
-#+BEGIN_SRC java
+   #+BEGIN_EXAMPLE
+     CountDownLatch是闭锁的具体实现：
+
+     内部维护了一个计数器, 初始化CountDownLatch时需要指定计数器的初始值，该初始值表示需要等待完成的事件的个数
+
+     每调用一次countDown方法, 表示其中一个事件已经完成, 计数器的值将减一
+
+     当计数器减为0时, 门才会打开
+   #+END_EXAMPLE
+
+   #+BEGIN_SRC java
   public long timeTasks(int nThreads, final Runnable task)
           throws InterruptedException {
           // startGate用来控制子线程，当所有的子线程准备就绪时候，主线程执行startGate的countDown操作，让子线程一起运行
@@ -209,14 +260,25 @@ CountDownLatch是闭锁的具体实现, CountDownLatch内部维护了一个计�
           long end = System.nanoTime();
           return end - start;
   }
-#+END_SRC
+   #+END_SRC
 ** FutureTask
-   FutureTask用于执行任务, 常用的构造函数为FutureTask(Callable<V> callable), 使用Callable封装任务, 其get方法将返回任务的执行结果 
+   *FutureTask* ：用于 *执行任务* 
+   + 常用的构造函数 _FutureTask(Callable<V> callable)_ ：
+     +  _Callable_ ： *封装任务* 
+   +  _get_ 方法：返回任务的 *执行结果* 
+   + 三种状态:  _等待运行_ ， _正在运行_ ， _已完成_ 
+     + 处于 _已完成_ 状态时调用 _get_ 方法,  将 *立即返回计算结果* 
+     + 否则 _get_ 方法会 *阻塞* , 直到FutureTask转变为 _已完成状态_ 
+     + _计算完成_ ,  _抛出异常_ , 或者 _被取消_ 都会使得FutureTask的 *状态变为已完成* 
    
-   FutureTask对象具有三种状态: 等待运行, 正在运行, 已完成. 当FutureTask对象处于已完成状态时调用get方法, get方法将立即返回计算结果, 否则get方法会阻塞, 直到FutureTask转变为已完成状态. 计算完成, 抛出异常, 或者被取消都会使得FutureTask的状态变为已完成 
-   
-   FutureTask的常见使用场景是封装一个耗时任务, 然后提前开始计算, 当需要计算结果时, 再调用其get方法, 这样可以减少等待计算完成的时间
-   
+   #+BEGIN_EXAMPLE
+     FutureTask的常见使用场景是封装一个耗时任务
+
+     提前开始计算, 当需要计算结果时, 再调用其get方法
+
+     这样可以减少等待计算完成的时间
+   #+END_EXAMPLE   
+
    #+BEGIN_SRC java
   public class Preloader {
           private final FutureTask<ProductInfo> future =
@@ -235,7 +297,7 @@ CountDownLatch是闭锁的具体实现, CountDownLatch内部维护了一个计�
                   } catch (ExecutionException e) {
                           Throwable cause = e.getCause();
                           if (cause instanceof DataLoadException)
-                                  throw (DataLoadException) cause;
+                                  throw (DataLoadException) cause; // 主线程直接处理业务异常
                           else
                                   throw launderThrowable(cause);
                   }
@@ -243,36 +305,38 @@ CountDownLatch是闭锁的具体实现, CountDownLatch内部维护了一个计�
   }
    #+END_SRC
    
-   异常处理
-1. 业务异常在主线程处理
-2. RuntimeException返回，在主线程抛出
-3. Error直接抛出
-4. 抛出IllegalStateException
-   
-   #+BEGIN_SRC java
-     /** If the Throwable is an Error, throw it; if it is a
-      ,* RuntimeException return it, otherwise throw IllegalStateException
-      ,*/
-     public static RuntimeException launderThrowable(Throwable t) {
-             if (t instanceof RuntimeException)
-                     return (RuntimeException) t;
-             else if (t instanceof Error)
-                     throw (Error) t;
-             else
-                     throw new IllegalStateException("Not unchecked", t);
-     }
-   #+END_SRC
-   
+   异常处理：
+   1.  _业务异常_ ： *主线程* 处理
+   2. _RuntimeException_ ：直接返回，然后在 *主线程抛出* 
+   3. _Error_ ：直接抛出
+   4. 抛出 _IllegalStateException_ 
+
+      #+BEGIN_SRC java
+	/** If the Throwable is an Error, throw it; if it is a
+	 ,* RuntimeException return it, otherwise throw IllegalStateException
+	 ,*/
+	public static RuntimeException launderThrowable(Throwable t) {
+		if (t instanceof RuntimeException)
+			return (RuntimeException) t; // 返回RuntimeException，在主线程再次抛出
+		else if (t instanceof Error)
+			throw (Error) t; // 直接抛出Error
+		else
+			throw new IllegalStateException("Not unchecked", t);
+	}
+      #+END_SRC
+
 ** Semphore
-   Semaphore用于管理permit, 创建Semaphore对象时, 需要指定permit的最大个数　
-   
-   调用acquire()方法申请从Semaphore对象中获取一个permit, 如果当前semaphore对象没有可用的permit, 线程将被阻塞, 直到有可用的permit 
-   
-   调用release()方法将permit放回Semaphore对象
-   
-   Permit不与线程绑定, 一个线程申请的permit, 可以在另一个线程里release 
-   
-   Semaphore通常用于实现资源池,有界的集合，如数据库连接池等   
+   _Semaphore_ ：用于 *管理permit* 
+   + 创建Semaphore对象时, 需要 *指定* permit的 _最大个数_
+   + _acquire()_ 方法： 申请从Semaphore对象中 *获取一个permit* 
+     + 如果当前semaphore对象 _没有可用的permit_ , 线程将被 *阻塞* , 直到 _有可用的_ permit
+   + _release()_ 方法： *permit放回* Semaphore对象
+   +  permit *不与线程绑定* , 一个线程申请的permit, 可以在另一个线程里release 
+   #+BEGIN_EXAMPLE
+     Semaphore 通常用于实现资源池这种有界的集合：如数据库连接池 等   
+
+   #+END_EXAMPLE
+
    #+BEGIN_SRC java
   public class BoundedHashSet<T> {
           private final Set<T> set;
@@ -310,14 +374,26 @@ CountDownLatch是闭锁的具体实现, CountDownLatch内部维护了一个计�
   }
    #+END_SRC
    
-** 栅栏
-   栅栏允许一组线程互相等待, 直到该组线程全部到达某个公共屏障点, 闭锁是一组线程等待事件，而栅栏是一组线程互相等待其他线程　
-   
-   CyclicBarrier是栅栏的一种实现，创建CyclicBarrier时需要指定线程组中线程的数量
-   
-   调用CyclicBarrier对象的await方法, 表示当前线程已到达公共屏障点, 然后等待其他线程到达。当所有线程到达公共屏障点后, CyclicBarrier对象将释放线程组, 然后重置CyclicBarrier对象的状态. 因此CyclicBarrier对象是可以循环使用的, 反之闭锁的门一旦打开就不会再次关闭。如果有线程在等待期间超时或者被中断, 该CyclicBarrier对象被视为已损坏, 随后对await方法的调用都要抛出BrokenBarrierException异常
-   
-   栅栏可以用于计算中主线程等待另外一组线程并行计算完毕　
+** Barrier
+   #+BEGIN_EXAMPLE
+     栅栏允许一组线程互相等待 , 直到该组线程全部到达某个公共屏障点
+
+     闭锁：一组线程等待事件 
+     栅栏 ： 一组线程互相等待其他线程　
+   #+END_EXAMPLE
+
+   _CyclicBarrier_ ：栅栏的 *一种实现* 
+   + 创建CyclicBarrier时需要指定线程组中线程的数量
+   + _await_ 方法：表示 _当前线程_ 已 *到达* _公共屏障点_ , 然后 *等待其他线程到达*
+   + 当 _所有线程_ 到达 _公共屏障点_ 后, CyclicBarrier对象将 *释放线程组* , 然后 *重置*  _CyclicBarrier对象的状态_ 
+     + 因此CyclicBarrier对象是可以 *循环使用* 的（闭锁的门一旦打开就不会再次关闭）
+  + 如果 _有线程在等待期间_  *超时* 或者 *被中断* 
+     + 该CyclicBarrier对象被视为 *已损坏* ，随后对 _await_ 方法的调用都要抛出 *BrokenBarrierException* 异常
+
+   #+BEGIN_EXAMPLE
+     栅栏可以用于计算中主线程等待另外一组线程并行计算完毕　
+   #+END_EXAMPLE
+
    #+BEGIN_SRC java
   public class CellularAutomata {
           private final Board mainBoard;
@@ -362,136 +438,156 @@ CountDownLatch是闭锁的具体实现, CountDownLatch内部维护了一个计�
    #+END_SRC
    　
 * 高效线程安全的缓存
-** 使用HashMap做缓存
-   #+BEGIN_SRC java
-     public interface Computable<A, V> {   
-             V compute(A arg) throws InterruptedException;   
-     }   
-       
-     public class ExpensiveFunction   
-             implements Computable<String, BigInteger> {   
-             // 模拟一个耗时操作  
-             public BigInteger compute(String arg) {   
-                     // ...  
-                     return new BigInteger(arg);   
-             }   
-     }   
-       
-     public class Memorizer1<A, V> implements Computable<A, V> {   
-             private final Map<A, V> cache = new HashMap<A, V>();   
-             private final Computable<A, V> c;   
-       
-             public Memorizer1(Computable<A, V> c) {   
-                     this.c = c;   
-             }   
-             // 使用synchronized同步整个方法解决线程安全  
-             public synchronized V compute(A arg) throws InterruptedException {   
-                     V result = cache.get(arg);   
-                     if (result == null) {   
-                             result = c.compute(arg);   
-                             cache.put(arg, result);   
-                     }   
-                     return result;   
-             }   
-     }  
-   #+END_SRC
-   由于HashMap不是线程安全的, Memorizer1同步整个compute方法, 避免重复计算的同时, 牺牲了并发执行compute方法的机会, 此种设计甚至可能导致性能比没有缓存更差 
-** 使用ConcurrentHashMap避免加锁　
-   
-   #+BEGIN_SRC java
-     public class Memorizer2<A, V> implements Computable<A, V> {   
-             private final Map<A, V> cache = new ConcurrentHashMap<A, V>();   
-             private final Computable<A, V> c;   
-       
-             public Memorizer2(Computable<A, V> c) { this.c = c; }   
-       
-             public V compute(A arg) throws InterruptedException {   
-                     V result = cache.get(arg);   
-                     if (result == null) {   
-                             result = c.compute(arg);   
-                             cache.put(arg, result);   
-                     }   
-                     return result;   
-             }   
-     }   
-   #+END_SRC
-   Memorizer2的问题在于一个线程在执行compute方法的过程中, 其他线程以相同的参数调用compute方法时, 无法从缓存中获知已有线程正在进行该参数的计算的信息, 因此造成了重复计算的发生 
-** 缓存Future对象，返回该Future对象的get方法，如果实际的计算还在进行当中, get方法将被阻塞, 直到计算完成　
-   
-   #+BEGIN_SRC java
-     public class Memorizer3<A, V> implements Computable<A, V> {   
-             // 改为缓存Future  
-             private final Map<A, Future<V>> cache   
-             = new ConcurrentHashMap<A, Future<V>>();   
-             private final Computable<A, V> c;   
-       
-             public Memorizer3(Computable<A, V> c) { this.c = c; }   
-       
-             public V compute(final A arg) throws InterruptedException {   
-                     Future<V> f = cache.get(arg);   
-                     if (f == null) {   
-                             Callable<V> eval = new Callable<V>() {   
-                                             public V call() throws InterruptedException {   
-                                                     return c.compute(arg);   
-                                             }   
-                                     };   
-                             FutureTask<V> ft = new FutureTask<V>(eval);   
-                             f = ft;   
-                             // 在计算开始前就将Future对象存入缓存中.  
-                             cache.put(arg, ft);   
-                             ft.run(); // call to c.compute happens here   
-                     }   
-                     try {   
-                             // 如果缓存中存在arg对应的Future对象, 就直接调用该Future对象的get方法.  
-                             // 如果实际的计算还在进行当中, get方法将被阻塞, 直到计算完成  
-                             return f.get();   
-                     } catch (ExecutionException e) {   
-                             throw launderThrowable(e.getCause());   
-                     }   
-             }   
-     }   
-   #+END_SRC
-   不幸的是Memorizer3仍然存在重复计算的问题, 只是相对于Memorizer2重复计算的概率降低了一些. get, if, put这三个操作并不是原子性的　
-   
-** 使用putIfAbsent合并get,if,put这三个操作 
-   #+BEGIN_SRC java
-  public class Memorizer<A, V> implements Computable<A, V> {   
-          private final ConcurrentMap<A, Future<V>> cache   
-          = new ConcurrentHashMap<A, Future<V>>();   
-          private final Computable<A, V> c;   
-    
-          public Memorizer(Computable<A, V> c) { this.c = c; }   
-    
-          public V compute(final A arg) throws InterruptedException {   
-                  while (true) {   
-                          Future<V> f = cache.get(arg);   
-                          if (f == null) {   
-                                  Callable<V> eval = new Callable<V>() {   
-                                                  public V call() throws InterruptedException {   
-                                                          return c.compute(arg);   
-                                                  }   
-                                          };   
-                                  FutureTask<V> ft = new FutureTask<V>(eval);   
-                                  // 使用putIfAbsent测试是否真的将ft存入了缓存, 如果存入失败, 说明cache中已经存在arg对应的future对象  
-                                  // 否则才进行计算.  
-                                  f = cache.putIfAbsent(arg, ft);   
-                                  if (f == null) { f = ft; ft.run(); }   
-                          }   
-                          try {   
-                                  return f.get();   
-                          } catch (CancellationException e) {   
-                                  // 当计算被取消时, 从缓存中移除arg-f键值对  
-                                  cache.remove(arg, f);   
-                          } catch (ExecutionException e) {   
-                                  throw launderThrowable(e.getCause());   
-                          }   
-                  }   
-          }   
-  }   
-   #+END_SRC
-   
-[[file:executor.org][Next:任务执行]]
+  + 使用 _HashMap_ 做缓存
+    #+BEGIN_SRC java
+       public interface Computable<A, V> {   
+	       V compute(A arg) throws InterruptedException;   
+       }   
 
-[[file:composing_objects.org][Previous:对象组合]]
+       public class ExpensiveFunction   
+	       implements Computable<String, BigInteger> {   
+	       // 模拟一个耗时操作  
+	       public BigInteger compute(String arg) {   
+		       // ...  
+		       return new BigInteger(arg);   
+	       }   
+       }   
 
-[[file:jcip.org][Up:目录]]
+       public class Memorizer1<A, V> implements Computable<A, V> {   
+	       private final Map<A, V> cache = new HashMap<A, V>();   
+	       private final Computable<A, V> c;   
+
+	       public Memorizer1(Computable<A, V> c) {   
+		       this.c = c;   
+	       }   
+	       // 使用synchronized同步整个方法解决线程安全  
+	       public synchronized V compute(A arg) throws InterruptedException {   
+		       V result = cache.get(arg);   
+		       if (result == null) {   
+			       result = c.compute(arg);   
+			       cache.put(arg, result);   
+		       }   
+		       return result;   
+	       }   
+       }  
+    #+END_SRC
+    #+BEGIN_EXAMPLE
+      由于HashMap不是线程安全的, Memorizer1同步整个compute方法
+
+      避免重复计算的同时, 牺牲了并发执行compute方法的机会
+
+      此种设计甚至可能导致性能比没有缓存更差 
+    #+END_EXAMPLE
+
+  + *避免枷锁* ：使用 _ConcurrentHashMap_ 
+
+    #+BEGIN_SRC java
+       public class Memorizer2<A, V> implements Computable<A, V> {   
+	       private final Map<A, V> cache = new ConcurrentHashMap<A, V>();   
+	       private final Computable<A, V> c;   
+
+	       public Memorizer2(Computable<A, V> c) { this.c = c; }   
+
+	       public V compute(A arg) throws InterruptedException {   
+		       V result = cache.get(arg);   
+		       if (result == null) {   
+			       result = c.compute(arg);   
+			       cache.put(arg, result);   
+		       }   
+		       return result;   
+	       }   
+       }   
+    #+END_SRC
+    #+BEGIN_EXAMPLE
+      Memorizer2的问题在于一个线程在执行compute方法的过程中
+
+      其他线程以相同的参数调用compute方法时, 无法从缓存中获知已有线程正在进行该参数的计算的信息
+
+      因此造成了“重复计算”的发生 
+    #+END_EXAMPLE
+
+  + *缓存* _Future_ 对象： *返回* 该 _Future_ 对象的 _get_ 方法
+    #+BEGIN_EXAMPLE
+    如果实际的计算还在进行当中,  get方法将被阻塞,  直到计算完成　
+    #+END_EXAMPLE
+
+    #+BEGIN_SRC java
+       public class Memorizer3<A, V> implements Computable<A, V> {   
+	       // 改为缓存Future  
+	       private final Map<A, Future<V>> cache   
+	       = new ConcurrentHashMap<A, Future<V>>();   
+	       private final Computable<A, V> c;   
+
+	       public Memorizer3(Computable<A, V> c) { this.c = c; }   
+
+	       public V compute(final A arg) throws InterruptedException {   
+		       Future<V> f = cache.get(arg);   
+		       if (f == null) {   
+			       Callable<V> eval = new Callable<V>() {   
+					       public V call() throws InterruptedException {   
+						       return c.compute(arg);   
+					       }   
+				       };   
+			       FutureTask<V> ft = new FutureTask<V>(eval);   
+			       f = ft;   
+			       // 在计算开始前就将Future对象存入缓存中.  
+			       cache.put(arg, ft);   
+			       ft.run(); // call to c.compute happens here   
+		       }   
+		       try {   
+			       // 如果缓存中存在arg对应的Future对象, 就直接调用该Future对象的get方法.  
+			       // 如果实际的计算还在进行当中, get方法将被阻塞, 直到计算完成  
+			       return f.get();   
+		       } catch (ExecutionException e) {   
+			       throw launderThrowable(e.getCause());   
+		       }   
+	       }   
+       }   
+    #+END_SRC
+
+    #+BEGIN_EXAMPLE
+      不幸的是Memorizer3仍然存在重复计算的问题，只是相对于Memorizer2重复计算的概率降低了一些
+
+      因为 get, if, put这三个操作并不是原子性的　
+    #+END_EXAMPLE   
+  +  使用 _putIfAbsent_ ： 合并 get, if , put这三个操作 
+    #+BEGIN_SRC java
+    public class Memorizer<A, V> implements Computable<A, V> {   
+	    private final ConcurrentMap<A, Future<V>> cache  = new ConcurrentHashMap<A, Future<V>>();   
+	    private final Computable<A, V> c;   
+
+	    public Memorizer(Computable<A, V> c) { this.c = c; }   
+
+	    public V compute(final A arg) throws InterruptedException {   
+		    while (true) {   
+			    Future<V> f = cache.get(arg);   
+			    if (f == null) {   
+				    Callable<V> eval = new Callable<V>() {   
+						    public V call() throws InterruptedException {   
+							    return c.compute(arg);   
+						    }   
+					    };   
+				    FutureTask<V> ft = new FutureTask<V>(eval);   
+				    // 使用putIfAbsent测试是否真的将ft存入了缓存, 如果存入失败, 说明cache中已经存在arg对应的future对象  
+				    // 否则才进行计算.  
+				    f = cache.putIfAbsent(arg, ft);   
+				    if (f == null) { f = ft; ft.run(); }   
+			    }   
+			    try {   
+				    return f.get();   
+			    } catch (CancellationException e) {   
+				    // 当计算被取消时, 从缓存中移除arg-f键值对  
+				    cache.remove(arg, f);   
+			    } catch (ExecutionException e) {   
+				    throw launderThrowable(e.getCause());   
+			    }   
+		    }   
+	    }   
+    }   
+    #+END_SRC
+
+    [[file:executor.org][Next:任务执行]]
+
+    [[file:composing_objects.org][Previous:对象组合]]
+
+    [[file:jcip.org][Up:目录]]
