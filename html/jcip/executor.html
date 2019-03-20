@@ -238,24 +238,29 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orge0da66f">线程中执行任务</a>
-<ul>
-<li><a href="#org4963f1e">串行执行</a></li>
-<li><a href="#org0601a26">每个请求单独线程</a></li>
-</ul>
-</li>
+<li><a href="#orge0da66f">线程中执行任务</a></li>
 <li><a href="#org2dc3b78">Executor框架</a>
 <ul>
 <li><a href="#org62628a6">线程执行策略</a></li>
 <li><a href="#org8f11510">线程池</a></li>
-<li><a href="#org8140dff">Executor生命周期：运行，关闭中，终止</a></li>
-<li><a href="#org43dacfb">Timer和ScheduledThreadPool</a></li>
+<li><a href="#org18f2f60">Executor生命周期</a></li>
+<li><a href="#org8ab2cd5">ScheduledThreadPool</a></li>
+<li><a href="#org6189085">返回结果的任务　</a>
+<ul>
+<li><a href="#orga626f21">任务生命周期</a></li>
+<li><a href="#orgeefcdac">Future对象</a>
+<ul>
+<li><a href="#orgdb2f52f">获得任务结果</a></li>
+<li><a href="#org9cfea88">创建 Future</a></li>
 </ul>
 </li>
-<li><a href="#orgba2c938">发现可利用的并发</a>
+</ul>
+</li>
+<li><a href="#org819ac07">实例</a>
 <ul>
-<li><a href="#org6189085">返回结果的任务　</a></li>
 <li><a href="#org4d73d76">CompletionService</a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -264,25 +269,19 @@ for the JavaScript code in this tag.
 <div id="outline-container-orge0da66f" class="outline-2">
 <h2 id="orge0da66f">线程中执行任务</h2>
 <div class="outline-text-2" id="text-orge0da66f">
-</div>
-<div id="outline-container-org4963f1e" class="outline-3">
-<h3 id="org4963f1e">串行执行</h3>
-<div class="outline-text-3" id="text-org4963f1e">
-<p>
-吞吐量低，响应慢，IO操作中浪费cpu
-</p>
-</div>
-</div>
-
-<div id="outline-container-org0601a26" class="outline-3">
-<h3 id="org0601a26">每个请求单独线程</h3>
-<div class="outline-text-3" id="text-org0601a26">
-<ol class="org-ol">
-<li>线程的创建和销毁会占用一定的资源。如果请求频繁而对请求的处理是轻量级的(大多的web请求符合该情形), 创建一个线程处理请求后将其销毁的方式是不划算的</li>
-<li>过多的线程导致线程切换频繁, 用于处理请求的CPU时间反而会减少. 如果当前的线程数已经让CPU处于忙碌状态, 那么增加更多的线程不会改善应用的性能</li>
-<li>过多的线程会导致系统稳定性下降　</li>
-</ol>
-</div>
+<ul class="org-ul">
+<li>串行执行： 
+<ul class="org-ul">
+<li><b>吞吐量低</b></li>
+<li><b>响应慢</b> ：IO操作中浪费cpu</li>
+</ul></li>
+<li>每个请求单独线程：
+<ul class="org-ul">
+<li>线程的 <span class="underline">创建和销毁</span> 会 <b>占用一定的资源</b> ：如果请求频繁而对请求的处理是轻量级的(大多的web请求符合该情形)，创建一个线程处理请求后将其销毁的方式是不划算的</li>
+<li>过多的线程导致 <b>线程切换频繁</b> ：用于 <span class="underline">处理请求的CPU时间</span> 反而会 <b>减少</b> . 如果当前的线程数已经让CPU处于忙碌状态, 那么增加更多的线程不会改善应用的性能</li>
+<li>过多的线程会导致 <b>系统稳定性下降</b></li>
+</ul></li>
+</ul>
 </div>
 </div>
 
@@ -290,17 +289,19 @@ for the JavaScript code in this tag.
 <h2 id="org2dc3b78">Executor框架</h2>
 <div class="outline-text-2" id="text-org2dc3b78">
 <p>
-将创建好的线程组织成线程池, 当请求来临时从池中取出线程处理请求, 处理完毕后将线程归还给线程池, 而不是销毁
+将 <span class="underline">创建好的线程</span> 组织成 <b>线程池</b> ：
 </p>
+<ul class="org-ul">
+<li>当 <span class="underline">请求来临</span> 时从池中 <span class="underline">取出线程</span> <b>处理请求</b></li>
+<li><span class="underline">处理完毕</span> 后将线程 <b>归还</b> 给 <span class="underline">线程池</span> , 而不是销毁</li>
+</ul>
+
+<pre class="example">
+    通过限制线程池中的线程数, 以克服 线程过多时“性能和稳定性”下降的缺陷 
+</pre>
 
 <p>
-通过限制线程池中的线程数, 以克服线程过多时性能和稳定性下降的缺陷 
-</p>
-
-<p>
-Executor框架包含多个线程池的实现, 所有线程池都派生自Executor接口
- 　
-Executor接口只定义了一个方法: execute(Runnable task) 
+<span class="underline">Executor</span> 框架包含多个线程池的实现, 所有线程池都派生自 <span class="underline">Executor</span> 接口，这个接口只定义了一个方法:  <b>execute(Runnable task)</b> 
 </p>
 <div class="org-src-container">
 <pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">interface</span> <span style="color: #98f5ff;">Executor</span> {
@@ -310,7 +311,7 @@ Executor接口只定义了一个方法: execute(Runnable task)
 </div>
 
 <p>
-Executor接口解耦了任务提交和任务执行, 提交任务的线程为生产者, 执行任务的线程为消费者 
+Executor接口解耦了 <b>任务提交</b> 和 <b>任务执行</b> , 提交任务的线程为 <span class="underline">生产者</span> , 执行任务的线程为 <span class="underline">消费者</span> 
 </p>
 <div class="org-src-container">
 <pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">class</span> <span style="color: #98f5ff;">TaskExecutionWebServer</span> {   
@@ -337,7 +338,7 @@ Executor接口解耦了任务提交和任务执行, 提交任务的线程为生�
 </div>
 
 <p>
-使用Executor实现每个请求一个线程
+使用Executor实现 <span class="underline">每个请求</span>  <span class="underline">一个线程</span> 
 </p>
 
 <div class="org-src-container">
@@ -354,12 +355,12 @@ Executor接口解耦了任务提交和任务执行, 提交任务的线程为生�
 <h3 id="org62628a6">线程执行策略</h3>
 <div class="outline-text-3" id="text-org62628a6">
 <ul class="org-ul">
-<li>任务在哪个线程中执行</li>
-<li>任务以何种顺序（FIFO, LIFO, 优先级）执行</li>
-<li>同时有多少线程同步执行任务</li>
-<li>多少任务可以等待执行</li>
-<li>当负荷过载时候，那些任务可以被牺牲，如何通知应用这些任务</li>
-<li>任务执行前和执行后需要哪些操作</li>
+<li>任务在 <b>哪个线程</b> 中执行</li>
+<li>任务以 <b>何种顺序</b> （ <span class="underline">FIFO</span> ,  <span class="underline">LIFO</span> ,  <span class="underline">优先级</span> ）执行</li>
+<li><b>同时有多少</b> 线程同步执行任务</li>
+<li>多少任务可以 <b>等待</b> 执行</li>
+<li>当 <span class="underline">负荷过载</span> 时候，那些任务可以 <b>被牺牲</b> ，如何 <b>通知</b> 应用这些任务</li>
+<li>任务 <b>执行前</b> 和 <b>执行后</b> 需要哪些操作</li>
 </ul>
 </div>
 </div>
@@ -368,20 +369,33 @@ Executor接口解耦了任务提交和任务执行, 提交任务的线程为生�
 <h3 id="org8f11510">线程池</h3>
 <div class="outline-text-3" id="text-org8f11510">
 <p>
-ExecutorService接口继承自Executor, 而预定义的线程池类大多实现了ExecutorService接口 
+<span class="underline">ExecutorService</span> 接口继承自 <span class="underline">Executor</span> ：
 </p>
 <ul class="org-ul">
-<li>newFixedThreadPool: 最大线程数固定的线程池.</li>
-<li>newCachedThreadPool: 可伸缩式线程池, 当线程池中线程的数量超过程序所需时, 会自动销毁多余的线程; 当线程池中的线程不能需要时再创建新的线程执行提交的任务, 该线程池没有最大线程数的限定</li>
-<li>newSingleThreadExecutor: 仅包含一个线程的线程池, 提交给该线程池执行的任务, 都将在这一单个线程中完成处理</li>
-<li>newScheduledThreadPool. 最大线程数固定且支持延迟和周期性重复执行任务的线程池</li>
+<li><span class="underline">newFixedThreadPool</span> :  <b>最大线程数固定</b> 的线程池</li>
+<li><span class="underline">newCachedThreadPool</span> :  <b>可伸缩式线程池</b> 
+<ul class="org-ul">
+<li>当线程池中 <span class="underline">线程的数量</span> <b>超过</b> <span class="underline">程序所需</span> 时, 会 <b>自动销毁</b> 多余的线程</li>
+<li>当线程池中的线程 <span class="underline">少于需要</span> 时再 <b>创建</b> 新的线程执行提交的任务</li>
+<li>该线程池 <b>没有最大线程数的限定</b></li>
+</ul></li>
+<li><span class="underline">newSingleThreadExecutor</span> : 仅包含 <b>一个线程的线程池</b> , 提交给该线程池执行的任务, 都将在这一单个线程中完成处理</li>
+<li><span class="underline">newScheduledThreadPool</span> ：  <b>最大线程数固定</b> 且 支持 <b>延迟和周期性重复执行</b> 任务的线程池</li>
 </ul>
+
+<pre class="example">
+     而预定义的线程池类大多实现了ExecutorService接口 
+</pre>
 </div>
 </div>
 
-<div id="outline-container-org8140dff" class="outline-3">
-<h3 id="org8140dff">Executor生命周期：运行，关闭中，终止</h3>
-<div class="outline-text-3" id="text-org8140dff">
+<div id="outline-container-org18f2f60" class="outline-3">
+<h3 id="org18f2f60">Executor生命周期</h3>
+<div class="outline-text-3" id="text-org18f2f60">
+<p>
+<b>运行</b> ， <b>关闭中</b> ， <b>终止</b> 
+</p>
+
 <div class="org-src-container">
 <pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">interface</span> <span style="color: #98f5ff;">ExecutorService</span> <span style="color: #00bfff; font-weight: bold;">extends</span> <span style="color: #98f5ff;">Executor</span> {
     <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">shutdown</span>();
@@ -395,11 +409,20 @@ ExecutorService接口继承自Executor, 而预定义的线程池类大多实现�
 </pre>
 </div>
 <ul class="org-ul">
-<li>shutdown: 在关闭前允许执行以前提交的任务, 包括那些已提交但尚未开始执行的任务</li>
-<li>shutdownNow: 阻止尚未开始执行的任务启动并试图停止当前正在执行的任务, 返回从未开始执行的任务的列表</li>
-<li>isShutdown：判断线程池是否已关闭. 线程池关闭后将拒绝接受新任务, 将抛出RejectedExecutionException</li>
-<li>awaitTermination: 将使得主线程阻塞, 直到线程池转变为终止状态, 通常在调用shutdown方法后紧接着调用awaitTermination方法</li>
-<li>isTerminated: 检测线程池是否处于终止状态, 当线程池已关闭, 并且所有提交给线程池的任务都已完成时, 线程池转变为终止状态</li>
+<li><span class="underline">shutdown</span> : 在 <span class="underline">关闭前</span> 允许 <span class="underline">执行已经提交</span> 的任务, 包括那些 <b>已提交但尚未开始执行</b> 的任务</li>
+<li><span class="underline">shutdownNow</span> :  <b>阻止</b> <span class="underline">尚未开始执行</span> 的任务启动并 <b>试图停止</b> <span class="underline">当前正在执行</span> 的任务, 返回 <span class="underline">从未开始执行的任务的列表</span></li>
+<li><span class="underline">isShutdown</span> ：判断 <b>线程池是否已关闭</b> 
+<ul class="org-ul">
+<li>线程池关闭后将 <b>拒绝接受新任务</b> , 抛出 <span class="underline">RejectedExecutionException</span></li>
+</ul></li>
+<li><span class="underline">awaitTermination</span> : 将使得 <b>主线程阻塞</b> , 直到 <span class="underline">线程池</span> 转变为 <span class="underline">终止状态</span> ,
+<ul class="org-ul">
+<li>通常在调用 <span class="underline">shutdown</span> 方法后 <b>紧接着调用</b> <span class="underline">awaitTermination</span> 方法</li>
+</ul></li>
+<li><span class="underline">isTerminated</span> : 检测 <b>线程池是否处于终止状态</b> 
+<ul class="org-ul">
+<li>当线程池 <span class="underline">已关闭</span> , 并且 <span class="underline">所有提交给线程池的任务</span>  <b>都已完成</b> 时, 线程池转变为 <span class="underline">终止状态</span></li>
+</ul></li>
 </ul>
 
 
@@ -434,55 +457,76 @@ ExecutorService接口继承自Executor, 而预定义的线程池类大多实现�
 </div>
 </div>
 
-<div id="outline-container-org43dacfb" class="outline-3">
-<h3 id="org43dacfb">Timer和ScheduledThreadPool</h3>
-<div class="outline-text-3" id="text-org43dacfb">
-<p>
-两者都可以用于延时或周期性重复执行某个任务, 但是Timer存在一些缺陷:
-</p>
-<ol class="org-ol">
-<li>Timer基于绝对时间来安排任务的调度, 因此系统时钟的改变会对其产生影响. ScheduledThreadPoolExecutor基于相对时间进行任务的调度</li>
-<li>Timer创建单一的线程执行定时任务. 假如Timer对象以10ms的间隔重复执行某个任务, 但是其中的一次执行花去了40ms, 这就意味着少执行了至少4次重复任务. ScheduledThreadPoolExecutor可以使用多个线程执行定时任务</li>
-<li>如果在执行任务的过程中抛出运行时异常, Timer的线程会被终止且没有恢复机制</li>
-</ol>
+<div id="outline-container-org8ab2cd5" class="outline-3">
+<h3 id="org8ab2cd5">ScheduledThreadPool</h3>
+<div class="outline-text-3" id="text-org8ab2cd5">
+<pre class="example">
+Timer和ScheduledThreadPool两者都可以用于延时或周期性重复执行某个任务
+
+但是Timer存在一些缺陷:
+1. Timer基于绝对时间来安排任务的调度, 因此系统时钟的改变会对其产生影响
+   ScheduledThreadPoolExecutor基于相对时间进行任务的调度
+
+2. Timer创建单一的线程执行定时任务
+   假如Timer对象以10ms的间隔重复执行某个任务, 但是其中的一次执行花去了40ms, 这就意味着少执行了至少4次重复任务
+   ScheduledThreadPoolExecutor可以使用多个线程执行定时任务
+
+3. 如果在执行任务的过程中抛出运行时异常,  Timer的线程会被终止且没有恢复机制
+</pre>
+
 <p>
 几乎没有理由继续使用Timer调度定时任务了
 </p>
 </div>
 </div>
-</div>
-
-<div id="outline-container-orgba2c938" class="outline-2">
-<h2 id="orgba2c938">发现可利用的并发</h2>
-<div class="outline-text-2" id="text-orgba2c938">
-</div>
 <div id="outline-container-org6189085" class="outline-3">
 <h3 id="org6189085">返回结果的任务　</h3>
 <div class="outline-text-3" id="text-org6189085">
-<p>
-Executor的使用Runnable作为基本的任务表达形式，但是Runnable无法返回结果或抛出异常
-</p>
+<pre class="example">
+Executor的使用 Runnable 作为基本的任务表达形式
+
+但是Runnable无法返回结果或抛出异常
+</pre>
 
 <p>
-Callable作为Runnable的扩展，可以返回结果或抛出异常
+<span class="underline">Callable</span> 作为Runnable的扩展，可以 <b>返回结果</b> 或 <b>抛出异常</b> 
 </p>
+
 <div class="org-src-container">
 <pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">interface</span> <span style="color: #98f5ff;">Callable</span>&lt;<span style="color: #98f5ff;">V</span>&gt; {
     <span style="color: #98f5ff;">V</span> <span style="color: #daa520; font-weight: bold;">call</span>() <span style="color: #00bfff; font-weight: bold;">throws</span> <span style="color: #98f5ff;">Exception</span>;
 }
 </pre>
 </div>
+</div>
+
+<div id="outline-container-orga626f21" class="outline-4">
+<h4 id="orga626f21">任务生命周期</h4>
+<div class="outline-text-4" id="text-orga626f21">
 <p>
-Executor提交的任务有４个生命周期：创建，提交，开始和完成
+Executor <span class="underline">提交的任务</span> 有４个生命周期： <b>创建</b> ， <b>提交</b> ， <b>开始</b> ， <b>完成</b> 
+</p>
+<ul class="org-ul">
+<li><span class="underline">已经提交</span> 但 <span class="underline">尚未开始</span> 的任务 <b>可以取消</b></li>
+<li><span class="underline">已经开始执行</span> 但 <span class="underline">尚未完成</span> 的任务只有它们 <span class="underline">能响应中断</span> <b>才能取消</b></li>
+<li><span class="underline">取消</span> <span class="underline">一个已经完成</span> 的任务 <b>没有任何影响</b></li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-orgeefcdac" class="outline-4">
+<h4 id="orgeefcdac">Future对象</h4>
+<div class="outline-text-4" id="text-orgeefcdac">
+<p>
+<span class="underline">Future</span> 表示一个 <b>任务的生命周期</b> ，并提供相应的方法 
+</p>
+<ul class="org-ul">
+<li><span class="underline">判断任务</span> 是否已经 <span class="underline">开始</span> ， <span class="underline">完成</span> ， <span class="underline">取消</span></li>
+<li><span class="underline">获取任务结果</span></li>
+<li><p>
+<span class="underline">取消</span> 任务等 
 </p>
 
-<p>
-已经提交但尚未开始的任务可以取消，已经开始执行但尚未完成的任务只有它们能响应中断才能取消，取消一个已经完成的任务没有任何影响
-</p>
-
-<p>
-Future表示一个任务的生命周期，并提供相应的方法判断任务是否已经开始，完成，取消，以及获取任务结果，取消任务等
-</p>
 <div class="org-src-container">
 <pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">interface</span> <span style="color: #98f5ff;">Future</span>&lt;<span style="color: #98f5ff;">V</span>&gt; {
     <span style="color: #98f5ff;">boolean</span> <span style="color: #daa520; font-weight: bold;">cancel</span>(<span style="color: #98f5ff;">boolean</span> <span style="color: #4eee94;">mayInterruptIfRunning</span>);
@@ -495,31 +539,49 @@ Future表示一个任务的生命周期，并提供相应的方法判断任务�
         <span style="color: #98f5ff;">CancellationException</span>, <span style="color: #98f5ff;">TimeoutException</span>;
 }
 </pre>
+</div></li>
+</ul>
 </div>
-<p>
-get方法的行为取决与任务的状态
-</p>
-<ul class="org-ul">
-<li>已经完成：立即返回结果或者抛出异常ExecutionException, 可以通过getClause获得被封装的初始异常</li>
-<li>没有完成：阻塞主线程直到任务结束</li>
-<li>取消：将抛出CancellationException</li>
-</ul>
 
+<div id="outline-container-orgdb2f52f" class="outline-5">
+<h5 id="orgdb2f52f">获得任务结果</h5>
+<div class="outline-text-5" id="text-orgdb2f52f">
 <p>
-创建Future
+<span class="underline">get</span> 方法：行为取决与 <span class="underline">任务的状态</span> 
 </p>
 <ul class="org-ul">
-<li>ExecutorService中所有submit方法都会返回一个Future, 将Runnable或Callable提交给Executor得到Future</li>
-<li>也可以显式地为Runnable或者Callable创建一个FutureTask提交给Executor</li>
-<li>ExecutorService也可以使用newTaskFor方法为Callable获得Future</li>
+<li><span class="underline">已经完成</span> ： <b>立即返回结果</b> 或者 <b>抛出异常ExecutionException</b> , 可以通过 <span class="underline">getClause</span> <b>获得被封装的初始异常</b></li>
+<li><span class="underline">没有完成</span> ： <b>阻塞主线程</b> 直到任务结束</li>
+<li><span class="underline">取消</span> ：将抛出 <span class="underline">CancellationException</span></li>
 </ul>
+</div>
+</div>
+
+<div id="outline-container-org9cfea88" class="outline-5">
+<h5 id="org9cfea88">创建 Future</h5>
+<div class="outline-text-5" id="text-org9cfea88">
+<ol class="org-ol">
+<li><span class="underline">ExecutorService</span> 中所有 <span class="underline">submit</span> 方法都会 <b>返回一个Future</b></li>
+<li>将 <span class="underline">Runnable</span> 或 <span class="underline">Callable</span> <b>提交</b> 给 <span class="underline">Executor</span> 得到Future</li>
+<li><b>显式</b> 地为 <span class="underline">Runnable</span> 或者 <span class="underline">Callable</span> <b>创建</b> 一个 <span class="underline">FutureTask</span> <b>提交</b> 给 <span class="underline">Executor</span></li>
+<li><p>
+<span class="underline">ExecutorService</span> 也可以使用 <span class="underline">newTaskFor</span> 方法为 <span class="underline">Callable</span> 获得Future
+</p>
 <div class="org-src-container">
 <pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">protected</span> &lt;<span style="color: #98f5ff;">T</span>&gt; <span style="color: #98f5ff;">RunnableFuture</span>&lt;<span style="color: #98f5ff;">T</span>&gt; <span style="color: #daa520; font-weight: bold;">newTaskFor</span>(<span style="color: #98f5ff;">Callable</span>&lt;<span style="color: #98f5ff;">T</span>&gt; <span style="color: #4eee94;">task</span>) {
     <span style="color: #00bfff; font-weight: bold;">return</span> <span style="color: #00bfff; font-weight: bold;">new</span> <span style="color: #98f5ff;">FutureTask</span>&lt;<span style="color: #98f5ff;">T</span>&gt;(task);
 }
 </pre>
+</div></li>
+</ol>
+</div>
+</div>
+</div>
 </div>
 
+<div id="outline-container-org819ac07" class="outline-3">
+<h3 id="org819ac07">实例</h3>
+<div class="outline-text-3" id="text-org819ac07">
 <p>
 使用Future渲染图片
 </p>
@@ -563,25 +625,36 @@ get方法的行为取决与任务的状态
 </pre>
 </div>
 
-<p>
-下载图片任务比渲染文本任务慢的多，可以把下载图片拆分成多个任务
-</p>
+<pre class="example">
+     下载图片任务 比 渲染文本任务慢的多，可以把下载图片拆分成多个任务
+</pre>
 </div>
-</div>
-<div id="outline-container-org4d73d76" class="outline-3">
-<h3 id="org4d73d76">CompletionService</h3>
-<div class="outline-text-3" id="text-org4d73d76">
-<p>
-CompletionService把Executor和BlockingQueue融合在一起 
-</p>
 
+<div id="outline-container-org4d73d76" class="outline-4">
+<h4 id="org4d73d76">CompletionService</h4>
+<div class="outline-text-4" id="text-org4d73d76">
 <p>
-将Callable任务提交给CompletionService执行，然后使用类似队列操作的take和poll方法来获得已知的结果，这些结果会在全部结束时候封装为Future 
+<span class="underline">CompletionService</span> ： <span class="underline">Executor</span> 和 <span class="underline">BlockingQueue</span> 融合在一起 
 </p>
+<ul class="org-ul">
+<li>将 <span class="underline">Callable</span> 任务 <b>提交</b> 给 <span class="underline">CompletionService</span> 执行</li>
+<li>使用类似 <b>队列</b> 操作的 <span class="underline">take</span> 和 <span class="underline">poll</span> 方法来获得已知的结果</li>
+<li>这些结果会在 <span class="underline">全部结束</span> 时候 <b>封装</b> 为 <span class="underline">Future</span></li>
+</ul>
 
-<p>
-ExecutorCompletionService实现了CompletionService。ExecutorCompletionService的构造函数中创建一个BlockingQueue来保存计算完成的结果。当计算完成时候，调用FutureTask的done方法。当提交某个任务的时候，该任务将包装成为QueueingFuture, 这是FutureTask的一个子类，然后改写子类的done方法，将结果放入BlockingQueue中。take和poll方法委托给BlockingQueue, 这些方法在得出结果前会阻塞
-</p>
+<pre class="example">
+ExecutorCompletionService实现了CompletionService
+
+ExecutorCompletionService的构造函数中创建一个 BlockingQueue 来保存计算完成的结果
+
+当计算完成时候，调用FutureTask的done方法
+
+当提交某个任务的时候，该任务将包装成为QueueingFuture, 这是FutureTask的一个子类
+然后改写子类的done方法，将结果放入BlockingQueue中
+
+take和poll方法委托给BlockingQueue, 这些方法在得出结果前会“阻塞”
+</pre>
+
 <div class="org-src-container">
 <pre class="src src-java">  <span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">class</span> <span style="color: #98f5ff;">ExecutorCompletionService</span>&lt;<span style="color: #98f5ff;">V</span>&gt; <span style="color: #00bfff; font-weight: bold;">implements</span> <span style="color: #98f5ff;">CompletionService</span>&lt;<span style="color: #98f5ff;">V</span>&gt; {
 ...
@@ -595,7 +668,7 @@ ExecutorCompletionService实现了CompletionService。ExecutorCompletionService�
       <span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #98f5ff;">Future</span>&lt;<span style="color: #98f5ff;">V</span>&gt; <span style="color: #daa520; font-weight: bold;">submit</span>(<span style="color: #98f5ff;">Callable</span>&lt;<span style="color: #98f5ff;">V</span>&gt; <span style="color: #4eee94;">task</span>) {  
           <span style="color: #00bfff; font-weight: bold;">if</span> (task == <span style="color: #ffd700;">null</span>) <span style="color: #00bfff; font-weight: bold;">throw</span> <span style="color: #00bfff; font-weight: bold;">new</span> <span style="color: #98f5ff;">NullPointerException</span>();  
           <span style="color: #98f5ff;">RunnableFuture</span>&lt;<span style="color: #98f5ff;">V</span>&gt; <span style="color: #4eee94;">f</span> = newTaskFor(task);  
-          <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#23558;&#20219;&#21153;&#21253;&#35013;&#25104;QueueingFuture&#23545;&#35937;&#21518;&#22996;&#25176;&#32473;executor&#25191;&#34892;  </span>
+          <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#23558;&#20219;&#21153;&#21253;&#35013;&#25104; QueueingFuture &#23545;&#35937;&#21518;&#22996;&#25176;&#32473;executor&#25191;&#34892;  </span>
           executor.execute(<span style="color: #00bfff; font-weight: bold;">new</span> <span style="color: #98f5ff;">QueueingFuture</span>(f));  
           <span style="color: #00bfff; font-weight: bold;">return</span> f;  
       }
@@ -622,7 +695,7 @@ ExecutorCompletionService实现了CompletionService。ExecutorCompletionService�
 </div>
 
 <p>
-使用CompletionService渲染
+使用 <span class="underline">CompletionService</span> 渲染
 </p>
 
 <div class="org-src-container">
@@ -667,6 +740,7 @@ ExecutorCompletionService实现了CompletionService。ExecutorCompletionService�
 <p>
 <a href="jcip.html">Up:目录</a>
 </p>
+</div>
 </div>
 </div>
 </div>
