@@ -240,11 +240,7 @@ for the JavaScript code in this tag.
 <ul>
 <li><a href="#org6763852">任务取消</a>
 <ul>
-<li><a href="#org9dc69e0">设置自定义flag结束线程</a>
-<ul>
-<li><a href="#orgc1c4c2e">自定义flag的问题</a></li>
-</ul>
-</li>
+<li><a href="#org9dc69e0">设置自定义flag结束线程</a></li>
 <li><a href="#orgce43b24">中断</a>
 <ul>
 <li><a href="#org4af5771">可中断的阻塞方法</a></li>
@@ -253,10 +249,10 @@ for the JavaScript code in this tag.
 </li>
 <li><a href="#org030b546">处理InterruptedException</a>
 <ul>
-<li><a href="#orgf959598">不catch直接向上层抛出，或者catch住做一些清理工作之后重抛该异常</a></li>
-<li><a href="#org941a5d5">不能向上抛出InterruptedException异常</a></li>
-<li><a href="#orge359c5f">发生了InterruptedException异常后仍然继续循环执行某阻塞方法</a></li>
-<li><a href="#org937ea8d">忽略InterruptedException</a></li>
+<li><a href="#org8ecdfdf">直接向上层抛出</a></li>
+<li><a href="#orgede353d">设置当前线程的中断标记为true</a></li>
+<li><a href="#org396fc45">仍然继续循环执行某阻塞方法</a></li>
+<li><a href="#org04407a8">忽略</a></li>
 </ul>
 </li>
 <li><a href="#orgf1d4488">限时运行</a></li>
@@ -301,16 +297,15 @@ for the JavaScript code in this tag.
 <div id="outline-container-org6763852" class="outline-2">
 <h2 id="org6763852">任务取消</h2>
 <div class="outline-text-2" id="text-org6763852">
-<p>
-启动任务之后, 大多数时候我们等待运行完成，但是有时我们希望可以提前终止任务的运行:
-</p>
-<ol class="org-ol">
-<li>用户申请取消时，比如用户点击了取消按钮.</li>
-<li>时间限制的任务，有些任务具有时间限制, 如果在一定的时间内仍然没有得到想要的结果, 可能希望终止该任务的运行.</li>
-<li>发生特定的事件时，比如多个任务同时在不同的位置搜索某一文件, 当其中一个搜索到了想要的文件, 应该终止其他仍在运行的任务</li>
-<li>发生错误时，比如发生了磁盘已满的错误, 需要向磁盘写入数据的任务应该提前终止</li>
-<li>应用或者服务被关闭时</li>
-</ol>
+<pre class="example">
+启动任务之后, 大多数时候会等待运行完成，但是有时希望可以提前终止任务的运行:
+
+1. 用户申请取消时，比如用户点击了取消按钮.
+2. 时间限制的任务，有些任务具有时间限制, 如果在一定的时间内仍然没有得到想要的结果, 可能希望终止该任务的运行.
+3. 发生特定的事件时，比如多个任务同时在不同的位置搜索某一文件, 当其中一个搜索到了想要的文件, 应该终止其他仍在运行的任务
+4. 发生错误时，比如发生了磁盘已满的错误, 需要向磁盘写入数据的任务应该提前终止
+5. 应用或者服务被关闭时
+</pre>
 </div>
 
 <div id="outline-container-org9dc69e0" class="outline-3">
@@ -368,14 +363,11 @@ for the JavaScript code in this tag.
 }
 </pre>
 </div>
-</div>
 
-<div id="outline-container-orgc1c4c2e" class="outline-4">
-<h4 id="orgc1c4c2e">自定义flag的问题</h4>
-<div class="outline-text-4" id="text-orgc1c4c2e">
-<p>
-假如循环中执行了阻塞操作, 那么即使cancelled标记被设置为true, run方法却没有机会去检查cancelled标记的值, 线程将迟迟无法结束！　
-</p>
+<pre class="example">
+   假如循环中执行了阻塞操作, 那么即使cancelled标记被设置为true, run方法却没有机会去检查cancelled标记的值, 线程将迟迟无法结束！　
+</pre>
+
 <div class="org-src-container">
 <pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">class</span> <span style="color: #98f5ff;">BrokenPrimeProducer</span> <span style="color: #00bfff; font-weight: bold;">extends</span> <span style="color: #98f5ff;">Thread</span> {
     <span style="color: #00bfff; font-weight: bold;">private</span> <span style="color: #00bfff; font-weight: bold;">final</span> <span style="color: #98f5ff;">BlockingQueue</span>&lt;<span style="color: #98f5ff;">BigInteger</span>&gt; <span style="color: #4eee94;">queue</span>;
@@ -417,14 +409,29 @@ for the JavaScript code in this tag.
 </div>
 </div>
 </div>
-</div>
 
 <div id="outline-container-orgce43b24" class="outline-3">
 <h3 id="orgce43b24">中断</h3>
 <div class="outline-text-3" id="text-orgce43b24">
+<pre class="example">
+java没有直接规定如何安全的提前终止线程的运行, 而是提供了不具约束力的协商式机制:
+
+线程A可以请求线程B中断, 但是是否响应, 何时响应, 如何响应中断请求, 由线程B自己决定
+</pre>
+
 <p>
-java没有直接规定如何安全的提前终止线程的运行, 而是提供了不具约束力的协商式机制: 线程A可以请求线程B中断, 但是是否响应, 何时响应, 如何响应中断请求, 由线程B自己决定。每个线程对象都有一个boolean型的中断标记, 其他线程请求目标线程中断时, 会将目标线程的中断标记设置为true, 然后由目标线程自己决定如何处理。所以中断线程时, 需要明确知道目标线程的中断机制, 如果不知道目标线程会怎样处理中断请求, 不要贸然请求其中断
+每个 <span class="underline">线程</span> 对象都有一个 <span class="underline">boolean</span> 型的 <b>中断标记</b> ：
 </p>
+<ul class="org-ul">
+<li><span class="underline">其他线程</span> 请求 <span class="underline">目标线程</span> <b>中断</b> 时, 会将 <span class="underline">目标线程</span> 的 <span class="underline">中断标记</span> <b>设置为true</b></li>
+<li>由 <span class="underline">目标线程</span> <b>自己决定</b> 如何处理</li>
+</ul>
+
+<pre class="example">
+     所以中断线程时, 需要明确知道目标线程的中断机制
+
+     如果不知道目标线程会怎样处理中断请求, 不要贸然请求其中断
+</pre>
 
 <p>
 Thread类中与中断标记相关的方法有:
@@ -447,16 +454,17 @@ Thread类中与中断标记相关的方法有:
 <h4 id="org4af5771">可中断的阻塞方法</h4>
 <div class="outline-text-4" id="text-org4af5771">
 <p>
-java API中的大多数阻塞方法都是可中断的, 如Thread.sleep, Object.wait, BlockingQueue.put等 
+java API中的 <span class="underline">大多数 <b>阻塞</b> 方法</span> 都是 <b>可中断的</b> ：如 <span class="underline">Thread.sleep</span> ,  <span class="underline">Object.wait</span> ,  <span class="underline">BlockingQueue.put</span> 等 
 </p>
-
-<p>
-可中断的阻塞方法有一个共同的特点: 声明抛出InterruptedException异常 
-</p>
-
-<p>
-可中断的阻塞方法在阻塞期间会周期性检查当前线程的中断标记, 如果发现当前线程的中断标记为true, 就重置中断标记后提前从阻塞状态返回, 并抛出InterruptedException异常  
-</p>
+<ul class="org-ul">
+<li>可中断的阻塞方法有一个共同的特点:  <b>声明</b> 抛出 <span class="underline">InterruptedException</span> 异常</li>
+<li>在 <span class="underline">阻塞期间</span> 会 <span class="underline">周期性</span> 检查当前线程的 <span class="underline">中断标记</span> ， 如果发现当前线程的 <span class="underline">中断标记</span> 为 <b>true</b> ：
+<ol class="org-ol">
+<li><b>重置中断标记</b></li>
+<li>提前 <b>从阻塞状态返回</b></li>
+<li>抛出 <span class="underline">InterruptedException</span> 异常</li>
+</ol></li>
+</ul>
 
 <p>
 使用中断终止PrimeProducer    
@@ -519,10 +527,10 @@ java API中的大多数阻塞方法都是可中断的, 如Thread.sleep, Object.w
 有些方法阻塞的时候不会检查中断标记　
 </p>
 <ol class="org-ol">
-<li>同步socket I/O:　基于InputStream的读写方法不会响应中断，关闭socket可以使阻塞方法退出</li>
-<li>同步nio: 关闭InterruptibleChannel可以扔出AsynchronousCloseException</li>
-<li>异步Selector：关闭selector　</li>
-<li>内置锁：等待获得内置锁不会响应中断，使用新的Lock对象替代内置锁</li>
+<li><b>同步socket I/O</b> :　基于 <span class="underline">InputStream</span> 的读写方法不会响应中断， <b>关闭socket</b> 可以使阻塞方法退出</li>
+<li><b>同步nio</b> :  <b>关闭</b> <span class="underline">InterruptibleChannel</span> 可以扔出 <span class="underline">AsynchronousCloseException</span></li>
+<li><b>异步Selector</b> ：*关闭* <span class="underline">selector</span></li>
+<li><b>内置锁</b> ： <b>等待获得内置锁</b> 不会响应中断，使用新的 <span class="underline">Lock</span> 对象替代内置锁</li>
 </ol>
 
 <div class="org-src-container">
@@ -535,7 +543,6 @@ java API中的大多数阻塞方法都是可中断的, 如Thread.sleep, Object.w
         <span style="color: #00bfff; font-weight: bold;">this</span>.socket = socket;
         <span style="color: #00bfff; font-weight: bold;">this</span>.in = socket.getInputStream();
     }
-
 
     <span style="color: #ffd700;">@Override</span>
     <span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">interrupt</span>() {
@@ -572,9 +579,14 @@ java API中的大多数阻塞方法都是可中断的, 如Thread.sleep, Object.w
 }
 </pre>
 </div>
+
 <p>
-覆写Thread的interrupt方法，如果阻塞在不可响应中断的read方法，则关闭socket退出read方法，反之则继续传递一个中断
+<b>覆写</b> Thread的 <span class="underline">interrupt</span> 方法：
 </p>
+<ul class="org-ul">
+<li>如果阻塞在不可响应中断的read方法，则 <span class="underline">关闭socket</span> 退出read方法</li>
+<li>反之则 <span class="underline">继续传递一个中断</span></li>
+</ul>
 </div>
 </div>
 </div>
@@ -583,11 +595,11 @@ java API中的大多数阻塞方法都是可中断的, 如Thread.sleep, Object.w
 <h3 id="org030b546">处理InterruptedException</h3>
 <div class="outline-text-3" id="text-org030b546">
 </div>
-<div id="outline-container-orgf959598" class="outline-4">
-<h4 id="orgf959598">不catch直接向上层抛出，或者catch住做一些清理工作之后重抛该异常</h4>
-<div class="outline-text-4" id="text-orgf959598">
+<div id="outline-container-org8ecdfdf" class="outline-4">
+<h4 id="org8ecdfdf">直接向上层抛出</h4>
+<div class="outline-text-4" id="text-org8ecdfdf">
 <p>
-这样的处理使得你的方法也成为一个可中断的阻塞方法 
+也可以 <span class="underline">做一些清理工作</span> 之后 <b>重抛该异常</b> 
 </p>
 
 <div class="org-src-container">
@@ -597,14 +609,37 @@ java API中的大多数阻塞方法都是可中断的, 如Thread.sleep, Object.w
 }  
 </pre>
 </div>
+
+<pre class="example">
+	这样的处理使得你的方法也成为一个可中断的阻塞方法 
+</pre>
 </div>
 </div>
-<div id="outline-container-org941a5d5" class="outline-4">
-<h4 id="org941a5d5">不能向上抛出InterruptedException异常</h4>
-<div class="outline-text-4" id="text-org941a5d5">
+
+<div id="outline-container-orgede353d" class="outline-4">
+<h4 id="orgede353d">设置当前线程的中断标记为true</h4>
+<div class="outline-text-4" id="text-orgede353d">
 <p>
-catch之后, 必须设置当前线程的中断标记为true, 以表明当前线程发生了中断, 以便调用栈上层进行处理
+表明 <b>当前线程发生了中断</b> , 以便 <span class="underline">调用栈上层</span> 进行处理
 </p>
+
+<pre class="example">
+  一般用于当前进程无法直接向上抛出InterruptedException异常
+</pre>
+
+<ol class="org-ol">
+<li>主线程 <b>启动</b>  <span class="underline">InterruptedExceptionHandler线程</span> 1s后, 设置 <span class="underline">InterruptedExceptionHandler线程</span> 的 <span class="underline">中断标记</span> 为 <b>true</b></li>
+<li><span class="underline">InterruptedExceptionHandler线程</span> 应该 <b>阻塞</b> 在 <span class="underline">wait</span> 方法上
+<ul class="org-ul">
+<li>由于wait方法是 <b>可中断的阻塞方法</b> , 所以其检查到 <span class="underline">中断标记</span> 为 <span class="underline">true</span> 时</li>
+<li><span class="underline">重置</span> 当前线程的 <span class="underline">中断标记</span> 后</li>
+<li>抛出InterruptedException</li>
+</ul></li>
+<li><span class="underline">dosomething</span> 方法catch住 <span class="underline">InterruptedException</span> 异常后,  <b>再次</b> 将 <span class="underline">当前线程的中断标记</span> 设置为 <span class="underline">true</span></li>
+<li><p>
+<span class="underline">run</span> 方法检查到 <span class="underline">中断标记</span> 为 <span class="underline">true</span> , 循环不再继续 
+</p>
+
 <div class="org-src-container">
 <pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">class</span> <span style="color: #98f5ff;">InterruptedExceptionHandler</span> <span style="color: #00bfff; font-weight: bold;">implements</span> <span style="color: #98f5ff;">Runnable</span> {  
     <span style="color: #00bfff; font-weight: bold;">private</span> <span style="color: #98f5ff;">Object</span> <span style="color: #4eee94;">lock</span> = <span style="color: #00bfff; font-weight: bold;">new</span> <span style="color: #98f5ff;">Object</span>();  
@@ -640,23 +675,30 @@ catch之后, 必须设置当前线程的中断标记为true, 以表明当前线�
     }  
 }  
 </pre>
+</div></li>
+</ol>
+
+<pre class="example">
+      假如dosomething方法catch住InterruptedException异常后没有设置中断标记
+
+      其调用栈上层的run方法就无法得知线程曾经发生过中断, 循环也就无法终止
+</pre>
 </div>
+</div>
+
+<div id="outline-container-org396fc45" class="outline-4">
+<h4 id="org396fc45">仍然继续循环执行某阻塞方法</h4>
+<div class="outline-text-4" id="text-org396fc45">
 <p>
-主线程启动InterruptedExceptionHandler线程1s后, 设置InterruptedExceptionHandler线程的中断标记为true. 此时InterruptedExceptionHandler线程应该阻塞在wait方法上, 由于wait方法是可中断的阻塞方法, 所以其检查到中断标记为true时, 将重置当前线程的中断标记后抛出InterruptedException, dosomething方法catch住InterruptedException异常后, 再次将当前线程的中断标记设置为true, run方法检查到中断标记为true, 循环不再继续 
+将 <span class="underline">中断状态</span> <b>保存</b> 下来, 当 <span class="underline">循环完成</span> 后再根据 <span class="underline">保存下来的中断状态</span> 执行相应的操作
 </p>
 
-<p>
-假如dosomething方法catch住InterruptedException异常后没有设置中断标记, 其调用栈上层的run方法就无法得知线程曾经发生过中断, 循环也就无法终止
+<ol class="org-ol">
+<li>等待doSomething的 <span class="underline">循环执行完毕</span></li>
+<li><b>恢复</b> <span class="underline">中断状态</span> 为 <span class="underline">true</span></li>
+<li><p>
+<span class="underline">run</span> 中 <b>处理中断</b> 
 </p>
-</div>
-</div>
-<div id="outline-container-orge359c5f" class="outline-4">
-<h4 id="orge359c5f">发生了InterruptedException异常后仍然继续循环执行某阻塞方法</h4>
-<div class="outline-text-4" id="text-orge359c5f">
-<p>
-将中断状态保存下来, 当循环完成后再根据保存下来的中断状态执行相应的操作
-</p>
-
 <div class="org-src-container">
 <pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">class</span> <span style="color: #98f5ff;">InterruptedExceptionContinueHandler</span> <span style="color: #00bfff; font-weight: bold;">implements</span> <span style="color: #98f5ff;">Runnable</span> {
     <span style="color: #00bfff; font-weight: bold;">private</span> <span style="color: #98f5ff;">BlockingQueue</span>&lt;<span style="color: #98f5ff;">Integer</span>&gt; <span style="color: #4eee94;">queue</span>;
@@ -702,38 +744,36 @@ catch之后, 必须设置当前线程的中断标记为true, 以表明当前线�
 }
 </pre>
 </div>
+
+<pre class="example">
+      “直接设置当前进程的中断标志为true“还是”保存中断状态“直到循环结束？
+
+      取决于业务场景是否需要”立刻结束循环“，还是”循环结束“再处理！
+</pre></li>
+</ol>
+</div>
+</div>
+
+<div id="outline-container-org04407a8" class="outline-4">
+<h4 id="org04407a8">忽略</h4>
+<div class="outline-text-4" id="text-org04407a8">
 <p>
-等待doSomething的循环执行完毕，恢复中断状态为true，再run中处理中断
+同时满足下面两个条件：
+</p>
+<ol class="org-ol">
+<li>被 <b>捕获</b> 在 <b>调用栈的最上层</b> ： <span class="underline">run</span> 方法或者 <span class="underline">main</span> 方法中</li>
+<li><p>
+<span class="underline">后续代码</span> <b>不检查</b> <span class="underline">中断状态</span> 
 </p>
 
-<div class="org-src-container">
-<pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">private</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">dosomething</span>() {
-    <span style="color: #00bfff; font-weight: bold;">for</span> (<span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">i</span> = 0; i &lt; 10000; i++) {
-        <span style="color: #00bfff; font-weight: bold;">try</span> {
-            queue.put(i);
-        } <span style="color: #00bfff; font-weight: bold;">catch</span> (<span style="color: #98f5ff;">InterruptedException</span> <span style="color: #4eee94;">e</span>) {
-            System.out.println(<span style="color: #deb887;">"InterruptedException happened when i = "</span> + i);
-            <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">&#36807;&#26089;&#37325;&#32622;&#20013;&#26029;&#29366;&#24577;&#20026;true&#20250;&#23548;&#33268;put&#26041;&#27861;&#21448;&#25243;&#20986;InterruptedException&#24322;&#24120;, &#22914;&#27492;&#24448;&#22797;&#30452;&#21040;&#24490;&#29615;&#32467;&#26463;.</span>
-            Thread.currentThread().interrupt();
-        }
-    }
-}
-</pre>
-</div>
-<p>
-过早重置中断状态为true会导致put方法又抛出InterruptedException异常, 如此往复直到循环结束 
-</p>
-</div>
-</div>
-<div id="outline-container-org937ea8d" class="outline-4">
-<h4 id="org937ea8d">忽略InterruptedException</h4>
-<div class="outline-text-4" id="text-org937ea8d">
-<p>
-只有当InterruptedException被捕获在调用栈的最上层, 如run方法, 或者main方法中, 且后续代码不检查中断状态时， 其他任何情况下都应该对InterruptedException作处理
-</p>
+<pre class="example">
+    其他任何情况下都应该对InterruptedException作处理
+</pre></li>
+</ol>
 </div>
 </div>
 </div>
+
 <div id="outline-container-orgf1d4488" class="outline-3">
 <h3 id="orgf1d4488">限时运行</h3>
 <div class="outline-text-3" id="text-orgf1d4488">

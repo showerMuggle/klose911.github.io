@@ -4,13 +4,17 @@
 #+HTML_LINK_UP: executor.html   
 #+HTML_LINK_HOME: jcip.html
 * 任务取消
-  启动任务之后, 大多数时候我们等待运行完成，但是有时我们希望可以提前终止任务的运行:
-1. 用户申请取消时，比如用户点击了取消按钮.
-2. 时间限制的任务，有些任务具有时间限制, 如果在一定的时间内仍然没有得到想要的结果, 可能希望终止该任务的运行.
-3. 发生特定的事件时，比如多个任务同时在不同的位置搜索某一文件, 当其中一个搜索到了想要的文件, 应该终止其他仍在运行的任务
-4. 发生错误时，比如发生了磁盘已满的错误, 需要向磁盘写入数据的任务应该提前终止
-5. 应用或者服务被关闭时
-   
+
+  #+BEGIN_EXAMPLE
+    启动任务之后, 大多数时候会等待运行完成，但是有时希望可以提前终止任务的运行:
+
+    1. 用户申请取消时，比如用户点击了取消按钮.
+    2. 时间限制的任务，有些任务具有时间限制, 如果在一定的时间内仍然没有得到想要的结果, 可能希望终止该任务的运行.
+    3. 发生特定的事件时，比如多个任务同时在不同的位置搜索某一文件, 当其中一个搜索到了想要的文件, 应该终止其他仍在运行的任务
+    4. 发生错误时，比如发生了磁盘已满的错误, 需要向磁盘写入数据的任务应该提前终止
+    5. 应用或者服务被关闭时
+  #+END_EXAMPLE   
+
 ** 设置自定义flag结束线程
    #+BEGIN_SRC java
      public class PrimeGenerator implements Runnable {
@@ -61,9 +65,11 @@
      }
    #+END_SRC
    
-*** 自定义flag的问题
-    假如循环中执行了阻塞操作, 那么即使cancelled标记被设置为true, run方法却没有机会去检查cancelled标记的值, 线程将迟迟无法结束！　
-    #+BEGIN_SRC java
+   #+BEGIN_EXAMPLE
+   假如循环中执行了阻塞操作, 那么即使cancelled标记被设置为true, run方法却没有机会去检查cancelled标记的值, 线程将迟迟无法结束！　
+   #+END_EXAMPLE
+
+   #+BEGIN_SRC java
   class BrokenPrimeProducer extends Thread {
           private final BlockingQueue<BigInteger> queue;
           private volatile boolean cancelled = false;
@@ -81,10 +87,10 @@
           }
           public void cancel() { cancelled = true; }
   }
-    #+END_SRC
+   #+END_SRC
     
-    测试代码
-    #+BEGIN_SRC java
+   测试代码
+   #+BEGIN_SRC java
   public static void main(String[] args) {  
           // 设置队列的最大容量为10  
           BlockingQueue<BigInteger> primes = new LinkedBlockingQueue<BigInteger>(10);  
@@ -97,11 +103,25 @@
           }  
           producer.cancel();  
   }  
-    #+END_SRC
+   #+END_SRC
     
 ** 中断
-   java没有直接规定如何安全的提前终止线程的运行, 而是提供了不具约束力的协商式机制: 线程A可以请求线程B中断, 但是是否响应, 何时响应, 如何响应中断请求, 由线程B自己决定。每个线程对象都有一个boolean型的中断标记, 其他线程请求目标线程中断时, 会将目标线程的中断标记设置为true, 然后由目标线程自己决定如何处理。所以中断线程时, 需要明确知道目标线程的中断机制, 如果不知道目标线程会怎样处理中断请求, 不要贸然请求其中断
-   
+   #+BEGIN_EXAMPLE
+     java没有直接规定如何安全的提前终止线程的运行, 而是提供了不具约束力的协商式机制:
+
+     线程A可以请求线程B中断, 但是是否响应, 何时响应, 如何响应中断请求, 由线程B自己决定
+   #+END_EXAMPLE
+
+   每个 _线程_ 对象都有一个 _boolean_ 型的 *中断标记* ：
+   + _其他线程_ 请求 _目标线程_ *中断* 时, 会将 _目标线程_ 的 _中断标记_ *设置为true*
+   + 由 _目标线程_ *自己决定* 如何处理
+
+   #+BEGIN_EXAMPLE
+     所以中断线程时, 需要明确知道目标线程的中断机制
+
+     如果不知道目标线程会怎样处理中断请求, 不要贸然请求其中断
+   #+END_EXAMPLE   
+
    Thread类中与中断标记相关的方法有:
    #+BEGIN_SRC java
   public class Thread {   
@@ -116,11 +136,12 @@
    #+END_SRC
    
 *** 可中断的阻塞方法
-    java API中的大多数阻塞方法都是可中断的, 如Thread.sleep, Object.wait, BlockingQueue.put等 
-    
-    可中断的阻塞方法有一个共同的特点: 声明抛出InterruptedException异常 
-    
-    可中断的阻塞方法在阻塞期间会周期性检查当前线程的中断标记, 如果发现当前线程的中断标记为true, 就重置中断标记后提前从阻塞状态返回, 并抛出InterruptedException异常  
+    java API中的 _大多数 *阻塞* 方法_ 都是 *可中断的* ：如 _Thread.sleep_ ,  _Object.wait_ ,  _BlockingQueue.put_ 等 
+    + 可中断的阻塞方法有一个共同的特点:  *声明* 抛出 _InterruptedException_ 异常
+    + 在 _阻塞期间_ 会 _周期性_ 检查当前线程的 _中断标记_ ， 如果发现当前线程的 _中断标记_ 为 *true* ：
+      1. *重置中断标记*
+      2. 提前 *从阻塞状态返回*
+      3. 抛出 _InterruptedException_ 异常  
     
     使用中断终止PrimeProducer    
     #+BEGIN_SRC java
@@ -170,12 +191,12 @@
     #+END_SRC
 *** 不可中断的阻塞方法
     有些方法阻塞的时候不会检查中断标记　
-1. 同步socket I/O:　基于InputStream的读写方法不会响应中断，关闭socket可以使阻塞方法退出
-2. 同步nio: 关闭InterruptibleChannel可以扔出AsynchronousCloseException
-3. 异步Selector：关闭selector　
-4. 内置锁：等待获得内置锁不会响应中断，使用新的Lock对象替代内置锁
-   
-#+BEGIN_SRC java
+    1. *同步socket I/O* :　基于 _InputStream_ 的读写方法不会响应中断， *关闭socket* 可以使阻塞方法退出
+    2. *同步nio* :  *关闭* _InterruptibleChannel_ 可以扔出 _AsynchronousCloseException_ 
+    3.  *异步Selector* ：*关闭* _selector_ 
+    4.  *内置锁* ： *等待获得内置锁* 不会响应中断，使用新的 _Lock_ 对象替代内置锁
+
+    #+BEGIN_SRC java
   public class ReaderThread extends Thread {
           private final Socket socket;
           private final InputStream in;
@@ -185,7 +206,6 @@
                   this.socket = socket;
                   this.in = socket.getInputStream();
           }
-
 
           @Override
           public void interrupt() {
@@ -220,12 +240,15 @@
                   // do something ...
           }
   }
-#+END_SRC
-覆写Thread的interrupt方法，如果阻塞在不可响应中断的read方法，则关闭socket退出read方法，反之则继续传递一个中断
+    #+END_SRC
 
-** 处理InterruptedException
-*** 不catch直接向上层抛出，或者catch住做一些清理工作之后重抛该异常
-    这样的处理使得你的方法也成为一个可中断的阻塞方法 
+    *覆写* Thread的 _interrupt_ 方法：
+    + 如果阻塞在不可响应中断的read方法，则 _关闭socket_ 退出read方法
+    + 反之则 _继续传递一个中断_ 
+
+** 处理InterruptedException 
+*** 直接向上层抛出
+    也可以 _做一些清理工作_ 之后 *重抛该异常* 
     
     #+BEGIN_SRC java
   // 直接向上层抛出InterruptedException, dosomething方法也是一个可中断的阻塞方法  
@@ -233,49 +256,74 @@
           Thread.sleep(1000);  
   }  
     #+END_SRC
-*** 不能向上抛出InterruptedException异常
-    catch之后, 必须设置当前线程的中断标记为true, 以表明当前线程发生了中断, 以便调用栈上层进行处理
-    #+BEGIN_SRC java
-  public class InterruptedExceptionHandler implements Runnable {  
-          private Object lock = new Object();  
-    
-          @Override  
-          public void run() {
-                  while (!Thread.currentThread().isInterrupted()) {  
-                          dosomething();  
-                  }  
-          }  
-    
-          private void dosomething() {  
-                  try {  
-                          // Object.wait是一个可中断的阻塞方法
-                          // 如果在其阻塞期间检查到当前线程的中断标记为true, 会重置中断标记后从阻塞状态返回, 并抛出InterruptedException异常  
-                          synchronized (lock) {  
-                                  lock.wait();  // 会重置中断标记后从阻塞状态返回, 并抛出InterruptedException异常 
-                          }  
-                  } catch (InterruptedException e) {  
-                          System.out.println("InterruptedException happened");  
-                          // catch住InterruptedException后设置当前线程的中断标记为true, 以供调用栈上层进行相应的处理  
-                          // 在此例中, dosomething方法的调用栈上层是run方法.  
-                          Thread.currentThread().interrupt();  
-                  }  
-          }  
-        
-          public static void main(String[] args) throws InterruptedException {  
-                  Thread t = new Thread(new InterruptedExceptionHandler());  
-                  t.start();  
-                  Thread.sleep(1000);
-                  // 启动线程1s后设置其中断标记为true
-                  t.interrupt();  
-          }  
-  }  
-    #+END_SRC
-    主线程启动InterruptedExceptionHandler线程1s后, 设置InterruptedExceptionHandler线程的中断标记为true. 此时InterruptedExceptionHandler线程应该阻塞在wait方法上, 由于wait方法是可中断的阻塞方法, 所以其检查到中断标记为true时, 将重置当前线程的中断标记后抛出InterruptedException, dosomething方法catch住InterruptedException异常后, 再次将当前线程的中断标记设置为true, run方法检查到中断标记为true, 循环不再继续 
 
-    假如dosomething方法catch住InterruptedException异常后没有设置中断标记, 其调用栈上层的run方法就无法得知线程曾经发生过中断, 循环也就无法终止
-*** 发生了InterruptedException异常后仍然继续循环执行某阻塞方法 
-    将中断状态保存下来, 当循环完成后再根据保存下来的中断状态执行相应的操作
-    
+    #+BEGIN_EXAMPLE
+	这样的处理使得你的方法也成为一个可中断的阻塞方法 
+    #+END_EXAMPLE
+
+***  设置当前线程的中断标记为true
+表明 *当前线程发生了中断* , 以便 _调用栈上层_ 进行处理
+
+#+BEGIN_EXAMPLE
+  一般用于当前进程无法直接向上抛出InterruptedException异常
+#+END_EXAMPLE
+
+    1. 主线程 *启动*  _InterruptedExceptionHandler线程_ 1s后, 设置 _InterruptedExceptionHandler线程_ 的 _中断标记_ 为 *true*
+    2. _InterruptedExceptionHandler线程_ 应该 *阻塞* 在 _wait_ 方法上
+       + 由于wait方法是 *可中断的阻塞方法* , 所以其检查到 _中断标记_ 为 _true_ 时
+       + _重置_ 当前线程的 _中断标记_ 后
+       + 抛出InterruptedException
+    3. _dosomething_ 方法catch住 _InterruptedException_ 异常后,  *再次* 将 _当前线程的中断标记_ 设置为 _true_ 
+    4. _run_ 方法检查到 _中断标记_ 为 _true_ , 循环不再继续 
+
+       #+BEGIN_SRC java
+    public class InterruptedExceptionHandler implements Runnable {  
+	    private Object lock = new Object();  
+
+	    @Override  
+	    public void run() {
+		    while (!Thread.currentThread().isInterrupted()) {  
+			    dosomething();  
+		    }  
+	    }  
+
+	    private void dosomething() {  
+		    try {  
+			    // Object.wait是一个可中断的阻塞方法
+			    // 如果在其阻塞期间检查到当前线程的中断标记为true, 会重置中断标记后从阻塞状态返回, 并抛出InterruptedException异常  
+			    synchronized (lock) {  
+				    lock.wait();  // 会重置中断标记后从阻塞状态返回, 并抛出InterruptedException异常 
+			    }  
+		    } catch (InterruptedException e) {  
+			    System.out.println("InterruptedException happened");  
+			    // catch住InterruptedException后设置当前线程的中断标记为true, 以供调用栈上层进行相应的处理  
+			    // 在此例中, dosomething方法的调用栈上层是run方法.  
+			    Thread.currentThread().interrupt();  
+		    }  
+	    }  
+
+	    public static void main(String[] args) throws InterruptedException {  
+		    Thread t = new Thread(new InterruptedExceptionHandler());  
+		    t.start();  
+		    Thread.sleep(1000);
+		    // 启动线程1s后设置其中断标记为true
+		    t.interrupt();  
+	    }  
+    }  
+       #+END_SRC
+
+    #+BEGIN_EXAMPLE
+      假如dosomething方法catch住InterruptedException异常后没有设置中断标记
+
+      其调用栈上层的run方法就无法得知线程曾经发生过中断, 循环也就无法终止
+    #+END_EXAMPLE
+
+*** 仍然继续循环执行某阻塞方法
+    将 _中断状态_ *保存* 下来, 当 _循环完成_ 后再根据 _保存下来的中断状态_ 执行相应的操作
+
+ 1. 等待doSomething的 _循环执行完毕_
+ 2. *恢复* _中断状态_ 为 _true_
+ 3. _run_ 中 *处理中断* 
     #+BEGIN_SRC java
   public class InterruptedExceptionContinueHandler implements Runnable {
           private BlockingQueue<Integer> queue;
@@ -320,24 +368,22 @@
           }
   }
     #+END_SRC
-    等待doSomething的循环执行完毕，恢复中断状态为true，再run中处理中断
-    
-    #+BEGIN_SRC java
-  private void dosomething() {
-          for (int i = 0; i < 10000; i++) {
-                  try {
-                          queue.put(i);
-                  } catch (InterruptedException e) {
-                          System.out.println("InterruptedException happened when i = " + i);
-                          //过早重置中断状态为true会导致put方法又抛出InterruptedException异常, 如此往复直到循环结束.
-                          Thread.currentThread().interrupt();
-                  }
-          }
-  }
-    #+END_SRC
-    过早重置中断状态为true会导致put方法又抛出InterruptedException异常, 如此往复直到循环结束 
-*** 忽略InterruptedException
-    只有当InterruptedException被捕获在调用栈的最上层, 如run方法, 或者main方法中, 且后续代码不检查中断状态时， 其他任何情况下都应该对InterruptedException作处理
+
+    #+BEGIN_EXAMPLE
+      “直接设置当前进程的中断标志为true“还是”保存中断状态“直到循环结束？
+
+      取决于业务场景是否需要”立刻结束循环“，还是”循环结束“再处理！
+    #+END_EXAMPLE    
+
+*** 忽略
+同时满足下面两个条件：
+1. 被 *捕获* 在 *调用栈的最上层* ： _run_ 方法或者 _main_ 方法中
+2. _后续代码_ *不检查* _中断状态_ 
+
+    #+BEGIN_EXAMPLE
+    其他任何情况下都应该对InterruptedException作处理
+    #+END_EXAMPLE
+
 ** 限时运行
    
    #+BEGIN_SRC java
@@ -352,10 +398,10 @@
      }
    #+END_SRC
    timeRun方法可以在任何一个线程中调用，所以timeRun方法无法知道运行线程处理中断的策略，不应该贸然向对应的线程发出中断请求
-+ 在r.run运行完成后，调用线程捕获中断异常是危险的
-+ 如果调用线程忽略了中断异常，那只有r.run运行完毕timeRun才能结束，这会超出所要求的运行时间
-  
-#+BEGIN_SRC java
+   + 在r.run运行完成后，调用线程捕获中断异常是危险的
+   + 如果调用线程忽略了中断异常，那只有r.run运行完毕timeRun才能结束，这会超出所要求的运行时间
+
+   #+BEGIN_SRC java
   private static final ScheduledExecutorService cancelExec = Executors.newSingleThreadScheduledExecutor();
 
   public static void timedRun(final Runnable r,
@@ -393,12 +439,12 @@
           //如果taskThread线程内捕获异常，重新抛出
           task.rethrow();
   }
-#+END_SRC
-1. 创建taskThread线程，把运行任务包装到taskThread
-2. 通过join方法让taskThread跑限时时间
-3. 超过限时时间，向taskThread发送中断请求
-4. 在taskThread中发现异常，则重新抛出供主线程处理
-   
+   #+END_SRC
+   1. 创建taskThread线程，把运行任务包装到taskThread
+   2. 通过join方法让taskThread跑限时时间
+   3. 超过限时时间，向taskThread发送中断请求
+   4. 在taskThread中发现异常，则重新抛出供主线程处理
+
 ** 取消Future
    将task提交给线程池运行, 由于不知道task会由线程池中的哪一个线程运行, 也不知道线程池中的线程会怎样处理中断, 所以无法直接调用Thread对象的interrupt方法提前终止线程的运行. 但是ExecutorService类的submit等方法会返回表示task未决结果的Future对象, 调用Future对象的cancel方法, 可以取消task的运行
    
@@ -601,11 +647,11 @@
    当LogWriter.shutDown方法被调用时, LoggerThread线程的中断标记被设置为true, 之后LoggerThread线程执行queue.take()方法时会抛出InterruptedException异常, 从而使得LoggerThread线程结束
    
 ** 中断线程的问题
-1. 丢弃了队列中尚未来得及输出的数据
-2. 更严重的是, 假如线程A对LogWriter.log方法的调用因为队列已满而阻塞, 此时停止LoggerThread线程将导致线程A永远阻塞在queue.put方法上　
-   
-当停止LogService以后，设置状态不在接受新的任务，并处理完所有已经存在的数据, 这种处理方式会导致竞争条件，所以必须手动同步
-#+BEGIN_SRC java
+   1. 丢弃了队列中尚未来得及输出的数据
+   2. 更严重的是, 假如线程A对LogWriter.log方法的调用因为队列已满而阻塞, 此时停止LoggerThread线程将导致线程A永远阻塞在queue.put方法上　
+
+   当停止LogService以后，设置状态不在接受新的任务，并处理完所有已经存在的数据, 这种处理方式会导致竞争条件，所以必须手动同步
+   #+BEGIN_SRC java
   public class LogService {
           private final BlockingQueue<String> queue;
           private final LoggerThread loggerThread;
@@ -679,7 +725,7 @@
                   }
           }
   }
-#+END_SRC
+   #+END_SRC
 
 ** 使用ExecutorService简化
    #+BEGIN_SRC java
@@ -758,12 +804,12 @@
           }
   }
     #+END_SRC
-极小的概率可能发生在关闭线程池的那一刻某个任务实际上已经执行完最后一条指令，但还没来得及记录任务运行结束。这种情况下就会造成将来重复执行任务。
+    极小的概率可能发生在关闭线程池的那一刻某个任务实际上已经执行完最后一条指令，但还没来得及记录任务运行结束。这种情况下就会造成将来重复执行任务。
 
 * 异常退出
-线程异常退出的主要原因是RunTimeException,这种情况下往往不会通知主线程，在某些情况下需要捕获这些RunTimeException
+  线程异常退出的主要原因是RunTimeException,这种情况下往往不会通知主线程，在某些情况下需要捕获这些RunTimeException
 
-#+BEGIN_SRC java
+  #+BEGIN_SRC java
   public void run() {
           Throwable thrown = null;
           try {
@@ -777,11 +823,11 @@
                   threadExited(this, thrown);
           }
   }
-#+END_SRC
+  #+END_SRC
 
 ** 未捕获异常处理器
-长时间运行的应用，对于未捕获的异常至少要在日志记录下来　
-#+BEGIN_SRC java
+   长时间运行的应用，对于未捕获的异常至少要在日志记录下来　
+   #+BEGIN_SRC java
   public class UEHLogger implements Thread.UncaughtExceptionHandler {
           public void uncaughtException(Thread t, Throwable e) {
                   Logger logger = Logger.getAnonymousLogger();
@@ -790,22 +836,22 @@
                              e);
           }
   }
-#+END_SRC
-通过线程池构造器的ThreadFactory参数可以使用自定义UncaughtExceptionHandler　
+   #+END_SRC
+   通过线程池构造器的ThreadFactory参数可以使用自定义UncaughtExceptionHandler　
 
 * 关闭JVM
 ** 正常关闭　
-1. 运行完主线程最后一条命令
-2. 调用System.exit
-3. 发送SIGINT信号(CTRL+C)
+   1. 运行完主线程最后一条命令
+   2. 调用System.exit
+   3. 发送SIGINT信号(CTRL+C)
 
-正常关闭的时候，会开始运行注册在Runtime.addShutdownHook的钩子线程。等到所有的钩子线程运行完毕，如果runFinalizersOnExit被设置的话，JVM开始运行finializer,最后停止JVM。JVM不会主动关闭或者中断任何其他线程
+   正常关闭的时候，会开始运行注册在Runtime.addShutdownHook的钩子线程。等到所有的钩子线程运行完毕，如果runFinalizersOnExit被设置的话，JVM开始运行finializer,最后停止JVM。JVM不会主动关闭或者中断任何其他线程
 *** 关闭钩子
-+ 钩子线程必须是同步
-+ 钩子线程不能死锁，不然JVM无法关闭
-+ 所有的钩子线程会同时运行，尽量使用一个钩子关闭所有的服务
+    + 钩子线程必须是同步
+    + 钩子线程不能死锁，不然JVM无法关闭
+    + 所有的钩子线程会同时运行，尽量使用一个钩子关闭所有的服务
 
-#+BEGIN_SRC java
+    #+BEGIN_SRC java
   public void start() {
           Runtime.getRuntime().addShutdownHook(new Thread() {
                           public void run() {
@@ -814,16 +860,16 @@
                           }
                   });
   }
-#+END_SRC
+    #+END_SRC
 *** 守护线程
-守护线程在被关闭的时候不会运行finializer，回收函数栈。当JVM停止的那一刻，守护线程只是被抛弃。慎用守护线程！
+    守护线程在被关闭的时候不会运行finializer，回收函数栈。当JVM停止的那一刻，守护线程只是被抛弃。慎用守护线程！
 
 ** 强行关闭
-1. 调用RunTime.halt
-2. 发送SIGKILL信号(kill -9) 
+   1. 调用RunTime.halt
+   2. 发送SIGKILL信号(kill -9) 
 
-[[file:thread_pool.org][Next:线程池]]
+   [[file:thread_pool.org][Next:线程池]]
 
-[[file:executor.org][Previous:任务执行]]
+   [[file:executor.org][Previous:任务执行]]
 
-[[file:jcip.org][Up:目录]]
+   [[file:jcip.org][Up:目录]]
