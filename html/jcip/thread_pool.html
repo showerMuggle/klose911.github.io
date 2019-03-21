@@ -240,7 +240,7 @@ for the JavaScript code in this tag.
 <ul>
 <li><a href="#org08c5c8a">任务和执行策略的隐形耦合</a>
 <ul>
-<li><a href="#orga8dec5f">线程饥饿死锁</a></li>
+<li><a href="#org27a2888">线程死锁</a></li>
 <li><a href="#org985e341">长时间运行任务</a></li>
 </ul>
 </li>
@@ -251,7 +251,7 @@ for the JavaScript code in this tag.
 <li><a href="#org6797865">任务队列</a></li>
 <li><a href="#org58c6981">饱和策略</a>
 <ul>
-<li><a href="#org006af9e">使用CallerRunsPolicy处理请求过载</a></li>
+<li><a href="#orgfe0d106">CallerRunsPolicy</a></li>
 <li><a href="#org70c194c">BoundExecutor</a></li>
 </ul>
 </li>
@@ -267,27 +267,31 @@ for the JavaScript code in this tag.
 <h2 id="org08c5c8a">任务和执行策略的隐形耦合</h2>
 <div class="outline-text-2" id="text-org08c5c8a">
 <p>
-某些任务的特质会要求或者排除某些特定的执行策略
+某些 <span class="underline">任务的特质</span> 会 <b>要求或者排除</b> 某些特定的 <span class="underline">执行策略</span> 
 </p>
 <ul class="org-ul">
-<li>有相互依赖的任务在同一个线程池会要求线程池无限大</li>
-<li>依赖于线程封闭的任务只能用单线程执行的线程池</li>
-<li>快速响应的任务不适合单线程执行的线程池</li>
-<li>使用ThreadLocal的任务不适合线程池</li>
+<li>有 <span class="underline">相互依赖</span> 的任务在 <span class="underline">同一个线程池</span> 会要求 <span class="underline">线程池无限大</span></li>
+<li>依赖于 <span class="underline">线程封闭</span> 的任务 <span class="underline">只能用</span>  <span class="underline">单线程执行</span> 的线程池</li>
+<li><span class="underline">快速响应</span> 的任务 <span class="underline">不适合</span>  <span class="underline">单线程执行</span> 的线程池</li>
+<li>使用 <span class="underline">ThreadLocal</span> 的任务 <b>不适合</b> <span class="underline">线程池</span></li>
 </ul>
 </div>
 
-<div id="outline-container-orga8dec5f" class="outline-3">
-<h3 id="orga8dec5f">线程饥饿死锁</h3>
-<div class="outline-text-3" id="text-orga8dec5f">
+<div id="outline-container-org27a2888" class="outline-3">
+<h3 id="org27a2888">线程死锁</h3>
+<div class="outline-text-3" id="text-org27a2888">
 <p>
-相互依赖的任务在一个线程池中执行，就可能出现饥饿死锁
+<b>相互依赖</b> 的任务在 <span class="underline">一个线程池</span> 中执行，就可能出现 <span class="underline">饥饿死锁</span> 
 </p>
 
-<p>
-比如在一个单线程执行的线程池中，线程B需要等待线程A执行完毕才能进入线程池执行，而线程A又要等待线程B执行完毕才能完毕。这样就造成了死锁。
-当线程池容量更大一点的情况下，依然可能所有存在于线程池中的线程都在等待“未能进入线程池”的线程执行完毕
-</p>
+<pre class="example">
+     比如在一个单线程执行的线程池中
+     线程B需要等待线程A执行完毕才能进入线程池执行
+     而线程A又要等待线程B执行完毕才能完毕。这样就造成了死锁
+
+     当线程池容量更大一点的情况下，依然可能所有存在于线程池中的线程都在等待“未能进入线程池”的线程执行完毕
+</pre>
+
 <div class="org-src-container">
 <pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">class</span> <span style="color: #98f5ff;">ThreadDeadlock</span> {
     <span style="color: #98f5ff;">ExecutorService</span> <span style="color: #4eee94;">exec</span> = Executors.newSingleThreadExecutor();
@@ -311,12 +315,12 @@ for the JavaScript code in this tag.
 <h3 id="org985e341">长时间运行任务</h3>
 <div class="outline-text-3" id="text-org985e341">
 <p>
-线程池包含许多运行长时间的任务会导致所有任务哪怕本来响应很快的响应变慢 
+线程池包含 <span class="underline">许多运行长时间</span> 的任务会导致 <b>所有任务 <span class="underline">哪怕本来响应很快</span> 的响应变慢</b>  
 </p>
 
-<p>
-使用timeout机制，标记那些超时的任务为失败，在未来串行执行
-</p>
+<pre class="example">
+     使用timeout机制，标记那些超时的任务为失败，在未来串行执行
+</pre>
 </div>
 </div>
 </div>
@@ -325,13 +329,15 @@ for the JavaScript code in this tag.
 <h2 id="org8841dc9">线程池大小</h2>
 <div class="outline-text-2" id="text-org8841dc9">
 <ul class="org-ul">
-<li>对于计算密集型task, 合适的size大约为CPU数量+1</li>
-<li>对于I/O占较大比例的task, 合适的size可以通过以下公式确定: size = CPU数量 * CPU利用率 * (1 + I/O时间比例)</li>
+<li>对于 <b>计算密集型</b> task, 合适的size大约为 <span class="underline">CPU数量 + 1</span></li>
+<li>对于 <b>I/O占较大比例</b> 的task, 合适的size大约为:  <span class="underline">size = CPU数量 * CPU利用率 * (1 + I/O时间比例)</span></li>
 </ul>
 
-<p>
-实际size还受到内存, 文件句柄, socket, 数据库连接数等稀缺资源的约束。将总的稀缺资源除以每一个task使用的资源数, 能得到线程数的上限
-</p>
+<pre class="example">
+    实际size还受到内存,  文件句柄,  socket, 数据库连接数 等稀缺资源的约束
+
+    将总的稀缺资源除以每一个task使用的资源数,  能得到线程数的上限
+</pre>
 </div>
 </div>
 
@@ -343,13 +349,24 @@ for the JavaScript code in this tag.
 <h3 id="org4594a05">线程的创建和销毁</h3>
 <div class="outline-text-3" id="text-org4594a05">
 <p>
-ThreadPoolExecutor构造函数中的corePoolSize, maximumPoolSize, keepAliveTime参数与线程的创建和销毁 
+<span class="underline">ThreadPoolExecutor</span> 构造函数中与线程的 <span class="underline">创建</span> 和 <span class="underline">销毁</span> 有关的参数： 
 </p>
-<ol class="org-ol">
-<li>corePoolSize：线程池中持有的核心线程数, 除非task队列已满, ThreadPoolExecutor不会创建超过核心线程数的线程(corePoolSize为0时是一种特殊情况, 此时就算task队列没有饱和, 向线程池第一次提交task时仍然会创建新的线程), 核心线程一旦创建就不会销毁, 除非设置了allowCoreThreadTimeOut(true), 或者关闭线程池</li>
-<li>maximumPoolSize：线程池中持有的最大线程数.</li>
+<ul class="org-ul">
+<li><span class="underline">corePoolSize</span> ：线程池中持有的 <b>核心线程数</b> 
+<ul class="org-ul">
+<li><span class="underline">除非task队列已满</span> , ThreadPoolExecutor <b>不会创建</b> <span class="underline">超过核心线程数</span> 的线程
+<ul class="org-ul">
+<li><span class="underline">corePoolSize为0</span> ：一种特殊情况, 此时就算task队列没有饱和, 向线程池第一次提交task时仍然会创建新的线程</li>
+</ul></li>
+<li><span class="underline">核心线程</span> 一旦 <span class="underline">创建</span> 就 <b>不会销毁</b> ，除非： 
+<ul class="org-ul">
+<li>设置了 <span class="underline">allowCoreThreadTimeOut(true)</span></li>
+<li><b>关闭</b> 线程池</li>
+</ul></li>
+</ul></li>
+<li><span class="underline">maximumPoolSize</span> ：线程池中持有的 <b>最大线程数</b></li>
 <li><p>
-keepAliveTime：对于超过核心线程数的线程, 如果在指定的超时时间内没有使用到, 就会被销毁
+<span class="underline">keepAliveTime</span> ：对于 <span class="underline">超过核心线程数</span> 的线程, 如果在 <span class="underline">指定的超时时间内</span> <b>没有使用</b> 到, 就会被 <b>销毁</b> 
 </p>
 <div class="org-src-container">
 <pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">static</span> <span style="color: #98f5ff;">ExecutorService</span> <span style="color: #daa520; font-weight: bold;">newCachedThreadPool</span>() {  
@@ -369,7 +386,7 @@ keepAliveTime：对于超过核心线程数的线程, 如果在指定的超时�
 }   
 </pre>
 </div></li>
-</ol>
+</ul>
 </div>
 </div>
 
@@ -377,24 +394,36 @@ keepAliveTime：对于超过核心线程数的线程, 如果在指定的超时�
 <h3 id="org6797865">任务队列</h3>
 <div class="outline-text-3" id="text-org6797865">
 <p>
-线程池内部持有一个任务队列, 当任务的提交速度超过任务的执行速度时, 任务将被缓存在任务队列中等待有线程可用时再执行. ThreadPoolExecutor在创建时可以为其指定任务队列。
-</p>
-
-<p>
-一般有三种选择: 
+线程池内部持有一个 <b>任务队列</b> , 当 <span class="underline">任务的提交速度</span> <b>超过</b> <span class="underline">任务的执行速度</span> 时, 任务将被 <b>缓存</b> 在 <span class="underline">任务队列</span> 中等待有线程可用时再执行。ThreadPoolExecutor在创建时可以为其指定任务队列。一般有三种选择: 
 </p>
 <ol class="org-ol">
-<li>有界队列</li>
-<li>无界队列：newFixedThreadPool, newScheduledThreadPool</li>
-<li>同步队列：newCashedThreadPool</li>
+<li><span class="underline">有界</span> 队列</li>
+<li><span class="underline">无界</span> 队列：newFixedThreadPool, newScheduledThreadPool</li>
+<li><span class="underline">同步</span> 队列：newCashedThreadPool</li>
 </ol>
 
 <p>
-为线程数不多的线程池指定一个容量大的队列(或者无界队列), 有助于减少线程间切换, CPU等方面的消耗, 代价是可能会造成吞吐量下降。如果使用的是有界队列, 队列可能会被填满, 将根据指定的饱和策略进行处理
+<span class="underline">线程数不多</span> 的线程池：
 </p>
+<ul class="org-ul">
+<li>指定一个 <b>容量大的队列</b> (或者无界队列)：
+<ul class="org-ul">
+<li>有助于 <span class="underline">减少线程间切换</span> , CPU等方面的消耗</li>
+<li>可能会造成吞吐量下降</li>
+</ul></li>
+<li>如果使用的是 <span class="underline">有界队列</span> , 队列 <b>可能会被填满</b> ：将根据 <span class="underline">指定的饱和策略</span> 进行处理</li>
+</ul>
+
+<pre class="example">
+     同步队列其实不能算是一种队列，因为同步队列没有缓存的作用
+
+     使用同步队列时, task被提交时, 直接由线程池中的线程接手
+     如果此时线程池中没有可用的线程, 线程池将创建新的线程接手
+     如果线程池无法创建新的线程(比如线程数已到达maximumPoolSize), 则根据指定的饱和策略进行处理 
+</pre>
 
 <p>
-对于线程数很大的线程池, 可以使用同步队列. 同步队列其实不能算是一种队列, 因为同步队列没有缓存的作用。使用同步队列时, task被提交时, 直接由线程池中的线程接手. 如果此时线程池中没有可用的线程, 线程池将创建新的线程接手. 如果线程池无法创建新的线程(比如线程数已到达maximumPoolSize), 则根据指定的饱和策略进行处理 
+<span class="underline">线程数很大</span> 的线程池, 可以使用 <b>同步队列</b> 
 </p>
 </div>
 </div>
@@ -403,21 +432,21 @@ keepAliveTime：对于超过核心线程数的线程, 如果在指定的超时�
 <h3 id="org58c6981">饱和策略</h3>
 <div class="outline-text-3" id="text-org58c6981">
 <ul class="org-ul">
-<li>有界队列满时继续提交task时, 饱和策略会被触发.</li>
-<li>同步队列当线程池无法创建新的线程接手task时, 饱和策略会被触发.</li>
-<li>线程池被关闭后, 向其提交task时, 饱和策略也会被触发.</li>
+<li><span class="underline">有界队列</span> ： <b>队列满后继续提交</b> task时, 饱和策略会被触发.</li>
+<li><span class="underline">同步队列</span> :  线程池 <b>无法创建新的线程</b> 接手task时, 饱和策略会被触发.</li>
+<li><span class="underline">线程池被关闭</span> 后,：向其提交task时, 饱和策略也会被触发.</li>
 </ul>
 
 <p>
-ThreadPoolExecutor.setRejectedExecutionHandler方法用于设定饱和策略
+<span class="underline">ThreadPoolExecutor.setRejectedExecutionHandler</span> 方法用于 <b>设定饱和策略</b> 
 </p>
 
 <p>
-预定义RejectedExecutionHandler的实现类
+预定义 <span class="underline">RejectedExecutionHandler</span> 的实现类
 </p>
 <ol class="org-ol">
 <li><p>
-AbortPolicy: 默认的饱和策略, 抛出RejectedExecutionException异常 
+<span class="underline">AbortPolicy</span> :  <b>默认的</b> 饱和策略, 抛出 <span class="underline">RejectedExecutionException</span> 异常 
 </p>
 <div class="org-src-container">
 <pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">rejectedExecution</span>(<span style="color: #98f5ff;">Runnable</span> <span style="color: #4eee94;">r</span>, <span style="color: #98f5ff;">ThreadPoolExecutor</span> <span style="color: #4eee94;">e</span>) {  
@@ -426,7 +455,7 @@ AbortPolicy: 默认的饱和策略, 抛出RejectedExecutionException异常
 </pre>
 </div></li>
 <li><p>
-CallerRunsPolicy: 在提交task的线程中执行task, 而不是由线程池中的线程执行
+<span class="underline">CallerRunsPolicy</span> : 在 <span class="underline">提交task的线程中执行</span> task, 而不是由线程池中的线程执行
 </p>
 <div class="org-src-container">
 <pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">rejectedExecution</span>(<span style="color: #98f5ff;">Runnable</span> <span style="color: #4eee94;">r</span>, <span style="color: #98f5ff;">ThreadPoolExecutor</span> <span style="color: #4eee94;">e</span>) {  
@@ -437,7 +466,7 @@ CallerRunsPolicy: 在提交task的线程中执行task, 而不是由线程池中�
 </pre>
 </div></li>
 <li><p>
-DiscardPolicy: 将最新提交的任务丢弃
+<span class="underline">DiscardPolicy</span> : 将最新提交的任务 <b>丢弃</b> 
 </p>
 <div class="org-src-container">
 <pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">rejectedExecution</span>(<span style="color: #98f5ff;">Runnable</span> <span style="color: #4eee94;">r</span>, <span style="color: #98f5ff;">ThreadPoolExecutor</span> <span style="color: #4eee94;">e</span>) {  
@@ -447,7 +476,7 @@ DiscardPolicy: 将最新提交的任务丢弃
 </div></li>
 
 <li><p>
-DiscardOldestPolicy: 将队列头部的任务丢弃，然后尝试重新提交新的任务
+<span class="underline">DiscardOldestPolicy</span> : 将 <b>队列头部的任务丢弃</b> ，然后尝试重新提交新的任务
 </p>
 <div class="org-src-container">
 <pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">rejectedExecution</span>(<span style="color: #98f5ff;">Runnable</span> <span style="color: #4eee94;">r</span>, <span style="color: #98f5ff;">ThreadPoolExecutor</span> <span style="color: #4eee94;">e</span>) {  
@@ -461,9 +490,9 @@ DiscardOldestPolicy: 将队列头部的任务丢弃，然后尝试重新提交�
 </ol>
 </div>
 
-<div id="outline-container-org006af9e" class="outline-4">
-<h4 id="org006af9e">使用CallerRunsPolicy处理请求过载</h4>
-<div class="outline-text-4" id="text-org006af9e">
+<div id="outline-container-orgfe0d106" class="outline-4">
+<h4 id="orgfe0d106">CallerRunsPolicy</h4>
+<div class="outline-text-4" id="text-orgfe0d106">
 <div class="org-src-container">
 <pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">class</span> <span style="color: #98f5ff;">LifecycleWebServer</span> {  
     <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">MAX_THREAD_COUNT&#21644;MAX_QUEUE_COUNT&#30340;&#20540;&#26681;&#25454;&#31995;&#32479;&#30340;&#23454;&#38469;&#24773;&#20917;&#30830;&#23450;  </span>
@@ -517,21 +546,27 @@ DiscardOldestPolicy: 将队列头部的任务丢弃，然后尝试重新提交�
 }   
 </pre>
 </div>
-<p>
-如果线程池饱和时主线程仍然向线程池提交任务, 那么任务将在主线程中执行。主线程执行任务是需要一定时间的，这样就给了线程池喘息的机会, 而且主线程在执行任务的时间内无法接受socket连接, 因此socket连接请求将缓存在tcp层。如果server过载持续的时间较长, 使得tcp层的缓存不够, 那么tcp缓存将根据其策略丢弃部分请求
-</p>
+<ul class="org-ul">
+<li>如果线程池饱和时主线程仍然向线程池提交任务, 那么任务将在主线程中执行</li>
+<li>主线程执行任务是需要一定时间的，这样就给了线程池喘息的机会
+<ul class="org-ul">
+<li>主线程在执行任务的时间内 <b>无法接受socket连接</b> , 因此socket连接请求将 <span class="underline">缓存在tcp层</span></li>
+<li>如果 <span class="underline">server过载持续的时间较长</span> , 使得 <b>tcp层的缓存不够</b> , 那么 <span class="underline">tcp缓存</span> 将根据其策略 <b>丢弃部分请求</b></li>
+</ul></li>
+</ul>
 
-<p>
-整个系统的过载压力逐步向外扩散: 线程池-线程池中的队列-main线程-tcp层-client。不会因为过多的请求而导致系统资源耗尽, 也不会一发生过载时就拒绝服务, 只有发生长时间系统过载时才会出现客户端无法连接的情况
-</p>
+<pre class="example">
+      整个系统的过载压力逐步向外扩散: 线程池 - 线程池中的队列 - main线程 - tcp层 - client
+
+      不会因为过多的请求而导致系统资源耗尽, 也不会一发生过载时就拒绝服务, 只有发生长时间系统过载时才会出现客户端无法连接的情况！！！
+</pre>
 </div>
 </div>
-
 <div id="outline-container-org70c194c" class="outline-4">
 <h4 id="org70c194c">BoundExecutor</h4>
 <div class="outline-text-4" id="text-org70c194c">
 <p>
-没有预定的饱和策略来限定线程池中执行任务线程的数量，可以结合Semaphore来实现
+<b>没有预定的饱和策略</b> 来限定线程池中执行任务线程的数量，可以结合 <span class="underline">Semaphore</span> 来实现
 </p>
 <div class="org-src-container">
 <pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">class</span> <span style="color: #98f5ff;">BoundedExecutor</span> {
@@ -574,12 +609,16 @@ DiscardOldestPolicy: 将队列头部的任务丢弃，然后尝试重新提交�
 <h3 id="org3f8e2bb">ThreadFactory</h3>
 <div class="outline-text-3" id="text-org3f8e2bb">
 <p>
-创建ThreadPoolExecutor时还可以为其指定ThreadFactory, 当线程池需要创建新的线程时会调用ThreadFactory的newThread方法
+创建ThreadPoolExecutor时还可以为其 <b>指定</b> <span class="underline">ThreadFactory</span> ：当线程池需要 <b>创建新的线程</b> 时会调用 <span class="underline">ThreadFactory</span> 的 <b>newThread</b> 方法
 </p>
+<ul class="org-ul">
+<li><b>默认的</b> ThreadFactory创建的线程是 <span class="underline">nonDaemon</span> ：
+<ul class="org-ul">
+<li>线程优先级： <span class="underline">普通</span> 的线程</li>
+<li>指定了 <span class="underline">可识别的线程名称</span></li>
+</ul></li>
+</ul>
 
-<p>
-默认的ThreadFactory创建的线程是nonDaemon, 线程优先级为普通的线程, 并且为其指定了可识别的线程名称 
-</p>
 <div class="org-src-container">
 <pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #98f5ff;">Thread</span> <span style="color: #daa520; font-weight: bold;">newThread</span>(<span style="color: #98f5ff;">Runnable</span> <span style="color: #4eee94;">r</span>) {  
     <span style="color: #98f5ff;">Thread</span> <span style="color: #4eee94;">t</span> = <span style="color: #00bfff; font-weight: bold;">new</span> <span style="color: #98f5ff;">Thread</span>(group, r, namePrefix + threadNumber.getAndIncrement(), 0);  
@@ -678,13 +717,14 @@ DiscardOldestPolicy: 将队列头部的任务丢弃，然后尝试重新提交�
 <h2 id="org612ea7c">扩展线程池</h2>
 <div class="outline-text-2" id="text-org612ea7c">
 <p>
-ThreadPoolExecutor类提供了多个"钩子"方法, 以供其子类实现
+<span class="underline">ThreadPoolExecutor</span> 类提供了多个 <span class="underline">钩子</span> 方法，以 <b>供其子类实现</b> 
 </p>
 <ol class="org-ol">
-<li>beforeExecute: 任务执行前</li>
-<li>afterExecute: 任务执行后</li>
-<li>terminated: 线程池被关闭后(释放线程池申请的资源)</li>
+<li><span class="underline">beforeExecute</span> :  <b>任务执行前</b></li>
+<li><span class="underline">afterExecute</span> :  <b>任务执行后</b></li>
+<li><span class="underline">terminated</span> :  <b>线程池被关闭后</b> (释放线程池申请的资源)</li>
 </ol>
+
 <div class="org-src-container">
 <pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">private</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">runTask</span>(<span style="color: #98f5ff;">Runnable</span> <span style="color: #4eee94;">task</span>) {  
     <span style="color: #00bfff; font-weight: bold;">final</span> <span style="color: #98f5ff;">ReentrantLock</span> <span style="color: #4eee94;">runLock</span> = <span style="color: #00bfff; font-weight: bold;">this</span>.runLock;  
@@ -712,7 +752,7 @@ ThreadPoolExecutor类提供了多个"钩子"方法, 以供其子类实现
 </div>
 
 <p>
-扩展线程池，在在日志中记录每个任务执行时间
+扩展线程池，在日志中 <span class="underline">记录每个任务执行时间</span> 
 </p>
 <div class="org-src-container">
 <pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">class</span> <span style="color: #98f5ff;">TimingThreadPool</span> <span style="color: #00bfff; font-weight: bold;">extends</span> <span style="color: #98f5ff;">ThreadPoolExecutor</span> {
@@ -758,7 +798,7 @@ ThreadPoolExecutor类提供了多个"钩子"方法, 以供其子类实现
 <h2 id="orgdaa187c">并行执行递归算法</h2>
 <div class="outline-text-2" id="text-orgdaa187c">
 <p>
-如果循环体所进行的操作是相互独立的, 这样的循环可以并发的运行 
+如果 <span class="underline">循环体所进行的操作</span> 是 <b>相互独立</b> 的, 这样的循环可以并发的运行 
 </p>
 <div class="org-src-container">
 <pre class="src src-java"><span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">processSequentially</span>(<span style="color: #98f5ff;">List</span>&lt;<span style="color: #98f5ff;">Element</span>&gt; <span style="color: #4eee94;">elements</span>) {
@@ -779,7 +819,7 @@ ThreadPoolExecutor类提供了多个"钩子"方法, 以供其子类实现
 </div>
 
 <p>
-有循环的递归操作也可以并发进行计算
+<span class="underline">有循环的递归操作</span> 也可以并发进行计算
 </p>
 <div class="org-src-container">
 <pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">public</span>&lt;<span style="color: #98f5ff;">T</span>&gt; <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">sequentialRecursive</span>(<span style="color: #98f5ff;">List</span>&lt;<span style="color: #98f5ff;">Node</span>&lt;<span style="color: #98f5ff;">T</span>&gt;&gt; <span style="color: #4eee94;">nodes</span>,
@@ -817,6 +857,12 @@ ThreadPoolExecutor类提供了多个"钩子"方法, 以供其子类实现
 }
 </pre>
 </div>
+
+<pre class="example">
+Java7 之后可以使用 ForkJoinPool
+
+Java 8 之后可以使用 parallel stream 
+</pre>
 
 <p>
 <a href="explicit_lock.html">Next:显式锁</a>

@@ -4,18 +4,24 @@
 #+HTML_LINK_UP: cancellation.html   
 #+HTML_LINK_HOME: jcip.html
 * 任务和执行策略的隐形耦合
-某些任务的特质会要求或者排除某些特定的执行策略
-+ 有相互依赖的任务在同一个线程池会要求线程池无限大
-+ 依赖于线程封闭的任务只能用单线程执行的线程池
-+ 快速响应的任务不适合单线程执行的线程池
-+ 使用ThreadLocal的任务不适合线程池
+  某些 _任务的特质_ 会 *要求或者排除* 某些特定的 _执行策略_ 
+  + 有 _相互依赖_ 的任务在 _同一个线程池_ 会要求 _线程池无限大_ 
+  + 依赖于 _线程封闭_ 的任务 _只能用_  _单线程执行_ 的线程池
+  + _快速响应_ 的任务 _不适合_  _单线程执行_ 的线程池
+  + 使用 _ThreadLocal_ 的任务 *不适合* _线程池_ 
 
-** 线程饥饿死锁
-相互依赖的任务在一个线程池中执行，就可能出现饥饿死锁
+** 线程死锁
+   *相互依赖* 的任务在 _一个线程池_ 中执行，就可能出现 _饥饿死锁_ 
 
-比如在一个单线程执行的线程池中，线程B需要等待线程A执行完毕才能进入线程池执行，而线程A又要等待线程B执行完毕才能完毕。这样就造成了死锁。
-当线程池容量更大一点的情况下，依然可能所有存在于线程池中的线程都在等待“未能进入线程池”的线程执行完毕
-#+BEGIN_SRC java
+   #+BEGIN_EXAMPLE
+     比如在一个单线程执行的线程池中
+     线程B需要等待线程A执行完毕才能进入线程池执行
+     而线程A又要等待线程B执行完毕才能完毕。这样就造成了死锁
+
+     当线程池容量更大一点的情况下，依然可能所有存在于线程池中的线程都在等待“未能进入线程池”的线程执行完毕
+   #+END_EXAMPLE
+
+   #+BEGIN_SRC java
   public class ThreadDeadlock {
           ExecutorService exec = Executors.newSingleThreadExecutor();
           private class RenderPageTask implements Callable<String> {
@@ -29,95 +35,116 @@
                   }
           }
   }
-#+END_SRC
+   #+END_SRC
 
 ** 长时间运行任务
-线程池包含许多运行长时间的任务会导致所有任务哪怕本来响应很快的响应变慢 
+   线程池包含 _许多运行长时间_ 的任务会导致 *所有任务 _哪怕本来响应很快_ 的响应变慢*  
 
-使用timeout机制，标记那些超时的任务为失败，在未来串行执行
+   #+BEGIN_EXAMPLE
+     使用timeout机制，标记那些超时的任务为失败，在未来串行执行
+   #+END_EXAMPLE
 
 * 线程池大小
-+ 对于计算密集型task, 合适的size大约为CPU数量+1
-+ 对于I/O占较大比例的task, 合适的size可以通过以下公式确定: size = CPU数量 * CPU利用率 * (1 + I/O时间比例) 
+  + 对于 *计算密集型* task, 合适的size大约为 _CPU数量 + 1_ 
+  + 对于 *I/O占较大比例* 的task, 合适的size大约为:  _size = CPU数量 * CPU利用率 * (1 + I/O时间比例)_  
 
-实际size还受到内存, 文件句柄, socket, 数据库连接数等稀缺资源的约束。将总的稀缺资源除以每一个task使用的资源数, 能得到线程数的上限
+  #+BEGIN_EXAMPLE
+    实际size还受到内存,  文件句柄,  socket, 数据库连接数 等稀缺资源的约束
+
+    将总的稀缺资源除以每一个task使用的资源数,  能得到线程数的上限
+  #+END_EXAMPLE
 
 * 线程池配置
 ** 线程的创建和销毁 
-ThreadPoolExecutor构造函数中的corePoolSize, maximumPoolSize, keepAliveTime参数与线程的创建和销毁 
-1. corePoolSize：线程池中持有的核心线程数, 除非task队列已满, ThreadPoolExecutor不会创建超过核心线程数的线程(corePoolSize为0时是一种特殊情况, 此时就算task队列没有饱和, 向线程池第一次提交task时仍然会创建新的线程), 核心线程一旦创建就不会销毁, 除非设置了allowCoreThreadTimeOut(true), 或者关闭线程池
-2. maximumPoolSize：线程池中持有的最大线程数. 
-3. keepAliveTime：对于超过核心线程数的线程, 如果在指定的超时时间内没有使用到, 就会被销毁
-   #+BEGIN_SRC java
-     public static ExecutorService newCachedThreadPool() {  
-             // 核心线程数为0, 最大线程数为Integer.MAX_VALUE, 超时时间为60s  
-             return new ThreadPoolExecutor(0, Integer.MAX_VALUE, 60L, TimeUnit.SECONDS, new SynchronousQueue<Runnable>());  
-     }  
-           
-     public static ExecutorService newFixedThreadPool(int nThreads) {  
-             // 核心线程数和最大线程数都为调用方指定的值nThreads, 超时时间为0  
-             return new ThreadPoolExecutor(nThreads, nThreads, 0L, TimeUnit.MILLISECONDS,  
-                                           new LinkedBlockingQueue<Runnable>());  
-     }  
-           
-     public static ScheduledExecutorService newScheduledThreadPool(int corePoolSize) {  
-             // 核心线程数由调用方指定, 最大线程数为Integer.MAX_VALUE, 超时时间为0  
-             return new ThreadPoolExecutor(corePoolSize, Integer.MAX_VALUE, 0, TimeUnit.NANOSECONDS, new DelayedWorkQueue());  
-     }   
-   #+END_SRC
+   _ThreadPoolExecutor_ 构造函数中与线程的 _创建_ 和 _销毁_ 有关的参数： 
+   + _corePoolSize_ ：线程池中持有的 *核心线程数* 
+     + _除非task队列已满_ , ThreadPoolExecutor *不会创建* _超过核心线程数_ 的线程
+       + _corePoolSize为0_ ：一种特殊情况, 此时就算task队列没有饱和, 向线程池第一次提交task时仍然会创建新的线程
+     + _核心线程_ 一旦 _创建_ 就 *不会销毁* ，除非： 
+       + 设置了 _allowCoreThreadTimeOut(true)_
+       + *关闭* 线程池
+   + _maximumPoolSize_ ：线程池中持有的 *最大线程数* 
+   + _keepAliveTime_ ：对于 _超过核心线程数_ 的线程, 如果在 _指定的超时时间内_ *没有使用* 到, 就会被 *销毁* 
+     #+BEGIN_SRC java
+       public static ExecutorService newCachedThreadPool() {  
+	       // 核心线程数为0, 最大线程数为Integer.MAX_VALUE, 超时时间为60s  
+	       return new ThreadPoolExecutor(0, Integer.MAX_VALUE, 60L, TimeUnit.SECONDS, new SynchronousQueue<Runnable>());  
+       }  
+
+       public static ExecutorService newFixedThreadPool(int nThreads) {  
+	       // 核心线程数和最大线程数都为调用方指定的值nThreads, 超时时间为0  
+	       return new ThreadPoolExecutor(nThreads, nThreads, 0L, TimeUnit.MILLISECONDS,  
+					     new LinkedBlockingQueue<Runnable>());  
+       }  
+
+       public static ScheduledExecutorService newScheduledThreadPool(int corePoolSize) {  
+	       // 核心线程数由调用方指定, 最大线程数为Integer.MAX_VALUE, 超时时间为0  
+	       return new ThreadPoolExecutor(corePoolSize, Integer.MAX_VALUE, 0, TimeUnit.NANOSECONDS, new DelayedWorkQueue());  
+       }   
+     #+END_SRC
 
 ** 任务队列
-线程池内部持有一个任务队列, 当任务的提交速度超过任务的执行速度时, 任务将被缓存在任务队列中等待有线程可用时再执行. ThreadPoolExecutor在创建时可以为其指定任务队列。
+   线程池内部持有一个 *任务队列* , 当 _任务的提交速度_ *超过* _任务的执行速度_ 时, 任务将被 *缓存* 在 _任务队列_ 中等待有线程可用时再执行。ThreadPoolExecutor在创建时可以为其指定任务队列。一般有三种选择: 
+   1. _有界_ 队列
+   2. _无界_ 队列：newFixedThreadPool, newScheduledThreadPool
+   3. _同步_ 队列：newCashedThreadPool
 
-一般有三种选择: 
-1. 有界队列
-2. 无界队列：newFixedThreadPool, newScheduledThreadPool
-3. 同步队列：newCashedThreadPool
+   _线程数不多_ 的线程池：
+   + 指定一个 *容量大的队列* (或者无界队列)：
+     + 有助于 _减少线程间切换_ , CPU等方面的消耗
+     + 可能会造成吞吐量下降
+   + 如果使用的是 _有界队列_ , 队列 *可能会被填满* ：将根据 _指定的饱和策略_ 进行处理
 
-为线程数不多的线程池指定一个容量大的队列(或者无界队列), 有助于减少线程间切换, CPU等方面的消耗, 代价是可能会造成吞吐量下降。如果使用的是有界队列, 队列可能会被填满, 将根据指定的饱和策略进行处理
+   #+BEGIN_EXAMPLE
+     同步队列其实不能算是一种队列，因为同步队列没有缓存的作用
 
-对于线程数很大的线程池, 可以使用同步队列. 同步队列其实不能算是一种队列, 因为同步队列没有缓存的作用。使用同步队列时, task被提交时, 直接由线程池中的线程接手. 如果此时线程池中没有可用的线程, 线程池将创建新的线程接手. 如果线程池无法创建新的线程(比如线程数已到达maximumPoolSize), 则根据指定的饱和策略进行处理 
+     使用同步队列时, task被提交时, 直接由线程池中的线程接手
+     如果此时线程池中没有可用的线程, 线程池将创建新的线程接手
+     如果线程池无法创建新的线程(比如线程数已到达maximumPoolSize), 则根据指定的饱和策略进行处理 
+   #+END_EXAMPLE
+
+   _线程数很大_ 的线程池, 可以使用 *同步队列* 
 
 **  饱和策略
-+ 有界队列满时继续提交task时, 饱和策略会被触发.
-+ 同步队列当线程池无法创建新的线程接手task时, 饱和策略会被触发.
-+ 线程池被关闭后, 向其提交task时, 饱和策略也会被触发.
+   + _有界队列_ ： *队列满后继续提交* task时, 饱和策略会被触发.
+   + _同步队列_ :  线程池 *无法创建新的线程* 接手task时, 饱和策略会被触发.
+   + _线程池被关闭_ 后,：向其提交task时, 饱和策略也会被触发.
 
-ThreadPoolExecutor.setRejectedExecutionHandler方法用于设定饱和策略
+   _ThreadPoolExecutor.setRejectedExecutionHandler_ 方法用于 *设定饱和策略* 
 
-预定义RejectedExecutionHandler的实现类
-1. AbortPolicy: 默认的饱和策略, 抛出RejectedExecutionException异常 
-   #+BEGIN_SRC java
-     public void rejectedExecution(Runnable r, ThreadPoolExecutor e) {  
-             throw new RejectedExecutionException();  
-     }   
-   #+END_SRC
-2. CallerRunsPolicy: 在提交task的线程中执行task, 而不是由线程池中的线程执行
-   #+BEGIN_SRC java
-     public void rejectedExecution(Runnable r, ThreadPoolExecutor e) {  
-             if (!e.isShutdown()) {  
-                     r.run();  
-             }  
-     }  
-   #+END_SRC
-3. DiscardPolicy: 将最新提交的任务丢弃
-   #+BEGIN_SRC java
-     public void rejectedExecution(Runnable r, ThreadPoolExecutor e) {  
-             // 丢弃, 不做任何处理  
-     }   
-   #+END_SRC
+   预定义 _RejectedExecutionHandler_ 的实现类
+   1.  _AbortPolicy_ :  *默认的* 饱和策略, 抛出 _RejectedExecutionException_ 异常 
+      #+BEGIN_SRC java
+	public void rejectedExecution(Runnable r, ThreadPoolExecutor e) {  
+		throw new RejectedExecutionException();  
+	}   
+      #+END_SRC
+   2. _CallerRunsPolicy_ : 在 _提交task的线程中执行_ task, 而不是由线程池中的线程执行
+      #+BEGIN_SRC java
+	public void rejectedExecution(Runnable r, ThreadPoolExecutor e) {  
+		if (!e.isShutdown()) {  
+			r.run();  
+		}  
+	}  
+      #+END_SRC
+   3. _DiscardPolicy_ : 将最新提交的任务 *丢弃* 
+      #+BEGIN_SRC java
+	public void rejectedExecution(Runnable r, ThreadPoolExecutor e) {  
+		// 丢弃, 不做任何处理  
+	}   
+      #+END_SRC
 
-4. DiscardOldestPolicy: 将队列头部的任务丢弃，然后尝试重新提交新的任务
-   #+BEGIN_SRC java
-     public void rejectedExecution(Runnable r, ThreadPoolExecutor e) {  
-             if (!e.isShutdown()) {  
-                     e.getQueue().poll();  
-                     e.execute(r);  
-             }  
-     }   
-   #+END_SRC
+   4. _DiscardOldestPolicy_ : 将 *队列头部的任务丢弃* ，然后尝试重新提交新的任务
+      #+BEGIN_SRC java
+	public void rejectedExecution(Runnable r, ThreadPoolExecutor e) {  
+		if (!e.isShutdown()) {  
+			e.getQueue().poll();  
+			e.execute(r);  
+		}  
+	}   
+      #+END_SRC
 
-*** 使用CallerRunsPolicy处理请求过载
+*** CallerRunsPolicy
     #+BEGIN_SRC java
       class LifecycleWebServer {  
               // MAX_THREAD_COUNT和MAX_QUEUE_COUNT的值根据系统的实际情况确定  
@@ -170,12 +197,18 @@ ThreadPoolExecutor.setRejectedExecutionHandler方法用于设定饱和策略
               }  
       }   
     #+END_SRC
-如果线程池饱和时主线程仍然向线程池提交任务, 那么任务将在主线程中执行。主线程执行任务是需要一定时间的，这样就给了线程池喘息的机会, 而且主线程在执行任务的时间内无法接受socket连接, 因此socket连接请求将缓存在tcp层。如果server过载持续的时间较长, 使得tcp层的缓存不够, 那么tcp缓存将根据其策略丢弃部分请求
+    + 如果线程池饱和时主线程仍然向线程池提交任务, 那么任务将在主线程中执行
+    + 主线程执行任务是需要一定时间的，这样就给了线程池喘息的机会
+      + 主线程在执行任务的时间内 *无法接受socket连接* , 因此socket连接请求将 _缓存在tcp层_
+      + 如果 _server过载持续的时间较长_ , 使得 *tcp层的缓存不够* , 那么 _tcp缓存_ 将根据其策略 *丢弃部分请求* 
 
-整个系统的过载压力逐步向外扩散: 线程池-线程池中的队列-main线程-tcp层-client。不会因为过多的请求而导致系统资源耗尽, 也不会一发生过载时就拒绝服务, 只有发生长时间系统过载时才会出现客户端无法连接的情况
+    #+BEGIN_EXAMPLE
+      整个系统的过载压力逐步向外扩散: 线程池 - 线程池中的队列 - main线程 - tcp层 - client
 
+      不会因为过多的请求而导致系统资源耗尽, 也不会一发生过载时就拒绝服务, 只有发生长时间系统过载时才会出现客户端无法连接的情况！！！
+    #+END_EXAMPLE
 *** BoundExecutor
-没有预定的饱和策略来限定线程池中执行任务线程的数量，可以结合Semaphore来实现
+    *没有预定的饱和策略* 来限定线程池中执行任务线程的数量，可以结合 _Semaphore_ 来实现
     #+BEGIN_SRC java
       public class BoundedExecutor {
               private final Executor exec;
@@ -210,10 +243,12 @@ ThreadPoolExecutor.setRejectedExecutionHandler方法用于设定饱和策略
     #+END_SRC
 
 ** ThreadFactory 
-创建ThreadPoolExecutor时还可以为其指定ThreadFactory, 当线程池需要创建新的线程时会调用ThreadFactory的newThread方法
+   创建ThreadPoolExecutor时还可以为其 *指定* _ThreadFactory_ ：当线程池需要 *创建新的线程* 时会调用 _ThreadFactory_ 的 *newThread* 方法
+   + *默认的* ThreadFactory创建的线程是 _nonDaemon_ ：
+     + 线程优先级： _普通_ 的线程
+     + 指定了 _可识别的线程名称_ 
 
-默认的ThreadFactory创建的线程是nonDaemon, 线程优先级为普通的线程, 并且为其指定了可识别的线程名称 
-#+BEGIN_SRC java
+   #+BEGIN_SRC java
   public Thread newThread(Runnable r) {  
           Thread t = new Thread(group, r, namePrefix + threadNumber.getAndIncrement(), 0);  
           if (t.isDaemon())  
@@ -222,10 +257,10 @@ ThreadPoolExecutor.setRejectedExecutionHandler方法用于设定饱和策略
                   t.setPriority(Thread.NORM_PRIORITY);  
           return t;  
   }  
-#+END_SRC
+   #+END_SRC
 
-客户化的MyAppThread
-#+BEGIN_SRC java
+   客户化的MyAppThread
+   #+BEGIN_SRC java
   public class MyAppThread extends Thread {
           public static final String DEFAULT_NAME = "MyAppThread";
           private static final AtomicInteger created = new AtomicInteger();
@@ -280,10 +315,10 @@ ThreadPoolExecutor.setRejectedExecutionHandler方法用于设定饱和策略
                   }
           }
   }
-#+END_SRC
+   #+END_SRC
 
-客户化ThreadFactory返回MyAppThread
-#+BEGIN_SRC java
+   客户化ThreadFactory返回MyAppThread
+   #+BEGIN_SRC java
   public class MyThreadFactory implements ThreadFactory {  
           private final String poolName;  
     
@@ -295,14 +330,15 @@ ThreadPoolExecutor.setRejectedExecutionHandler方法用于设定饱和策略
                   return new MyAppThread(runnable, poolName);  
           }  
   }  
-#+END_SRC
+   #+END_SRC
 
 * 扩展线程池
-ThreadPoolExecutor类提供了多个"钩子"方法, 以供其子类实现
-1. beforeExecute: 任务执行前
-2. afterExecute: 任务执行后
-3. terminated: 线程池被关闭后(释放线程池申请的资源) 
-#+BEGIN_SRC java
+  _ThreadPoolExecutor_ 类提供了多个 _钩子_ 方法，以 *供其子类实现* 
+  1.  _beforeExecute_ :  *任务执行前* 
+  2.  _afterExecute_ :  *任务执行后* 
+  3. _terminated_ :  *线程池被关闭后* (释放线程池申请的资源) 
+
+  #+BEGIN_SRC java
   private void runTask(Runnable task) {  
           final ReentrantLock runLock = this.runLock;  
           runLock.lock();  
@@ -325,10 +361,10 @@ ThreadPoolExecutor类提供了多个"钩子"方法, 以供其子类实现
                   runLock.unlock();  
           }  
   }   
-#+END_SRC
+  #+END_SRC
 
-扩展线程池，在在日志中记录每个任务执行时间
-#+BEGIN_SRC java
+  扩展线程池，在日志中 _记录每个任务执行时间_ 
+  #+BEGIN_SRC java
   public class TimingThreadPool extends ThreadPoolExecutor {
           private final ThreadLocal<Long> startTime = new ThreadLocal<Long>();
           private final Logger log = Logger.getLogger("TimingThreadPool");
@@ -363,11 +399,11 @@ ThreadPoolExecutor类提供了多个"钩子"方法, 以供其子类实现
                   }
           }
   }
-#+END_SRC
+  #+END_SRC
 
 * 并行执行递归算法
-如果循环体所进行的操作是相互独立的, 这样的循环可以并发的运行 
-#+BEGIN_SRC java
+  如果 _循环体所进行的操作_ 是 *相互独立* 的, 这样的循环可以并发的运行 
+  #+BEGIN_SRC java
   void processSequentially(List<Element> elements) {
           for (Element e : elements)
                   process(e);
@@ -382,10 +418,10 @@ ThreadPoolExecutor类提供了多个"钩子"方法, 以供其子类实现
           exec.shutdown();   
           exec.awaitTermination(Long.MAX_VALUE, TimeUnit.SECONDS); 
   }
-#+END_SRC
+  #+END_SRC
 
-有循环的递归操作也可以并发进行计算
-#+BEGIN_SRC java
+  _有循环的递归操作_ 也可以并发进行计算
+  #+BEGIN_SRC java
   public<T> void sequentialRecursive(List<Node<T>> nodes,
                                      Collection<T> results) {
           for (Node<T> n : nodes) {
@@ -419,10 +455,16 @@ ThreadPoolExecutor类提供了多个"钩子"方法, 以供其子类实现
           exec.awaitTermination(Long.MAX_VALUE, TimeUnit.SECONDS);
           return resultQueue;
   }
-#+END_SRC
+  #+END_SRC
 
-[[file:explicit_lock.org][Next:显式锁]]
+  #+BEGIN_EXAMPLE
+    Java7 之后可以使用 ForkJoinPool
 
-[[file:cancellation.org][Previous:任务取消]]
+    Java 8 之后可以使用 parallel stream 
+  #+END_EXAMPLE
 
-[[file:jcip.org][Up:目录]]
+  [[file:explicit_lock.org][Next:显式锁]]
+
+  [[file:cancellation.org][Previous:任务取消]]
+
+  [[file:jcip.org][Up:目录]]
