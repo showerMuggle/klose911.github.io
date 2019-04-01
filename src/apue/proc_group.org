@@ -803,45 +803,66 @@ $ crypt < salaries | lpr
    #+END_EXAMPLE
 
 * BSD实现
-  图9-11显示了BSD中进程，进程组，会话期，控制终端等各种数据结构：
+  图9-11显示了BSD中 _进程_ ， _进程组_ ， _会话期_ ， _控制终端_ 等各种数据结构：
   #+ATTR_HTML: image :width 80% 
   [[file:pic/proc-group-bsd.jpg]]
 
 ** session结构
-   每个对话期都分配了一个session结构：
-   + s_count：该对话期中的进程组数。当此计数器减至0时，则可释放此结构
-   + s_leader：指向对话期首进程proc结构的指针。4.3+BSD不保持对话期ID字段，而SVR4则保持此字段
-   + s_ttyvp：指向控制终端vnode结构的指针
-   + s_ttyp：指向控制终端tty结构的指针 
+   每个 *对话期* 都分配了一个 *session* 结构：
+   + s_count：该对话期中的 _进程组数_ 。当此计数器减至 _0_ 时，则可 *释放此结构* 
+   + s_leader：指向 *对话期首进程* _proc_ 结构的指针
+     + 4.3+BSD不保持 _对话期ID_ 字段
+     + SVR4则保持此字段
+   + s_ttyvp ：指向 *控制终端* _vnode_ 结构的指针
+   + s_ttyp：指向 *控制终端* _tty_ 结构的指针 
 
-   在调用setsid时，在内核中分配一个新的对话期结构。s_count设置为1，s_leader设置为调用进程的proc结构的指针，因为新对话期没有控制终端，所以s_ttyvp和s_ttyp设置为空指针
+   #+BEGIN_EXAMPLE
+     在调用setsid时，在内核中分配一个新的对话期结构：
+
+     1. s_count设置为1
+     2. s_leader设置为调用进程的proc结构的指针
+     3. 因为新对话期没有控制终端，所以s_ttyvp和s_ttyp设置为空指针
+   #+END_EXAMPLE
 
 ** tty结构
-   每个终端设备和每个伪终端设备均在内核中分配这样一个tty结构：
-   + t_session：指向将此终端作为控制终端的session结构(注意：session结构也会指向tty结构)。终端在失去载波信号时需要使用此指针将挂起信号送给对话期首进程
-   + t_pgrp：指向前台进程组的pgrp结构。终端驱动程序用此字段将信号送向前台进程组。由输入特殊字符(中断、退出和挂起)而产生的三个信号被送至前台进程组
-   + t_termios：包含所有这些特殊字符和与该终端有关信息的结构
-   + t_winsize：包含终端窗口当前尺寸的winsize结构
+   每个 *终端设备* 和每个 *伪终端设备* 均在内核中分配这样一个 *tty*  结构：
+   + t_session：指向将此终端作为 *控制终端* 的 _session_ 结构
+     + _session_ 结构也会 *指向* _tty_ 结构
+     + 终端在 _失去载波信号_ 时需要使用此指针 *将挂起信号* 送给 _对话期首进程_ 
+   + t_pgrp：指向 *前台进程组* 的 _pgrp_ 结构
+     + _终端驱动程序_ 用此字段 *将信号* 送向 _前台进程组_ 
+       + 由 *输入特殊字符* ( _中断_ 、 _退出_ 和 _挂起_ )而产生的三个信号被送至 _前台进程组_ 
+   + t_termios：包含所有这些 *特殊字符* 和与该 *终端有关信息* 的结构
+   + t_winsize：包含 *终端窗口当前尺寸* 的 _winsize_ 结构
 
-   注意：为了找到特定对话期的前台进程组，内核从session结构开始，然后用s_ttyp得到控制终端的tty结构，然后用t_pgrp得到前台进程组的pgrp结构
+   #+BEGIN_EXAMPLE
+      注意：为了找到特定对话期的前台进程组，内核从session结构开始
+
+     然后用s_ttyp得到控制终端的tty结构，然后用t_pgrp得到前台进程组的pgrp结构
+   #+END_EXAMPLE
 
 ** pgrp结构
-   pgrp结构包含一个进程组的信息：
-   + pg_id：进程组ID
-   + pg_session：指向此进程组所属的session结构
-   + pg_mem：是指向此进程组第一个进程proc结构的指针
+   *pgrp* 结构包含一个 *进程组* 的信息：
+   + pg_id： _进程组ID_ 
+   + pg_session：指向此 _进程组_ 所属的 _session_ 结构
+   + pg_mem：是指向此 _进程组_ *第一个进程* _proc_ 结构的指针
 
 ** proc结构
-   proc结构包含一个进程的所有信息：
-   + p_pid：进程ID
-   + p_pptr：指向父进程proc结构的指针
-   + p_pgrp：指向本进程所属的进程组的pgrp结构
-   + p_pgrpnxt：指向进程组中下一个进程的指针，进程组中最后一个进程的p_pgrpnxt为NULL指针
+   _proc_ 结构包含一个 *进程* 的所有信息：
+   + p_pid： _进程ID_ 
+   + p_pptr：指向 _父进程_ proc结构的指针
+   + p_pgrp：指向本进程 *所属的进程组* 的 _pgrp_ 结构
+   + p_pgrpnxt：指向 _进程组_ 中 *下一个进程* 的指针
+     + _进程组_ 中 *最后一个进程* 的p_pgrpnxt为 _NULL_ 指针
 
 ** vnode结构
-   在打开控制终端设备时分配vnode结构，进程对/dev/tty的所有访问都通过vnode结构
+   在 *打开* _控制终端设备_ 时 *分配vnode结构* ， _进程_ 对 _/dev/tty_ 的所有 _访问_ 都通过 _vnode_ 结构
 
-   在BSD中实际i节点是v节点的一部分，而SVR4实现中v节点存在i节点中
+   #+BEGIN_EXAMPLE
+     在BSD中实际 i 节点是 v 节点的一部分
+
+     而SVR4实现中 v节点 存在 i节点 中
+   #+END_EXAMPLE
 
    [[file:signal.org][Next：信号]]
 
