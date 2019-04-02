@@ -323,12 +323,12 @@ for the JavaScript code in this tag.
 <li><a href="#org9de7c33">BSD实现</a></li>
 <li><a href="#org39ab09f">sigprocmask函数</a>
 <ul>
-<li><a href="#orgef50586">实例</a></li>
+<li><a href="#org7844027">实例</a></li>
 </ul>
 </li>
 <li><a href="#orge9528da">sigpending函数</a>
 <ul>
-<li><a href="#orgcf1e967">实例</a></li>
+<li><a href="#orgf5370fa">实例</a></li>
 </ul>
 </li>
 </ul>
@@ -351,7 +351,7 @@ for the JavaScript code in this tag.
 </li>
 <li><a href="#org88e1906">信号处理函数中的非局部转移</a>
 <ul>
-<li><a href="#org59050c8">实例</a>
+<li><a href="#org04206ac">实例</a>
 <ul>
 <li><a href="#org801f2cb">setsigjmp的保护机制</a></li>
 </ul>
@@ -402,27 +402,43 @@ for the JavaScript code in this tag.
 </div>
 </div>
 <p>
-信号是软件中断，提供了一种处理异步事件的方法：例如终端用户键入中断键，则会通过信号机制停止一个程序
+<span class="underline">信号</span> 是 <b>软件中断</b> ，提供了一种 <b>处理异步事件</b> 的方法：例如终端用户键入中断键，则会通过信号机制停止一个程序
 </p>
 
-<p>
-UNIX的早期版本，就已经有信号机制，但是这些系统所提供的信号模型并不可靠。信号可能被丢失，而且在执行临界区代码时，进程很难关闭所选择的信号。4.3BSD和SVR3对信号模型都作了更改，增加了可靠信号机制。但是这两种更改之间并不兼容。幸运的是POSIX.1对可靠信号例程进行了标准化
-</p>
+<pre class="example">
+UNIX的早期版本，就已经有信号机制，但是这些系统所提供的信号模型并不可靠
+信号可能被丢失，而且在执行临界区代码时，进程很难关闭所选择的信号
 
-<p>
-本章先对信号机制进行综述，并说明每种信号的一般用法。然后分析早期实现的问题，最后说明解决这些问题的方法
-</p>
+4.3BSD和SVR3对信号模型都作了更改，增加了可靠信号机制
+但是这两种更改之间并不兼容。幸运的是POSIX.1对可靠信号例程进行了标准化
+
+本章先对信号机制进行综述，并说明每种信号的一般用法
+然后分析早期实现的问题，最后说明解决这些问题的方法
+</pre>
 
 <div id="outline-container-orgd2b7716" class="outline-2">
 <h2 id="orgd2b7716">基础概念</h2>
 <div class="outline-text-2" id="text-orgd2b7716">
 <p>
-每个信号都有一个名字，这些名字都以三个字符SIG开头。例如，SIGABRT是异常终止信号，当进程调用abort函数时产生这种信号。SIGALRM是闹钟信号，当由alarm函数设置的时间已经超过后产生此信号。SVR4和4.3+BSD均有31种不同的信号
+每个信号都有一个名字，这些名字都以三个字符 <span class="underline">SIG</span> 开头。例如：
 </p>
+<ul class="org-ul">
+<li>SIGABRT是异常终止信号，当进程调用abort函数时产生这种信号</li>
+<li>SIGALRM是闹钟信号，当由alarm函数设置的时间已经超过后产生此信号</li>
+</ul>
+
+<pre class="example">
+SVR4和4.3+BSD均有31种不同的信号
+</pre>
 
 <p>
-在头文件&lt;signal.h&gt;中，这些信号都被定义为正整数(信号编号)。没有一个信号其编号为0，因为信号编号0有特殊的应用，POSIX.1将此种信号编号值称为空信号
+在头文件 <span class="underline">&lt;signal.h&gt;</span> 中，这些信号都被定义为 <b>正整数</b> ( <span class="underline">信号编号</span> )
 </p>
+<pre class="example">
+没有一个信号其编号为0，因为信号编号0有特殊的应用
+
+POSIX.1将此种信号编号值称为空信号
+</pre>
 </div>
 
 <div id="outline-container-org279687d" class="outline-3">
@@ -432,25 +448,73 @@ UNIX的早期版本，就已经有信号机制，但是这些系统所提供的�
 很多条件可以产生一个信号：
 </p>
 <ul class="org-ul">
-<li>当用户按某些特殊键时产生信号，在终端上按DELETE键通常产生中断信号(SIGINT)。这是停止一个已失去控制程序的方法</li>
-<li>硬件异常产生信号：除数为0、无效的存储访问等等。这些条件通常由硬件检测到，并将其通知内核，然后内核为该条件发生时正在运行的进程产生适当的信号。例如，对执行一个无效存储访问的进程产生一个SIGSEGV</li>
-<li>进程用kill(2)系统调用可将信号发送给另一个进程或进程组。自然有些限制：接收信号进程和发送信号进程的所有者必须相同，或发送信号进程的所有者必须是超级用户</li>
-<li>用户可用kill(1)命令将信号发送给其他进程，这是是kill系统调用的命令，常用此命令终止一个失控的后台进程</li>
-<li>当检测到某种软件条件已经发生，并将其通知有关进程时也产生信号。这里并不是指硬件产生条件(如被0除)，而是软件条件。例如SIGURG(在网络连接上传来非规定波特率的数据)、SIGPIPE(在管道的读进程已终止后一个进程写此管道)，以及SIGALRM(进程所设置的闹钟时间已经超时)</li>
+<li>当用户按某些 <b>特殊键</b>  时产生信号：
+<ul class="org-ul">
+<li>在 <span class="underline">终端</span> 上按 <span class="underline">DELETE键</span> 通常产生 <b>中断信号</b> <span class="underline">SIGINT</span> ： <b>停止</b> 一个 <span class="underline">已失去控制程序</span> 的方法</li>
+</ul></li>
+<li><b>硬件异常</b> 产生信号：通常由 <span class="underline">硬件检测</span> 到，并将其 <span class="underline">通知内核</span> ，然后 <span class="underline">内核</span> 为 <span class="underline">该条件发生时正在运行的进程</span> <b>产生适当的信号</b> 
+<ul class="org-ul">
+<li>除数为0</li>
+<li>无效的存储访问：产生一个 <span class="underline">SIGSEGV</span></li>
+</ul></li>
+<li>进程用 <b>kill(2)系统调用</b> 可将 <span class="underline">信号</span> <b>发送给</b> <span class="underline">另一个进程或进程组</span> 。自然有些限制：
+<ul class="org-ul">
+<li><span class="underline">接收信号进程</span> 和 <span class="underline">发送信号进程</span> 的 <b>所有者必须相同</b></li>
+<li>或 <span class="underline">发送信号进程的所有者</span> 必须是 <b>超级用户</b></li>
+</ul></li>
+<li>用户可用 <b>kill(1)命令</b> 将信号发送给其他进程
+<ul class="org-ul">
+<li>这是 <span class="underline">kill系统调用的命令</span> ，常用此命令 <b>终止</b> 一个 <b>失控的后台进程</b></li>
+</ul></li>
+<li>当 <b>检测</b> 到 <b>某种软件条件</b> 已经发生，并将其 <b>通知有关进程</b> 时也产生信号，例如：
+<ul class="org-ul">
+<li><span class="underline">SIGURG</span> : 在网络连接上传来非规定波特率的数据</li>
+<li><span class="underline">SIGPIPE</span> : 在管道的读进程已终止后一个进程写此管道</li>
+<li><span class="underline">SIGALRM</span> : 进程所设置的闹钟时间已经超时</li>
+</ul></li>
 </ul>
+
+<pre class="example">
+   这里并不是指硬件产生条件(如被0除)，而是软件条件
+</pre>
 </div>
 </div>
 
 <div id="outline-container-org11f6065" class="outline-3">
 <h3 id="org11f6065">信号处理</h3>
 <div class="outline-text-3" id="text-org11f6065">
+<pre class="example">
+     信号是异步事件的经典实例，产生信号的事件对进程而言是随机出现的
+
+     进程不能只是测试一个变量(例如errno)来判别是否发生了一个信号
+
+     而是必须告诉内核“在此信号发生时，请执行下列操作”
+</pre>
 <p>
-信号是异步事件的经典实例，产生信号的事件对进程而言是随机出现的，进程不能只是测试一个变量(例如errno)来判别是否发生了一个信号，而是必须告诉内核“在此信号发生时，请执行下列操作”。系统在某个信号出现时按照下列三种方式中的一种进行操作：
+系统在某个信号出现时按照下列三种方式中的一种进行操作：
 </p>
 <ol class="org-ol">
-<li>忽略此信号：大多数信号都可使用这种方式进行处理，但有两种信号却决不能被忽略，它们是SIGKILL和SIGSTOP。这两种信号不能被忽略的原因是为了向超级用户提供一种使进程终止或停止的可靠方法。另外如果忽略某些由硬件异常产生的信号(例如非法存储访问或除以0)，则进程的行为是未定义的</li>
-<li>捕捉信号：为了做到这一点要通知内核在某种信号发生时，调用一个用户函数。在用户函数中，可执行用户希望对这种事件进行的处理。例如，若编写一个命令解释器，当用户用键盘产生中断信号时，很可能希望返回到程序的主循环，终止系统正在为该用户执行的命令。如果捕捉到SIGCHLD信号，则表示子进程已经终止，所以此信号的捕捉函数可以调用waitpid以取得该子进程的进程ID以及它的终止状态。又例如，如果进程创建了临时文件，那么可能要为SIGTERM信号编写一个信号捕捉函数以清除临时文件(kill命令传送的系统默认信号是终止信号)</li>
-<li>执行系统默认动作：表10-1给出了对每一种信号的系统默认动作。注意，对大多数信号的系统默认动作是终止该进程</li>
+<li><b>忽略</b> 此信号：大多数信号都可使用这种方式进行处理
+<ul class="org-ul">
+<li>但有两种信号却决不能被忽略，它们是 <span class="underline">SIGKILL</span> 和 <span class="underline">SIGSTOP</span>
+<ul class="org-ul">
+<li>原因：为了 <b>向 <span class="underline">超级用户</span> 提供一种使进程 <span class="underline">终止</span> 或 <span class="underline">停止</span> 的可靠方法</b></li>
+</ul></li>
+<li>如果忽略某些由 <span class="underline">硬件异常</span> 产生的信号(例如非法存储访问或除以0)，则 <b>进程的行为是未定义的</b></li>
+</ul></li>
+<li><b>捕捉</b> 信号：为了做到这一点要通知内核在某种信号发生时， <span class="underline">调用一个用户函数</span> 
+<ul class="org-ul">
+<li>在用户函数中，可 <span class="underline">执行用户希望对这种事件进行的处理</span> 。例如：
+<ul class="org-ul">
+<li>若编写一个命令解释器，当用户用键盘产生 <span class="underline">中断信号</span> 时，很可能希望 <b>返回到程序的主循环</b> ，终止系统正在为该用户执行的命令</li>
+<li>如果捕捉到 <span class="underline">SIGCHLD</span> 信号，则表示子进程已经终止，所以此信号的捕捉函数可以 <b>调用waitpid</b> 以取得该子进程的进程ID以及它的终止状态</li>
+<li>如果进程创建了临时文件，那么可能要为 <span class="underline">SIGTERM</span> 信号编写一个信号捕捉函数以 <b>清除临时文件</b> (kill命令传送的系统默认信号是终止信号)</li>
+</ul></li>
+</ul></li>
+<li>执行 <b>系统默认</b> 动作：表10-1给出了对每一种信号的系统默认动作
+<ul class="org-ul">
+<li>注意：对大多数信号的系统默认动作是 <b>终止该进程</b></li>
+</ul></li>
 </ol>
 </div>
 </div>
@@ -459,7 +523,7 @@ UNIX的早期版本，就已经有信号机制，但是这些系统所提供的�
 <h3 id="org3f36a0d">常见信号</h3>
 <div class="outline-text-3" id="text-org3f36a0d">
 <p>
-表10-1列出所有信号的名字，说明，以及对于信号的系统默认动作，作业表示这是作业控制信号(仅当支持作业控制时，才要求此种信号)：
+表10-1列出所有信号的 <span class="underline">名字</span> ， <span class="underline">说明</span> ，以及对于信号的 <span class="underline">系统默认动作</span> 
 </p>
 <table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
 <caption class="t-above"><span class="table-number">Table 1:</span> UNIX信号</caption>
@@ -713,23 +777,32 @@ UNIX的早期版本，就已经有信号机制，但是这些系统所提供的�
 </tr>
 </tbody>
 </table>
-</div>
 
+<pre class="example">
+   作业表示这是作业控制信号(仅当支持作业控制时，才要求此种信号)
+</pre>
+</div>
 <div id="outline-container-org8fdfe24" class="outline-4">
 <h4 id="org8fdfe24">core文件</h4>
 <div class="outline-text-4" id="text-org8fdfe24">
 <p>
-在系统默认动作列，“终止+core”表示在进程当前工作目录的core文件中复制了该进程的存储图像。大多数UNIX调试程序都使用core文件以检查进程在终止时的状态。在下列条件下不产生core文件: 
+在系统默认动作列，_终止+core_ 表示在 <span class="underline">进程当前工作目录</span> 的 <span class="underline">core文件</span> 中 <b>复制</b> 了 <b>该进程的存储图像</b> 
+</p>
+<pre class="example">
+      大多数UNIX调试程序都使用core文件以检查进程在终止时的状态
+</pre>
+<p>
+在下列条件下不产生core文件: 
 </p>
 <ul class="org-ul">
-<li>进程是设置-用户-ID，而且当前用户并非程序文件的所有者</li>
-<li>进程是设置-组-ID，而且当前用户并非该程序文件的组所有者</li>
-<li>用户没有写当前工作目录的许可权</li>
-<li>文件太大(RLIMIT_CORE)</li>
+<li>进程是 <b>设置-用户-ID</b> ，而且 <span class="underline">当前用户</span> 并非 <span class="underline">程序文件的所有者</span></li>
+<li>进程是 <b>设置-组-ID</b> ，而且 <span class="underline">当前用户</span> 并非 <span class="underline">该程序文件的组所有者</span></li>
+<li>用户 <b>没有写</b> <span class="underline">当前工作目录</span> 的许可权</li>
+<li><b>文件太大</b> <span class="underline">RLIMIT_CORE</span></li>
 </ul>
 
 <p>
-core文件的许可权通常是用户读/写，组读和其他读
+core文件的许可权通常是 <span class="underline">用户读/写</span> ， <span class="underline">组读</span> 和 <span class="underline">其他读</span> (rw-r&#x2013;r&#x2013;) 
 </p>
 </div>
 </div>
@@ -738,63 +811,131 @@ core文件的许可权通常是用户读/写，组读和其他读
 <h4 id="org1700da4">常用信号说明</h4>
 <div class="outline-text-4" id="text-org1700da4">
 <ul class="org-ul">
-<li>SIGABRT：调用abort函数时产生此信号，进程异常终止</li>
-<li>SIGALRM：超过用alarm函数设置的时间时产生此信号，若由setitimer(2)函数设置的间隔时间已经过时，那么也产生此信号</li>
+<li><span class="underline">SIGABRT</span> ：调用 <b>abort函数</b> 时产生此信号，进程 <span class="underline">异常终止</span></li>
+<li><span class="underline">SIGALRM</span> ：超过用 <b>alarm函数设置的时间</b> 时产生此信号
+<ul class="org-ul">
+<li>若由 <span class="underline">setitimer(2)</span> 函数设置的 <span class="underline">间隔时间</span> 已经过时，那么也产生此信号</li>
+</ul></li>
 <li>SIGBUS：一个实现定义的硬件故障</li>
-<li>SIGCHLD：在一个进程终止或停止时，SIGCHLD信号被送给其父进程。按系统默认，将忽略此信号。如果父进程希望了解其子进程的这种状态改变，则应捕捉此信号。信号捕捉函数中通常要调用wait函数以取得子进程ID和其终止状态</li>
-<li>SIGCONT：作业控制信号，送给需要继续运行的处于停止状态的进程。如果接收到此信号的进程处于停止状态，则系统默认动作是使该进程继续运行，否则默认动作是忽略此信号。例如vi编辑程序在捕捉到此信号后，重新绘制终端屏幕</li>
-<li>SIGEMT：一个实现定义的硬件故障</li>
-<li>SIGFPE：一个算术运算异常，例如除以0，浮点溢出等</li>
-<li><p>
-SIGHUP：如果终端界面检测到一个连接断开，则将此信号送给与该终端相关的控制进程。此信号被送给session结构中s_leader字段所指向的进程。仅当终端的CLOCAL标志没有设置时，在上述条件下才产生此信号
-注意：接到此信号的对话期首进程可能在后台，这区别于通常由终端产生的信号(中断、退出和挂起)，这些信号总是传递给前台进程组。如果对话期前进程终止，则也产生此信号。在这种情况，此信号送给前台进程组中的每一个进程
-</p>
-
-<p>
-通常用此信号通知精灵进程以再读它们的配置文件。选用SIGHUP的理由是：因为一个精灵进程不会有一个控制终端，而且通常决不会接收到这种信号
-</p></li>
-<li>SIGILL：进程已执行一条非法硬件指令</li>
-<li>SIGINFO：一种4.3+BSD信号，当用户按状态键(一般采用Ctrl-T)时，终端驱动程序产生此信号并送至前台进程组中的每一个进程(见图9-8)。此信号通常造成在终端上显示前台进程组中各进程的状态信息</li>
-<li>SIGINT：当用户按中断键(一般采用DELETE或Ctrl-C)时，终端驱动程序产生此信号并送至前台进程组中的每一个进程。当一个进程在运行时失控，特别是它正在屏幕上产生大量不需要的输出时，常用此信号终止它</li>
-<li>SIGIO：一个异步I/O事件发生</li>
-<li>SIGIOT：一个实现定义的硬件故障</li>
-<li>SIGKILL：两个不能被捕捉或忽略信号中的一个，它向系统管理员提供了一种可以杀死任一进程的可靠方法</li>
-<li>SIGPIPE：如果在读进程已终止时写管道，则产生此信号，当套接口的一端已经终止时，若进程写该套接口也产生此信号</li>
-<li>SIGPOLL：SVR4信号，当在一个可轮询设备上发生一特定事件时产生此信号，它与4.3+BSD的SIGIO和SIGURG信号类似</li>
-<li>SIGPROF：当setitimer(2)函数设置的统计间隔时间已经超过时产生</li>
-<li>SIGPWR：SVR4信号，它依赖于系统。它主要用于具有不间断电源(UPS)的系统上
-如果电源失效，则UPS起作用，而且通常软件会接到通知。在这种情况下，系统依靠蓄电池电源继续运行，所以无须作任何处理。但是如果蓄电池也将不能支持工作，则软件通常会再次接到通知，此时，它在15~30秒内使系统各部分都停止运行。此时应当传递SIGPWR信号。在大多数系统中使接到蓄电池电压过低的进程将信号SIGPWR发送给init进程，然后由init处理停机操作。很多系统init实现在inittab文件中提供了两个记录项用于此种目的：powerfail以及powerwait 
-目前已能获得低价格的UPS系统，它用RS-232串行连接能够很容易地将蓄电池电压过低的条件通知系统，于是这种信号也就更加重要了</li>
-<li>SIGQUIT：当用户在终端上按退出键(一般采用Ctrl-\)时，产生此信号，并送至前台进程组中的所有进程。此信号不仅终止前台进程组(如SIGINT所做的那样)，同时产生一个core文件</li>
-<li>SIGSEGV：进程进行了一次无效的内存访问</li>
-<li>SIGSTOP：作业控制信号，它停止一个进程。它类似于交互停止信号(SIGTSTP)，两个不能被捕捉或忽略信号中的一个</li>
-<li>SIGSYS：一个无效的系统调用。由于某种未知原因，进程执行了一条系统调用指令，但其指示系统调用类型的参数却是无效的</li>
-<li>SIGTERM：由kill(1)命令发送的系统默认终止信号</li>
-<li>SIGTRAP：一个实现定义的硬件故障</li>
-<li>SIGTSTP：交互停止信号，当用户在终端上按挂起键(一般采用Ctrl-Z)时，终端驱动程序产生此信号</li>
-<li>SIGTTIN：当一个后台进程组进程试图读其控制终端时，终端驱动程序产生此信号。在下列例外情形下不产生此信号，此时读操作返回出错，errno设置为EIO：
-<ol class="org-ol">
-<li>读进程忽略或阻塞此信号</li>
-<li>读进程所属的进程组是孤儿进程组</li>
-</ol></li>
-<li>SIGTTOU：当一个后台进程组进程试图写其控制终端时产生此信号。与上面所述的SIGTTIN信号不同，一个进程可以选择为允许后台进程写控制终端。如果不允许后台进程写，在这两种情况下不产生此信号，写操作返回出错，errno设置为EIO：
-<ol class="org-ol">
-<li>写进程忽略或阻塞此信号</li>
-<li>写进程所属进程组是孤儿进程组</li>
-</ol></li>
+<li><b>SIGCHLD</b> ：在一个 <b>进程终止或停止</b> 时，SIGCHLD信号被 <b>送给其父进程</b> 
+<ul class="org-ul">
+<li>按系统 <span class="underline">默认</span> ，将 <b>忽略此信号</b></li>
+<li>如果父进程希望了解其子进程的这种状态改变，则应 <b>捕捉</b> 此信号
+<ul class="org-ul">
+<li>信号捕捉函数中通常要 <b>调用wait函数</b> 以取得子进程ID和其终止状态</li>
+</ul></li>
+</ul></li>
+<li><span class="underline">SIGCONT</span> ： <span class="underline">作业控制</span> 信号，送给 <b>需要继续运行的处于停止状态的进程</b> 
+<ul class="org-ul">
+<li>如果接收到此信号的进程处于 <span class="underline">停止状态</span> ，则系统 <span class="underline">默认</span> 动作是使 <b>该进程继续运行</b></li>
+<li>否则默认动作是 <b>忽略</b> 此信号</li>
+<li>例如vi编辑程序在捕捉到此信号后，重新绘制终端屏幕</li>
+</ul></li>
+<li>SIGEMT：一个实现定义的 <span class="underline">硬件故障</span></li>
+<li>SIGFPE：一个 <span class="underline">算术运算异常</span> ，例如
+<ul class="org-ul">
+<li>除以0</li>
+<li>浮点溢出等</li>
+</ul></li>
+<li>SIGHUP：如果 <span class="underline">终端</span> 界面检测到一个 <b>连接断开</b> ，则将此信号送给与 <span class="underline">该终端相关的控制进程</span> 
+<ul class="org-ul">
+<li>被送给 <span class="underline">session</span> 结构中 <b>s_leader</b> 字段所指向的 <span class="underline">进程</span></li>
+<li>仅当终端的 <span class="underline">CLOCAL</span> 标志 <b>没有设置</b> 时，在上述条件下才产生此信号</li>
+</ul></li>
 </ul>
 
-<p>
-不论是否允许后台进程写，某些除写以外的下列终端操作也能产生此信号：tcsetattr，tcsendbreak，tcdrain，tcflush，tcflow以及tcsetpgrp
-</p>
+<pre class="example">
+      注意：接到此信号的对话期首进程可能在后台，这区别于通常由终端产生的信号(中断、退出和挂起)，这些信号总是传递给前台进程组
+
+      如果对话期前台进程终止，则也产生此信号。在这种情况，此信号送给前台进程组中的每一个进程
+
+      通常用此信号“通知守护进程”以 “再读它们的配置文件”。选用SIGHUP的理由是：
+      因为一个守护进程不会有一个控制终端，而且通常决不会接收到这种信号
+</pre>
 <ul class="org-ul">
-<li>SIGURG：通知进程已经发生一个紧急情况。在网络连接上，接到非规定波特率的数据时，此信号可选择地产生</li>
-<li>SIGUSR1：一个用户定义的信号，可用于应用程序</li>
-<li>SIGUSR2：这是一个用户定义的信号，可用于应用程序</li>
-<li>SIGVTALRM：当一个由setitimer(2)函数设置的虚拟间隔时间已经超过时产生此信号</li>
-<li>SIGWINCH：SVR4和4.3+BSD内核保持与每个终端或伪终端相关联的窗口的大小，一个进程可以用ioctl函数得到或设置窗口的大小。如果一个进程用ioctl的设置-窗口-大小命令更改了窗口大小，则内核将SIGWINCH信号送至前台进程组</li>
-<li>SIGXCPUS：如果进程超过了其软CPU时间限制，则产生此信号</li>
-<li>SIGXFSZ：如果进程超过了其软文件长度限制，则产生此信号</li>
+<li>SIGILL：进程已执行一条 <span class="underline">非法硬件指令</span></li>
+<li>SIGINFO：一种4.3+BSD信号，当用户按 <b>状态键</b> (一般采用 <span class="underline">Ctrl-T</span> )时， <span class="underline">终端驱动程序</span> 产生此信号并送至 <span class="underline">前台进程组中的每一个进程</span> (见图9-8)。+ 通常造成在 <b>终端上显示 <span class="underline">前台进程组中各进程</span> 的状态信息</b></li>
+<li><b>SIGINT</b> ：当用户按 <b>中断键</b>  (一般采用 <span class="underline">DELETE</span> 或 <span class="underline">Ctrl-C</span> )时， <span class="underline">终端驱动程序</span>  产生此信号并送至 <span class="underline">前台进程组中的每一个进程</span> 
+<ul class="org-ul">
+<li>当一个 <b>进程在运行时失控</b> ，特别是它正在屏幕上产生大量不需要的输出时，常用此信号 <b>终止</b> 它</li>
+</ul></li>
+<li>SIGIO：一个 <span class="underline">异步I/O事件</span> 发生</li>
+<li>SIGIOT：一个实现定义的 <span class="underline">硬件故障</span></li>
+<li><b>SIGKILL</b> ：两个不能被捕捉或忽略信号中的一个
+<ul class="org-ul">
+<li>它向系统管理员提供了一种可以 <b>杀死任一进程</b> 的可靠方法</li>
+</ul></li>
+<li><span class="underline">SIGPIPE</span> ：
+<ul class="org-ul">
+<li>如果在 <span class="underline">读进程</span> <b>已终止</b> 时 <span class="underline">写管道</span> ，则产生此信号</li>
+<li>当 <span class="underline">socket</span> 的一端已经 <b>终止</b> 时，若进程写该套接口也产生此信号</li>
+</ul></li>
+<li>SIGPOLL：SVR4信号，当在一个 <span class="underline">可轮询设备</span> 上发生一 <span class="underline">特定事件</span> 时产生此信号
+<ul class="org-ul">
+<li>它与4.3+BSD的SIGIO和SIGURG信号类似</li>
+</ul></li>
+<li>SIGPROF：当 <span class="underline">setitimer(2)</span> 函数设置的 <span class="underline">统计间隔时间</span> 已经超过时产生</li>
+<li>SIGPWR：SVR4信号，它依赖于系统。它主要用于具有 <span class="underline">不间断电源(UPS)</span> 的系统上</li>
+</ul>
+
+<pre class="example">
+      如果电源失效，则UPS起作用，而且通常软件会接到通知
+
+      在这种情况下，系统依靠蓄电池电源继续运行，所以无须作任何处理
+
+      但是如果蓄电池也将不能支持工作，则软件通常会再次接到通知，
+      它在15~30秒内使系统各部分都停止运行，此时应当传递SIGPWR信号
+
+      在大多数系统中使接到蓄电池电压过低的进程将信号SIGPWR发送给init进程，然后由init处理停机操作
+      很多系统init实现在inittab文件中提供了两个记录项用于此种目的：powerfail以及powerwait 
+      目前已能获得低价格的UPS系统，它用RS-232串行连接能够很容易地将蓄电池电压过低的条件通知系统，于是这种信号也就更加重要了
+</pre>
+
+<ul class="org-ul">
+<li><b>SIGQUIT</b> ：当用户在 <span class="underline">终端</span> 上按 <b>退出键</b> (一般采用 <span class="underline">Ctrl-\</span> )时，产生此信号，并送至 <span class="underline">前台进程组中的所有进程</span> 
+<ul class="org-ul">
+<li>不仅 <span class="underline">终止前台进程组</span> (如 <span class="underline">SIGINT</span> 所做的那样)，同时 <b>产生一个core文件</b></li>
+</ul></li>
+<li>SIGSEGV：进程进行了一次 <span class="underline">无效的内存访问</span></li>
+<li><b>SIGSTOP</b> ： <span class="underline">作业控制</span> 信号，它 <b>停止一个进程</b> 。它类似于交互停止信号( <span class="underline">SIGTSTP</span> )，两个不能被捕捉或忽略信号中的一个</li>
+<li>SIGSYS：一个 <span class="underline">无效的系统调用</span> 
+<ul class="org-ul">
+<li>由于某种未知原因，进程执行了一条系统调用指令，但其指示 <b>系统调用类型的参数却是无效的</b></li>
+</ul></li>
+<li><b>SIGTERM</b> ：由 <span class="underline">kill(1)命令</span> 发送的系统 <b>默认终止信号</b></li>
+<li>SIGTRAP：一个实现定义的 <span class="underline">硬件故障</span></li>
+<li><b>SIGTSTP</b> ： <b>交互停止</b> 信号，当用户在终端上按 <b>挂起键</b> (一般采用 <span class="underline">Ctrl-Z</span> )时，终端驱动程序产生此信号</li>
+<li><span class="underline">SIGTTIN</span> ：当一个 <span class="underline">后台进程组进程</span> 试图 <b>读</b> 其 <span class="underline">控制终端</span> 时，终端驱动程序产生此信号。在下列例外情形下 <b>不产生此信号</b> ，此时 <span class="underline">读操作</span> <b>返回出错</b> ，errno设置为 <span class="underline">EIO</span> ：
+<ol class="org-ol">
+<li><span class="underline">读进程</span> <b>忽略</b> 或 <b>阻塞</b> 此信号</li>
+<li><span class="underline">读进程所属的进程组</span> 是 <b>孤儿进程组</b></li>
+</ol></li>
+<li><span class="underline">SIGTTOU</span> ：当一个 <span class="underline">后台进程组进程</span> 试图 <b>写</b> 其 <span class="underline">控制终端</span> 时产生此信号。与上面所述的SIGTTIN信号不同，一个进程可以选择为允许后台进程写控制终端。如果 <b>不允许后台进程写</b> ，在这两种情况下 <b>不产生此信号</b> ，写操作 <b>返回出错</b> ，errno设置为 <span class="underline">EIO</span> ：
+<ol class="org-ol">
+<li><span class="underline">写进程</span>  <b>忽略</b> 或 <b>阻塞</b> 此信号</li>
+<li><span class="underline">写进程所属进程组</span> 是 <b>孤儿进程组</b></li>
+</ol></li>
+</ul>
+<pre class="example">
+      不论是否允许后台进程写，某些除写以外的下列终端操作也能产生此信号：tcsetattr，tcsendbreak，tcdrain，tcflush，tcflow以及tcsetpgrp
+</pre>
+<ul class="org-ul">
+<li>SIGURG：通知进程已经发生一个紧急情况
+<ul class="org-ul">
+<li>在网络连接上，接到 <span class="underline">非规定波特率</span> 的数据时，此信号可选择地产生</li>
+</ul></li>
+<li><b>SIGUSR1</b> ：一个 <b>用户定义</b> 的信号，可用于应用程序</li>
+<li><b>SIGUSR2</b> ：这是一个 <b>用户定义</b> 的信号，可用于应用程序</li>
+<li>SIGVTALRM：当一个由 <span class="underline">setitimer(2)</span> 函数设置的 <span class="underline">虚拟间隔时间已经超过</span> 时产生此信号</li>
+<li>SIGWINCH：SVR4和4.3+BSD内核保持与每个 <span class="underline">终端或伪终端</span> 相关联的 <span class="underline">窗口的大小</span> 
+<ul class="org-ul">
+<li>一个进程可以用 <span class="underline">ioctl</span> 函数 <b>得到或设置</b> <span class="underline">窗口的大小</span> 
+<ul class="org-ul">
+<li>如果一个进程用ioctl的设置-窗口-大小命令 <b>更改了窗口大小</b> ，则内核将 <span class="underline">SIGWINCH</span> 信号送至 <span class="underline">前台进程组</span></li>
+</ul></li>
+</ul></li>
+<li>SIGXCPUS：如果 <span class="underline">进程</span> <b>超过</b> 了其 <span class="underline">软CPU时间限制</span> ，则产生此信号</li>
+<li>SIGXFSZ：如果 <span class="underline">进程</span> <b>超过</b> 了其 <span class="underline">软文件长度限制</span> ，则产生此信号</li>
 </ul>
 </div>
 </div>
@@ -2075,9 +2216,9 @@ sigprocmask：检测或更改进程的信号屏蔽字
 </ul>
 </div>
 
-<div id="outline-container-orgef50586" class="outline-5">
-<h5 id="orgef50586">实例</h5>
-<div class="outline-text-5" id="text-orgef50586">
+<div id="outline-container-org7844027" class="outline-5">
+<h5 id="org7844027">实例</h5>
+<div class="outline-text-5" id="text-org7844027">
 <p>
 打印调用进程的信号屏蔽字所阻塞信号的名称：
 </p>
@@ -2137,9 +2278,9 @@ sigpending：返回对于调用进程被阻塞不能递送和当前未决的信�
 </div>
 </div>
 
-<div id="outline-container-orgcf1e967" class="outline-5">
-<h5 id="orgcf1e967">实例</h5>
-<div class="outline-text-5" id="text-orgcf1e967">
+<div id="outline-container-orgf5370fa" class="outline-5">
+<h5 id="orgf5370fa">实例</h5>
+<div class="outline-text-5" id="text-orgf5370fa">
 <p>
 进程阻塞了SIGQUIT信号，保存了当前信号屏蔽字以便以后恢复，然后睡眠5秒钟。在此期间所产生的退出信号都被阻塞，不递送至该进程，直到该信号不再被阻塞。在5秒睡眠结束后，检查是否有信号未决，然后将SIGQUIT设置为不再阻塞
 </p>
@@ -2514,9 +2655,9 @@ sigaction函数：检查或修改与指定信号相关联的处理方式
 </div>
 </div>
 
-<div id="outline-container-org59050c8" class="outline-4">
-<h4 id="org59050c8">实例</h4>
-<div class="outline-text-4" id="text-org59050c8">
+<div id="outline-container-org04206ac" class="outline-4">
+<h4 id="org04206ac">实例</h4>
+<div class="outline-text-4" id="text-org04206ac">
 <p>
 下面程序展示了在信号处理程序被调用时和调用后进程信号屏蔽字的自动变化以及如何使用sigsetjmp和siglongjmp函数：
 </p>
