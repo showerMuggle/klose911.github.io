@@ -323,12 +323,12 @@ for the JavaScript code in this tag.
 <li><a href="#org9de7c33">BSD实现</a></li>
 <li><a href="#org39ab09f">sigprocmask函数</a>
 <ul>
-<li><a href="#org04206ac">实例</a></li>
+<li><a href="#orgb9e49f0">实例</a></li>
 </ul>
 </li>
 <li><a href="#orge9528da">sigpending函数</a>
 <ul>
-<li><a href="#orgee9b3c9">实例</a></li>
+<li><a href="#org32a24f5">实例</a></li>
 </ul>
 </li>
 </ul>
@@ -351,7 +351,7 @@ for the JavaScript code in this tag.
 </li>
 <li><a href="#org88e1906">信号处理函数中的非局部转移</a>
 <ul>
-<li><a href="#org5c3dc7a">实例</a>
+<li><a href="#org7417964">实例</a>
 <ul>
 <li><a href="#org801f2cb">setsigjmp的保护机制</a></li>
 </ul>
@@ -1074,9 +1074,9 @@ $ kill 10225 <span style="color: #5f9ea0; font-style: italic;">#</span><span sty
 </div>
 
 <pre class="example">
-  当向该进程发送SIGTERM信号后，该进程就终止
+     当向该进程发送SIGTERM信号后，该进程就终止
 
-  因为它不捕捉此信号，而对此信号的系统默认动作是终止
+     因为它不捕捉此信号，而对此信号的系统默认动作是终止
 </pre>
 </div>
 </div>
@@ -1130,9 +1130,9 @@ shell自动将”后台进程“中对中断和退出信号的处理方式设置
 </p>
 
 <pre class="example">
-  从signal的这两个调用中也可以看到这种函数的限制：
+     从signal的这两个调用中也可以看到这种函数的限制：
 
-  只有通过“改变信号的处理方式”才能“获得信号的当前处理方式”！！！
+     只有通过“改变信号的处理方式”才能“获得信号的当前处理方式”！！！
 </pre>
 </div>
 </div>
@@ -1145,7 +1145,7 @@ shell自动将”后台进程“中对中断和退出信号的处理方式设置
 </p>
 
 <pre class="example">
-  因为子进程在开始时复制了父进程存储图像，所以信号捕捉函数的地址在子进程中是有意义的
+     因为子进程在开始时复制了父进程存储图像，所以信号捕捉函数的地址在子进程中是有意义的
 </pre>
 </div>
 </div>
@@ -1154,15 +1154,19 @@ shell自动将”后台进程“中对中断和退出信号的处理方式设置
 <div id="outline-container-orgdc9356a" class="outline-2">
 <h2 id="orgdc9356a">不可靠性</h2>
 <div class="outline-text-2" id="text-orgdc9356a">
+<pre class="example">
+   在早期的UNIX版本中(例如V7)，信号是不可靠的
+</pre>
 <p>
-在早期的UNIX版本中(例如V7)，信号是不可靠的。不可靠：一个信号发生了，但进程却可能不知道这个信号
+不可靠：一个 <span class="underline">信号发生</span> 了，但 <b>进程却可能不知道这个信号</b> 
 </p>
 </div>
+
 <div id="outline-container-org151c66d" class="outline-3">
 <h3 id="org151c66d">丢失信号</h3>
 <div class="outline-text-3" id="text-org151c66d">
 <p>
-早期版本中的一个问题是在进程每次处理信号时，随即将信号动作复置为默认值，因此早期的信号处理如下：
+早期版本中的一个问题是在进程 <span class="underline">每次处理信号</span> 时，随即将 <b>信号动作复置为默认值</b> ，因此早期的信号处理如下：
 </p>
 <div class="org-src-container">
 <pre class="src src-C"><span style="color: #00bfff; font-weight: bold;">static</span> <span style="color: #98f5ff;">int</span> <span style="color: #daa520; font-weight: bold;">sig_int</span>();
@@ -1178,9 +1182,12 @@ shell自动将”后台进程“中对中断和退出信号的处理方式设置
 }
 </pre>
 </div>
-<p>
-问题在于：在信号发生之后到信号处理程序中调用signal函数之间有一个时间窗口。在此段时间中可能发生另一次同样中断信号，第二个信号会造成执行默认动作，而对中断信号则是终止该进程！
-</p>
+
+<pre class="example">
+     问题在于：在“信号发生”之后到“信号处理程序中调用signal函数”之间有一个时间窗口
+
+     在此段时间中可能发生另一次同样中断信号，第二个信号会造成执行默认动作，而对中断信号则是终止该进程！
+</pre>
 </div>
 </div>
 
@@ -1188,11 +1195,21 @@ shell自动将”后台进程“中对中断和退出信号的处理方式设置
 <h3 id="org7ea1220">无法阻塞信号</h3>
 <div class="outline-text-3" id="text-org7ea1220">
 <p>
-那时进程对信号的控制能力也很低，它能捕捉信号或忽略它，但有些很需要的功能它却并不具备。例如，有时用户希望通知内核阻塞一种信号：不要忽略该信号，在其发生时记住它，然后在进程作好了准备时再通知它。这种阻塞信号的能力当时并不具备。同样内核也无法关闭某种信号，只能忽略它　
+有时用户希望通知内核 <b>阻塞</b> 一种信号： <span class="underline">不要忽略</span> 该信号，在其发生时 <span class="underline">记住</span> 它，然后在 <span class="underline">进程作好了准备</span> 时再 <b>通知</b> 它   
 </p>
+<pre class="example">
+那时进程对信号的控制能力也很低，它能“捕捉”信号或“忽略”它
 
-<p>
-主函数调用pause函数使自己睡眠，直到捕捉到一个信号。当信号被捕捉到后，信号处理程序将标志sig_int_flag设置为非0。在信号处理程序返回之后，内核将该进程唤醒，它检测到该标志为非0，然后执行它所需做的
+但有些很需要的功能它却并不具备：
+1. “阻塞信号”的能力当时并不具备
+2. 内核也无法“关闭”某种信号，只能忽略它　
+</pre>
+
+<ul class="org-ul">
+<li>主函数调用 <span class="underline">pause</span> 函数使自己 <b>睡眠</b> ，直到 <b>捕捉</b> 到一个信号</li>
+<li>当 <span class="underline">信号被捕捉</span> 到后，信号处理程序将标志 <span class="underline">sig_int_flag</span> 设置为 <span class="underline">非0</span></li>
+<li><p>
+在 <span class="underline">信号处理程序返回</span> 之后， <span class="underline">内核</span> 将该 <b>进程唤醒</b> ，它 <span class="underline">检测</span> 到 <span class="underline">该标志为非0</span> ，然后执行它所需做的
 </p>
 <div class="org-src-container">
 <pre class="src src-C"><span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">sig_int_flag</span> = 0; <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">&#22914;&#26524;&#25429;&#25417;&#21040;SIGINT&#20449;&#21495;&#65292;&#21017;&#38750;0</span>
@@ -1206,6 +1223,7 @@ shell自动将”后台进程“中对中断和退出信号的处理方式设置
     <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">...</span>
 
     <span style="color: #00bfff; font-weight: bold;">while</span>(sig_int_flag == 0)
+        <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#22914;&#26524;&#27492;&#26102;&#20449;&#21495;&#21457;&#29983;&#65292;pause&#21487;&#33021;&#19968;&#30452;&#20241;&#30496;&#19979;&#21435;&#65281;&#65281;&#65281; </span>
         pause();<span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">&#19968;&#30452;&#30561;&#30496;&#30452;&#21040;&#26576;&#20010;&#20449;&#21495;&#21457;&#29983;</span>
     <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">...</span>
 }
@@ -1219,47 +1237,78 @@ shell自动将”后台进程“中对中断和退出信号的处理方式设置
     sig_int_flag = 1;
 }
 </pre>
-</div>
-<p>
-问题在于：如果在测试sig_int_flag之后，调用pause之前发生信号，此时sig_int_flag已经变为1，但是程序还是会调用pause，如果以后再无此信号发生，则此进程可能会一直睡眠，因此这次发生的信号也就丢失了！
-</p>
+</div></li>
+</ul>
+
+<pre class="example">
+     问题在于：如果在测试sig_int_flag之后，调用pause之前发生信号，此时sig_int_flag已经变为1，但是程序还是会调用pause
+
+     如果以后再无此信号发生，则此进程可能会一直睡眠，因此这次发生的信号也就丢失了！   
+</pre>
 
 <p>
-这种类型的程序段在大多数情况下会正常工作，使得我们认为它们正确，而实际上却并不是如此
+这种类型的程序在大多数情况下会正常工作，使得我们认为它们正确，而实际上却并不是如此
 </p>
 </div>
 </div>
 </div>
-
 <div id="outline-container-org74105ae" class="outline-2">
 <h2 id="org74105ae">可中断的系统调用</h2>
 <div class="outline-text-2" id="text-org74105ae">
-<p>
-早期UNIX系统的一个特性是：如果在进程执行一个低速系统调用而阻塞期间捕捉到一个信号，则该系统调用就被中断不再继续执行。该系统调用返回出错，其errno设置为EINTR。这样处理的理由是因为一个信号发生了，进程捕捉到了它，这意味着已经发生了某种事情，所以是个好机会应当唤醒阻塞的系统调用
-</p>
+<pre class="example">
+  早期UNIX系统的一个特性是：
 
+  如果在进程执行一个低速系统调用而阻塞期间捕捉到一个信号
+  则该系统调用就被中断不再继续执行，该系统调用返回出错，其errno设置为EINTR
+
+  这样处理的理由是因为一个信号发生了，进程捕捉到了它
+  这意味着已经发生了某种事情，所以是个好机会应当唤醒阻塞的系统调用
+</pre>
 <p>
-系统调用分成两类：低速系统调用和其他系统调用。低速系统调用是可能会使进程永远阻塞的一类系统调用，它们包括:
+系统调用分成两类：
 </p>
 <ul class="org-ul">
-<li>在读某些类型的文件时，如果数据并不存在则可能会使调用者永远阻塞。例如管道、终端设备以及网络设备</li>
-<li>在写这些类型的文件时，如果不能立即接受这些数据，则也可能会使调用者永远阻塞</li>
-<li>打开文件，在某种条件发生之前也可能会使调用者阻塞。例如，打开终端设备，它要等待直到所连接的调制解调器回答了电话</li>
-<li>pause(调用进程睡眠直至捕捉到一个信号)和wait</li>
-<li>某些ioctl操作</li>
-<li>某些进程间通信函数</li>
+<li><span class="underline">低速系统</span> 调用：可能会使 <b>进程永远阻塞</b> 的一类系统调用，它们包括：
+<ul class="org-ul">
+<li>在 <span class="underline">读某些类型的文件</span> 时，如果 <span class="underline">数据并不存在</span> 则可能会使调用者永远阻塞，例如：
+<ul class="org-ul">
+<li>管道</li>
+<li>终端设备</li>
+<li>网络设备</li>
+</ul></li>
+<li>在 <span class="underline">写这些类型的文件</span> 时，如果 <span class="underline">不能立即接受这些数据</span> ，则也可能会使调用者永远阻塞</li>
+<li><span class="underline">打开文件</span> ，在某种条件发生之前也可能会使调用者阻塞。例如：
+<ul class="org-ul">
+<li>打开终端设备，它要等待直到所连接的调制解调器回答了电话</li>
+</ul></li>
+<li><b>pause</b> (调用 <span class="underline">进程睡眠</span> 直至 <span class="underline">捕捉</span> 到一个信号)和 <b>wait</b></li>
+<li>某些 <span class="underline">ioctl</span> 操作</li>
+<li>某些 <span class="underline">进程间通信</span> 函数</li>
+</ul></li>
 </ul>
+<pre class="example">
+  使用 中断系统 调用这种方法来处理的一种情况是：
+
+  一个进程起动了读终端操作，而使用该终端设备的用户却离开该终端很长时间
+
+  在这种情况下进程可能处于阻塞状态几个小时甚至数天，除非系统停机，否则一直如此
+</pre>
+
+<ul class="org-ul">
+<li><span class="underline">其他系统</span> 调用</li>
+</ul>
+<pre class="example">
+  在这些低速系统调用中一个例外是与“磁盘I/O”有关的系统调用
+
+  虽然读、写一个磁盘文件可能暂时阻塞调用者：在磁盘驱动程序将请求排入队列，然后在适当时间执行请求期间
+
+  但是除非发生硬件错误，I/O操作总会很快返回，并使调用者不再处于阻塞状态
+</pre>
+
+
 
 <p>
-在这些低速系统调用中一个例外是与磁盘I/O有关的系统调用。虽然读、写一个磁盘文件可能暂时阻塞调用者(在磁盘驱动程序将请求排入队列，然后在适当时间执行请求期间)，但是除非发生硬件错误，I/O操作总会很快返回，并使调用者不再处于阻塞状态。
-</p>
-
-<p>
-使用中断系统调用这种方法来处理的一种情况是：一个进程起动了读终端操作，而使用该终端设备的用户却离开该终端很长时间。在这种情况下进程可能处于阻塞状态几个小时甚至数天，除非系统停机，否则一直如此
-</p>
-
-<p>
-必须用显式方法处理可中断的系统调用带来的出错返回。典型的代码序列，假定进行一个读操作，它被中断，我们希望重新起动它如下列样式：
+必须用 <b>显式</b> 方法 处理 <span class="underline">可中断的系统调用</span> 带来的 <b>出错返回</b> 。假定进行一个读操作，它被中断，希望重新起动它如下列样式：
 </p>
 <div class="org-src-container">
 <pre class="src src-C"><span style="color: #ffd700;">again</span>:
@@ -1271,17 +1320,21 @@ shell自动将”后台进程“中对中断和退出信号的处理方式设置
 }
 </pre>
 </div>
-<p>
-为了帮助应用程序使其不必处理被中断的系统调用，4.2BSD引进了某些被中断的系统调用的自动再起动。自动再起动的系统调用包括:ioctl、read、readv、write、writev、wait和waitpid。正如前述，其中前五个函数只有对低速设备进行操作时才会被信号中断。而wait和waitpid在捕捉到信号时总是被中断
-</p>
 
-<p>
-某些应用程序并不希望这些函数被中断后再起动，因为这种自动再起动的处理方式也会带来问题，为此4.3BSD允许进程在每个信号各别处理的基础上不使用此功能
-</p>
+<pre class="example">
+为了帮助应用程序使其不必处理被中断的系统调用，4.2BSD引进了某些被中断的系统调用的自动再起动
+自动再起动的系统调用包括: ioctl、read、readv、write、writev、wait和waitpid
+正如前述，其中前五个函数只有对低速设备进行操作时才会被信号中断，而wait和waitpid在捕捉到信号时总是被中断
 
-<p>
-4.2BSD引进自动再起动功能的一个理由是：有时用户并不知道所使用的输入、输出设备是否是低速设备。如果编写的程序可以用交互方式运行，则它可能读、写终端低速设备。如果在程序中捕捉信号，而系统却不提供再起动功能，则对每次读、写系统调用就要进行是否出错返回的测试，如果是被中断的，则再进行读、写
-</p>
+某些应用程序并不希望这些函数被中断后再起动，因为这种自动再起动的处理方式也会带来问题
+为此4.3BSD允许进程在每个信号各别处理的基础上不使用此功能
+
+4.2BSD引进自动再起动功能的一个理由是：
+有时用户并不知道所使用的输入、输出设备是否是低速设备
+如果编写的程序可以用交互方式运行，则它可能读、写终端低速设备
+如果在程序中捕捉信号，而系统却不提供再起动功能，则对每次读、写系统调用就要进行是否出错返回的测试
+如果是被中断的，则再进行读、写
+</pre>
 
 <p>
 表10-2列出了几种实现所提供的信号功能及它们的语义
@@ -1459,24 +1512,48 @@ shell自动将”后台进程“中对中断和退出信号的处理方式设置
 <h2 id="orgb4d2d81">可再入函数</h2>
 <div class="outline-text-2" id="text-orgb4d2d81">
 <p>
-进程捕捉到信号并继续执行时，它首先执行该信号处理程序中的指令。如果从信号处理程序正常返回(例如没有调用exit或longjmp)，则继续执行在捕捉到信号时进程正在执行的正常指令序列
+进程 <span class="underline">捕捉到信号</span> 并 <span class="underline">继续执行</span> 时：
 </p>
+<ul class="org-ul">
+<li>首先 <b>执行</b> 该 <span class="underline">信号处理程序中的指令</span></li>
+<li>如果从信号处理程序 <b>正常返回</b> (例如没有调用 <span class="underline">exit</span> 或 <span class="underline">longjmp</span> )
+<ul class="org-ul">
+<li><b>继续执行</b> 在 <span class="underline">捕捉到信号</span> 时 <span class="underline">进程正在执行</span> 的 <b>正常指令序列</b></li>
+</ul></li>
+</ul>
 
-<p>
-但在信号处理程序中，不能判断捕捉到信号时进程执行到何处。如果进程正在执行malloc，在其堆中分配另外的存储空间，而此时由于捕捉到信号插入执行该信号处理程序，其中又调用malloc，这时会发生什么？又比如进程正在执行getpwnam这种将其结果存放在静态存储单元中的函数，而插入执行的信号处理程序中又调用这样的函数，这时又会发生什么呢？在malloc例子中，可能会对进程造成破坏，因为malloc通常为它所分配的存储区保持一个连接表，而插入执行信号处理程序时，进程可能正在更改此连接表。而在getpwnam的例子中，正常返回给调用者的信息可能由返回至信号处理程序的信息覆盖
-</p>
+<pre class="example">
+  但在信号处理程序中，不能判断捕捉到信号时进程执行到何处
+
+  如果进程正在执行malloc，在其堆中分配另外的存储空间
+  而此时由于捕捉到信号插入”执行该信号处理程序，其中又调用malloc“，这时会发生什么？
+
+  又比如进程正在执行getpwnam这种将其结果存放在”静态存储单元“中的函数
+  而插入执行的”信号处理程序中又调用这样的函数“，这时又会发生什么呢？
+
+  在malloc例子中，可能会对”进程造成破坏“，因为malloc通常为它所分配的存储区保持一个链接表
+  而插入执行信号处理程序时，”进程可能正在更改此链接表“
+
+  而在getpwnam的例子中，正常返回给调用者的信息可能由返回至信号处理程序的”信息覆盖“
+</pre>
 
 <p>
 函数是不可再入的原因为：
 </p>
 <ul class="org-ul">
-<li>使用静态数据结构</li>
-<li>调用malloc或free函数</li>
-<li>标准I/O函数，标准I/O库的很多实现都以不可再入方式使用全局数据结构</li>
+<li>使用 <b>静态数据结构</b></li>
+<li>调用 <b>malloc</b> 或 <b>free</b> 函数</li>
+<li><b>标准I/O</b> 函数，标准I/O库的很多实现都以不可再入方式使用全局数据结构</li>
 </ul>
 
+<pre class="example">
+  信号处理程序中即使调用了POSIX定义的可再入的函数，但因为每个进程只有一个errno变量，所以仍可能修改了其原先的值
+
+  一个信号处理程序，它恰好在main刚设置errno之后被调用
+  如果该信号处理程序调用read，则它可能更改errno的值，从而取代了刚由main设置的值
+</pre>
 <p>
-信号处理程序中即使调用了POSIX定义的可再入的函数，但因为每个进程只有一个errno变量，所以仍可能修改了其原先的值。一个信号处理程序，它恰好在main刚设置errno之后被调用。如果该信号处理程序调用read，则它可能更改errno的值，从而取代了刚由main设置的值。因此，作为一个通用的规则，应当在信号处理程序前保存，而在其后恢复errno
+因此，作为一个通用的规则，应当在 <b>信号处理程序前保存，而在其后恢复errno</b> 
 </p>
 </div>
 
@@ -1516,12 +1593,19 @@ shell自动将”后台进程“中对中断和退出信号的处理方式设置
 }
 </pre>
 </div>
-<p>
-运行此程序时，其结果具有随意性：通常在信号处理程序第一次返回时，该程序将由SIGSEGV信号终止。检查core文件，从中可以看到main函数已调用getpwnam，而且当信号处理程序调用此同一函数时，某些内部指针出了问题。偶然，此程序会运行若干秒，然后因产生SIGSEGV信号而终止。在捕捉到信号后，若main函数仍正确运行，其返回值却有时错误，有时正确。有时在信号处理程序中调用getpwnam会出错返回，其出错值为EBADF(无效文件描述符)
-</p>
 
+<pre class="example">
+  运行此程序时，其结果具有随意性：
+
+  通常在信号处理程序第一次返回时，该程序将由SIGSEGV信号终止
+
+  检查core文件，从中可以看到main函数已调用getpwnam，而且当信号处理程序调用此同一函数时，某些内部指针出了问题
+  偶然，此程序会运行若干秒，然后因产生SIGSEGV信号而终止
+  在捕捉到信号后，若main函数仍正确运行，其返回值却有时错误，有时正确
+  有时在信号处理程序中调用 getpwnam 会出错返回，其出错值为EBADF(无效文件描述符)
+</pre>
 <p>
-从此实例中可以看出：若在信号处理程序中调用一个不可再入函数，则其结果是不可预见的！
+从此实例中可以看出：若在 <span class="underline">信号处理程序</span> 中 <b>调用</b> 一个 <span class="underline">不可再入函数</span> ，则其 <b>结果是不可预见的</b> 
 </p>
 </div>
 </div>
@@ -2248,9 +2332,9 @@ sigprocmask：检测或更改进程的信号屏蔽字
 </ul>
 </div>
 
-<div id="outline-container-org04206ac" class="outline-5">
-<h5 id="org04206ac">实例</h5>
-<div class="outline-text-5" id="text-org04206ac">
+<div id="outline-container-orgb9e49f0" class="outline-5">
+<h5 id="orgb9e49f0">实例</h5>
+<div class="outline-text-5" id="text-orgb9e49f0">
 <p>
 打印调用进程的信号屏蔽字所阻塞信号的名称：
 </p>
@@ -2310,9 +2394,9 @@ sigpending：返回对于调用进程被阻塞不能递送和当前未决的信�
 </div>
 </div>
 
-<div id="outline-container-orgee9b3c9" class="outline-5">
-<h5 id="orgee9b3c9">实例</h5>
-<div class="outline-text-5" id="text-orgee9b3c9">
+<div id="outline-container-org32a24f5" class="outline-5">
+<h5 id="org32a24f5">实例</h5>
+<div class="outline-text-5" id="text-org32a24f5">
 <p>
 进程阻塞了SIGQUIT信号，保存了当前信号屏蔽字以便以后恢复，然后睡眠5秒钟。在此期间所产生的退出信号都被阻塞，不递送至该进程，直到该信号不再被阻塞。在5秒睡眠结束后，检查是否有信号未决，然后将SIGQUIT设置为不再阻塞
 </p>
@@ -2687,9 +2771,9 @@ sigaction函数：检查或修改与指定信号相关联的处理方式
 </div>
 </div>
 
-<div id="outline-container-org5c3dc7a" class="outline-4">
-<h4 id="org5c3dc7a">实例</h4>
-<div class="outline-text-4" id="text-org5c3dc7a">
+<div id="outline-container-org7417964" class="outline-4">
+<h4 id="org7417964">实例</h4>
+<div class="outline-text-4" id="text-org7417964">
 <p>
 下面程序展示了在信号处理程序被调用时和调用后进程信号屏蔽字的自动变化以及如何使用sigsetjmp和siglongjmp函数：
 </p>
