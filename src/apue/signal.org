@@ -1031,73 +1031,101 @@ POSIX.1定义了一个新数据类型 *sigset_t* ，它保持一个 _信号集_
 
      另一种更好地选择是使用 _select_ 或 _poll_ 函数
 ** 信号集
-   POSIX.1定义数据类型sigset_t以包含一个信号集，并且定义了下列五个处理信号集的函数:
-   + sigemptyset：初始化由set指向的信号集，使排除其中所有信号
-   + sigfillset：初始化由set指向的信号集，使其包括所有信号
-   + sigaddset：将一个信号添加到现存集中
-   + sigdelset：从信号集中删除一个信号
-   + sigismember：测试信号是否在信号集中
+   POSIX.1定义数据类型 *sigset_t* 以包含一个 _信号集_ ，并且定义了下列五个 *处理信号集* 的函数:
+   + _sigemptyset_ ： *初始化* 由set指向的信号集，使 *排除* 其中所有信号
+   + _sigfillset_ ： *初始化* 由set指向的信号集，使其 *包括* 所有信号
+   + _sigaddset_ ：将一个 *信号添加* 到现存集中
+   + _sigdelset_ ：从信号集中 *删除一个信号* 
+   + _sigismember_ ： *测试* 信号是否在信号集中
    #+BEGIN_SRC C
-  #include <signal.h>
+     #include <signal.h>
 
-  /**
-     初始化由set指向的信号集，使排除其中所有信号
+     /**
+      ,* 初始化由set指向的信号集，使排除其中所有信号
+      ,*
+      ,* set: 信号集
+      ,*
+      ,* return: 成功返回 0，失败返回 -1
+      ,*
+      ,*/
+     int sigemptyset(sigset_t *set);
 
-     set：信号集
+     /**
+      ,* 填满指定的信号集
+      ,*
+      ,* set: 信号集
+      ,*
+      ,* return: 成功返回 0，失败返回 -1
+      ,*
+      ,*/
+     int sigfillset(siget_t *set);
 
-     return：成功返回0，失败返回-1
-  ,*/
-  int sigemptyset(sigset_t *set);
+     /**
+      ,* 为信号集中增加一个信号
+      ,*
+      ,* set: 信号集
+      ,* signo: 信号编号
+      ,*
+      ,* return: 成功返回 0，失败返回 -1
+      ,*
+      ,*/
+     int sigaddset(sigset_t *set, int signo);
 
-  /**
-     填满指定的信号集
+     /**
+      ,* 为信号集中删除一个信号
+      ,*
+      ,* set: 信号集
+      ,* signo: 信号编号
+      ,*
+      ,* return: 成功返回 0，失败返回 -1
+      ,*
+      ,*/
+     int sigdelset(setset_t *set, int signo);
 
-     set：信号集
-
-     return：成功返回0，失败返回-1
-  ,*/
-  int sigfillset(siget_t *set);
-  /**
-     为信号集中增加一个信号
-
-     set：信号集
-     signo：信号编号
-
-     return：成功返回0，失败返回-1
-  ,*/
-  int sigaddset(sigset_t *set, int signo);
-  /**
-     为信号集中删除一个信号
-
-     set：信号集
-     signo：信号编号
-
-     return：成功返回0，失败返回-1
-  ,*/
-  int sigdelset(setset_t *set, int signo);
-  /**
-     测试信号是否在信号集中
-
-     set：信号集
-     signo：信号编号
-
-     return：若真则为1，若假则为0
-  ,*/
-  int sigismember(const sigset_t *set, int signo);
+     /**
+      ,* 测试信号是否在信号集中
+      ,*
+      ,* set: 信号集
+      ,* signo: 信号编号
+      ,*
+      ,* return: 若真则为 1，若假则为 0
+      ,*
+      ,*/
+     int sigismember(const sigset_t *set, int signo);
    #+END_SRC
-   所有应用程序在使用信号集前，要对该信号集调用sigemptyset或sigfillset一次，主要是因为C编译程序将不赋初值的外部和静态度量都初始化为0，而这是否与给定系统上信号集的实现相对应并不清楚
+
+#+BEGIN_EXAMPLE
+  所有应用程序在使用信号集前，要对该信号集调用sigemptyset或sigfillset一次
+
+  主要是因为C编译程序将不赋初值的外部和静态度量都初始化为0，而这是否与给定系统上信号集的实现相对应并不清楚
+#+END_EXAMPLE
 
    一旦已经初始化了一个信号集就可在该信号集中增、删特定的信号
 
 *** BSD实现
-    如果实现的信号数目少于一个整型量所包含的位数，则可用一位代表一个信号的方法实现信号集。例如，大多数4.3+BSD实现中有31种信号和32位整型。sigemptyset和sigfillset这两个函数可以在<signal.h>头文件中实现为宏：
+    如果 _实现的信号数目_ *少于* _一个整型量所包含的位数_ ，则可用 *一位代表一个信号* 的方法实现信号集
+
+#+BEGIN_EXAMPLE
+  例如，大多数4.3+BSD实现中有31种信号和32位整型
+
+  sigemptyset和sigfillset这两个函数可以在<signal.h>头文件中实现为宏
+#+END_EXAMPLE
+
     #+BEGIN_SRC C
   #define sigemptyset(ptr) ( *(ptr) = 0 )
   //注意：除了设置对应信号集中各信号的位外，sigfillset必须返回0，所以使用逗号算符，将之后的值作为表达式的值返回
   #define sigfillset(ptr) ( *(ptr) =  ~(sigset_t)0, 0 )
     #+END_SRC
 
-    使用这种形式表达的信号集，sigaddset设置对应信号位为1，sigdelset则设置对应信号位为0，sigismember测试一指定信号位。因为没有信号编号值为0，所以从信号编号中减1以得到要处理的位的位编号数
+    使用这种形式表达的信号集：
++ sigaddset: 设置对应信号位为1
++ sigdelset: 设置对应信号位为0
++ sigismember: 测试一指定信号位
+
+#+BEGIN_EXAMPLE
+  因为没有信号编号值为0，所以从 信号编号中减1 以得到要处理的位的位编号数
+#+END_EXAMPLE
+
     #+BEGIN_SRC C
   #include    <signal.h>
   #include    <errno.h>
@@ -1133,38 +1161,44 @@ POSIX.1定义了一个新数据类型 *sigset_t* ，它保持一个 _信号集_
           return((*set & (1 << (signo - 1))) != 0);
   }
     #+END_SRC
-    也可将这三个函数在实现为各一行的宏，但是POSIX.1要求检查信号编号参数的有效性，如果无效则设置errno，而在宏中实现这一点比函数要难
+
+#+BEGIN_EXAMPLE
+  也可将这三个函数在实现为各一行的宏
+
+  但是POSIX.1要求检查信号编号参数的有效性，如果无效则设置errno，而在宏中实现这一点比函数要难
+#+END_EXAMPLE
 
 *** sigprocmask函数
-    sigprocmask：检测或更改进程的信号屏蔽字
+    _sigprocmask_ ： *检测* 或 *更改* _进程的信号屏蔽字_ 
+    +  如果在 *调用sigprocmask后* 有任何 *未决的、不再阻塞的信号* ，则在 *sigprocmask返回前* ，至少将 *其中之一递送给该进程* 
 
-    如果在调用sigprocmask后有任何未决的、不再阻塞的信号，则在sigprocmask返回前，至少将其中之一递送给该进程
     #+BEGIN_SRC C
-  #include <signal.h>
+      #include <signal.h>
 
-  /**
-     以how指定的方式将信号集set设置为调用进程的信号屏蔽字，同时把原信号屏蔽字取值保存到oset中作为备份
-
-     how：更改当前信号屏蔽字的方法
-     set：要设置的信号集
-     oset：原信号屏蔽字
-     
-  ,*/
-  int sigprocmask(int how, const sigset_t *set, sigset_t *oset);
+      /**
+       ,* 以how指定的方式将信号集set设置为调用进程的信号屏蔽字
+       ,* 同时把原信号屏蔽字取值保存到oset中作为备份
+       ,*
+       ,* how：更改当前信号屏蔽字的方法
+       ,* set：要设置的信号集
+       ,* oset：原信号屏蔽字
+       ,*
+       ,*/
+      int sigprocmask(int how, const sigset_t *set, sigset_t *oset);
     #+END_SRC
-    + oset是非空指针，进程的当前信号屏蔽字通过oset返回
-    + set是一个非空指针，则参数how指示如何修改当前信号屏蔽字：
-      1. SIG_BLOCK：屏蔽
-      2. SIG_UNBLOCK：解除屏蔽
-      3. SIG_SETMASK：赋值
+    + _oset_ 是 _非空_ 指针： _进程的当前信号屏蔽字_ 通过oset *返回* 
+    + _set_ 是一个 _非空_ 指针，参数 _how_ 指示如何 *修改* 当前 _信号屏蔽字_ ：
+      1. _SIG_BLOCK_ ： *屏蔽* 
+      2. _SIG_UNBLOCK_ ： *解除屏蔽* 
+      3. _SIG_SETMASK_ ： *赋值* 
     #+CAPTION: 用sigprocmask更改当前信号屏蔽字的方法
     #+ATTR_HTML: :border 1 :rules all :frame boader
     | how         | 说明                                                                                       |
-    | SIG_BLOCK   | 该进程新的信号屏蔽字是其当前信号屏蔽字和set指向信号集的并集。set包含了希望阻塞的附加信号 |
-    | SIG_UNBLOCK | 该进程新的信号屏蔽字是其当前信号屏蔽字和set所指向信号集的交集。set包含了希望解除阻塞的信号 |
-    | SIG_SETMASK | 该进程新的信号屏蔽是set指向的值                                              |
+    | SIG_BLOCK   | 该进程新的信号屏蔽字是其 *当前信号屏蔽字和set指向信号集的并集* 。set包含了希望阻塞的附加信号 |
+    | SIG_UNBLOCK | 该进程新的信号屏蔽字是其 *当前信号屏蔽字和set所指向信号集的交集* 。set包含了希望解除阻塞的信号 |
+    | SIG_SETMASK | 该进程新的 *信号屏蔽是set指向的值*                                           |
 
-    + set是个空指针，则不改变该进程的信号屏蔽字，how的值也无意义，只是通过oset返回当前信号屏蔽字
+    + _set_ 是个 _空_ 指针，则 *不改变该进程的信号屏蔽字* ，how的值也无意义，只是 *通过oset返回* 当前信号屏蔽字
 
 **** 实例
      打印调用进程的信号屏蔽字所阻塞信号的名称：
@@ -1200,22 +1234,29 @@ POSIX.1定义了一个新数据类型 *sigset_t* ，它保持一个 _信号集_
      #+END_SRC
 
 *** sigpending函数
-    sigpending：返回对于调用进程被阻塞不能递送和当前未决的信号集
+    _sigpending_ ：返回对于 _调用进程_ *被阻塞不能递送* 和 *当前未决* 的 _信号集_ 
     #+BEGIN_SRC C
-  #include <signal.h>
+      #include <signal.h>
 
-  /**
-     获取当前因阻塞而未决的信号集到指定的指针set中
-
-     set：信号集
-
-     return：若成功则为0，若出错则为-1
-  ,*/
-  int sigpending(sigset_t *set);
+      /**
+       ,* 获取当前因阻塞而未决的信号集到指定的指针set中
+       ,*
+       ,* set: 信号集
+       ,*
+       ,* return: 若成功则为 0，若出错则为 -1
+       ,*
+       ,*/
+      int sigpending(sigset_t *set);
     #+END_SRC
 
 **** 实例
-     进程阻塞了SIGQUIT信号，保存了当前信号屏蔽字以便以后恢复，然后睡眠5秒钟。在此期间所产生的退出信号都被阻塞，不递送至该进程，直到该信号不再被阻塞。在5秒睡眠结束后，检查是否有信号未决，然后将SIGQUIT设置为不再阻塞
+1. 进程 *阻塞* 了 _SIGQUIT_ 信号
+   + *保存* 了 _当前信号屏蔽字_ 以便以后恢复
+2. _睡眠_ 5秒钟
+   + 在此期间所产生的 _退出信号_ 都被 *阻塞* ， _不递送至该进程_ ，直到该信号不再被阻塞
+3. 在5秒睡眠结束后， *检查* 是否有 _信号未决_ 
+4. _SIGQUIT_ 设置为 *不再阻塞* 
+
      #+BEGIN_SRC C
   #include <signal.h>
   #include "apue.h"
@@ -1237,25 +1278,25 @@ POSIX.1定义了一个新数据类型 *sigset_t* ，它保持一个 _信号集_
   {
           sigset_t newmask, oldmask, pendmask;
 
-          if(SIG_ERR == (signal(SIGQUIT, sig_quit)))
+          if(SIG_ERR == (signal(SIGQUIT, sig_quit))) // 测试是否能设置信号处理方式
                   err_sys("can't catch SIGQUIT");
 
           sigemptyset(&newmask);
-          sigaddset(&newmask, SIGQUIT);
+          sigaddset(&newmask, SIGQUIT); // 信号屏蔽字中增加SIGQUIT信号
 
           //block SIGQUIT and save current signal mask
-          if(sigprocmask(SIG_BLOCK, &newmask, &oldmask) < 0 )
+          if(sigprocmask(SIG_BLOCK, &newmask, &oldmask) < 0 )  // 设置newmask为当前信号屏蔽字，保存老的信号屏蔽字到 oldmask
                   err_sys("SIG_BLOCK error");
 
           sleep(5); //SIGQUIT remain pending
 
-          if(sigpending(&pendmask) < 0 )
+          if(sigpending(&pendmask) < 0 ) // 检查是否有信号未决
                   err_sys("sigpending error");
           if(sigismember(&pendmask, SIGQUIT))
                   printf("\nSIGQUIT pending\n");
 
           //reset signal mask which unblocks SIGQUIT
-          if(sigprocmask(SIG_SETMASK, &oldmask, NULL) < 0)
+          if(sigprocmask(SIG_SETMASK, &oldmask, NULL) < 0) // 恢复信号屏蔽字
                   err_sys("SIG_SETMASK error");
 
           printf("SIGQUIT unblocked\n");
@@ -1265,7 +1306,18 @@ POSIX.1定义了一个新数据类型 *sigset_t* ，它保持一个 _信号集_
           exit(0);
   }
      #+END_SRC
-     注意：在设置SIGQUIT为阻塞前，保存了老的屏蔽字。为了解除对该信号的阻塞，用老的屏蔽字重新设置了进程信号屏蔽字(SIG_SETMASK)。另一种方法是用SIG_UNBLOCK使阻塞的信号不再阻塞。但是如果编写一个可能由其他人使用的函数，而且需要在函数中阻塞一个信号，则不能用SIG_UNBLOCK解除对此信号的阻塞，这是因为此函数的调用者在调用本函数之前可能也阻塞了此信号。在这种情况下必须使用SIG_SETMASK将信号屏蔽字恢复为原先值！
+
+#+BEGIN_EXAMPLE
+  在设置SIGQUIT为阻塞前，保存了老的屏蔽字
+
+  为了解除对该信号的阻塞，用老的屏蔽字重新设置了进程信号屏蔽字(SIG_SETMASK)
+
+  另一种方法是用SIG_UNBLOCK使阻塞的信号不再阻塞
+
+  但是如果编写一个可能由其他人使用的函数，而且需要在函数中阻塞一个信号，则不能用SIG_UNBLOCK解除对此信号的阻塞
+
+  这是因为此函数的调用者在调用本函数之前可能也阻塞了此信号，在这种情况下必须使用SIG_SETMASK将信号屏蔽字恢复为原先值！
+#+END_EXAMPLE
 
      测试代码：
      #+BEGIN_SRC sh
@@ -1283,77 +1335,91 @@ POSIX.1定义了一个新数据类型 *sigset_t* ，它保持一个 _信号集_
   SIGQUIT unblocked
   ^\Quit
      #+END_SRC
-     在第一次睡眠期间如果产生了退出信号，那么此时该信号是未决的，但是不再受阻塞，所以在sigprocmask返回之前，它被递送到本进程。从程序的输出中可以看到：SIGQUIT处理程序(sig_quit)中的printf语句先执行，然后再执行sigprocmask之后的printf语句
 
-     然后该进程再睡眠5秒钟。如果在此期间再产生退出信号，那么它就会使该进程终止，因为在上次捕捉到该信号时，已将其处理方式设置为默认动作
-
-     在第二次运行该程序时，在进程睡眠期间使SIGQUIT信号产生了10次，但是解除了对该信号的阻塞后，只向进程传送一次SIGQUIT。从中可以看出linux系统没有将信号进行排队
++ 在 _第一次睡眠期间_ 如果产生了 _退出信号_ ，此时该信号是 *阻塞的* 
++ 在  _sigprocmask_ （恢复信号屏蔽字）后， 这个信号是 *未决的，但不再阻塞的* 
+  + 在这个 _sigprocmask返回之前_ 这个信号会被 *递送到本进程* 
+     + SIGQUIT处理程序(sig_quit)中的printf语句先执行
+     + 再执行sigprocmask之后的printf语句
++ 进程再睡眠5秒钟。如果在此期间 _再产生退出信号_ ，那么它就会 *使该进程终止* 
+  + 因为在上次捕捉到该信号时，已将其 _处理方式_ 设置为 *默认动作* 
++ 第二次运行该程序时，在进程睡眠期间使SIGQUIT信号产生了多次次，但是解除了对该信号的阻塞后， *只向进程传送一次SIGQUIT* 
+  + 可以看出linux系统没有将信号进行排队
 
 ** 注册信号处理方式
-   sigaction函数取代了UNIX早期版本使用的signal函数
+#+BEGIN_EXAMPLE
+  sigaction函数取代了UNIX早期版本使用的signal函数
+#+END_EXAMPLE
+
 *** sigaction结构
     更全面地定义了信号处理的方式
     #+BEGIN_SRC C
-    /**
-       信号处理方式
-     ,,*/
-    struct sigaction {
-            void (*sa_handler)(int); //信号处理函数指针，SIG_IGN，SIG_DFL，自定义函数
-            sigset_t sa_mask; //信号屏蔽字
-            int sa_flags; //信号处理选项
-    }
+      /**
+       ,*  信号处理方式
+       ,* 
+       ,*/
+      struct sigaction {
+	      void (*sa_handler)(int); //信号处理函数指针，SIG_IGN，SIG_DFL，自定义函数
+	      sigset_t sa_mask; //信号屏蔽字
+	      int sa_flags; //信号处理选项
+      }
     #+END_SRC
 
 **** sa_handler字段
-     类似于signal函数中的信号处理函数指针：
-     + SIG_IGN：忽略信号
-     + SIG_DFL：信号默认处理动作
+     类似于signal函数中的 *信号处理函数指针* ：
+     + _SIG_IGN_ ： *忽略* 信号
+     + _SIG_DFL_ ：信号 *默认* 处理动作
      + 用户自定义函数
 
 **** sa_mask字段
-     当更改信号动作时，如果sa_handler指向一个信号捕捉函数(不是常数SIG_IGN或SIG_DFL)，则sa_mask字段代表了一个信号集：
-     + 注册后将加到进程原先的信号屏蔽字中
-     + 在信号捕捉函数被调用时，还将隐式的加上所处理的信号
-     + 在信号捕捉函数结束后再隐式的恢复调用前的阻塞状态
+     当 _更改信号动作_ 时，如果 *sa_handler* 指向一个 _信号捕捉函数_ (不是常数SIG_IGN或SIG_DFL)，则 *sa_mask* 字段代表了一个 _信号集_ ：
+     + _注册后_ 将加到 _进程原先的信号屏蔽字_ 中
+     + 在 _信号捕捉函数被调用_ 时，还将 *隐式的加上* _所处理的信号_ 
+     + 在 _信号捕捉函数结束后_ 再 *隐式的恢复*  _调用前的阻塞状态_ 
 
 **** sa_flags字段
-     sa_flags字段包含了对信号进行处理的各个选择项，下表详细列出了这些可选项的意义：
+     *sa_flags* 字段包含了对 _信号进行处理的各个选择项_ ，下表详细列出了这些可选项的意义：
 
      #+CAPTION: 信号处理的选择项标志 (sa_flags)
      #+ATTR_HTML: :border 1 :rules all :frame boader
      | sa_flags     | POSIX | SVR4 | 4.3+BSD | 说明                                                                                                                                              |
-     | SA_NOCLDSTOP | •     | •    | •       | 若signo是SIGCHLD，当一子进程停止时(作业控制)，不产生此信号。当一子进程终止时，仍旧产生此信                  |
-     | SA_RESTART   |       | •    | •       | 由此信号中断的系统调用自动再起动                                                                                                  |
+     | SA_NOCLDSTOP | •     | •    | •       | 若signo是 _SIGCHLD_ ，当一子进程 *停止* 时(作业控制)， *不产生此信号* 。当一子进程终止时，仍旧产生此信      |
+     | SA_RESTART   |       | •    | •       | 由此信号中断的 *系统调用自动再起动*                                                                                               |
      | SA_ONSTACK   |       | •    | •       | 若用sigaltstack(2)已说明了一替换栈，则此信号递送给替换栈上的进程                                                         |
-     | SA_NOCLDWAIT |       | •    |         | 若signo是SIGCHLD，则当调用进程的子进程终止时，不创建僵死进程。若调用进程在后面调用wait，则阻塞到它所有子进程都终止，此时返回-1，errno设置为ECHILD |
-     | SA_NODEFER   |       | •    |         | 若当捕捉到此信号时，在执行其信号捕捉函数时，系统不自动阻塞此信号。注意：此种类型的操作对应于早期的不可靠信号 |
-     | SA_RESETHAND |       | •    |         | 若对此信号的处理方式在此信号捕捉函数的入口处复置为SIG_DFL。注意：此种类型的信号对应于早期的不可靠信号 |
+     | SA_NOCLDWAIT |       | •    |         | 若signo是 _SIGCHLD_ ，则当调用进程的 _子进程终止_ 时， *不创建僵死进程* 。若调用进程在后面调用wait，则阻塞到它所有子进程都终止，此时返回-1，errno设置为ECHILD |
+     | SA_NODEFER   |       | •    |         | 若当捕捉到此信号时，在 _执行其信号捕捉函数时_ ，系统 *不自动阻塞此信号* 。注意：此种类型的操作对应于早期的不可靠信号 |
+     | SA_RESETHAND |       | •    |         | 若对此信号的处理方式在 _此信号捕捉函数的入口处_ *复置为SIG_DFL* 。注意：此种类型的信号对应于早期的不可靠信号 |
      | SA_SIGINFO   |       | •    |         | 若此选项对信号处理程序提供了附加信息                                                                                                              |
 
 *** sigaction函数
-    sigaction函数：检查或修改与指定信号相关联的处理方式
+    _sigaction_ 函数： *检查* 或 *修改* 与 _指定信号_ 相关联的 _处理方式_ 
     #+BEGIN_SRC C
-  #include <signal.h>
+      #include <signal.h>
 
-  /**
-     注册信号处理的方式
-
-     signo：信号编号
-     act：要设置的信号处理方式
-     oact：原来的信号处理方式
-
-     return：若成功则为0，若出错则为-1
-  ,*/
-  int sigaction(int signo, const struct sigaction *act, struct sigaction *oact);
+      /**
+       ,* 注册信号处理的方式
+       ,*
+       ,* signo: 信号编号
+       ,* act: 要设置的信号处理方式
+       ,* oact: 原来的信号处理方式
+       ,*
+       ,* return: 若成功则为0，若出错则为-1
+       ,*
+       ,*/
+      int sigaction(int signo, const struct sigaction *act, struct sigaction *oact);
     #+END_SRC
-    + 参数signo：检测或修改具体动作的信号的编号数
-    + 若act指针非空：则要修改其处理方式
-    + 如果oact指针非空：则系统返回该信号的原先处理方式
+    + 参数 _signo_ ：检测或修改具体动作的 *信号的编号数* 
+    + 若 _act_ 指针 _非空_ ：则要 *修改* 其 _处理方式_ 
+    + 若 _oact_ 指针 _非空_ ：则系统 *返回* 该信号的 _原先处理方式_ 
 
-    一旦对给定的信号设置了一个动作，那么在用sigaction改变它之前，该设置就一直有效。这与早期的不可靠信号机制不同，早期的signal注册的处理动作再捕捉一个信号后会恢复成默认动作
+#+BEGIN_EXAMPLE
+  一旦对给定的信号设置了一个动作，那么在用sigaction改变它之前，该设置就一直有效
+
+  这与早期的不可靠信号机制不同，早期的signal注册的处理动作再捕捉一个信号后会恢复成默认动作
+#+END_EXAMPLE
 
 **** 实现signal函数
-     用sigaction实现signal函数：
+     用 _sigaction_ 实现 _signal_ 函数：
      #+BEGIN_SRC C
        #include <signal.h>
        #include "apue.h"
@@ -1377,15 +1443,20 @@ POSIX.1定义了一个新数据类型 *sigset_t* ，它保持一个 _信号集_
                if(sigaction(signo, &act, &oact) < 0)
                        return SIG_ERR;
 
-               return(oact.sa_handler);
+               return oact.sa_handler;
        }
      #+END_SRC
-     注意：
-     + 必须用sigemptyset函数初始化act结构的成员
-     + 除SIGALRM以外的所有信号都企图设置SA_RESTART标志，于是被这些信号中断的系统调用都能再起动，而不希望再起动由SIGALRM信号中断的系统调用的原因：可以对对I/O操作可以设置时间限制
-     + 某些系统(如SunOS)定义了SA_INTERRUPT标志，这些系统的默认方式是重新起动被中断的系统调用，而指定此标志则使系统调用被中断后不再重起动
+    
+     + 必须用 _sigemptyset_ 函数 *初始化act结构的成员* 
+     + _除SIGALRM以外的所有信号_ 都企图 *设置SA_RESTART标志* ，于是被这些信号中断的 *系统调用都能再起动* 
 
-     下面这个signal_intr禁止系统中断再启动：
+#+BEGIN_EXAMPLE
+  不希望再起动由SIGALRM信号中断的系统调用的原因：可以对I/O操作可以设置时间限制
+
+  某些系统(如SunOS)定义了SA_INTERRUPT标志，这些系统的默认方式是重新起动被中断的系统调用，而指定此标志则使系统调用被中断后不再重起动
+#+END_EXAMPLE
+
+     下面这个signal_intr *禁止系统中断再启动* ：
      #+BEGIN_SRC C
   #include <signal.h>
   #include "apue.h"
