@@ -478,38 +478,40 @@
      #+END_SRC
 
 * readv和writev
-  readv和writev函数用于在一个函数调用中读、写多个非连续缓存
-  + readv：散布读
-  + writev：聚集写
+  _readv_ 和 _writev_ 函数用于在 _一个函数调用_ 中 _读、写_ *多个 _非连续_ 内存* 
+  + _readv_ ： *散布读* 
+  + _writev_ ： *聚集写* 
   #+BEGIN_SRC C
-  #include <sys/types.h> 
-  #include <sys/uio.h>
+    #include <sys/types.h> 
+    #include <sys/uio.h>
 
-  /**
-     从fileds中读入的数据按顺序逐块分散存储在iov指向的iovcnt个缓冲区中
+    /**
+     ,* 从fileds中读入的数据按顺序逐块分散存储在iov指向的iovcnt个缓冲区中
+     ,*
+     ,* fileds: 文件描述符
+     ,* iov: 指向缓存区结构数组的第一个元素
+     ,* iovcnt: 缓存区结构数组的元素数目
+     ,*
+     ,* return: 已读取的字节数，若出错则为 -1
+     ,*
+     ,*/
+    ssize_t readv(int filedes, const struct iovec *iov, int iovcnt);
 
-     fileds：文件描述符
-     iov：指向缓存区结构数组的第一个元素
-     iovcnt：缓存区结构数组的元素数目
-
-     return：已读取的字节数，若出错则为-1
-  ,*/
-  ssize_t readv(int filedes, const struct iovec *iov, int iovcnt);
-
-  /**
-     将iovcnt个缓冲区的数据按顺序逐块连续的写入fileds
-
-     fileds：文件描述符
-     iov：指向缓存区结构数组的第一个元素
-     iovcnt：缓存区结构数组的元素数目
-
-     return：已写出的字节数，若出错则为-1
-  ,*/
-  ssize_t writev(int filedes, const struct iovec *iov, int iovcnt);
+    /**
+     ,* 将 iovcnt 个缓冲区的数据按顺序逐块连续的写入fileds
+     ,*
+     ,* fileds: 文件描述符
+     ,* iov: 指向缓存区结构数组的第一个元素
+     ,* iovcnt: 缓存区结构数组的元素数目
+     ,*
+     ,* return: 已写出的字节数，若出错则为 -1
+     ,*
+     ,*/
+    ssize_t writev(int filedes, const struct iovec *iov, int iovcnt);
   #+END_SRC
 
 ** iovec结构
-   iovec结构用来说明缓存区：
+   _iovec结构_ 用来说明 *缓存区* ：
    #+BEGIN_SRC C
      struct iovec
      {
@@ -517,190 +519,261 @@
              size_t iov_len;    /* 缓冲区长度 */
      }
    #+END_SRC
-   图12-11显示了readv和writev的参数和iovec结构之间的关系：
+   下图显示了readv和writev的参数和iovec结构之间的关系：
 
    #+ATTR_HTML: image :width 90% 
    [[file:pic/iovec.png]] 
 
-   + writev以顺序iov[ 0 ]，iov[ 1 ]至iov[ iovcnt-1 ]从缓存中聚集输出数据。writev返回输出的字节总数，等于所有缓存长度之和
-   + readv则将读入的数据按上述同样顺序散布到缓存中，总是先填满一个缓存，然后再填写下一个。readv返回读得的总字节数，如果遇到文件结尾，已无数据可读，则返回0
-
+   + writev:  *顺序* _iov[0]_ ， _iov[1]_ 至 _iov[iovcnt-1]_ 从 _缓存_ 中 *聚集* 输出数据
+     +返回： _输出的字节总数_ ，等于 *各个缓存长度之和*
+   + readv: 将 _读入的数据_ 按上述同样 *顺序* *散布* 到 _缓存_ 中
+     + 总是先填满一个缓存，然后再填写下一个
+     + 返回：读得的 _总字节数_ 
+       + 如果遇到 *文件结尾* ，已无数据可读，则返回 _0_ 
 
 ** 性能测试
    有三种方法可以实现从两个缓存区写入一个文件:
-   1. 调用write两次，一次一个缓存
-   2. 分配一个大到足以包含两个缓存的新缓存。将两个缓存的内容复制到新缓存中。然后对该缓存调用wrtre一次
-   3. 调用writev输出两缓存
+   1. 调用 _write两次_  ，一次一个缓存
+   2. _分配_ 一个大到 _足以包含两个缓存的新缓存_ 。将两个缓存的内容 *复制到新缓存中* 。然后对该缓存调用wrtre一次
+   3. 调用 _writev_ 输出两缓存
 
-   测试结果显示：调用两次write几乎是另外两种方法的2倍时间，采用缓存复制后用一个write与采用一个writev所用CPU时间几乎一样，但一般说来，因为前者还需要分配一个临时缓存用于存储及复制，所以后者更复杂
+   #+BEGIN_EXAMPLE
+     测试结果显示：
+
+     调用两次write几乎是另外两种方法的2倍时间
+
+     采用缓存复制后用一个write与采用一个writev所用CPU时间几乎一样
+     但一般说来，因为前者还需要分配一个临时缓存用于存储及复制，所以后者更复杂
+   #+END_EXAMPLE
 
 * 存储映射IO
-  存储映射I/O使一个磁盘文件与存储空间中的一个缓存相映射。于是当从缓存中取数据就相当于读文件中的相应字节，而将数据存入缓存，则相应字节就自动地写入文件。这样，就可以在不使用read和write的情况下执行I/O
+  _存储映射_ I/O：使一个 _磁盘文件_ 与 _存储空间中的一个缓存_ 相 *映射* 
+
+  #+BEGIN_EXAMPLE
+    当从缓存中取数据就相当于读文件中的相应字节，而将数据存入缓存，则相应字节就自动地写入文件
+
+    这样就可以在不使用read和write的情况下执行I/O
+  #+END_EXAMPLE
 
 ** mmap函数
-   mmap函数：告诉内核将一个给定的文件映射到一个存储区域中
+   _mmap_ 函数：*告诉* _内核_ 将一个给定的 _文件_ *映射* 到一个 _存储区域_ 中
 
    #+BEGIN_SRC C
-  #include <sys/types.h>
-  #include <sys/mman.h>
+     #include <sys/types.h>
+     #include <sys/mman.h>
 
-  /**
-     磁盘文件映射到内存中的缓冲区
-
-     addr：缓存区的首地址，一般为NULL，表示系统自己分配，应为系统虚拟内存页的整数倍
-     len：缓存区长度
-     prot：文件保护模式，PROT_NONE, PROT_READ, PROT_WRITE, PROT_EXEC的任意或逻辑的组合
-     flag：MAP_FIXED 要求系统使用指定的 addr,不建议使用此标志
-           MAP_SHARED 修改缓冲区即为直接修改文件
-           MAP_PRIVATE(缓冲区仅仅是文件的副本
-     filedes：文件描述符
-     off：文件中的起始位置，应为系统虚拟内存页的整数倍
-
-     return：若成功则为映射区的起始地址，若出错则为-1
-  ,*/
-  void *mmap(void *addr, size_t len, int prot, int flag, int filedes, off_t off);
+     /**
+      ,* 磁盘文件映射到内存中的缓冲区
+      ,*
+      ,* addr: 缓存区的首地址，一般为NULL，表示系统自己分配，应为系统“虚拟内存页的整数倍”
+      ,* len: 缓存区长度
+      ,* prot: 文件保护模式，PROT_NONE, PROT_READ, PROT_WRITE, PROT_EXEC的任意或逻辑的组合
+      ,* flag: MAP_FIXED 要求系统使用指定的 addr,不建议使用此标志
+      ,*       MAP_SHARED 修改缓冲区即为直接修改文件
+      ,*       MAP_PRIVATE(缓冲区仅仅是文件的副本
+      ,* filedes: 文件描述符
+      ,* off: 文件中的起始位置，应为系统“虚拟内存页的整数倍”
+      ,*
+      ,* return：若成功则返回“映射区的起始地址”，若出错则为 -1
+      ,*
+      ,*/
+     void *mmap(void *addr, size_t len, int prot, int flag, int filedes, off_t off);
    #+END_SRC
-   返回值：该映射区的起始地址
 *** 参数说明
-    + addr：映射存储区的起始地址，通常将其设置为NULL，这表示由系统选择该映射区的起始地址
-    + filedes：要被映射文件的描述符。在映射该文件到一个地址空间之前，先要打开该文件
-    + len：映射的字节数
-    + off：要映射字节在文件中的起始位移量
+    + _addr_ :  _映射存储区_ 的 *起始地址* 
+      + 通常将其设置为 _NULL_ ：由 *系统选择* 该映射区的起始地址
+    + _filedes_ :  _被映射文件_ 的 *描述符* 
+      + 在映射该文件到一个地址空间之前， *先要打开* 该文件
+    + _len_ : 映射的 *字节数* 
+    + _off_ : 要映射字节在 *文件中的起始位移量* 
 
 **** prot参数
-     prot参数说明映射存储区的保护要求：
+     _prot_ 参数：映射存储区的 *保护要求* 
      #+CAPTION: 存储映射区的保护
      #+ATTR_HTML: :border 1 :rules all :frame boader
      | prot       | 说明       |
-     | PROT_READ  | 区域可读   |
-     | PROT_WRITE | 区域可写   |
-     | PROT_EXEC  | 区域可执行 |
-     | PROT_NONE  | 区域可存取(BSD无此选项) |
+     | PROT_READ  | 区域 *可读*  |
+     | PROT_WRITE | 区域 *可写* |
+     | PROT_EXEC  | 区域 *可执行*  |
+     | PROT_NONE  | 区域 *可存取* (BSD无此选项) |
 
-     对于映射存储区所指定的保护要求与文件的open方法匹配。例如，若该文件是只读打开的，那么对映射存储区就不能指定PROT_WRITE 
+     #+BEGIN_EXAMPLE
+       对于“映射存储区所指定的保护要求”必须与“文件的open方法”匹配
+
+       例如，若该文件是只读打开的，那么对映射存储区就不能指定PROT_WRITE 
+     #+END_EXAMPLE
 **** flag参数
-     flag参数影响映射存储区的多种属性：
-     + MAP_FIXED：返回值必须等于addr。因为这不利于可移植性，所以不鼓励使用此标志。如果未指定此标志，而且addr非0，则内核只把addr视为何处设置映射区的一种建议。通过将addr指定为NULL可获得最大可移植性
-     + MAP_SHARED：本进程对映射区所进行的存储操作的配置。指定存储操作修改映射文件，这意味着存储操作相当于对该文件write
-     + MAP_PRIVATE：对映射区的存储操作导致创建该映射文件的一个副本。所有后来对该映射区的存访都是存访该副本，而不是原始文件
+     _flag_ 参数：影响 *映射存储区的多种属性* 
+     + _MAP_FIXED_ ： _返回值_ *必须等于* _addr_ 
+     #+BEGIN_EXAMPLE
+       因为这不利于可移植性，所以不鼓励使用此标志
+
+       如果未指定此标志，而且addr非0，则内核只把addr视为何处设置映射区的一种建议
+
+       通过将addr指定为NULL可获得最大可移植性
+     #+END_EXAMPLE
+     + _MAP_SHARED_ ： _本进程_ 对 _映射区_ 所进行的 *存储操作* 
+       + 这意味着 _存储操作_ 相当于对该文件 _write_ 
+     + _MAP_PRIVATE_ ：对映射区的 _存储操作_ 导致 *创建* 该 _映射文件的一个副本_ 
+       + 所有后来对该映射区的存访都是 *存访该副本* ，而不是原始文件
 **** off和addr参数限制
      下图显示了一个存储映射文件：
      #+ATTR_HTML: image :width 90% 
      [[file:pic/mmap.png]] 
 
-     off和addr的值通常应当是系统虚存页长度的倍数，一般这2个值都是NULL或0，所以这不会造成太大的问题 
+     _off_ 和 _addr_ 的值通常应当是 *系统虚存页长度的倍数* ，一般这2个值都是 _NULL_ 或 _0_ 
 
-     因为映射文件的起动位移量受系统虚存页长度的限制，那么如果映射区的长度不是页长度的整数倍时，将如何呢？假定文件长12字节，系统页长为512字节，则系统通常提供512字节的映射区，其中后500字节被设为0。可以修改这500字节，但任何变动都不会在文件中反映出来
+     #+BEGIN_EXAMPLE
+       因为映射文件的起动位移量受系统虚存页长度的限制，那么如果映射区的长度不是页长度的整数倍时，将如何呢？
+
+       假定文件长12字节，系统页长为512字节，则系统通常提供512字节的映射区，其中后500字节被设为0
+
+       可以修改这500字节，但任何变动都不会在文件中反映出来
+     #+END_EXAMPLE
+
 *** 信号和进程
     与映射存储区相关有两个信号：
-    + SIGSEGV：通常用于指示进程试图存取它不能存取的存储区。如果进程企图存数据到用mmap指定为只读的映射存储区，那么也产生此信号
-    + SIGBUS：如果存取映射区的某个部分，而在存储时这一部分已不存在，则产生此信号。例如用文件长度映射一个文件，但在存访该映射区之前，另一个进程已将该文件截短，此时如果进程企图存取对应于该文件尾端部分的映射区，则接收到SIGBUS信号
+    + _SIGSEGV_ ：用于指示 _进程_ *试图存取* 它 *不能存取* 的 _存储区_ 
+      + 如果进程企图 *存数据* 到用mmap指定为 *只读的* 映射存储区 ，那么也产生此信号
+    + _SIGBUS_ ：如果存取映射区的某个部分，而在 *存储时这一部分已不存在* ，则产生此信号
+    #+BEGIN_EXAMPLE
+      例如用文件长度映射一个文件
+
+      但在存访该映射区之前，另一个进程已将该文件截短
+
+      此时如果进程企图存取对应于该文件尾端部分的映射区，则接收到SIGBUS信号
+    #+END_EXAMPLE
 
     进程在fork和exec后：
-    + fork：子进程继承存储映射区，这是因为子进程复制父进程地址空间，而存储映射区是该地址空间中的一部分
-    + exec：新程序则不继承此存储映射区
+    + fork： _子进程_ *继承* _存储映射区_ 
+      +   这是因为 _子进程_ *复制* _父进程地址空间_ ，而 *存储映射区是该地址空间中的一部分* 
+    + exec： _新程序_ 则 *不继承* 此存储映射区
 
 ** munmap函数
-   munmap函数：解除内存映射
+   _munmap_ 函数： *解除* 内存映射
    #+BEGIN_SRC C
-  #include <sys/types.h>
-  #include <sys/mman.h>
+     #include <sys/types.h>
+     #include <sys/mman.h>
 
-  /**
-     解除存储映射
-
-     addr：缓存区首地址
-     len：缓存区长度
-
-     return：若成功则为0，若出错则为-1
-  ,*/
-  int munmap(caddr_t addr, size_t len);
+     /**
+      ,* 解除存储映射
+      ,*
+      ,* addr : 缓存区首地址
+      ,* len : 缓存区长度
+      ,*
+      ,* return : 若成功则为 0，若出错则为 -1
+      ,*/
+     int munmap(caddr_t addr, size_t len);
    #+END_SRC
-   进程终止时或调用了munmap之后，存储映射区就被自动去除
+   _进程终止_ 时或 _调用了munmap_ 之后， _存储映射区_ 就被 *自动去除* 
 
-   注意：关闭文件描述符filedes并不解除映射区
+   #+BEGIN_EXAMPLE
+      注意：“关闭文件描述符”filedes并不“解除映射区”
+   #+END_EXAMPLE
 
 ** msync函数
-   调用munmap并不使映射区的内容写到磁盘文件上，调用msync函数才使修改后的数据反应到映射的磁盘文件中　
+   #+BEGIN_EXAMPLE
+     调用munmap并不使映射区的内容写到磁盘文件上
+   #+END_EXAMPLE
+   调用 _msync_ 函数才使 _修改后的数据_ *反应到* 映射的 _磁盘文件_ 中　
    #+BEGIN_SRC C
-  #include <sys/types.h>
-  #include <sys/mman.h>
+     #include <sys/types.h>
+     #include <sys/mman.h>
 
-  /**
-     使修改后的数据更新到映射的磁盘文件中
-
-     addr：映射缓存区首地址
-     len：映射缓存区长度
-     flags：更新方式 MS_ASYNC(异步更新，立即返回)，MS_SYNC(同步更新，更新完成后才返回)
-  ,*/
-  void msync(void *addr, size_t len, int flags);
+     /**
+      ,* 使修改后的数据更新到映射的磁盘文件中
+      ,*
+      ,* addr : 映射缓存区首地址
+      ,* len : 映射缓存区长度
+      ,* flags : 更新方式 MS_ASYNC(异步更新，立即返回)，MS_SYNC(同步更新，更新完成后才返回)
+      ,*
+      ,*/
+     void msync(void *addr, size_t len, int flags);
    #+END_SRC
 
 ** 使用内存映射拷贝文件
-   下面程序用存储映射I/O复制一个文件。首先打开两个文件，然后调用fstat得到输入文件的长度。在调用mmap和设置输出文件长度时都需使用输入文件长度，因此调用lseek，然后写一个字节以设置输出文件的长度。如果不设置输出文件的长度，则对输出文件调用mmap也可以，但是对相关存储区的第一次存访会产生SIGBUS。也可使用ftruncate函数来设置输出文件的长度，但是并非所有系统都支持该函数扩充文件长度
+   下面程序用 _存储映射_ I/O *复制* 一个 _文件_ ：
+   1.  _打开_ 两个文件
+   2. 调用 _fstat_ 得到 _输入文件的长度_ 
+   3. 调用 _lseek_ ，然后 _写一个字节_ 以 *设置* _输出文件的长度_ 
+      + 如果不设置输出文件的长度，则对输出文件调用mmap也可以，但是 _对相关存储区的第一次存访_ 会 *产生* _SIGBUS_ 
+   4. 对每个文件调用 _mmap_ ，将文件 *映射* 到存储区
+   5. 调用 _memcpy_ 将 _输入缓存的内容_ *复制* 到 _输出缓存_ 
+      + 在从 _输入缓存_ *取* 数据字节时， _内核_ *自动读* _输入文件_
+      + 在将 _数据_ *存入* _输出缓存_ 时， _内核_ *自动将数据写* 到 _输出文件_ 中
 
-   然后对每个文件调用mmap，将文件映射到存储区，最后调用memcpy将输入缓存的内容复制到输出缓存。在从输入缓存(src)取数据字节时，内核自动读输入文件，同样在将数据存入输出缓存(dst)时，内核自动将数据写到输出文件中
+   #+BEGIN_EXAMPLE
+     也可使用'ftruncate'函数来设置输出文件的长度，但是并非所有系统都支持该函数扩充文件长度
+   #+END_EXAMPLE
 
    #+BEGIN_SRC C
-  #include "apue.h"
-  #include <fcntl.h>
-  #include <sys/mman.h>
+   #include "apue.h"
+   #include <fcntl.h>
+   #include <sys/mman.h>
 
-  int main(int argc, char *argv[])
-  {
-          int         fdin, fdout;
-          void        *src, *dst;
-          struct stat statbuf;
+   int main(int argc, char *argv[])
+   {
+           int         fdin, fdout;
+           void        *src, *dst;
+           struct stat statbuf;
 
-          if (argc != 3)
-                  err_quit("usage: %s <fromfile> <tofile>", argv[0]);
+           if (argc != 3)
+                   err_quit("usage: %s <fromfile> <tofile>", argv[0]);
 
-          if ((fdin = open(argv[1], O_RDONLY)) < 0)
-                  err_sys("can't open %s for reading", argv[1]);
+           if ((fdin = open(argv[1], O_RDONLY)) < 0)
+                   err_sys("can't open %s for reading", argv[1]);
 
-          if ((fdout = open(argv[2], O_RDWR | O_CREAT | O_TRUNC,
-                            FILE_MODE)) < 0)
-                  err_sys("can't creat %s for writing", argv[2]);
+           if ((fdout = open(argv[2], O_RDWR | O_CREAT | O_TRUNC,
+                             FILE_MODE)) < 0)
+                   err_sys("can't creat %s for writing", argv[2]);
 
-          if (fstat(fdin, &statbuf) < 0)  /* need size of input file */
-                  err_sys("fstat error");
+           if (fstat(fdin, &statbuf) < 0)  /* need size of input file */
+                   err_sys("fstat error");
 
-          /* set size of output file */
-          if (lseek(fdout, statbuf.st_size - 1, SEEK_SET) == -1)
-                  err_sys("lseek error");
-          if (write(fdout, "", 1) != 1)
-                  err_sys("write error");
+           /* set size of output file */
+           if (lseek(fdout, statbuf.st_size - 1, SEEK_SET) == -1)
+                   err_sys("lseek error");
+           if (write(fdout, "", 1) != 1)
+                   err_sys("write error");
 
-          if ((src = mmap(0, statbuf.st_size, PROT_READ, MAP_SHARED,
-                          fdin, 0)) == MAP_FAILED)
-                  err_sys("mmap error for input");
+           if ((src = mmap(0, statbuf.st_size, PROT_READ, MAP_SHARED,
+                           fdin, 0)) == MAP_FAILED)
+                   err_sys("mmap error for input");
 
-          if ((dst = mmap(0, statbuf.st_size, PROT_READ | PROT_WRITE,
-                          MAP_SHARED, fdout, 0)) == MAP_FAILED)
-                  err_sys("mmap error for output");
+           if ((dst = mmap(0, statbuf.st_size, PROT_READ | PROT_WRITE,
+                           MAP_SHARED, fdout, 0)) == MAP_FAILED)
+                   err_sys("mmap error for output");
 
-          memcpy(dst, src, statbuf.st_size);  /* does the file copy */
-          exit(0);
-  }
+           memcpy(dst, src, statbuf.st_size);  /* does the file copy */
+           exit(0);
+   }
    #+END_SRC
 
    测试：
    #+BEGIN_SRC sh
-  #使用cp和mmap拷贝一个1.2G长度的文件
-  $ time cp ~/Movie/La\ La\ Land/La\ La\ Land.mkv ./ 
+   #使用cp和mmap拷贝一个1.2G长度的文件
+   $ time cp ~/Movie/La\ La\ Land/La\ La\ Land.mkv ./ 
 
-  real    0m23.824s
-  user    0m0.010s
-  sys     0m2.170s
+   real    0m23.824s
+   user    0m0.010s
+   sys     0m2.170s
 
-  $ time ./mcopy ~/Movie/La\ La\ Land/La\ La\ Land.mkv ./a.mkv
+   $ time ./mcopy ~/Movie/La\ La\ Land/La\ La\ Land.mkv ./a.mkv
 
-  real    0m16.796s
-  user    0m0.186s
-  sys     0m1.079s
+   real    0m16.796s
+   user    0m0.186s
+   sys     0m1.079s
    #+END_SRC
 
-   测试结果显示将一个普通文件复制到另一个普通文件中时，存储映射I/O比较快。但是有一些限制，如不能用在某些设备之间(例如网络设备或终端设备)进行复制。并且对被复制的文件进行映射后，也要注意该文件的长度是否改变。尽管如此有很多应用程序会从存储映射I/O得到好处，因为它处理的是内存而不是读、写一个文件，所以常常可以简化算法
+   #+BEGIN_EXAMPLE
+     测试结果显示：将一个普通文件复制到另一个普通文件中时，存储映射I/O比较快
+
+     但是有一些限制，如不能用在某些设备之间(例如网络设备或终端设备)进行复制
+     并且对被复制的文件进行映射后，也要注意该文件的长度是否改变
+
+     尽管如此有很多应用程序会从存储映射I/O得到好处
+     因为它处理的是内存而不是读、写一个文件，所以常常可以“简化算法”
+   #+END_EXAMPLE
 
 * 记录锁
   当两个人同时编辑一个文件时，其后果将如何呢？在很多UNIX系统中，该文件的最后状态取决于写该文件的最后一个进程。但是对于有些应用程序，例如数据库，有时进程需要确保它正在单独写一个文件。为了向进程提供这种功能，较新的UNIX系统提供了记录锁机制
