@@ -243,7 +243,7 @@ for the JavaScript code in this tag.
 <li><a href="#orgd2a3bb5">特征</a></li>
 <li><a href="#org12bce76">编程规则</a>
 <ul>
-<li><a href="#org44eb940">实例</a></li>
+<li><a href="#org35e62b5">实例</a></li>
 </ul>
 </li>
 <li><a href="#orgbfc2a16">日志</a>
@@ -253,7 +253,7 @@ for the JavaScript code in this tag.
 <li><a href="#org2275c2f">openlog函数</a></li>
 <li><a href="#org481b4d1">syslog函数</a></li>
 <li><a href="#org2391944">closelog函数</a></li>
-<li><a href="#orgfdef2df">实例</a></li>
+<li><a href="#orge77470a">实例</a></li>
 </ul>
 </li>
 </ul>
@@ -268,19 +268,26 @@ for the JavaScript code in this tag.
 <h2 id="org71b0d05">守护进程</h2>
 <div class="outline-text-2" id="text-org71b0d05">
 <p>
-守护进程是生存期长的一种进程。它们常常在系统引导装入时起动，在系统关闭时终止。因为它们没有控制终端，所以说它们是在后台运行的。UNIX系统有很多守护进程，它们执行日常事物活动
+<span class="underline">守护进程_</span> ：生存期长的一种进程。它们常常在 <span class="underline">系统引导装入</span> 时 <b>起动</b> ，在 <span class="underline">系统关闭</span> 时 <b>终止</b> 
 </p>
+<ul class="org-ul">
+<li>因为它们 <b>没有控制终端</b> ，所以说它们是在 <span class="underline">后台运行</span> 的</li>
+</ul>
 
-<p>
-本章说明守护进程结构，以及如何编写守护进程程序，因为守护没有控制终端，需要了解在有关事物出问题时，守护进程如何报告出错情况
-</p>
+<pre class="example">
+UNIX系统有很多守护进程，它们执行日常事物活动
+
+本章说明守护进程结构，以及如何编写守护进程程序
+
+因为守护没有控制终端，需要了解在有关事物出问题时，守护进程如何报告出错情况
+</pre>
 </div>
 
 <div id="outline-container-orgd2a3bb5" class="outline-3">
 <h3 id="orgd2a3bb5">特征</h3>
 <div class="outline-text-3" id="text-orgd2a3bb5">
 <p>
-在linux下执行ps命令观察守护进程，各列标题的意义是：父进程ID、进程ID、进程组ID、终端名称、终端进程组ID(与该控制终端相关的前台进程组)、用户ID以及实际命令字符串
+在linux下执行 <span class="underline">ps</span> 命令观察守护进程，各列标题的意义是： <span class="underline">父进程ID</span> 、 <span class="underline">进程ID</span> 、 <span class="underline">进程组ID</span> 、 <span class="underline">终端名称</span> 、 <span class="underline">终端进程组ID</span> (与该控制终端相关的前台进程组)、 <span class="underline">用户ID</span> 以及实际 <span class="underline">命令字符串</span> 
 </p>
 <div class="org-src-container">
 <pre class="src src-sh">$ pa -axj
@@ -305,10 +312,18 @@ PPID  PID  PGID   SID TTY      TPGID COMMAND
 </pre>
 </div>
 <ul class="org-ul">
-<li>所有守护进程都以超级用户：用户ID为0的优先权运行</li>
-<li>守护进程不拥有控制终端：终端名称设置为问号?，终端前台进程组ID设置为-1。缺少控制终端可能是守护进程调用了setsid的结果</li>
-<li>一般守护进程都是进程组的首进程，对话期的首进程，而且是这些进程组和对话期中的唯一进程</li>
-<li>守护进程的父进程都是init进程</li>
+<li>所有 <span class="underline">守护进程</span> 都以 <b>超级用户</b> ： <span class="underline">用户ID为0</span> 的优先权运行</li>
+<li>守护进程 <b>不拥有控制终端</b> ：
+<ul class="org-ul">
+<li><span class="underline">终端名称</span> 设置为问号 <span class="underline">?</span></li>
+<li><span class="underline">终端前台进程组ID</span> 设置为 <span class="underline">-1</span></li>
+<li><b>缺少控制终端</b> 可能是 <span class="underline">守护进程</span> 调用了 <span class="underline">setsid</span> 的结果</li>
+</ul></li>
+<li>一般 <span class="underline">守护进程</span> 都是 <span class="underline">进程组的首进程</span> ， <span class="underline">对话期的首进程</span> 
+<ul class="org-ul">
+<li>这些进程组和对话期中的唯一进程</li>
+</ul></li>
+<li><span class="underline">守护进程的父进程</span> 都是 <span class="underline">init</span> 进程</li>
 </ul>
 </div>
 </div>
@@ -320,28 +335,52 @@ PPID  PID  PGID   SID TTY      TPGID COMMAND
 在编写守护进程程序时需遵循一些基本规则，以便防止产生并不希望的交互作用：
 </p>
 <ol class="org-ol">
-<li>首先做的是调用fork，然后使父进程exit。这样做实现了下面几点:
+<li>首先做的是调用 <span class="underline">fork</span> ，然后使父进程 <span class="underline">exit</span> 。这样做实现了下面几点:
 <ul class="org-ul">
-<li>如果该守护进程是由一条简单shell命令起动的，那么使父进程终止使得shell认为这条命令已经执行完成</li>
-<li>子进程继承了父进程的进程组ID，但具有一个新的进程ID，这就保证了子进程不是一个进程组的首进程。这对于下面就要做的setsid调用是必要的前提条件</li>
+<li>如果该守护进程是由一条 <span class="underline">简单shell命令</span> <b>起动</b> 的，那么使 <span class="underline">父进程终止</span> 使得 <b>shell认为这条命令已经执行完成</b></li>
+<li><span class="underline">子进程</span> <b>继承</b> 了 <span class="underline">父进程的进程组ID</span> ，但具有一个 <span class="underline">新的进程ID</span> ，这就保证了 <b>子进程不是一个进程组的首进程</b> 。这对于下面就要做的 <span class="underline">setsid调用</span> 是 <b>必要的前提条件</b></li>
 </ul></li>
-<li>调用setsid以创建一个新对话期。然后执行9.5节中列举的三个操作，使调用进程:
+<li><span class="underline">调用setsid</span> 以 <b>创建一个新对话期</b> 。然后执行 <a href="proc_group.html#orgbd1270b">setsid</a> 中列举的三个操作，使调用进程:
 <ul class="org-ul">
-<li>成为新对话期的首进程</li>
-<li>成为一个新进程组的首进程</li>
-<li>没有控制终端</li>
+<li>成为 <span class="underline">新对话期的首进程</span></li>
+<li>成为一个 <span class="underline">新进程组的首进程</span></li>
+<li><span class="underline">没有控制终端</span></li>
 </ul></li>
-<li>将当前工作目录更改为根目录。从父进程继承过来的当前工作目录可能在一个装载的文件系统中。因为守护进程通常在系统再引导之前是一直存在的，所以如果守护进程的当前工作目录在一个装载的文件系统中，那么该文件系统就不能被卸载。另外，某些守护进程可能会把当前工作目录更改到某个指定位置，在此位置做它们的工作。例如，行式打印机假脱机守护进程常常将其工作目录更改到它们的spool目录上</li>
-<li>将文件方式创建屏蔽字设置为0。由继承得来的文件方式创建屏蔽字可能会拒绝设置某些许可权。例如，若守护进程要创建一个组可读、写的文件，而继承的文件方式创建屏蔽字，屏蔽了这两种许可权，则所要求的组可读、写就不能起作用</li>
-<li>关闭不再需要的文件描述符。这样使守护进程就不再持有从其父进程继承来的某些文 件描述符(父进程可能是shell进程，或某个其他进程)。但是，究竟关闭哪些描述符则与具体的守护进程有关</li>
+<li>将 <span class="underline">当前工作目录</span> 更改为 <b>根目录</b>  
+<ul class="org-ul">
+<li>从父进程继承过来的当前工作目录可能在一个装载的文件系统中，守护进程通常在系统再引导之前是一直存在的
+<ul class="org-ul">
+<li>如果 <span class="underline">守护进程的当前工作目录</span> 在一个 <span class="underline">装载的文件系统</span> 中，那么 <b>该文件系统就不能被卸载</b></li>
+</ul></li>
+<li>某些 <span class="underline">守护进程</span> 可能会把 <span class="underline">当前工作目录</span> <b>更改</b> 到某个指定位置，在此位置做它们的工作
+<ul class="org-ul">
+<li>行式打印机假脱机守护进程常常将其工作目录更改到它们的 <span class="underline">spool</span> 目录上</li>
+</ul></li>
+</ul></li>
+<li>将 <span class="underline">文件方式创建屏蔽字</span> 设置为 <span class="underline">0</span> ，由 <span class="underline">继承得来的文件方式创建屏蔽字</span> 可能会 <b>拒绝</b> 设置 <span class="underline">某些许可权</span> 
+<ul class="org-ul">
+<li>若守护进程要创建一个组可读、写的文件，而继承的文件方式创建屏蔽字，屏蔽了这两种许可权，则所要求的组可读、写就不能起作用</li>
+</ul></li>
+<li><p>
+<b>关闭</b> 不再需要的 <span class="underline">文件描述符</span> 
+</p>
+<ul class="org-ul">
+<li>这样使守护进程就 <b>不再持有</b> 从其 <span class="underline">父进程继承来的某些文件描述符</span> 
+<ul class="org-ul">
+<li>父进程可能是 <span class="underline">shell</span> 进程，或某个 <span class="underline">其他进程</span></li>
+</ul></li>
+</ul>
+<ul class="org-ul">
+<li>究竟关闭哪些描述符则与具体的守护进程有关</li>
+</ul></li>
 </ol>
 </div>
 
-<div id="outline-container-org44eb940" class="outline-4">
-<h4 id="org44eb940">实例</h4>
-<div class="outline-text-4" id="text-org44eb940">
+<div id="outline-container-org35e62b5" class="outline-4">
+<h4 id="org35e62b5">实例</h4>
+<div class="outline-text-4" id="text-org35e62b5">
 <p>
-daemon_init函数,可由想初始化成为一个守护进程的程序调用
+<span class="underline">daemon_init</span> 函数：初始化成为一个守护进程
 </p>
 <div class="org-src-container">
 <pre class="src src-C"><span style="color: #ffd700;">#include</span> <span style="color: #deb887;">&lt;sys/types.h&gt;</span>
@@ -393,14 +432,13 @@ PPID  PID   PGID   SID TTY      TPGID UID  COMMAND
 1     16992 16992 16992 ?       -1    1001 ./src/daemon/daemonize
 </pre>
 </div>
-<p>
-由此可见，除了运行的用户ID不是超级用户，新创建的新进程完全满足守护进程的特征：
-</p>
-<ol class="org-ol">
-<li>无控制终端</li>
-<li>会话组首进程，唯一进程</li>
-<li>父进程为init进程</li>
-</ol>
+<pre class="example">
+由此可见，除了运行的用户ID不是“超级用户”，新创建的新进程完全满足守护进程的特征：
+
+1. 无控制终端
+2. 会话组首进程，唯一进程
+3. 父进程为init进程
+</pre>
 </div>
 </div>
 </div>
@@ -408,16 +446,27 @@ PPID  PID   PGID   SID TTY      TPGID UID  COMMAND
 <div id="outline-container-orgbfc2a16" class="outline-3">
 <h3 id="orgbfc2a16">日志</h3>
 <div class="outline-text-3" id="text-orgbfc2a16">
+<pre class="example">
+  与守护进程有关的一个问题是如何处理出错消息
+
+  因为它没有控制终端，所以不能只是写到标准出错输出上
+  在很多工作站上，控制台设备运行一个窗口系统，所以不希望所有后台进程都写到控制台设备上
+  也不希望每个守护进程将它自己的出错消息写到一个单独的文件中
+</pre>
 <p>
-与守护进程有关的一个问题是如何处理出错消息。因为它没有控制终端，所以不能只是写到标准出错输出上。在很多工作站上，控制台设备运行一个窗口系统，所以不希望所有精灵进程都写到控制台设备上。也不希望每个守护进程将它自己的出错消息写到一个单独的文件中。对系统管理人员而言，如果要关心哪一个守护进程写到哪一个记录文件中，并定期地检查这些文件，那么一定会使他感到头痛。所以，需要有一个集中的守护进程出错记录机制
+对系统管理人员而言，如果要关心哪一个守护进程写到哪一个记录文件中，并定期地检查这些文件，那么一定会使他感到头痛。所以 <b>需要有一个 <span class="underline">集中的</span> 守护进程出错记录</b> 机制
 </p>
 </div>
-
 <div id="outline-container-org731d0d0" class="outline-4">
 <h4 id="org731d0d0">syslog机制</h4>
 <div class="outline-text-4" id="text-org731d0d0">
+<pre class="example">
+  自4.2BSD以来广泛地应用了BSD的syslog机制
+
+  大多数守护进程使用这一机制
+</pre>
 <p>
-自4.2BSD以来广泛地应用了BSD的syslog机制。大多数守护进程使用这一机制。图13-2显示了syslog机制的详细组织结构：
+下图显示了 <span class="underline">syslog</span> 机制的详细组织结构：
 </p>
 
 <div class="figure">
@@ -429,47 +478,71 @@ PPID  PID   PGID   SID TTY      TPGID UID  COMMAND
 有三种方法产生记录消息:
 </p>
 <ol class="org-ol">
-<li>内核例程可以调用log函数。任何一个用户进程通过打开和读/dev/klog设备就可以读取这些消息。因为无意编写内核中的例程，所以不再进一步说明此函数</li>
-<li>大多数用户进程(守护进程)调用syslog(3)函数以产生记录消息。将在下面说明其调用序列。这使消息发送至UNIX域数据报套接口/dev/log</li>
-<li>在此主机上或通过TCP/IP网络连接到此主机的某一其他主机上的一个用户进程可将记录消息发向UDP端口514。注意:syslog函数并不产生这些UDP数据报文件，它们要求产生此记录消息的进程具有显式的网络编程，在此也不详细描述</li>
+<li><span class="underline">内核例程</span> 可以调用 <span class="underline">log</span> 函数。任何一个 <span class="underline">用户进程</span> 通过 <b>打开和读</b> <span class="underline">/dev/klog</span> 设备就可以读取这些消息
+<ul class="org-ul">
+<li>因为无意编写内核中的例程，所以不再进一步说明此函数</li>
+</ul></li>
+<li>大多数用户进程( <span class="underline">守护进程</span> )调用 <span class="underline">syslog</span> (3)函数以产生记录消息
+<ul class="org-ul">
+<li>将在下面说明其调用序列。这使 <span class="underline">消息</span>  <b>发送</b> 至 <span class="underline">UNIX域数据报套接口/dev/log</span></li>
+</ul></li>
+<li>在此主机上或通过 <span class="underline">TCP/IP网络连接</span> 到此主机的某一 <span class="underline">其他主机上的一个用户进程</span> 可将 <span class="underline">记录消息</span> <b>发向</b> <span class="underline">UDP端口514</span></li>
 </ol>
 
+<pre class="example">
+  注意：syslog函数并不产生这些UDP数据报文件，它们要求产生此记录消息的进程具有显式的网络编程，在此也不详细描述
+</pre>
+
 <p>
-通常syslogd守护进程读取三种格式的记录消息。此守护进程在起动时读一个配置文件。一般其文件名为/etc/syslog.conf，该文件决定了不同种类的消息应送向何处。例如，紧急消息可被送向系统管理员(若已登录)，并在控制台上显示，而警告消息则可记录到一个文件中等
+通常 <span class="underline">syslogd守护进程</span> 读取 <span class="underline">三种格式</span> 的记录消息
 </p>
+<ul class="org-ul">
+<li>此守护进程在 <span class="underline">起动时</span> 读一个 <span class="underline">配置文件</span> 。一般其文件名为 <b>/etc/syslog.conf</b> 
+<ul class="org-ul">
+<li>该文件决定了 <b>不同种类的消息应送向何处</b> 
+<ul class="org-ul">
+<li><span class="underline">紧急</span> 消息可被送向 <span class="underline">系统管理员</span> (若已登录)，并在 <span class="underline">控制台上显示</span></li>
+<li><span class="underline">警告</span> 消息则可 <span class="underline">记录到一个文件</span> 中等</li>
+</ul></li>
+</ul></li>
+</ul>
 </div>
 
 <div id="outline-container-org2275c2f" class="outline-5">
 <h5 id="org2275c2f">openlog函数</h5>
 <div class="outline-text-5" id="text-org2275c2f">
 <p>
-openlog函数：打开日志文件
+<span class="underline">openlog</span> 函数： <b>打开</b> <span class="underline">日志文件</span> 
 </p>
 <div class="org-src-container">
 <pre class="src src-C"><span style="color: #ffd700;">#include</span> <span style="color: #deb887;">&lt;syslog.h&gt;</span>
 
 <span style="color: #ffebcd;">/**</span>
-<span style="color: #ffebcd;">   &#25171;&#24320;&#26085;&#24535;&#25991;&#20214;</span>
-
-<span style="color: #ffebcd;">   ident&#65306;&#26085;&#24535;&#28040;&#24687;&#30340;&#21069;&#32512;&#23383;&#31526;&#20018;&#65292;&#36890;&#24120;&#20026;&#31243;&#24207;&#21517;</span>
-<span style="color: #ffebcd;">   option&#65306;&#26085;&#24535;&#28040;&#24687;&#36873;&#39033;</span>
-<span style="color: #ffebcd;">   facility&#65306;&#26085;&#24535;&#28040;&#24687;&#21151;&#33021;&#20998;&#31867;&#19982;&#20005;&#37325;&#31561;&#32423;</span>
-
-<span style="color: #ffebcd;">   return&#65306;&#26080;</span>
-<span style="color: #ffebcd;">*/</span>
+<span style="color: #ffebcd;"> * &#25171;&#24320;&#26085;&#24535;&#25991;&#20214;</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> * ident : &#26085;&#24535;&#28040;&#24687;&#30340;&#21069;&#32512;&#23383;&#31526;&#20018;&#65292;&#36890;&#24120;&#20026;&#31243;&#24207;&#21517;</span>
+<span style="color: #ffebcd;"> * option : &#26085;&#24535;&#28040;&#24687;&#36873;&#39033;</span>
+<span style="color: #ffebcd;"> * facility : &#26085;&#24535;&#28040;&#24687;&#21151;&#33021;&#20998;&#31867;&#19982;&#20005;&#37325;&#31561;&#32423;</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> * return&#65306;&#26080;</span>
+<span style="color: #ffebcd;"> * </span>
+<span style="color: #ffebcd;"> */</span>
 <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">openlog</span>(<span style="color: #00bfff; font-weight: bold;">const</span> <span style="color: #98f5ff;">char</span> *<span style="color: #4eee94;">ident</span>, <span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">option</span>, <span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">facility</span>);
 </pre>
 </div>
+
+<pre class="example">
+openlog是可选择的
+
+如果不调用openlog，则在第一次调用syslog时，自动调用openlog
+</pre>
+
 <p>
-调用openlog是可选择的。如果不调用openlog，则在第一次调用syslog时，自动调用openlog
+openlog可以指定一个 <span class="underline">ident</span> ，以后此ident将被加至每则记录消息中。ident一般是 <b>程序的名称</b> (例如，cron、inetd等)
 </p>
 
 <p>
-调用openlog可以指定一个ident，以后此ident将被加至每则记录消息中。ident一般是程序的名称(例如，cron、inetd等)
-</p>
-
-<p>
-表13-1说明了4种可能的option：
+下表说明了4种可能的 <span class="underline">option</span> ：
 </p>
 <table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
 <caption class="t-above"><span class="table-number">Table 1:</span> openlog的option参数</caption>
@@ -508,7 +581,7 @@ openlog函数：打开日志文件
 </table>
 
 <p>
-openlog中的参数facility可以选取表13-2中列举的值，设置facility参数的目的是让配置文件可以说明来自不同设施的消息以不同的方式进行处理：
+openlog中的参数 <span class="underline">facility</span> 可以选取下表中列举的值，设置facility参数的目的是让  <span class="underline">配置文件</span> 可以 <b>说明</b> 来自 <span class="underline">不同设施的消息</span> 以 <span class="underline">不同的方式</span> 进行 <b>处理</b> ：
 </p>
 <table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
 <caption class="t-above"><span class="table-number">Table 2:</span> openlog的facilty参数</caption>
@@ -622,25 +695,27 @@ openlog中的参数facility可以选取表13-2中列举的值，设置facility�
 <h5 id="org481b4d1">syslog函数</h5>
 <div class="outline-text-5" id="text-org481b4d1">
 <p>
-syslog函数：产生一个日志记录消息
+<span class="underline">syslog</span> 函数： <b>产生</b> 一个 <span class="underline">日志记录消息</span> 
 </p>
 <div class="org-src-container">
 <pre class="src src-C"><span style="color: #ffd700;">#include</span> <span style="color: #deb887;">&lt;syslog.h&gt;</span> 
 
 <span style="color: #ffebcd;">/**</span>
-<span style="color: #ffebcd;">   &#35760;&#24405;&#26085;&#24535;&#28040;&#24687;</span>
-
-<span style="color: #ffebcd;">   priorty&#65306;facilty&#21644;level&#30340;&#36923;&#36753;&#21644;</span>
-<span style="color: #ffebcd;">   format&#65306;&#26085;&#24535;&#28040;&#24687;&#26684;&#24335;</span>
-
-<span style="color: #ffebcd;">   return&#65306;&#26080;</span>
-<span style="color: #ffebcd;">*/</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> * &#35760;&#24405;&#26085;&#24535;&#28040;&#24687;</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> * priorty: facilty&#21644;level&#30340;&#36923;&#36753;&#21644;</span>
+<span style="color: #ffebcd;"> * format: &#26085;&#24535;&#28040;&#24687;&#26684;&#24335;</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> * return: &#26080;</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> */</span>
 <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">syslog</span>(<span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">priorty</span>, <span style="color: #00bfff; font-weight: bold;">const</span> <span style="color: #98f5ff;">char</span> *<span style="color: #4eee94;">format</span>, ...);
 </pre>
 </div>
 
 <p>
-priority参数是facility和level的组合，可选取的值分别列于facility(见表13-2)和level(见表13-3)中。level值按优先级从最高到最低按序排列：
+<span class="underline">priority</span> 参数： <span class="underline">facility</span> 和 <span class="underline">level</span> 的 <b>组合</b> ，可选取的值分别列于facility表和level(下表)中。level值按优先级从 <span class="underline">最高到最低</span> 按序排列：
 </p>
 <table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
 <caption class="t-above"><span class="table-number">Table 3:</span> syslog的option参数</caption>
@@ -699,8 +774,12 @@ priority参数是facility和level的组合，可选取的值分别列于facility
 </table>
 
 <p>
-format参数以及其他参数传至vsprintf函数以便进行格式化：在format中每个%m都被代换成对应于errno值的出错消息字符串(strerror) 
+<span class="underline">format</span> 参数以及其他参数传至 <span class="underline">vsprintf</span> 函数以便进行格式化
 </p>
+
+<pre class="example">
+  在format中每个%m都被代换成对应于errno值的出错消息字符串(strerror) 
+</pre>
 </div>
 </div>
 
@@ -708,30 +787,31 @@ format参数以及其他参数传至vsprintf函数以便进行格式化：在for
 <h5 id="org2391944">closelog函数</h5>
 <div class="outline-text-5" id="text-org2391944">
 <p>
-closelog函数：关闭日志消息
+<span class="underline">closelog</span> 函数： <b>关闭</b> <span class="underline">日志消息</span>
 </p>
 <div class="org-src-container">
 <pre class="src src-C"><span style="color: #ffd700;">#include</span> <span style="color: #deb887;">&lt;syslog.h&gt;</span>
 
 <span style="color: #ffebcd;">/**</span>
-<span style="color: #ffebcd;">   &#20851;&#38381;&#26085;&#24535;&#28040;&#24687;</span>
-
-<span style="color: #ffebcd;">   return&#65306;&#26080;</span>
+<span style="color: #ffebcd;"> * &#20851;&#38381;&#26085;&#24535;&#28040;&#24687;</span>
+<span style="color: #ffebcd;"> *</span>
+<span style="color: #ffebcd;"> * return: &#26080;</span>
+<span style="color: #ffebcd;"> *</span>
 <span style="color: #ffebcd;"> */</span>
 <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">closelog</span>(<span style="color: #98f5ff;">void</span>)
 </pre>
 </div>
-<p>
-调用closelog也是可选择的，它只是关闭被用于与syslogd精灵进程通信的描述符
-</p>
-</div>
-</div>
 
-<div id="outline-container-orgfdef2df" class="outline-5">
-<h5 id="orgfdef2df">实例</h5>
-<div class="outline-text-5" id="text-orgfdef2df">
+<pre class="example">
+  调用closelog也是可选择的，它只是关闭被用于与syslogd精灵进程通信的描述符
+</pre>
+</div>
+</div>
+<div id="outline-container-orge77470a" class="outline-5">
+<h5 id="orge77470a">实例</h5>
+<div class="outline-text-5" id="text-orge77470a">
 <p>
-将前缀字符串“test log”和PID的日志信息送到标准出错，同时记录到记录LOG_INFO以上等级的日志文件中：
+将前缀字符串 <span class="underline">test log</span> 和 <span class="underline">PID的日志信息</span> 送到 <span class="underline">标准出错</span> ，同时记录到记录 <span class="underline">LOG_INFO以上等级</span> 的日志文件中：
 </p>
 <div class="org-src-container">
 <pre class="src src-C"><span style="color: #ffd700;">#include</span> <span style="color: #deb887;">&lt;syslog.h&gt;</span> 
@@ -746,26 +826,36 @@ closelog函数：关闭日志消息
 </pre>
 </div>
 
-<p>
-SVR4和4.3+BSD都提供logger(1)程序，以其作为向syslog设施发送出错消息的方法。送至该程序的可选择参数可以指定facility、level以及ident。logger的意图是用于以非交互方式运行，又要产生记录消息的shell过程
-</p>
-</div>
-</div>
-</div>
-</div>
+<pre class="example">
+SVR4和4.3+BSD都提供logger(1)程序，以其作为向syslog设施发送出错消息的方法
 
+送至该程序的可选择参数可以指定facility、level以及ident
+
+logger的意图是用于以非交互方式运行，又要产生记录消息的shell过程
+</pre>
+</div>
+</div>
+</div>
+</div>
 <div id="outline-container-org31e94fe" class="outline-3">
 <h3 id="org31e94fe">注意事项</h3>
 <div class="outline-text-3" id="text-org31e94fe">
 <p>
-守护进程通常单实例运行的，为了保证是单例运行的话，可以通过文件标记或者是文件锁来完成。 在Unix下面守护进程通常有下面这些惯例：
+守护进程通常 <b>单实例</b> 运行的，为了保证是单例运行的话，可以通过 <span class="underline">文件标记</span> 或者是 <span class="underline">文件锁</span> 来完成。 在Unix下面守护进程通常有下面这些惯例：
 </p>
 <ul class="org-ul">
-<li>守护进程的锁文件，通常存放在/var/run/&lt;name&gt;.pid</li>
-<li>如果守护进程有配置文件的话，那么文件存放在/etc/&lt;name&gt;.conf</li>
-<li>守护进程可以使用命令行启动，但是通常是在系统初始化脚本之一存放在/etc/init.d/*下面</li>
-<li>守护进程终止的话通常希望重启。而守护进程的父进程通常为init。在/etc/inittab里面为守护进程包含respawn选项的话，那么守护进程终止的话init会自动重启</li>
-<li>因为守护进程和终端不连接，所以永远接收不到SIGHUP信号。可以使用SIGHUP信号来通知守护进程重新载入配置文件。守护进程必须支持这个功能</li>
+<li>守护进程的 <b>锁文件</b> ，通常存放在 <span class="underline">/var/run/&lt;name&gt;.pid</span></li>
+<li>如果守护进程有 <b>配置文件</b> 的话，那么文件存放在 <span class="underline">/etc/&lt;name&gt;.conf</span></li>
+<li>守护进程可以使用 <b>命令行启动</b> ，但是通常是在 <span class="underline">系统初始化脚本</span> 之一存放在 <span class="underline">/etc/init.d/*</span> 下面</li>
+<li>守护进程 <b>终止的话通常希望重启</b> 。而 <span class="underline">守护进程的父进程</span> 通常为 <span class="underline">init</span> 
+<ul class="org-ul">
+<li>在 <span class="underline">/etc/inittab</span> 里面为 <span class="underline">守护进程</span> 包含 <b>respawn</b> 选项的话，那么 <span class="underline">守护进程终止</span> 的话 <b>init会自动重启</b> （机器重启）</li>
+</ul></li>
+<li>因为 <span class="underline">守护进程</span> 和 <span class="underline">终端</span> <b>不连接</b> ，所以 <b>永远接收不到SIGHUP信号</b> 
+<ul class="org-ul">
+<li>使用 <span class="underline">SIGHUP</span> 信号来通知 <b>守护进程 <span class="underline">重新载入</span> 配置文件</b></li>
+<li>守护进程必须支持这个功能</li>
+</ul></li>
 </ul>
 
 <p>
