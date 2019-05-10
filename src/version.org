@@ -1,0 +1,825 @@
+#+TITLE: 微服务打包和升级
+#+HTML_HEAD: <link rel="stylesheet" type="text/css" href="css/main.css" />
+#+OPTIONS: num:nil timestamp:nil ^:nil
+
+* 项目结构
+** com.ebao.base.parent
+
+基于maven插件定义了编译，打包，组装等一系列的流程
+*** git 
+git页面：https://oss.ebaotech.com/unicorn-foundation/com.ebao.base.parent
+
+*** propertity 
+#+BEGIN_SRC xml 
+  <!-- 编译环境设置 -->
+  <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+  <project.build.resourceEncoding>UTF-8</project.build.resourceEncoding>
+  <maven.compile.encoding>UTF-8</maven.compile.encoding>
+  <compile.version>1.8</compile.version>
+
+  <!--打包设置-->
+  <genereate-resource-dir>${project.build.directory}/generated-resources</genereate-resource-dir>
+  <release.center.repo>ftp://app.ebaotech.com/home/deploy/softwares/release-packages</release.center.repo>
+  <release.namespace>${project.artifactId}</release.namespace>
+  <lightweight.httpserver.version>1.5-SNAPSHOT</lightweight.httpserver.version>
+
+  <skipApps>false</skipApps>
+  <app.activation.flagfile>markers/app.marker</app.activation.flagfile>
+  <assembly.release.attach>false</assembly.release.attach>
+  <!-- wrapper log文件等设置 -->
+
+  <wrapper.logfile.maxfiles>7</wrapper.logfile.maxfiles>
+  <wrapper.logfile.maxsize>50M</wrapper.logfile.maxsize>
+  <wrapper.logfile.loglevel>none</wrapper.logfile.loglevel>
+  <wrapper.disable_restarts>false</wrapper.disable_restarts>
+  <application.daemon>app</application.daemon>
+
+  <!-- jvm memory设置 --> 
+  <application.initialMemorySize>100M</application.initialMemorySize>
+  <application.maxMemorySize>1024M</application.maxMemorySize>
+  <application.maxStackSize>128M</application.maxStackSize>
+  <application.maxMetaspaceSize>256M</application.maxMetaspaceSize>
+
+  <!-- pinpoint 打包配置 -->
+  <plugins.ext.dir>${project.build.directory}/app-plugins</plugins.ext.dir>
+  <!-- pinpoint plugins 当markers目录存在pinpoint.marker文件时,自动下载agent,在最后的sap包中加入一个agent -->
+  <pinpoint.activation.flagfile>markers/pinpoint.marker</pinpoint.activation.flagfile>
+  <pinpoint.agent.groupId>com.navercorp.pinpoint</pinpoint.agent.groupId>
+  <pinpoint.agent.artifactId>pinpoint-agent</pinpoint.agent.artifactId>
+  <pinpoint.agent.version>1.3.2</pinpoint.agent.version>
+  <pinpoint.opts>-Dpinpoint.profiler=false</pinpoint.opts>
+  <pinpoint.applicationName>${project.artifactId}</pinpoint.applicationName>
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  其余的关于 docker打包，npm 编译，gitbook编译， 基于liquidbase的dbasset配置, ccagent配置......
+
+  这些都只有v4的一些工程可能在使用，云平台不用
+#+END_EXAMPLE
+
+*** plugin
++ wagon-ftp：ftp支持
++ maven-compiler-plugin ： 编译
+  + 支持 groovy 
++ maven-surefire-plugin: ut 测试
++ maven-source-plugin：是否包含源代码jar包
++ maven-war-plugin：支持war包
++ maven-install-plugin：安装jar包到本地
++ maven-deploy-plugin：部署jar包
++ maven-dependency-plugin : 处理依赖相关（主要用于数据库脚本依赖管理）
+  + download-db-dependency-task：将依赖中的 '*.db.zip' 复制到 'target/db-dependencies' 目录
+  + generate-module-dept-tree-task : 自动生成dept-tree文件
+  + download-biz-dependency-task : 复制 biz数据包到依赖目录
+  + copy-uimodule-zip-task: 将依赖中的*.uimodule.zip复制到target/uimodule-dependencies
+  + unzip-pinpoint-zip-task: 将依赖中pinpoint agent 解压到target/pinpoint-agent
+  + download-ccagent-task: 将ccagent 下载并解压到target/ccagent目录
+  + unpack-adocframe-task
++ maven-resources-plugin: 静态资源文件相关
+  + prepare-dbmetadata-files-task：  准备一个dbasset.history文件到target/db-metadata目录,以供后续操作 有可能这个项目当前没有定义dbasset.history文件,可以自动创建一个
+  + rewrite-dbmetadata-files-task：已经修改的过的dbasset.history文件 回写回去
++ maven-antrun-plugin： 
+  + copy-self-db-to-dependency-dir-task： 将自身的db复制到 依赖的目录
+  + copy-self-biz-to-dependency-dir-task ：将自身的biz复制到 依赖的目录
+  + copy-self-bizasset-to-assembly-dir-task：将bizasset copy到 另外一个目录target/assets以供装配 主要目的是精简文件名
+  + ant-copy-template：模板拷贝
++ frontend-maven-plugin： 前端npm打包等，使用ebao客户化的版本,修改一些问题 ，主要引入useSystem 属性
++ opts-maven-plugin：shawn实现的关于devopts相关的任务定义
+  + generate-application-version-file-task : 生成版本号文件
+  + 其他有些关于dbassert的任务
++ asciidoctor-maven-plugin： 不知道干嘛的
++ wagon-maven-plugin：将app release copy 软件的release仓库
+  + deploy-release-package-task
+  + deploy-uiapp-package-task
+  + deploy-staticapp-package-task
+  + deploy-docker-compose-task
++ appassembler-maven-plugin：生成发布包（重要！）
+  + 启动jvm进程的wrapper的配置文件，jvm启动参数，pinpoint启动参数，会在这里被填入到发布包内
++ maven-assembly-plugin：组装文档，数据库脚本，编译后的二进制文件（java, js等）
++ docker-maven-plugin：maven生成docker镜像
++ lifecycle-mapping：针对eclipse m2e插件的，貌似没啥用
+
+*** profile 
+  根据源代码里是否存在某个特定名字的文件，来判断当前应用是否要激活某个profile 
+
+#+BEGIN_SRC xml 
+  <!-- pinpoint profile 当markers目录存在pinpoint.markers目录时,下载指定的pinpoint agent,然后将pinpoint -->
+  <profile>
+    <id>pinpoint-profile</id>
+    <activation>
+      <activeByDefault>false</activeByDefault>
+      <file>
+	<!-- 激活docker执行的文件 -->
+	<exists>${pinpoint.activation.flagfile}</exists>
+      </file>
+    </activation>
+    <properties>
+      <pinpoint.opts>-javaagent:./plugins/pinpoint/pinpoint-bootstrap-${pinpoint.agent.version}.jar</pinpoint.opts>
+    </properties>
+    <build>
+      <plugins>
+	<plugin>
+	  <groupId>org.apache.maven.plugins</groupId>
+	  <artifactId>maven-dependency-plugin</artifactId>
+	  <executions>
+	    <execution>
+	      <id>unzip-pinpoint-zip-task</id>
+	      <phase>process-sources</phase>
+	    </execution>
+	  </executions>
+	</plugin>
+      </plugins>
+    </build>
+  </profile>
+#+END_SRC
+
+假如在应用中存在 _/marker/pinpoint.marker_ 这个文件，那么应用就激活了 *pinpoint* 这个profile，因此在 _process-sources_ 阶段就会去执行前面 _maven-dependency-plugin_ 插件中定义的 _unzip-pinpoint-zip-task_ 任务 
+
+云平台项目主要使用了这里定义的 app, pinpoint两个profile。app profile：主要定义了如何打出app的zip包（和jvm wrapper相关的任务）
+#+BEGIN_SRC xml 
+  <profile>
+    <id>app-profile</id>
+    <activation>
+      <activeByDefault>false</activeByDefault>
+      <file>
+	<!-- 如果存在脚本,那么必然是一个application -->
+	<exists>${app.activation.flagfile}</exists>
+      </file>
+    </activation>
+    <build>
+      <resources>
+	<resource>
+	  <directory>${project.basedir}/src/main/resources</directory>
+	</resource>
+	<resource>
+	  <directory>${genereate-resource-dir}</directory>
+	</resource>
+
+      </resources>
+      <plugins>
+      
+	<!-- 作为一个application,提供在命令行中启动的能力 -->
+	<plugin>
+	  <groupId>org.codehaus.mojo</groupId>
+	  <artifactId>exec-maven-plugin</artifactId>
+	  <version>1.5.0</version>
+	  <configuration>
+	    <mainClass>${application.mainclass}</mainClass>
+	  </configuration>
+	</plugin>
+      
+	<!--作为应用,打包时应该排除src/main/resource下的文件,否则可能重复 -->
+	<plugin>
+	  <groupId>org.apache.maven.plugins</groupId>
+	  <artifactId>maven-jar-plugin</artifactId>
+	  <version>2.5</version>
+	  <configuration>
+	    <excludes>
+	      <exclude>**/*.xml</exclude>
+	    </excludes>
+	  </configuration>
+	  <executions>
+	    <execution>
+	      <phase>package</phase>
+	      <goals>
+		<goal>jar</goal>
+	      </goals>
+	    </execution>
+	  </executions>
+	</plugin>
+
+	<!-- 将依赖的uimodule 解压到 uimodule的依赖目录 -->
+	<plugin>
+	  <groupId>org.apache.maven.plugins</groupId>
+	  <artifactId>maven-dependency-plugin</artifactId>
+	  <executions>
+	    <execution>
+	      <id>copy-uimodule-zip-task</id>
+	      <phase>generate-sources</phase>
+	    </execution>
+	  </executions>
+	</plugin>
+
+	<!-- 产生jws文件 -->
+	<plugin>
+	  <groupId>org.codehaus.mojo</groupId>
+	  <artifactId>appassembler-maven-plugin</artifactId>
+	  <executions>
+	    <execution>
+	      <id>generate-jsw-scripts</id>
+	      <phase>prepare-package</phase>
+	      <goals>
+		<goal>generate-daemons</goal>
+	      </goals>
+	    </execution>
+	  
+	    <execution>
+	      <id>generate-program-scripts</id>
+	      <phase>prepare-package</phase>
+	      <goals>
+		<goal>assemble</goal>
+	      </goals>
+	      <configuration>
+		<repositoryName>lib</repositoryName>
+		<generateRepository>false</generateRepository>
+	      </configuration>
+	    </execution>
+	  </executions>
+	</plugin>
+
+	<!-- 产生应用级别的版本文件 -->
+	<plugin>
+	  <groupId>com.ebao.opts</groupId>
+	  <artifactId>opts-maven-plugin</artifactId>
+	  <executions>
+	    <execution>
+	      <id>generate-application-version-file-task</id>
+	      <phase>generate-resources</phase>
+	    </execution>
+	  </executions>
+	</plugin>
+
+	<!-- 产生git的信息文件,如果是svn,自动忽略 -->
+
+	<plugin>
+	  <groupId>pl.project13.maven</groupId>
+	  <artifactId>git-commit-id-plugin</artifactId>
+	  <version>2.2.5</version>
+	  <executions>
+	    <execution>
+	      <id>get-the-git-infos</id>
+	      <goals>
+		<goal>revision</goal>
+	      </goals>
+	      <phase>generate-resources</phase>
+	    </execution>
+	  </executions>
+	  <configuration>
+	    <!-- 如果没有发现git目录,自动忽略 -->
+	    <verbose>false</verbose>
+	    <failOnNoGitDirectory>false</failOnNoGitDirectory>
+	    <generateGitPropertiesFile>true</generateGitPropertiesFile>
+	    <generateGitPropertiesFilename>${genereate-resource-dir}/git.properties</generateGitPropertiesFilename>
+	  </configuration>
+	</plugin>
+
+	<!-- 触发application 包(release)的构建,此构建 不需要deploy到maven仓库 -->
+	<plugin>
+	  <groupId>org.apache.maven.plugins</groupId>
+	  <artifactId>maven-assembly-plugin</artifactId>
+	  <executions>
+	    <execution>
+	      <id>release</id>
+	      <phase>package</phase>
+	      <configuration>
+		<attach>${assembly.release.attach}</attach>
+	      </configuration>
+	    </execution>
+	  </executions>
+	</plugin>
+
+	<!-- 将application release copy 到 交付中心 -->
+	<plugin>
+	  <groupId>org.codehaus.mojo</groupId>
+	  <artifactId>wagon-maven-plugin</artifactId>
+	  <executions>
+	    <execution>
+	      <id>deploy-release-package-task</id>
+	      <phase>deploy</phase>
+	    </execution>
+	  </executions>
+	</plugin>
+      </plugins>
+    </build>
+  </profile>
+#+END_SRC
+注意： 
+1. 一个应用可以有多个profile
+2. 现在云平台使用的profile不仅仅定义在这里，有些定义在下面的 ebaocloud-base-parent 工程
+
+** ebaocloud-base-parent
+
+继承于 上面的 _com.ebao.base.parent_ , 他的作用是：
+1. 管理spring boot等第三方库的版本
+2. 管理云品台提供的starter的版本
+3. 根据不同的profile包含不同的starter 
+
+#+BEGIN_SRC xml 
+  <parent>
+    <groupId>com.ebao</groupId>
+    <artifactId>com.ebao.base.parent</artifactId>
+    <version>1.3.1</version>
+  </parent>
+#+END_SRC
+*** code 
+git目录 https://oss.ebaotech.com/ebaocloud/ebaocloud-base-parent
+
+*** property 
+
+#+BEGIN_SRC xml 
+  <!-- 指明在app.ebaotech.com下sap存储的namespace -->
+  <release.namespace>ebaocloud</release.namespace>
+
+  <!-- 执行在docker-all.repo.ebaotech.com docker image存储的namespace  -->
+  <docker.prefix>ebaocloud</docker.prefix>
+
+  <!-- docker的默认tag -->
+  <docker.build.image.version>latest</docker.build.image.version>
+
+  <!-- docker plugins的版本 -->
+  <docker.build.plugin.version>0.4.11</docker.build.plugin.version>
+
+  <!-- spring boot -->
+  <spring.boot.version>1.5.2.RELEASE</spring.boot.version>
+  <spring.cloud.version>Dalston.RELEASE</spring.cloud.version>
+  <ebaocloud.platform.version>1.3.8</ebaocloud.platform.version>
+  <springfox.swagger.version>2.7.0</springfox.swagger.version>
+  <product.name>platform</product.name>
+  <dependOn></dependOn>
+  <dbasset.flat.enabled>true</dbasset.flat.enabled>
+  <!-- docker 环境disable异常,交由容器保证-->
+  <wrapper.disable_restarts>TRUE</wrapper.disable_restarts>
+  <application.maxMemorySize>512M</application.maxMemorySize>
+  <pinpoint.agent.version>1.3.3</pinpoint.agent.version>
+#+END_SRC
+*** plugin 
+
+其中比较重要的是 spring boot  和 spring cloud 的版本
+
+#+BEGIN_SRC xml 
+  <spring.boot.version>1.5.2.RELEASE</spring.boot.version>
+  <spring.cloud.version>Dalston.RELEASE</spring.cloud.version>
+#+END_SRC 
+
+云平台starter插件的版本： 
+#+BEGIN_SRC xml 
+    <ebaocloud.platform.version>1.3.8</ebaocloud.platform.version>
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  注意：这里定义的属性可能会改写他父工程的属性
+
+  比如：pinpoint.agent.version在父工程定义为1.3.2 , 这里定义成1.3.3 
+#+END_EXAMPLE
+
+*** dependency management 
+使用上面定义的属性，在这里定义了spring boot, spring cloud 的库依赖版本
+#+BEGIN_SRC xml 
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+	<groupId>org.springframework.cloud</groupId>
+	<artifactId>spring-cloud-dependencies</artifactId>
+	<version>${spring.cloud.version}</version>
+	<type>pom</type>
+	<scope>import</scope>
+      </dependency>
+      <dependency>
+	<!-- Import dependency management from Spring Boot -->
+	<groupId>org.springframework.boot</groupId>
+	<artifactId>spring-boot-dependencies</artifactId>
+	<version>${spring.boot.version}</version>
+	<type>pom</type>
+	<scope>import</scope>
+      </dependency>
+      ......
+#+END_SRC
+
+云平台自己的starter也在这里管理版本： 
+
+#+BEGIN_SRC xml 
+  <dependency>
+    <groupId>com.ebao.cloud</groupId>
+    <artifactId>ebao-spring-boot-starter-configcenter</artifactId>
+    <version>${ebaocloud.platform.version}</version>
+  </dependency>
+
+  <dependency>
+    <groupId>com.ebao.cloud</groupId>
+    <artifactId>ebao-spring-boot-starter-discoveryendpoint</artifactId>
+    <version>${ebaocloud.platform.version}</version>
+  </dependency>
+
+
+  <dependency>
+    <groupId>com.ebao.cloud</groupId>
+    <artifactId>ebao-spring-boot-starter-redis</artifactId>
+    <version>${ebaocloud.platform.version}</version>
+  </dependency>
+
+  <dependency>
+    <groupId>com.ebao.cloud</groupId>
+    <artifactId>ebao-spring-boot-starter-netflixext</artifactId>
+    <version>${ebaocloud.platform.version}</version>
+  </dependency>
+  ......
+#+END_SRC 
+
+还有其他的一些第三方库的版本，比如swagger 工具库
+
+#+BEGIN_SRC xml 
+  <dependency>
+    <groupId>io.springfox</groupId>
+    <artifactId>springfox-swagger2</artifactId>
+    <version>${springfox.swagger.version}</version>
+  </dependency>
+  <dependency>
+    <groupId>io.springfox</groupId>
+    <artifactId>springfox-swagger-ui</artifactId>
+    <version>${springfox.swagger.version}</version>
+  </dependency>
+#+END_SRC
+*** profile 
+激活profile的机制和他的父工程类似，不同的是：
++ 父工程com.ebao.base.parent 中不同的profile来定义不同的打包流程
++ 这里根据不同的profile来定义会自动依赖那些云平台的starter 
+
+现在云平台服务主要使用的是这里定义的 _backend_  profile 
+
+#+BEGIN_SRC xml 
+  <profiles>
+    <!-- 后端系统-->
+    <profile>
+      <id>backend-profile</id>
+      <activation>
+	<activeByDefault>false</activeByDefault>
+	<file>
+	  <exists>markers/backend.marker</exists>				
+	</file>
+      </activation>
+    
+      <dependencies>1
+	<dependency>
+	  <groupId>io.springfox</groupId>
+	  <artifactId>springfox-swagger2</artifactId>
+	</dependency>
+      
+	<dependency>
+	  <groupId>io.springfox</groupId>
+	  <artifactId>springfox-swagger-ui</artifactId>
+	</dependency>
+      
+	<dependency>
+	  <groupId>com.ebao.cloud</groupId>
+	  <artifactId>ebao-spring-boot-starter-configcenter</artifactId>
+	</dependency>
+      
+	<dependency>
+	  <groupId>com.ebao.cloud</groupId>
+	  <artifactId>ebao-spring-boot-starter-discoveryendpoint</artifactId>
+	</dependency>
+            
+	<dependency>
+	  <groupId>com.ebao.cloud</groupId>
+	  <artifactId>ebao-spring-boot-starter-netflixext</artifactId>
+	</dependency>
+      
+	<!-- 当前安全检查只是负责获取token标识,不处理其他信息 -->
+	<dependency>
+	  <groupId>com.ebao.cloud</groupId>
+	  <artifactId>ebao-spring-boot-starter-security</artifactId>
+	</dependency>
+      
+	<!-- 根据安全组件获得上下文,得到用户context -->
+	<dependency>
+	  <groupId>com.ebao.cloud</groupId>
+	  <artifactId>ebao-spring-boot-starter-usercontext</artifactId>
+	</dependency>
+      
+	<dependency>
+	  <groupId>com.ebao.cloud</groupId>
+	  <artifactId>ebao-spring-boot-starter-redis</artifactId>
+	</dependency>
+      
+	<dependency>
+	  <groupId>com.ebao.cloud</groupId>
+	  <artifactId>ebao-spring-boot-starter-logger</artifactId>
+	</dependency>
+      
+	<dependency>
+	  <groupId>com.ebao.cloud</groupId>
+	  <artifactId>ebao-spring-boot-starter-swagger</artifactId>
+	</dependency>
+      
+	<dependency>
+	  <groupId>com.ebao.cloud</groupId>
+	  <artifactId>ebao-spring-boot-starter-httptrace</artifactId>
+	</dependency>
+      
+	<dependency>
+	  <groupId>com.ebao.cloud</groupId>
+	  <artifactId>ebao-spring-boot-starter-liquibase</artifactId>
+	</dependency>
+      
+	<!-- -->
+	<dependency>
+	  <groupId>com.ebao.cloud</groupId>
+	  <artifactId>ebao-spring-boot-starter-metrics</artifactId>
+	</dependency>
+      
+      </dependencies>
+      </profile>
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  copy-dockerfile-to-target 这个profile也会激活，
+
+  主要作用是把源代码的Dockerfile文件copy到target目录，来适应maven的docker插件
+
+  现在是把DockerFile放在源代码的某个固定位置，jenkins通过运行 docker 命令来打镜像，实际上这个profile已经不需要
+#+END_EXAMPLE
+** platform-boot 
+继承于 _ebaocloud-base-parent_  工程
+
+#+BEGIN_SRC xml
+  <parent>
+    <groupId>com.ebao.cloud</groupId>
+    <artifactId>ebaocloud-base-parent</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+  </parent>
+#+END_SRC
+作用：定义了云平台starter和服务中需要用到的通用常量，数据模型，接口，工具类等
++ 用户模型：UserDetail 
++ http头常量
++ SessionService接口
++ ...... 
+*** git 
+git页面 https://oss.ebaotech.com/ebaocloud/platform-boot 
+
+** platform-starters
+继承于 _ebaocloud-base-parent_  工程
+#+BEGIN_SRC xml
+  <parent>
+    <groupId>com.ebao.cloud</groupId>
+    <artifactId>ebaocloud-base-parent</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+  </parent>
+#+END_SRC 
+
+作用：云平台应用中的一些通用功能通过spring boot 插件来实现
++ configcenter： 配置中心支持
++ netflixext: netflix 库扩展
++ logger 文件格式
++ httptrace ：rest请求抓取
++ swagger 支持
++ ..... 
+*** git 
+git页面 https://oss.ebaotech.com/ebaocloud/platform-starters
+
+*** property 
+这里定义了依赖的platform-boot版本
+#+BEGIN_SRC xml 
+  <properties>
+    <ebaocloud.boot.version>1.0.0-SNAPSHOT</ebaocloud.boot.version>
+  </properties>
+#+END_SRC
+
+*** dependency 
+主要是依赖platform-boot 
+
+#+BEGIN_SRC xml 
+  <dependencies>
+    <dependency>
+      <groupId>com.ebao.cloud</groupId>
+      <artifactId>platform-boot</artifactId>
+      <version>${ebaocloud.boot.version}</version>
+    </dependency>
+  
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-configuration-processor</artifactId>
+      <optional>true</optional>
+    </dependency>
+  
+  </dependencies>
+#+END_SRC
+
+*** modules 
+选择那些starter做为子模块编译
+#+BEGIN_SRC xml 
+  <modules>
+    <module>ebao-spring-boot-starter-configcenter</module>
+    <module>ebao-spring-boot-starter-discoveryendpoint</module>
+    <module>ebao-spring-boot-starter-netflixext</module>
+    <module>ebao-spring-boot-starter-security</module>
+    <module>ebao-spring-boot-starter-usercontext</module>
+    <module>ebao-spring-boot-starter-swagger</module>
+    <module>ebao-spring-boot-starter-redis</module>
+    <module>ebao-spring-boot-starter-logger</module>
+    <module>ebao-spring-boot-starter-httptrace</module>
+    <module>ebao-spring-boot-starter-liquibase</module>
+    <module>ebao-spring-boot-starter-commonstore</module>
+    <module>ebao-spring-boot-starter-modelrestful</module>
+    <module>ebao-spring-boot-starter-metrics</module>
+  </modules> 
+#+END_SRC
+
+主要是：
++ configcenter : 配置中心
++ discoveryendpoint: 服务信息写到redis
++ netflixext : ribbon, feign, restTemplate 的扩展
+  + ribbon : 支持redis的服务注册模式
+  + feign:  自动加上 x-ebao-tenant-id 等http头 传递给下游服务
+  + restTemplate: 类似feign 
++ security : 基本没用到里面功能
++ usercontext : 从redis拿到缓存的用户信息，放入到 ThreadLocal
++ swagger: swagger支持，自动扫描生成swagger文件，以及相关rest服务
++ logger: 日志中打印tenant，vendor，traceid等信息
++ httptrace: jason 了解
++ liquidbase: 数据库脚本管理
++ commonstore: 存储小文件功能
++ modelrestful: 基本没用到
++ metrics: jason 了解
+
+*** starter 
+每个starter的父工程都是 _platform-starter-parent_ 
+
+#+BEGIN_SRC xml 
+  <artifactId>ebao-spring-boot-starter-configcenter</artifactId>
+  <packaging>jar</packaging>
+
+  <parent>
+    <groupId>com.ebao.cloud</groupId>
+    <artifactId>platform-starter-parent</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <relativePath>../pom.xml</relativePath>
+  </parent>
+#+END_SRC
+
+*** 微服务工程
++ 父工程同样也是 ebaocloud-base-parent， 根据 _marker_ 目录中不同的marker文件来确定依赖哪些starter 和 打包流程 
+
+* 项目依赖
+  + 微服务工程中的parent是ebaocloud-base-parent，在他的pom文件里面定义了 *ebaocloud.platform.version* 属性，这个决定了每个微服务依赖的platform-starter-parent的版本
+  + platform-starter-parent 的pom文件里面定义了 *ebaocloud.boot.version* 属性，这个决定了他依赖的 _platform-boot_ jar包的版本
+  + platform-starter-parent 的版本决定了各个starter的版本，因为starter是platform-starter-parent的子工程
+
+** 升级boot 
+1. 修改的版本号
+2. 发布platform-boot jar包
+3. 刷新platform-starter-parent 的pom文件里面定义的 *ebaocloud.boot.version* 属性为新的boot版本号
+4. 修改platform-starter-parent的版本号
+5. 修改各个starter中platform-starter-parent的版本号
+6. 发布platform-starter-parent jar包
+7. 刷新ebaocloud-base-parent的pom文件里面定义了 *ebaocloud.platform.version* 属性
+8. 升级ebaocloud-base-parent的版本号
+9. 发布ebaocloud-base-parent jar包
+10. 修改各个微服务中依赖的ebaocloud-base-parent的版本号
+11. 发布各个微服务
+
+** 升级starter
+1. 修改platform-starter-parent的版本号
+2. 修改各个starter中platform-starter-parent的版本号
+3. 发布platform-starter-parent jar包
+4. 刷新ebaocloud-base-parent的pom文件里面定义了 *ebaocloud.platform.version* 属性
+5. 升级ebaocloud-base-parent的版本号
+6. 发布ebaocloud-base-parent jar包
+7. 修改各个微服务中依赖的ebaocloud-base-parent的版本号
+8. 发布各个微服务
+
+* 升级流程
+1. jenkins 中触发 platform boot的升级
+2. jenkins 中触发 platform starters 的升级
+3. jenkins 中触发 ebaocloud base parent的升级
+4. jenkins 中触发 其他java服务的升级
+
+** boot升级
+jenkins页面配置地址： ][[http://172.25.32.129/job/ebaocloud/job/release/job/platform-boot/configure]]
+
+这个升级是手动触发的， 触发的时候必须输入一个参数： platform boot 想要发布的版本号 _${releaseVersion}_ 
+
+#+BEGIN_SRC sh 
+  set -x
+  echo "checking version from ebao repo"
+  wget -q http://repo.ebaotech.com/artifactory/repo/com/ebao/cloud/${service}/${releaseVersion} && echo "Oops, version ${releaseVersion} already exists" && exit 1
+  set +x
+
+  git branch -f ${releaseVersion}
+  git checkout ${releaseVersion}
+  mvn versions:set -DnewVersion=${releaseVersion}
+  mvn clean deploy -Dmaven.test.skip=true
+
+  git add -A
+  git commit -am "release the version to ${releaseVersion}"
+  git push --set-upstream origin ${releaseVersion}
+#+END_SRC
+
+1. 校验要发布的版本在maven库中是否已经存在
+2. 根据版本号，生成git的一条新分支
+3. 代码切换到新分支
+4. 调用  _mvn versions:set -DnewVersion=${releaseVersio}_ 设置新的版本号
+5. 打包，发布
+6. 提交修改后的代码到新分支流
+
+** starters 升级
+jenkins页面配置地址： [[http://172.25.32.129/job/ebaocloud/job/release/job/platform-starters/configure]]
+
+这个升级是手动触发的， 触发的时候必须输入一个参数： platform starters 想要发布的版本号 _${releaseVersion}_ 
+#+BEGIN_SRC sh 
+  set -x
+  echo "checking version from ebao repo"
+  wget -q http://repo.ebaotech.com/artifactory/repo/com/ebao/cloud/${service}/${releaseVersion} && echo "Oops, version ${releaseVersion} already exists" && exit 1
+  set +x
+
+  mvn versions:update-properties -DincludeProperties=ebaocloud.boot.version
+  mvn versions:set -DnewVersion=${releaseVersion}
+  mvn clean deploy -Dmaven.test.skip=true
+
+  git tag ${releaseVersion}
+  git push origin ${releaseVersion}
+#+END_SRC
+1. 校验发布的版本号
+2. mvn versions:update-properties -DincludeProperties=ebaocloud.boot.version ： 使用maven库中starter的最新版本号来刷新starters代码里pom文件中定义的 *ebaocloud.boot.version* ，相当于使用最新的boot中的模型2
+3. 打包发布
+4. _git tag ${relaseVersion}_ 生成 *发布的版本号* 对应的git 快照
+5. git库提交快照
+** ebaocloud base parent 升级
+jenkins页面配置地址： [[http://172.25.32.129/job/ebaocloud/job/release/job/ebao-cloud-base-parent/configure]] 
+
+这个升级是手动触发的， 触发的时候必须输入一个参数： ebaocloud base parent 想要发布的版本号 _${releaseVersion}_ 
+
+#+BEGIN_SRC sh 
+  set -x
+  echo "checking version from oss..."
+  git ls-remote | fgrep ${releaseVersion} && echo "version ${releaseVersion} already existed" && exit 1
+  set +x
+
+  mvn versions:set -DnewVersion=${releaseVersion}
+  mvn clean deploy -Dmaven.test.skip=true
+
+  git commit -am "release the version to ${releaseVersion}"
+
+  git tag ${releaseVersion}
+  git push origin ${releaseVersion}
+#+END_SRC
+
+基本流程和前面类似，这里不做解释。但注意：
++ 为了使用新版本 starters，必须 *手动编辑* 这个项目pom文件只的 *ebaocloud.platform.version* 的值，提交改动到master流，再触发发布
+
+#+BEGIN_EXAMPLE
+ 不知道为啥这里没有执行自动更新 ebaocloud.platform.version的值
+#+END_EXAMPLE
+
+#+BEGIN_EXAMPLE
+发布新的pinpoint版本，也需要在这里更新属性，然后全量打包所有java服务
+#+END_EXAMPLE
+* 问题和建议
+** 循环依赖
+#+BEGIN_EXAMPLE
+  base, boot, starters 三个工程的版本发布事实上是循环依赖 
+
+  boot 需要刷新 base的版本
+  starters 需要刷新base的版本，boot的版本
+  base需要刷新：starters版本
+#+END_EXAMPLE
+
+建议：
+1. base 中去掉 starter版本的属性，以及如何基于marker自动引入starters
+2. 上面删除的部分放入到platform-starers工程
+3. Java微服务继承platform-starters
+#+BEGIN_EXAMPLE
+  当然Java微服务也可以只继承ebaocloud-base-parent, 在工程内手动添加starters的依赖
+#+END_EXAMPLE
+
+这样：
++ ebaocloud-base-parent管理spring cloud/boot ，pinpoint等第三方库的版本，升级这些第三方库
+  1. 修改base-parent工程的pom
+  2. jenkins触发ebaocloud-base-parent的发布
+  3. 刷新platform-boot中父工程ebaocloud-base-parent的版本号，然后升级发布platform-boot
+  4. 刷新platform-starters中父工程ebaocloud-base-parent的版本号，其中定义的platform-boot，starters等属性，升级并发布platform-starters
+  5. 刷新各个java服务中的platform-starters-parent或ebaocloud-base-parent的版本号，升级并发布各个微服务
++ boot管理starters和微服务公用的模型等信息：他的升级做上面的3，4，5
++ platform-starters管理微服务公用的插件：他的升级做上面的4和5 
+
+** 升级脚本
+#+BEGIN_EXAMPLE
+  升级脚本的流程实际上并不合理：
+
+  master流的pom文件中压根没有体现版本：基本上全是1.0.0-SNAPSHOT
+
+  实际打包中用的版本号在某个发布流或某个快照中的pom文件里
+#+END_EXAMPLE
+
+假设开发流的版本是1.0.0-SNAPSHOT，发布的版本一般就是1.0.0， 发布完毕后开发流的版本升级到1.0.1-SNAPSHOT，一般的做法： 
+1. 从dev流创建一条 _1.0.0_ 的作为发布流
+2. 在1.0.0的流上，把pom文件中的版本号从1.0.0-SNAPSHOT改成1.0.0
+3. 提交代码到1.0.0的流上
+4. 从1.0.0的发布流merge代码到master流
+5. master流打包发布
+6. 确认发布成功后 master流提交代码
+7. 基于master流打出1.0.0的快照
+8. 切换回dev流，把dev流的版本从1.0.0-SNAPSHOT升级到1.0.1-SNAPSHOT
+9. 提交dev流
+
+#+BEGIN_EXAMPLE
+  这样，发布完毕后，更新完工程代码后，就知道生产版本是1.0.0， 开发版本是1.0.1-SNAPSHOT， 下次发布的版本就是1.0.1
+#+END_EXAMPLE
+
+** 项目合并
+com.ebao.base.parent 可以和 ebaocloud-base-parent这两个工程合并：
+1. 避免出现同时定义pinpoint版本这种事情
+2. 不需要再去修改unicorn的代码流
+
+** 功能减少
+maven应该只关注java的库依赖和打包
+
+至于docker, db，npm等完全没必要体现在pom文件中，这些可以在jenkins的脚本中，执行其他命令完成
