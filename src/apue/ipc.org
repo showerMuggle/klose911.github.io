@@ -1183,15 +1183,19 @@ UNIX _IPC_ 已经是而且继续是各种 *进程通信方式* 的统称，其�
      #+END_EXAMPLE
 
 ** 消息队列
-   消息队列是消息的链接表，存放在内核中并由消息队列标识符标识。我们将称消息队列为"队列"，其标识符为“队列ID”
+   _消息队列_ 是 *消息的链表* ，存放在 _内核_ 中并由 _消息队列标识符_ 标识。因此可以将称消息队列为 _队列_ ，其标识符为 _队列ID_ 
    
-   + msgget函数：创建一个新队列或打开一个现存的队列
-   + msgsnd函数：将新消息添加到队列尾端。每个消息包含一个正长整型类型字段，一个非负长度以及实际数据字节
-   + msgrcv函数：从队列中取消息。并不一定要以先进先出次序取消息，也可以按消息的类型字段取消息
+   + _msgget_ 函数： *创建* 一个 _新_ 队列或 *打开* 一个 _现存的_ 队列 
+   + _msgsnd_ 函数：将 _新消息_ *添加* 到 _队列尾端_ ，每个消息包含：
+     + 一个 _正长整型_ *类型* 字段
+     + 一个 _非负_ *长度*
+     + 实际 *数据* 字节
+   + _msgrcv_ 函数：从队列中 *取消息* 
+     + 并不一定要以 _先进先出_ 次序取消息，也可以按 _消息的类型_ 字段取消息
 
 
 *** msqid_ds结构
-    每个队列都有一个msqid_ds结构与其相关。此结构规定了队列的当前状态：
+    每个队列都有一个 _msqid_ds结构_ 与其相关。此结构规定了 *队列的当前状态* ：
     #+BEGIN_SRC C
   /* Structure of record for one message inside the kernel.
      The type `struct msg' is opaque.  */
@@ -1210,8 +1214,12 @@ UNIX _IPC_ 已经是而且继续是各种 *进程通信方式* 的统称，其�
           pid_t msg_lrpid;            /* pid of last msgrcv() */
   };
     #+END_SRC
-    两个指针msg-first和msg-last分别指向相应消息在内核中的存放位置，所以它们对用户进程而言是无价值的。结构的其他成员是自定义的
-    
+    两个指针 _msg_first_ 和 _msg_last_ 分别指向 *相应消息在内核中的存放位置* 
+
+    #+BEGIN_EXAMPLE
+      这两个指针对用户进程而言是无价值的
+    #+END_EXAMPLE
+
 *** 资源限制
     #+CAPTION: 影响消息队列的系统限制
     #+ATTR_HTML: :border 1 :rules all :frame boader
@@ -1222,86 +1230,105 @@ UNIX _IPC_ 已经是而且继续是各种 *进程通信方式* 的统称，其�
     | MSGTOL | 系统中最大消息数                       |     50 |
     
 *** msgget函数
-    + msgget函数：打开一个现存队列或创建一个新队列
+    + _msgget_ 函数：打开一个现存队列或创建一个新队列
       #+BEGIN_SRC C
 	#include <sys/types.h>
 	#include <sys/ipc.h>
 	#include <sys/msg.h>
 
 	/**
-	   新建或打开一个消息队列
-
-	   key：消息队列关键字，内核根据规则转换为标识符
-	   flag：消息队列权限
-
-	   return：若成功则为消息队列ID，若出错则为-1
-	,*/
+	 ,* 新建或打开一个消息队列
+	 ,*
+	 ,* key: 消息队列关键字，内核根据规则转换为标识符
+	 ,* flag: 消息队列权限
+	 ,*
+	 ,* return: 若成功则为 消息队列ID，若出错则为 -1
+	 ,*
+	 ,*/
 	int msgget(key_t key, int flag);
       #+END_SRC
-    当创建一个新队列时，初始化msqid-ds结构的下列成员:
-    + ipc-perm结构按上节中所述进行初始化。该结构中mode按flag中的相应许可权位设置
-    + msg_qnum，msg_lspid、msg_lrpid、msg_stime和msg_rtime都设置为0
-    + msg_ctime设置为当前时间
-    + msg_qbytes设置为系统限制值
+    当 *创建* 一个新队列时，初始化 _msqid-ds结构_ 的下列成员:
+    + _ipc-perm_ 结构按上节中所述进行初始化。该结构中 _mode_ 按 _flag_ 中的 *相应许可权位* 设置
+    + msg_qnum，msg_lspid、msg_lrpid、msg_stime和msg_rtime都设置为 _0_ 
+    + msg_ctime设置为 _当前时间_ 
+    + _msg_qbytes_ 设置为 _系统限制值_ 
 
 *** msgctl函数
-    + msgctl函数：对队列执行多种操作，类似于ioctl函数
+    + _msgctl_ 函数：对队列 *执行多种操作* ，类似于ioctl函数
       #+BEGIN_SRC C
 	#include <sys/types.h>
 	#include <sys/ipc.h>
 	#include <sys/msg.h>
 
 	/**
-	   管理一个消息队列
-
-	   msgid：消息队列ID
-	   cmd：管理命令
-	   buf：消息队列指针
-
-	   return：若成功则为0，出错则为-1
-	,*/
+	 ,* 管理一个消息队列
+	 ,*
+	 ,* msgid: 消息队列ID
+	 ,* cmd: 管理命令
+	 ,* buf: 消息队列指针
+	 ,*
+	 ,* return: 若成功则为 0，出错则为 -1
+	 ,*
+	 ,*/
 	int msgctl(int msqid, int cmd, struct mdqid_ds *buf);
       #+END_SRC
 
 **** cmd参数
-     cmd参数指定对于由msqid规定的队列要执行的命令：
-     + IPC_STAT：取此队列的msqid_ds结构，并将其存放在buf指向的结构中
+     _cmd_ 参数指定对于由 _msqid_ 规定的队列要执行的命令：
+     + _IPC_STAT_ ： *取* 此队列的 _msqid_ds结构_ ，并将其 *存放* 在 _buf指向的结构_ 中
 
-     + IPC_SET：由buf指向的结构中的值，设置与此队列相关的结构中的下列四个字段: 
+     + _IPC_SET_ ：由 _buf指向的结构_ 中的值， *设置* 与此队列相关的结构中的下列四个字段: 
        1. msg_perm.uid
        2. msg_perm.gid
        3. msg_perm.mode
        4. msg_qbytes
 
-     此命令只能由下列两种进程执行: 其有效用户ID等于msg_perm.cuid或msg_perm.uid或具有超级用户特权的进程。只有超级用户才能增加msg_qbytes的值 
+     #+BEGIN_EXAMPLE
+       此命令只能由下列两种进程执行:
 
-     + IPC_RMID：从系统中删除该消息队列以及仍在该队列上的所有数据。这种删除立即生效。仍在使用这一消息队列的其他进程在它们下一次试图对此队列进行操作时，将出错返回EIDRM
+       其有效用户ID等于msg_perm.cuid或msg_perm.uid 或 具有超级用户特权的进程
 
-     此命令只能由下列两种进程执行：其有效用户ID等于msg_perm.cuid或msg_perm.uid或具有超级用户特权的进程
+       只有超级用户才能增加msg_qbytes的值 
+     #+END_EXAMPLE
+     + _IPC_RMID_ ：从系统中 *删除* 该 _消息队列_ 以及仍在 _该队列上的所有数据_ 
+      
+     #+BEGIN_EXAMPLE
+       这种删除立即生效。仍在使用这一消息队列的其他进程在它们下一次试图对此队列进行操作时，将出错返回EIDRM
 
+       此命令只能由下列两种进程执行：
+
+       其有效用户ID等于msg_perm.cuid或msg_perm.uid 或 具有超级用户特权的进程
+     #+END_EXAMPLE
 
 *** msgsnd函数
-    + msgsnd函数：将数据放到消息队列上
+    + _msgsnd_ 函数：将 _数据_ *放到* _消息队列_ 上
       #+BEGIN_SRC C
 	#include <sys/types.h>
 	#include <sys/ipc.h>
 	#include <sys/msg.h>
 
 	/**
-	   往队列末尾添加一个消息
-
-	   msqid：消息队列标识符
-	   ptr：消息指针
-	   nbytes：实际数据字节
-	   flag：读取方式标志
-
-	   return：成功则为0，若出错则为-1
-	,*/
+	 ,* 往队列末尾添加一个消息
+	 ,*
+	 ,* msqid: 消息队列标识符
+	 ,* ptr: 消息指针
+	 ,* nbytes: 实际数据字节
+	 ,* flag: 读取方式标志
+	 ,*
+	 ,* return: 成功则为 0，若出错则为 -1
+	 ,*
+	 ,*/
 	int msgsnd(int msqid, const void *ptr, size_t nbytes, int flag);
       #+END_SRC
 
 **** ptr指针
-     ptr指向的消息结构中包含了正整型消息类型，在其后立即跟随了消息数据(若nbytes是0，则无消息数据)。假设发送的最长消息是512字节，则可定义下列结构:
+     _ptr指向的消息结构_ 中包含了 _正整型_ *消息类型* ，在其后立即跟随了 *消息数据* 
+
+     #+BEGIN_EXAMPLE
+       若nbytes是0，则无消息数据
+     #+END_EXAMPLE
+
+     假设发送的最长消息是512字节，则可定义下列结构:
      #+BEGIN_SRC C
   struct mymesg
   {
@@ -1309,56 +1336,78 @@ UNIX _IPC_ 已经是而且继续是各种 *进程通信方式* 的统称，其�
           char mtext[512]; /* message data of length nbytes */
   };
      #+END_SRC
-     而ptr就是一个指向mymesg结构的指针。接收者可以使用消息类型以非先进先出的次序取消息
-     
+     ptr就是一个 _指向mymesg结构的指针_ 
+
+     #+BEGIN_EXAMPLE
+       接收者可以使用消息类型以“非先进先出”的次序取消息
+     #+END_EXAMPLE
+
 **** flag标记
-     + flag的值可以指定为IPC_NOWAIT：这类似于文件I/O的非阻塞I/O标志。若消息队列已满(或者是队列中的消息总数等于系统限制值，或队列中的字节总数等于系统限制值)，则指定IPC_NOWAIT使得msgsnd立即出错返回EAGAIN
+     #+BEGIN_EXAMPLE
+       flag的值可以指定为 IPC_NOWAIT ，这类似于文件 I/O的非阻塞I/O标志
+     #+END_EXAMPLE
 
-     + 如果没有指定IPC_NOWAIT，则进程阻塞直到：
-       1. 有空间可以容纳要发送的消息
-       2. 从系统中删除了此队列，返回EIDRM(“标志符被删除”)报错
-       3. 捕捉到一个信号，并从信号处理程序返回。返回EINTR报错
+     若消息队列已满(或者是队列中的消息总数等于系统限制值，或队列中的字节总数等于系统限制值)
+     + 如果指定  _IPC_NOWAIT_ ： _msgsnd_ *立即出错返回* _EAGAIN_ 
+     + 如果没有指定 _IPC_NOWAIT_ ，则进程 *阻塞* 直到：
+       1. _有空间_ 可以容纳要发送的消息
+       2. 从系统中 *删除* 了此队列，返回 _EIDRM_ (“标志符被删除”)报错
+       3.  _捕捉_ 到一个 _信号_ ，并从信号处理程序返回，返回 _EINTR_ 报错
 
-     注意：对消息队列删除的处理不是很完善。因为对每个消息队列并没有设置一个引用计数器(对打开文件则有这种计数器)，所以删除一个队列使得仍在使用这一队列的进程在下次对队列进行操作时出错返回。信号量机构也以同样方式处理其删除。而删除一个文件则要等到使用该文件的最后一个进程关闭了它，才能删除文件的内容
+     #+BEGIN_EXAMPLE
+       注意：对消息队列删除的处理不是很完善
 
+       因为对每个消息队列并没有设置一个引用计数器(对打开文件则有这种计数器)
+       所以删除一个队列使得仍在使用这一队列的进程在下次对队列进行操作时出错返回
+
+       信号量机构也以同样方式处理其删除
+
+       而删除一个文件则要等到使用该文件的最后一个进程关闭了它，才能删除文件的内容
+     #+END_EXAMPLE
 *** msgrcv函数
-    + msgrcv函数：从队列中取消息  
+    + _msgrcv_ 函数：从队列中取消息  
       #+BEGIN_SRC C
 	#include <sys/types.h>
 	#include <sys/ipc.h>
 	#include <sys/msg.h>
 
 	/**
-	   从队列中取走一个消息，这意味着消息会被移出链表
-
-	   msqid：消息标识符
-	   ptr：消息指针
-	   nbytes：消息实际字节长度
-	   type：消息类型
-	   flag：取走标志
-
-	   return：若成功则为消息数据部分的长度，若出错则为-1
-	,*/
+	 ,* 从队列中取走一个消息，这意味着消息会被移出链表
+	 ,*
+	 ,* msqid: 消息标识符
+	 ,* ptr: 消息指针
+	 ,* nbytes: 消息实际字节长度
+	 ,* type: 消息类型
+	 ,* flag: 取走标志
+	 ,*
+	 ,* return: 若成功则为 消息数据部分的长度，若出错则为 -1
+	 ,*/
 	int msgrcv(int msqid, void *ptr, size_t nbytes, long type, int flag);
       #+END_SRC
     如同msgsnd中一样：
-    + ptr参数指向一个长整型数(返回的消息类型存放在其中)，跟随其后的是存放实际消息数据的缓存
-    + nbytes说明数据缓存的长度。若返回的消息大于nbytes:
-      + 在flag中设置了MSG_NOERROR，则该消息被截短(在这种情况下，不通知我们消息截短了:-()
-      + 如果没有设置这一标志，而消息又太长，则出错返回E2BIG(消息仍留在队列中)
+    + _ptr_ 参数指向一个长整型数(返回的消息类型存放在其中)，跟随其后的是存放实际消息数据的缓存
+    + _nbytes_ 说明数据 *缓存的长度* 。若返回的 _消息大于nbytes_ :
+      + 在flag中设置了 _MSG_NOERROR_ ，则该消息被 *截短* (在这种情况下，不通知消息截短了)
+      + 如果没有设置这一标志，而消息又太长，则 *出错* 返回 _E2BIG_ (消息仍留在队列中)
     + flag值指定IPC_NOWAIT，使操作不阻塞。这使得如果没有所指定类型的消息，则msgrcv出错返回ENOMSG
     + 如果flag没有指定IPC_NOWAIT，则进程阻塞直至：
       + 有了指定类型的消息
       + 从系统中删除了此队列(出错返回EIDRM)
       + 捕捉到一个信号并从信号处理程序返回(出错返回EINTR)。
 **** type参数
-     参数type可以指定想要哪一种消息：
-     + type == 0： 返回队列中的第一个消息
-     + type > 0：返回队列中消息类型为type的第一个消息
-     + type < 0：返回队列中消息类型值小于或等于type绝对值，而且在这种消息中，其类型值又是最小的消息
+     参数 _type_ 可以指定想要 *哪一种* 消息：
+     + _type == 0_ ： 返回队列中的 *第一个消息*
+     + _type > 0_ ：返回队列中 *消息类型为type的第一个消息* 
+     + _type < 0_ ：返回队列中 *消息类型值小于或等于type绝对值* ，而且在这种消息中，其 *类型值又是最小的消息* 
 
-     非零的type用于以非先进先出次序读消息。例如，若应用程序对消息赋优先权，那么type就可以是优先权值。如果一个消息队列由多个客户机和一个服务器使用，那么type字段可以用来包
-     含客户机进程ID。 
+     #+BEGIN_EXAMPLE
+       非零的type用于以非先进先出次序读消息
+
+       例如，若应用程序对消息赋优先权，那么type就可以是优先权值
+
+       如果一个消息队列由多个客户机和一个服务器使用，那么type字段可以用来包含客户机进程ID。 
+     #+END_EXAMPLE
+
 *** 实例
     向一个消息队列写入消息，读取出对应类型的消息
     #+BEGIN_SRC C
@@ -1427,9 +1476,11 @@ UNIX _IPC_ 已经是而且继续是各种 *进程通信方式* 的统称，其�
   help #读取出的消息
     #+END_SRC
     
-*** 消息队列 VS 流管道
-    如若需要客户机和服务器之间的双向数据流，可以使用消息队列或流管道(用UNIX域套接字来实现)。消息队列原来的实施目的是提供比一般IPC更高速度的进程通信方法，而现在这个优点已经不复存在，所以不推荐使用消息队列！ 
-    
+    #+BEGIN_EXAMPLE
+      如若需要客户机和服务器之间的“双向数据流”，可以使用“消息队列“或”流管道“(用Socket套接字来实现)
+
+      消息队列原来的目的是“提供比一般IPC更高速度的进程通信方法”，而现在这个优点已经不复存在，所以不推荐使用消息队列！ 
+    #+END_EXAMPLE    
 ** 信号量
    信号量与已经介绍过的IPC(管道、FIFO以及消息列队)不同。它是一个计数器，用于多进程对共享数据对象的存取。为了获得共享资源，进程需要执行下列操作：
    1. 测试控制该资源的信号量

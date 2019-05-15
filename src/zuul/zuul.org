@@ -16,7 +16,7 @@ zuul本身是通过配置文件来初始化zuul的路由映射：
 #+END_EXAMPLE
 
 ** 自动注册
-1. Java的微服务依赖的 _ebao-spring-boot-starter-discoveryendpoint_ 这个starter插件，微服务启动后，往redis发布一条消息
+1. Java的微服务依赖的 ebao-spring-boot-starter-discoveryendpoint 这个starter插件，微服务启动后，往redis发布一条消息
 2. redis收到消息后，会广播给所有也依赖这个插件的服务
 3. zuul网关收到redis的广播，更新zuul的路由映射
 
@@ -47,8 +47,8 @@ zuul本身是通过配置文件来初始化zuul的路由映射：
        + 反之则会调用RibbonRoutingFilter基于客户端的负载均衡器做路由
    + 把VendorRoute放入到com.ebao.cloud.gateway.route.TenantRouteLocator#cachedVenderRoutes这个Map
 3. 当请求到来时，路径信息和http方法匹配后，把请求路由到后台服务器
-   + 某个服务暴露在网关的url是： _${gw-url}/${vendorCode}/${version}/${fromPath}_ 
-     + ${gw-url} 是网关的域名：比如 https://dev-gw.ebaocloud.com ， 也可以是 https://dev.ebaocloud.com/api 
+   + 某个服务暴露在网关的url是： $ {gw-url}/$ {vendorCode}/$ {version}/$ {fromPath} 
+     + $ {gw-url} 是网关的域名：比如 https://dev-gw.ebaocloud.com ， 也可以是 https://dev.ebaocloud.com/api 
    + 路由匹配的入口： com.ebao.cloud.gateway.route.TenantRouteLocator#getMatchingRoute 
      + 路由匹配支持通配符和path变量：匹配器使用的是spring提供的AntPathMatcher
        + 注意：通配符path变量匹配成功后，因为数据库保存的是类似于/aaa/${id} 这种形式，实际路由请求的后台路径需要做变量替换
@@ -57,6 +57,21 @@ zuul本身是通过配置文件来初始化zuul的路由映射：
    + 后台服务器地址保存在admin-service的t_maf_vendor_service.route_nodes字段
 
 * 自定义ZuulFilter
+外部http请求到达api网关服务的时候：
++ 首先它会进入第一个阶段pre，在这里它会被pre类型的过滤器进行处理
+  + 该类型过滤器的主要目的是在进行请求路由之前做一些前置加工，比如请求的校验等
++ 在完成了pre类型的过滤器处理之后，请求进入第二个阶段routing，也就是之前说的路由请求转发阶段，请求将会被routing类型的处理器处理。这里的具体处理内容就是将外部请求转发到具体服务实例上去的过程
++ 当服务实例请求结果都返回之后，routing阶段完成，请求进入第三个阶段post
+   + 在post类型的过滤器中，可以对处理结果进行一些加工或转换等内容
++ 还有一个特殊的阶段error，该阶段只有在上述三个阶段中发生异常的时候才会触发
+   + 但是它的最后流向还是post类型的过滤器，因为它需要通过post过滤器将最终结果返回给请求客户端
+
+#+BEGIN_EXAMPLE
+  对于error过滤器的处理，在spring cloud zuul的过滤链中实际上有一些不同
+#+END_EXAMPLE
+
+每个Filter实际上都要定义一个优先级的数值，值越低表示优先级越高
+
 ** pre 
 *** CorsPreFlightFilter 
 
@@ -304,6 +319,7 @@ venderPath对象的ignoreHeaders信息来自于注册在admin-service数据库�
 #+BEGIN_EXAMPLE
   升级到支持nio的zuul2试试，或选择基于go的网关中间件
 #+END_EXAMPLE
+
 + 出错时报错信息很不直观
 #+BEGIN_EXAMPLE
   CustomErrorFilter应该自己组装对应的报错响应
