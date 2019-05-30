@@ -148,3 +148,112 @@
      2. 为用户程序提交 *数据节点监听* 服务 
 
 * 特点
+  + *顺序一致性* ：从同一客户端发起的事务请求，最终将会严格地按照顺序被应用到 ZooKeeper 中去
+  + *原子性* ：所有事务请求的处理结果在整个集群中所有机器上的应用情况是一致的，也就是说，要么整个集群中所有的机器都成功应用了某一个事务，要么都没有应用
+  + *单一系统映像* ：无论客户端连到哪一个 ZooKeeper 服务器上，其看到的服务端数据模型都是一致的
+  + *可靠性* ：一旦一次更改请求被应用，更改的结果就会被持久化，直到被下一次更改覆盖
+
+* 目标
+
+** 简单的数据模型
+   ZooKeeper 允许 _分布式进程_ 通过 *共享的* _层次结构命名空间_ 进行 *相互协调* ，这与标准文件系统类似：
+   + _名称空间_ 由 ZooKeeper 中的 _数据寄存器_ 组成，被称为 _znode_ ，这些类似于文件和目录
+   + 与为存储设计的典型文件系统不同，ZooKeeper数据保存在 *内存* 中：这意味着ZooKeeper可以实现 *高吞吐量* 和 *低延迟* 
+
+     #+ATTR_HTML: image :width 30% 
+     file:pic/zookeeper/znode.jpg]] 
+
+** 可扩展集群
+   #+BEGIN_EXAMPLE
+     为了保证高可用，最好是以集群形态来部署 ZooKeeper
+
+     这样只要集群中大部分机器是可用的（能够容忍一定的机器故障），那么zookeeper本身仍然是可用的
+   #+END_EXAMPLE
+
+   客户端在使用 ZooKeeper 时，需要知道 *集群机器列表* ，通过与 _集群中的某一台机器_ 建立 TCP 连接来使用服务，客户端使用这个TCP链接来发送请求、获取结果、获取监听事件以及发送心跳包。如果这个连接异常断开了，客户端可以连接到另外的机器上 
+
+   #+ATTR_HTML: image :width 50% 
+   [[file:pic/zookeeper/cluster.jpg]] 
+
+   上图中每一个 _Server_ 代表一个 _安装Zookeeper服务的服务器_ ：
+   + 组成 ZooKeeper 服务的服务器都会在 *内存中维护当前的服务器状态*
+   + *每台服务器之间都互相保持着通信* ，集群间通过  _Zab 协议_ 来保持 *数据的一致性* 
+** 顺序访问
+   对于来自 _客户端的每个 *更新* 请求_ ，ZooKeeper 都会分配一个 _全局唯一的递增编号_ ，这个编号反应了所有 *事务操作的先后顺序* 
+   #+BEGIN_EXAMPLE
+     应用程序可以使用 ZooKeeper 这个特性来实现更高层次的同步原语
+
+     这个编号也叫做时间戳：zxid
+   #+END_EXAMPLE
+** 高性能
+   ZooKeeper 是 *高性能* 的。 在 _读_ 多于 _写_ 的应用程序中尤其地高性能，因为 _写_ 会导致 *所有的服务器间同步状态* 
+
+   #+BEGIN_EXAMPLE
+     “读”多于“写”是协调服务的典型场景
+   #+END_EXAMPLE
+
+* 集群
+  #+BEGIN_EXAMPLE
+    在典型的Master/Slave模式中，通常 Master服务器作为主服务器提供写服务
+    其他的 Slave 服务器从服务器通过异步复制的方式获取 Master 服务器最新的数据提供读服务
+
+    但是，在 ZooKeeper 中没有选择传统的 Master/Slave 概念
+  #+END_EXAMPLE
+
+  ZooKeeper引入了 _Leader_ 、 _Follower_  和 _Observer_ 三种角色。如下图所示：
+
+  #+ATTR_HTML: image :width 50% 
+  [[file:pic/zookeeper/roles.jpg]] 
+
+  + ZooKeeper 集群中的所有机器通过一个 *Leader 选举过程* 来选定一台称为  _Leader_  的机器
+    + Leader 既可以 *为客户端提供 _写_ 服务又能提供 _读_ 服务* 
+  + 除了 Leader 外， _Follower_  和  _Observer_ 都只能 *提供读服务* 
+    + _Observer_  机器 *不参与 Leader 的选举过程* ，也 *不参与写操作的 _过半写成功_ 策略*
+    + 因此 Observer 机器可以在 *不影响写性能的情况下提升集群的读性能* 
+
+
+  #+CAPTION: zookeeper集群中的角色
+  #+ATTR_HTML: :border 1 :rules all :frame boader
+  | 角色    |          | 描述                                                                       |
+  | Leader  |          | 负责进行投票的发起和决议，更新系统状态                                     |
+  | Learner | Follower | 接受客户请求并向客户端发起响应，选主过程参与投票                           |
+  |         | Observer | 接受客户端连接，把写请求发送给Leader，但不参加投票过程，只同步Leader的状态 |
+  | Client  |          | 请求发起方                                                                 |
+
+
+* ZAB 协议
+** Paxos算法
+   _Paxos 算法_ 应该可以说是 *ZooKeeper 的灵魂* 了。但是，ZooKeeper 并没有完全采用 Paxos算法 ，而是使用 _ZAB 协议_ 作为其保证数据一致性的核心算法
+
+   #+BEGIN_EXAMPLE
+     在ZooKeeper的官方文档中也指出，ZAB协议并不像 Paxos 算法那样，是一种通用的分布式一致性算法
+   #+END_EXAMPLE
+** ZAB 协议 
+   ZAB (ZooKeeper Atomic Broadcast ) 协议是为分布式协调服务 ZooKeeper 专门设计的一种 *支持崩溃恢复的原子广播协议* 
+
+   #+BEGIN_EXAMPLE
+     在 ZooKeeper 中，主要依赖 ZAB 协议来实现分布式数据一致性
+
+     基于该协议，ZooKeeper 实现了一种主备模式的系统架构来保持集群中各个副本之间的数据一致性
+   #+END_EXAMPLE
+*** 崩溃恢复
+    1. 当整个服务框架在 _启动过程_ 中，或是当 _Leader 服务器_ 出现 _网络中断_ 、 _崩溃退出_ 与 _重启_ 等异常情况时，ZAB 协议就会进人 *恢复模式* 并 *选举产生新的Leader服务器*
+    2. 当选举产生了 _新的 Leader 服务器_ ，同时集群中已经有 *过半的* 机器与 _该Leader服务器_ 完成了 *状态同步* 之后，ZAB协议就会 *退出恢复模式* 
+       + 所谓的 _状态同步_ 是指 *数据同步* ，用来保证 *集群中存在过半的机器能够和Leader服务器的数据状态保持一致* 
+*** 消息广播
+    + 当集群中已经有过半的Follower服务器完成了和Leader服务器的状态同步，那么整个服务框架就可以进人 *消息广播* 模式 
+    + 当一台同样 _遵守ZAB协议的服务器_ 启动后 *加入到集群* 中时，如果此时集群中已经 _存在一个Leader服务器_ 在负责进行消息广播：
+      1. 新加入的服务器就会自觉地进入 *数据恢复* 模式
+      2. 找到Leader所在的服务器
+      3. 与Leader进行 *数据同步*
+      4. 一起参与到消息广播流程中去
+
+    #+BEGIN_EXAMPLE
+      ZooKeeper设计成只允许唯一的一个Leader服务器来进行事务请求的处理
+
+      Leader服务器在接收到客户端的事务请求后，会生成对应的事务提案并发起一轮广播协议
+
+      而如果集群中的其他机器接收到客户端的事务请求，那么这些非Leader服务器会首先将这个事务请求转发给Leader服务器
+    #+END_EXAMPLE
+
+* 应用：分布式锁

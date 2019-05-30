@@ -238,7 +238,7 @@ for the JavaScript code in this tag.
 <ul>
 <li><a href="#org29ef66a">概览</a></li>
 <li><a href="#orgdd7face">场景</a></li>
-<li><a href="#orgc9cb550">集群</a></li>
+<li><a href="#org8f34e11">集群</a></li>
 </ul>
 </li>
 <li><a href="#orgf587db0">概念</a>
@@ -252,6 +252,27 @@ for the JavaScript code in this tag.
 </ul>
 </li>
 <li><a href="#orgd7146e4">特点</a></li>
+<li><a href="#orgc0e52ce">目标</a>
+<ul>
+<li><a href="#org8ab1f68">简单的数据模型</a></li>
+<li><a href="#org97fa37e">可扩展集群</a></li>
+<li><a href="#org14eea91">顺序访问</a></li>
+<li><a href="#org14791c0">高性能</a></li>
+</ul>
+</li>
+<li><a href="#orgeb06427">集群</a></li>
+<li><a href="#org55584e4">ZAB 协议</a>
+<ul>
+<li><a href="#org6e73cf3">Paxos算法</a></li>
+<li><a href="#orgc149479">ZAB 协议</a>
+<ul>
+<li><a href="#org2595c7a">崩溃恢复</a></li>
+<li><a href="#orgcb190d4">消息广播</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#org9b7c6e2">应用：分布式锁</a></li>
 </ul>
 </div>
 </div>
@@ -333,9 +354,9 @@ Master 选举
 </div>
 </div>
 
-<div id="outline-container-orgc9cb550" class="outline-3">
-<h3 id="orgc9cb550">集群</h3>
-<div class="outline-text-3" id="text-orgc9cb550">
+<div id="outline-container-org8f34e11" class="outline-3">
+<h3 id="org8f34e11">集群</h3>
+<div class="outline-text-3" id="text-org8f34e11">
 <p>
 Zookeeper中 <span class="underline">Leader 选举算法</span> 采用了 <b>Zab</b> 协议。Zab核心思想是 <b>当多数 Server 写成功，则任务数据写成功</b> 
 </p>
@@ -505,6 +526,242 @@ ZooKeeper 本身就是一个 <span class="underline">分布式</span> 程序
 
 <div id="outline-container-orgd7146e4" class="outline-2">
 <h2 id="orgd7146e4">特点</h2>
+<div class="outline-text-2" id="text-orgd7146e4">
+<ul class="org-ul">
+<li><b>顺序一致性</b> ：从同一客户端发起的事务请求，最终将会严格地按照顺序被应用到 ZooKeeper 中去</li>
+<li><b>原子性</b> ：所有事务请求的处理结果在整个集群中所有机器上的应用情况是一致的，也就是说，要么整个集群中所有的机器都成功应用了某一个事务，要么都没有应用</li>
+<li><b>单一系统映像</b> ：无论客户端连到哪一个 ZooKeeper 服务器上，其看到的服务端数据模型都是一致的</li>
+<li><b>可靠性</b> ：一旦一次更改请求被应用，更改的结果就会被持久化，直到被下一次更改覆盖</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-orgc0e52ce" class="outline-2">
+<h2 id="orgc0e52ce">目标</h2>
+<div class="outline-text-2" id="text-orgc0e52ce">
+</div>
+<div id="outline-container-org8ab1f68" class="outline-3">
+<h3 id="org8ab1f68">简单的数据模型</h3>
+<div class="outline-text-3" id="text-org8ab1f68">
+<p>
+ZooKeeper 允许 <span class="underline">分布式进程</span> 通过 <b>共享的</b> <span class="underline">层次结构命名空间</span> 进行 <b>相互协调</b> ，这与标准文件系统类似：
+</p>
+<ul class="org-ul">
+<li><span class="underline">名称空间</span> 由 ZooKeeper 中的 <span class="underline">数据寄存器</span> 组成，被称为 <span class="underline">znode</span> ，这些类似于文件和目录</li>
+<li><p>
+与为存储设计的典型文件系统不同，ZooKeeper数据保存在 <b>内存</b> 中：这意味着ZooKeeper可以实现 <b>高吞吐量</b> 和 <b>低延迟</b> 
+</p>
+
+<p width="30%">
+<img src="pic/zookeeper/znode.jpg" alt="znode.jpg" width="30%" />]] 
+</p></li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-org97fa37e" class="outline-3">
+<h3 id="org97fa37e">可扩展集群</h3>
+<div class="outline-text-3" id="text-org97fa37e">
+<pre class="example">
+     为了保证高可用，最好是以集群形态来部署 ZooKeeper
+
+     这样只要集群中大部分机器是可用的（能够容忍一定的机器故障），那么zookeeper本身仍然是可用的
+</pre>
+
+<p>
+客户端在使用 ZooKeeper 时，需要知道 <b>集群机器列表</b> ，通过与 <span class="underline">集群中的某一台机器</span> 建立 TCP 连接来使用服务，客户端使用这个TCP链接来发送请求、获取结果、获取监听事件以及发送心跳包。如果这个连接异常断开了，客户端可以连接到另外的机器上 
+</p>
+
+
+<div class="figure">
+<p><img src="pic/zookeeper/cluster.jpg" alt="cluster.jpg" width="50%" /> 
+</p>
+</div>
+
+<p>
+上图中每一个 <span class="underline">Server</span> 代表一个 <span class="underline">安装Zookeeper服务的服务器</span> ：
+</p>
+<ul class="org-ul">
+<li>组成 ZooKeeper 服务的服务器都会在 <b>内存中维护当前的服务器状态</b></li>
+<li><b>每台服务器之间都互相保持着通信</b> ，集群间通过  <span class="underline">Zab 协议</span> 来保持 <b>数据的一致性</b></li>
+</ul>
+</div>
+</div>
+<div id="outline-container-org14eea91" class="outline-3">
+<h3 id="org14eea91">顺序访问</h3>
+<div class="outline-text-3" id="text-org14eea91">
+<p>
+对于来自 <span class="underline">客户端的每个 <b>更新</b> 请求</span> ，ZooKeeper 都会分配一个 <span class="underline">全局唯一的递增编号</span> ，这个编号反应了所有 <b>事务操作的先后顺序</b> 
+</p>
+<pre class="example">
+     应用程序可以使用 ZooKeeper 这个特性来实现更高层次的同步原语
+
+     这个编号也叫做时间戳：zxid
+</pre>
+</div>
+</div>
+<div id="outline-container-org14791c0" class="outline-3">
+<h3 id="org14791c0">高性能</h3>
+<div class="outline-text-3" id="text-org14791c0">
+<p>
+ZooKeeper 是 <b>高性能</b> 的。 在 <span class="underline">读</span> 多于 <span class="underline">写</span> 的应用程序中尤其地高性能，因为 <span class="underline">写</span> 会导致 <b>所有的服务器间同步状态</b> 
+</p>
+
+<pre class="example">
+     “读”多于“写”是协调服务的典型场景
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgeb06427" class="outline-2">
+<h2 id="orgeb06427">集群</h2>
+<div class="outline-text-2" id="text-orgeb06427">
+<pre class="example">
+    在典型的Master/Slave模式中，通常 Master服务器作为主服务器提供写服务
+    其他的 Slave 服务器从服务器通过异步复制的方式获取 Master 服务器最新的数据提供读服务
+
+    但是，在 ZooKeeper 中没有选择传统的 Master/Slave 概念
+</pre>
+
+<p>
+ZooKeeper引入了 <span class="underline">Leader</span> 、 <span class="underline">Follower</span>  和 <span class="underline">Observer</span> 三种角色。如下图所示：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/zookeeper/roles.jpg" alt="roles.jpg" width="50%" /> 
+</p>
+</div>
+
+<ul class="org-ul">
+<li>ZooKeeper 集群中的所有机器通过一个 <b>Leader 选举过程</b> 来选定一台称为  <span class="underline">Leader</span>  的机器
+<ul class="org-ul">
+<li>Leader 既可以 <b>为客户端提供 <span class="underline">写</span> 服务又能提供 <span class="underline">读</span> 服务</b></li>
+</ul></li>
+<li>除了 Leader 外， <span class="underline">Follower</span>  和  <span class="underline">Observer</span> 都只能 <b>提供读服务</b> 
+<ul class="org-ul">
+<li><span class="underline">Observer</span>  机器 <b>不参与 Leader 的选举过程</b> ，也 <b>不参与写操作的 <span class="underline">过半写成功</span> 策略</b></li>
+<li>因此 Observer 机器可以在 <b>不影响写性能的情况下提升集群的读性能</b></li>
+</ul></li>
+</ul>
+
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 1:</span> zookeeper集群中的角色</caption>
+
+<colgroup>
+<col  class="org-left" />
+
+<col  class="org-left" />
+
+<col  class="org-left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="org-left">角色</td>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">描述</td>
+</tr>
+
+<tr>
+<td class="org-left">Leader</td>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">负责进行投票的发起和决议，更新系统状态</td>
+</tr>
+
+<tr>
+<td class="org-left">Learner</td>
+<td class="org-left">Follower</td>
+<td class="org-left">接受客户请求并向客户端发起响应，选主过程参与投票</td>
+</tr>
+
+<tr>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">Observer</td>
+<td class="org-left">接受客户端连接，把写请求发送给Leader，但不参加投票过程，只同步Leader的状态</td>
+</tr>
+
+<tr>
+<td class="org-left">Client</td>
+<td class="org-left">&#xa0;</td>
+<td class="org-left">请求发起方</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+
+
+<div id="outline-container-org55584e4" class="outline-2">
+<h2 id="org55584e4">ZAB 协议</h2>
+<div class="outline-text-2" id="text-org55584e4">
+</div>
+<div id="outline-container-org6e73cf3" class="outline-3">
+<h3 id="org6e73cf3">Paxos算法</h3>
+<div class="outline-text-3" id="text-org6e73cf3">
+<p>
+<span class="underline">Paxos 算法</span> 应该可以说是 <b>ZooKeeper 的灵魂</b> 了。但是，ZooKeeper 并没有完全采用 Paxos算法 ，而是使用 <span class="underline">ZAB 协议</span> 作为其保证数据一致性的核心算法
+</p>
+
+<pre class="example">
+     在ZooKeeper的官方文档中也指出，ZAB协议并不像 Paxos 算法那样，是一种通用的分布式一致性算法
+</pre>
+</div>
+</div>
+<div id="outline-container-orgc149479" class="outline-3">
+<h3 id="orgc149479">ZAB 协议</h3>
+<div class="outline-text-3" id="text-orgc149479">
+<p>
+ZAB (ZooKeeper Atomic Broadcast ) 协议是为分布式协调服务 ZooKeeper 专门设计的一种 <b>支持崩溃恢复的原子广播协议</b> 
+</p>
+
+<pre class="example">
+     在 ZooKeeper 中，主要依赖 ZAB 协议来实现分布式数据一致性
+
+     基于该协议，ZooKeeper 实现了一种主备模式的系统架构来保持集群中各个副本之间的数据一致性
+</pre>
+</div>
+<div id="outline-container-org2595c7a" class="outline-4">
+<h4 id="org2595c7a">崩溃恢复</h4>
+<div class="outline-text-4" id="text-org2595c7a">
+<ol class="org-ol">
+<li>当整个服务框架在 <span class="underline">启动过程</span> 中，或是当 <span class="underline">Leader 服务器</span> 出现 <span class="underline">网络中断</span> 、 <span class="underline">崩溃退出</span> 与 <span class="underline">重启</span> 等异常情况时，ZAB 协议就会进人 <b>恢复模式</b> 并 <b>选举产生新的Leader服务器</b></li>
+<li>当选举产生了 <span class="underline">新的 Leader 服务器</span> ，同时集群中已经有 <b>过半的</b> 机器与 <span class="underline">该Leader服务器</span> 完成了 <b>状态同步</b> 之后，ZAB协议就会 <b>退出恢复模式</b> 
+<ul class="org-ul">
+<li>所谓的 <span class="underline">状态同步</span> 是指 <b>数据同步</b> ，用来保证 <b>集群中存在过半的机器能够和Leader服务器的数据状态保持一致</b></li>
+</ul></li>
+</ol>
+</div>
+</div>
+<div id="outline-container-orgcb190d4" class="outline-4">
+<h4 id="orgcb190d4">消息广播</h4>
+<div class="outline-text-4" id="text-orgcb190d4">
+<ul class="org-ul">
+<li>当集群中已经有过半的Follower服务器完成了和Leader服务器的状态同步，那么整个服务框架就可以进人 <b>消息广播</b> 模式</li>
+<li>当一台同样 <span class="underline">遵守ZAB协议的服务器</span> 启动后 <b>加入到集群</b> 中时，如果此时集群中已经 <span class="underline">存在一个Leader服务器</span> 在负责进行消息广播：
+<ol class="org-ol">
+<li>新加入的服务器就会自觉地进入 <b>数据恢复</b> 模式</li>
+<li>找到Leader所在的服务器</li>
+<li>与Leader进行 <b>数据同步</b></li>
+<li>一起参与到消息广播流程中去</li>
+</ol></li>
+</ul>
+
+<pre class="example">
+ZooKeeper设计成只允许唯一的一个Leader服务器来进行事务请求的处理
+
+Leader服务器在接收到客户端的事务请求后，会生成对应的事务提案并发起一轮广播协议
+
+而如果集群中的其他机器接收到客户端的事务请求，那么这些非Leader服务器会首先将这个事务请求转发给Leader服务器
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org9b7c6e2" class="outline-2">
+<h2 id="org9b7c6e2">应用：分布式锁</h2>
 </div>
 </div>
 <div id="postamble" class="status">
