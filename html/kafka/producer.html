@@ -5,7 +5,7 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>生产者API</title>
+<title>实例</title>
 <meta name="generator" content="Org mode" />
 <meta name="author" content="Wu, Shanliang" />
 <style type="text/css">
@@ -233,8 +233,171 @@ for the JavaScript code in this tag.
  |
  <a accesskey="H" href="kafka.html"> HOME </a>
 </div><div id="content">
-<h1 class="title">生产者API</h1>
+<h1 class="title">实例</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#org1554739">生产者</a></li>
+<li><a href="#orgb44124a">消费者</a></li>
+</ul>
+</div>
+</div>
+<p>
+Kafka有以下四个核心API：
+</p>
+<ul class="org-ul">
+<li>Producer</li>
+<li>Consumer</li>
+<li>Streamer</li>
+<li>Connector</li>
+</ul>
 
+<pre class="example">
+这里讲解比较基础的Producer和Consumer
+</pre>
+
+<div id="outline-container-org1554739" class="outline-2">
+<h2 id="org1554739">生产者</h2>
+<div class="outline-text-2" id="text-org1554739">
+<p>
+一个简单的Producer的实例：
+</p>
+<div class="org-src-container">
+<pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">class</span> <span style="color: #98f5ff;">ProducerDemo</span> {
+    <span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">static</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">main</span>(<span style="color: #98f5ff;">String</span>[] <span style="color: #4eee94;">args</span>){
+        <span style="color: #98f5ff;">Properties</span> <span style="color: #4eee94;">properties</span> = <span style="color: #00bfff; font-weight: bold;">new</span> <span style="color: #98f5ff;">Properties</span>();
+        properties.put(<span style="color: #deb887;">"bootstrap.servers"</span>, <span style="color: #deb887;">"127.0.0.1:9092"</span>);
+        properties.put(<span style="color: #deb887;">"acks"</span>, <span style="color: #deb887;">"all"</span>);
+        properties.put(<span style="color: #deb887;">"retries"</span>, 0);
+        properties.put(<span style="color: #deb887;">"batch.size"</span>, 16384);
+        properties.put(<span style="color: #deb887;">"linger.ms"</span>, 1);
+        properties.put(<span style="color: #deb887;">"buffer.memory"</span>, 33554432);
+        properties.put(<span style="color: #deb887;">"key.serializer"</span>, <span style="color: #deb887;">"org.apache.kafka.common.serialization.StringSerializer"</span>);
+        properties.put(<span style="color: #deb887;">"value.serializer"</span>, <span style="color: #deb887;">"org.apache.kafka.common.serialization.StringSerializer"</span>);
+        <span style="color: #98f5ff;">Producer</span>&lt;<span style="color: #98f5ff;">String</span>, <span style="color: #98f5ff;">String</span>&gt; <span style="color: #4eee94;">producer</span> = <span style="color: #ffd700;">null</span>;
+        <span style="color: #00bfff; font-weight: bold;">try</span> {
+            producer = <span style="color: #00bfff; font-weight: bold;">new</span> <span style="color: #98f5ff;">KafkaProducer</span>&lt;<span style="color: #98f5ff;">String</span>, <span style="color: #98f5ff;">String</span>&gt;(properties);
+            <span style="color: #00bfff; font-weight: bold;">for</span> (<span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">i</span> = 0; i &lt; 100; i++) {
+                <span style="color: #98f5ff;">String</span> <span style="color: #4eee94;">msg</span> = <span style="color: #deb887;">"Message "</span> + i;
+                producer.send(<span style="color: #00bfff; font-weight: bold;">new</span> <span style="color: #98f5ff;">ProducerRecord</span>&lt;<span style="color: #98f5ff;">String</span>, <span style="color: #98f5ff;">String</span>&gt;(<span style="color: #deb887;">"HelloWorld"</span>, msg));
+                System.out.println(<span style="color: #deb887;">"Sent:"</span> + msg);
+            }
+        } <span style="color: #00bfff; font-weight: bold;">catch</span> (<span style="color: #98f5ff;">Exception</span> <span style="color: #4eee94;">e</span>) {
+            e.printStackTrace();
+        } <span style="color: #00bfff; font-weight: bold;">finally</span> {
+            producer.close();
+        }
+    }
+}
+</pre>
+</div>
+
+<p>
+使用 <span class="underline">KafkaProducer</span> 类的实例来创建一个生产者，KafkaProducer类的参数是一系列属性值：
+</p>
+<ul class="org-ul">
+<li>bootstrap.servers : Kafka <b>集群的IP地址</b> ，如果Broker数量超过1个，则使用逗号分隔，如 <span class="underline">192.168.1.110:9092,192.168.1.110:9092</span></li>
+<li>key.serializer   &amp;  value.serializer :  消息序列化类型
+<ul class="org-ul">
+<li>消息是以 <span class="underline">键值对</span> 的形式发送到Kafka集群的，其中Key是可选的，Value可以是任意类型</li>
+<li>在Message被发送到Kafka集群之前，Producer需要把 <b>不同类型的消息序列化为二进制类型</b></li>
+</ul></li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">for</span> (<span style="color: #98f5ff;">int</span> <span style="color: #4eee94;">i</span> = 0; i &lt; 100; i++) {
+    <span style="color: #98f5ff;">String</span> <span style="color: #4eee94;">msg</span> = <span style="color: #deb887;">"Message "</span> + i;
+    producer.send(<span style="color: #00bfff; font-weight: bold;">new</span> <span style="color: #98f5ff;">ProducerRecord</span>&lt;<span style="color: #98f5ff;">String</span>, <span style="color: #98f5ff;">String</span>&gt;(<span style="color: #deb887;">"HelloWorld"</span>, msg));
+    System.out.println(<span style="color: #deb887;">"Sent:"</span> + msg);
+}
+</pre>
+</div>
+<p>
+生产者使用 <span class="underline">send</span> 方法来发送100个消息到 <span class="underline">HelloWorld</span> 这个主题
+</p>
+</div>
+</div>
+
+<div id="outline-container-orgb44124a" class="outline-2">
+<h2 id="orgb44124a">消费者</h2>
+<div class="outline-text-2" id="text-orgb44124a">
+<p>
+一个简单的Consumer的实例：
+</p>
+<div class="org-src-container">
+<pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">class</span> <span style="color: #98f5ff;">ConsumerDemo</span> {
+    <span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">static</span> <span style="color: #98f5ff;">void</span> <span style="color: #daa520; font-weight: bold;">main</span>(<span style="color: #98f5ff;">String</span>[] <span style="color: #4eee94;">args</span>){
+    <span style="color: #98f5ff;">Properties</span> <span style="color: #4eee94;">properties</span> = <span style="color: #00bfff; font-weight: bold;">new</span> <span style="color: #98f5ff;">Properties</span>();
+    properties.put(<span style="color: #deb887;">"bootstrap.servers"</span>, <span style="color: #deb887;">"127.0.0.1:9092"</span>);
+    properties.put(<span style="color: #deb887;">"group.id"</span>, <span style="color: #deb887;">"group-1"</span>);
+    properties.put(<span style="color: #deb887;">"enable.auto.commit"</span>, <span style="color: #deb887;">"true"</span>);
+    properties.put(<span style="color: #deb887;">"auto.commit.interval.ms"</span>, <span style="color: #deb887;">"1000"</span>);
+    properties.put(<span style="color: #deb887;">"auto.offset.reset"</span>, <span style="color: #deb887;">"earliest"</span>);
+    properties.put(<span style="color: #deb887;">"session.timeout.ms"</span>, <span style="color: #deb887;">"30000"</span>);
+    properties.put(<span style="color: #deb887;">"key.deserializer"</span>, <span style="color: #deb887;">"org.apache.kafka.common.serialization.StringDeserializer"</span>);
+    properties.put(<span style="color: #deb887;">"value.deserializer"</span>, <span style="color: #deb887;">"org.apache.kafka.common.serialization.StringDeserializer"</span>);
+
+    <span style="color: #98f5ff;">KafkaConsumer</span>&lt;<span style="color: #98f5ff;">String</span>, <span style="color: #98f5ff;">String</span>&gt; <span style="color: #4eee94;">kafkaConsumer</span> = <span style="color: #00bfff; font-weight: bold;">new</span> <span style="color: #98f5ff;">KafkaConsumer</span>&lt;&gt;(properties);
+    kafkaConsumer.subscribe(Arrays.asList(<span style="color: #deb887;">"HelloWorld"</span>));
+    <span style="color: #00bfff; font-weight: bold;">while</span> (<span style="color: #ffd700;">true</span>) {
+        <span style="color: #98f5ff;">ConsumerRecords</span>&lt;<span style="color: #98f5ff;">String</span>, <span style="color: #98f5ff;">String</span>&gt; <span style="color: #4eee94;">records</span> = kafkaConsumer.poll(100);
+        <span style="color: #00bfff; font-weight: bold;">for</span> (<span style="color: #98f5ff;">ConsumerRecord</span>&lt;<span style="color: #98f5ff;">String</span>, <span style="color: #98f5ff;">String</span>&gt; <span style="color: #4eee94;">record</span> : records) {
+        System.out.printf(<span style="color: #deb887;">"offset = %d, value = %s"</span>, record.offset(), record.value());
+        System.out.println();
+        }
+    }
+    }
+}
+</pre>
+</div>
+
+<p>
+使用 <span class="underline">KafkaConsumer</span> 类的实例来创建一个消费者，和KafkaProucer类似，KafkaConsumer类的参数也是一系列属性值：
+</p>
+<ul class="org-ul">
+<li>bootstrap.servers</li>
+<li>key.serializer   &amp;  value.serializer</li>
+<li>group.id : Consumer分组ID</li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-java">kafkaConsumer.subscribe(Arrays.asList(<span style="color: #deb887;">"HelloWorld"</span>));
+</pre>
+</div>
+
+<p>
+消费者订阅了 <span class="underline">HelloWorld</span> 这个主题
+</p>
+
+<div class="org-src-container">
+<pre class="src src-java"><span style="color: #00bfff; font-weight: bold;">while</span> (<span style="color: #ffd700;">true</span>) {
+    <span style="color: #98f5ff;">ConsumerRecords</span>&lt;<span style="color: #98f5ff;">String</span>, <span style="color: #98f5ff;">String</span>&gt; <span style="color: #4eee94;">records</span> = kafkaConsumer.poll(200);
+    <span style="color: #00bfff; font-weight: bold;">for</span> (<span style="color: #98f5ff;">ConsumerRecord</span>&lt;<span style="color: #98f5ff;">String</span>, <span style="color: #98f5ff;">String</span>&gt; <span style="color: #4eee94;">record</span> : records) {
+        System.out.printf(<span style="color: #deb887;">"offset = %d, value = %s"</span>, record.offset(), record.value());
+        System.out.println();
+    }
+}
+</pre>
+</div>
+
+<p>
+消费者使用 <span class="underline">poll</span> 方法来轮询获得消息：
+</p>
+<ul class="org-ul">
+<li>等待直到获得所有的消息</li>
+<li>参数 <span class="underline">200</span> ：超时时间</li>
+</ul>
+
+<p>
+<a href="operation.html">Previous: 操作</a>
+</p>
+
+<p>
+<a href="kafka.html">Home: 目录</a>
+</p>
+</div>
+</div>
 </div>
 <div id="postamble" class="status">
 
