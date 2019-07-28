@@ -5,7 +5,7 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>核心概念</title>
+<title>配置</title>
 <meta name="generator" content="Org mode" />
 <meta name="author" content="Wu, Shanliang" />
 <style type="text/css">
@@ -229,434 +229,296 @@ for the JavaScript code in this tag.
 </head>
 <body>
 <div id="content">
-<h1 class="title">核心概念</h1>
+<h1 class="title">配置</h1>
 <div id="table-of-contents">
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org487e146">安装</a>
+<li><a href="#orgd7ca585">configMap</a>
 <ul>
-<li><a href="#orgc95f640">master节点</a></li>
-<li><a href="#orgb0d41c0">node节点</a></li>
-<li><a href="#orgb1d241e">测试</a></li>
+<li><a href="#org281ed76">创建</a></li>
+<li><a href="#org2808d9c">引用</a>
+<ul>
+<li><a href="#orgdf78fae">环境变量</a></li>
+<li><a href="#org0454cf3">作为volume挂载</a></li>
 </ul>
 </li>
-<li><a href="#org86c70b5">kubernate apis</a></li>
-<li><a href="#org2fb43ab">Pod</a>
-<ul>
-<li><a href="#org94e85bb">创建</a></li>
-<li><a href="#org7b48eb6">修改</a></li>
-<li><a href="#org7a4d2f7">删除</a></li>
 </ul>
 </li>
-<li><a href="#org3e7ac5c">namespace</a></li>
-<li><a href="#orgfb2f0de">基本容器配置</a></li>
-<li><a href="#orge988dfb">多容器的Pod</a></li>
+<li><a href="#org9a39e70">Secret</a>
+<ul>
+<li><a href="#org396e1b8">创建</a></li>
+<li><a href="#org270007a">引用</a></li>
+</ul>
+</li>
+<li><a href="#orgc9ba05b">SecurityContext</a></li>
+<li><a href="#org200b867">ServiceAccount</a>
+<ul>
+<li><a href="#org066e2a3">创建</a></li>
+<li><a href="#org0e742c1">使用</a></li>
+</ul>
+</li>
+<li><a href="#orgc98c7a7">资源限制</a></li>
 </ul>
 </div>
 </div>
 
-<div id="outline-container-org487e146" class="outline-2">
-<h2 id="org487e146">安装</h2>
-<div class="outline-text-2" id="text-org487e146">
-<p>
-配置apt源：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-sh">curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
-
-sudo add-apt-repository    <span style="color: #deb887;">"deb [arch=amd64] https://download.docker.com/linux/ubuntu \</span>
-<span style="color: #deb887;">   $(</span><span style="color: #fa8072;">lsb_release</span><span style="color: #deb887;"> -cs) \</span>
-<span style="color: #deb887;">   stable"</span>
-
-curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
-
-cat &lt;&lt; EOF | sudo tee /etc/apt/sources.list.d/kubernetes.list
-<span style="color: #ffff00; font-weight: bold;">deb https://apt.kubernetes.io/ kubernetes-xenial main</span>
-<span style="color: #ffff00; font-weight: bold;">EOF</span>
-</pre>
-</div>
-
-<p>
-安装docker和kubernate包：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-sh">sudo apt-get update
-
-sudo apt-get install -y docker-ce=18.06.1~ce~3-0~ubuntu <span style="color: #4eee94;">kubelet</span>=1.13.5-00 <span style="color: #4eee94;">kubeadm</span>=1.13.5-00 <span style="color: #4eee94;">kubectl</span>=1.13.5-00
-
-<span style="color: #5f9ea0; font-style: italic;">#</span><span style="color: #5f9ea0; font-style: italic;">sudo apt-mark hold docker-ce kubelet kubeadm kubectl</span>
-</pre>
-</div>
-
+<div id="outline-container-orgd7ca585" class="outline-2">
+<h2 id="orgd7ca585">configMap</h2>
+<div class="outline-text-2" id="text-orgd7ca585">
 <pre class="example">
-    请确保kubelet, kubeadm, kubectl这三个组件的版本一致！
+ConfigMap是存储通用的配置变量的，类似于配置文件，使用户可以将分布式系统中用于不同模块的环境变量统一到一个对象中管理
 </pre>
+</div>
 
+
+<div id="outline-container-org281ed76" class="outline-3">
+<h3 id="org281ed76">创建</h3>
+<div class="outline-text-3" id="text-org281ed76">
 <p>
-允许iptables bridge call：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-sh"><span style="color: #f08080;">echo</span> <span style="color: #deb887;">"net.bridge.bridge-nf-call-iptables=1"</span> | sudo tee -a /etc/sysctl.conf
-
-sudo sysctl -p
-</pre>
-</div>
-</div>
-
-<div id="outline-container-orgc95f640" class="outline-3">
-<h3 id="orgc95f640">master节点</h3>
-<div class="outline-text-3" id="text-orgc95f640">
-<p>
-初始化kubernates集群：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-sh">sudo kubeadm init --pod-network-cidr=10.244.0.0/16
-</pre>
-</div>
-
-<p>
-初始化本地配置：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-sh">mkdir -p $<span style="color: #4eee94;">HOME</span>/.kube
-
-sudo cp -i /etc/kubernetes/admin.conf $<span style="color: #4eee94;">HOME</span>/.kube/config
-
-sudo chown $(<span style="color: #fa8072;">id</span> -u):$(<span style="color: #fa8072;">id</span> -g) $<span style="color: #4eee94;">HOME</span>/.kube/config
-</pre>
-</div>
-
-<p>
-安装 <span class="underline">Flannel</span> 网络插件：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-sh">kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/bc79dd1505b0c8681ece4de4c0d86c5cd2643275/Documentation/kube-flannel.yml
-</pre>
-</div>
-</div>
-</div>
-
-<div id="outline-container-orgb0d41c0" class="outline-3">
-<h3 id="orgb0d41c0">node节点</h3>
-<div class="outline-text-3" id="text-orgb0d41c0">
-<p>
-把本机加入集群：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-sh">sudo kubeadm join $<span style="color: #4eee94;">controller_private_ip</span>:6443 --token $<span style="color: #4eee94;">token</span> --discovery-token-ca-cert-hash $<span style="color: #4eee94;">hash</span>
-</pre>
-</div>
-
-<pre class="example">
-controller_private_ip, token, hash 是值在初始化时候获得
-</pre>
-</div>
-</div>
-<div id="outline-container-orgb1d241e" class="outline-3">
-<h3 id="orgb1d241e">测试</h3>
-<div class="outline-text-3" id="text-orgb1d241e">
-<p>
-验证所有节点已经加入集群，在master节点执行：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-sh">kubectl get nodes
-
-NAME                      STATUS   ROLES    AGE   VERSION
-wboyd1c.mylabserver.com   Ready    master   54m   v1.13.4
-wboyd2c.mylabserver.com   Ready    &lt;none&gt;   49m   v1.13.4
-wboyd3c.mylabserver.com   Ready    &lt;none&gt;   49m   v1.13.4
-</pre>
-</div>
-</div>
-</div>
-</div>
-
-<div id="outline-container-org86c70b5" class="outline-2">
-<h2 id="org86c70b5">kubernate apis</h2>
-<div class="outline-text-2" id="text-org86c70b5">
-<p>
-获取K8s所有的组件名称：
+定义文件：
 </p>
 <div class="org-src-container">
-<pre class="src src-sh">kubectl api-resources -o name
+<pre class="src src-yaml"><span style="color: #4eee94;">apiVersion</span>: v1
+<span style="color: #4eee94;">kind</span>: ConfigMap
+<span style="color: #4eee94;">metadata</span>:
+   <span style="color: #4eee94;">name</span>: my-config-map
+<span style="color: #4eee94;">data</span>:
+   <span style="color: #4eee94;">myKey</span>: myValue
+   <span style="color: #4eee94;">anotherKey</span>: anotherValue
 </pre>
 </div>
-
-<p>
-获取 <span class="underline">kube-system</span> 这个 <b>namespace</b> 下的所有pod：
-</p>
-<div class="org-src-container">
-<pre class="src src-sh">kubectl get pods -n kube-system
-</pre>
-</div>
-
-<p>
-查询特定 <span class="underline">node_name</span> 的节点信息
-</p>
-<div class="org-src-container">
-<pre class="src src-sh">kubectl get nodes $<span style="color: #4eee94;">node_name</span>
-</pre>
-</div>
-
-<p>
-把节点信息导出成yaml格式： 
-</p>
 
 <div class="org-src-container">
-<pre class="src src-sh">kubectl get nodes $<span style="color: #4eee94;">node_name</span> -o yaml
-</pre>
-</div>
-
-<p>
-展示某个节点的详细信息：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-sh">kubectl describe node $<span style="color: #4eee94;">node_name</span>
+<pre class="src src-sh">kubectl create -f my-config.yml
 </pre>
 </div>
 </div>
 </div>
 
-<div id="outline-container-org2fb43ab" class="outline-2">
-<h2 id="org2fb43ab">Pod</h2>
-<div class="outline-text-2" id="text-org2fb43ab">
-<p>
-表示一组容器
-</p>
+<div id="outline-container-org2808d9c" class="outline-3">
+<h3 id="org2808d9c">引用</h3>
+<div class="outline-text-3" id="text-org2808d9c">
 </div>
-
-<div id="outline-container-org94e85bb" class="outline-3">
-<h3 id="org94e85bb">创建</h3>
-<div class="outline-text-3" id="text-org94e85bb">
+<div id="outline-container-orgdf78fae" class="outline-4">
+<h4 id="orgdf78fae">环境变量</h4>
+<div class="outline-text-4" id="text-orgdf78fae">
 <p>
-my-pod.yml: 
+<span class="underline">configMapKeyRef</span> :  
 </p>
 <div class="org-src-container">
 <pre class="src src-yaml"><span style="color: #4eee94;">apiVersion</span>: v1
 <span style="color: #4eee94;">kind</span>: Pod
 <span style="color: #4eee94;">metadata</span>:
-  <span style="color: #4eee94;">name</span>: my-pod
-  <span style="color: #4eee94;">labels</span>:
-    <span style="color: #4eee94;">app</span>: myapp
+  <span style="color: #4eee94;">name</span>: my-configmap-pod
+<span style="color: #4eee94;">spec</span>:
+  <span style="color: #4eee94;">containers</span>:
+  - <span style="color: #4eee94;">name</span>: myapp-container
+    <span style="color: #4eee94;">image</span>: busybox
+    <span style="color: #4eee94;">command</span>: [<span style="color: #deb887;">'sh'</span>, <span style="color: #deb887;">'-c'</span>, <span style="color: #deb887;">"echo $(MY_VAR) &amp;&amp; sleep 3600"</span>]
+    <span style="color: #4eee94;">env</span>:
+    - <span style="color: #4eee94;">name</span>: MY_VAR
+      <span style="color: #4eee94;">valueFrom</span>:
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">configMapKeyRef</span>:
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">name</span>: my-config-map
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">key</span>: myKey
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org0454cf3" class="outline-4">
+<h4 id="org0454cf3">作为volume挂载</h4>
+<div class="outline-text-4" id="text-org0454cf3">
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #4eee94;">apiVersion</span>: v1
+<span style="color: #4eee94;">kind</span>: Pod
+<span style="color: #4eee94;">metadata</span>:
+  <span style="color: #4eee94;">name</span>: my-configmap-volume-pod
+<span style="color: #4eee94;">spec</span>:
+  <span style="color: #4eee94;">containers</span>:
+  - <span style="color: #4eee94;">name</span>: myapp-container
+    <span style="color: #4eee94;">image</span>: busybox
+    <span style="color: #4eee94;">command</span>: [<span style="color: #deb887;">'sh'</span>, <span style="color: #deb887;">'-c'</span>, <span style="color: #deb887;">"echo $(cat /etc/config/myKey) &amp;&amp; sleep 3600"</span>]
+    <span style="color: #4eee94;">volumeMounts</span>:
+    - <span style="color: #4eee94;">name</span>: config-volume
+      <span style="color: #4eee94;">mountPath</span>: /etc/config
+  <span style="color: #4eee94;">volumes</span>:
+  - <span style="color: #4eee94;">name</span>: config-volume
+    <span style="color: #4eee94;">configMap</span>:
+    <span style="color: #4eee94;">name</span>: my-config-map
+</pre>
+</div>
+
+<p>
+更多关于configMap的操作参见：<a href="https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/">https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/</a>
+</p>
+</div>
+</div>
+</div>
+</div>
+<div id="outline-container-org9a39e70" class="outline-2">
+<h2 id="org9a39e70">Secret</h2>
+<div class="outline-text-2" id="text-org9a39e70">
+<pre class="example">
+Secret和ConfigMap类似，用来保存敏感信息
+</pre>
+</div>
+<div id="outline-container-org396e1b8" class="outline-3">
+<h3 id="org396e1b8">创建</h3>
+<div class="outline-text-3" id="text-org396e1b8">
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #4eee94;">apiVersion</span>: v1
+<span style="color: #4eee94;">kind</span>: Secret
+<span style="color: #4eee94;">metadata</span>:
+  <span style="color: #4eee94;">name</span>: my-secret
+<span style="color: #4eee94;">stringData</span>:
+  <span style="color: #4eee94;">myKey</span>: myPassword
+</pre>
+</div>
+
+<div class="org-src-container">
+<pre class="src src-sh">kubectl create -f my-secret.yml
+</pre>
+</div>
+
+<pre class="example">
+     在k8s中创建完Secret之后，应该删除对应的定义文件，避免泄漏
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org270007a" class="outline-3">
+<h3 id="org270007a">引用</h3>
+<div class="outline-text-3" id="text-org270007a">
+<p>
+通过 <span class="underline">secretKeyRef</span> 来引用：
+</p>
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #4eee94;">apiVersion</span>: v1
+<span style="color: #4eee94;">kind</span>: Pod
+<span style="color: #4eee94;">metadata</span>:
+  <span style="color: #4eee94;">name</span>: my-secret-pod
+<span style="color: #4eee94;">spec</span>:
+  <span style="color: #4eee94;">containers</span>:
+  - <span style="color: #4eee94;">name</span>: myapp-container
+    <span style="color: #4eee94;">image</span>: busybox
+    <span style="color: #4eee94;">command</span>: [<span style="color: #deb887;">'sh'</span>, <span style="color: #deb887;">'-c'</span>, <span style="color: #deb887;">"echo Hello, Kubernetes! &amp;&amp; sleep 3600"</span>]
+    <span style="color: #4eee94;">env</span>:
+    - <span style="color: #4eee94;">name</span>: MY_PASSWORD
+      <span style="color: #4eee94;">valueFrom</span>:
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">secretKeyRef</span>:
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">  name</span>: my-secret
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">  key</span>: myKey
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgc9ba05b" class="outline-2">
+<h2 id="orgc9ba05b">SecurityContext</h2>
+<div class="outline-text-2" id="text-orgc9ba05b">
+<p>
+以 <span class="underline">uid=2001</span> 和 <span class="underline">gid=3001</span> 来限制运行pod的用户和组：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #4eee94;">apiVersion</span>: v1
+<span style="color: #4eee94;">kind</span>: Pod
+<span style="color: #4eee94;">metadata</span>:
+  <span style="color: #4eee94;">name</span>: my-securitycontext-pod
+<span style="color: #4eee94;">spec</span>:
+  <span style="color: #4eee94;">securityContext</span>:
+    <span style="color: #4eee94;">runAsUser</span>: 2001
+    <span style="color: #4eee94;">fsGroup</span>: 3001
+  <span style="color: #4eee94;">containers</span>:
+  - <span style="color: #4eee94;">name</span>: myapp-container
+    <span style="color: #4eee94;">image</span>: busybox
+    <span style="color: #4eee94;">command</span>: [<span style="color: #deb887;">'sh'</span>, <span style="color: #deb887;">'-c'</span>, <span style="color: #deb887;">"cat /message/message.txt &amp;&amp; sleep 3600"</span>]
+    <span style="color: #4eee94;">volumeMounts</span>:
+    - <span style="color: #4eee94;">name</span>: message-volume
+      <span style="color: #4eee94;">mountPath</span>: /message
+  <span style="color: #4eee94;">volumes</span>:
+  - <span style="color: #4eee94;">name</span>: message-volume
+    <span style="color: #4eee94;">hostPath</span>:
+    <span style="color: #4eee94;">path</span>: /etc/message
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org200b867" class="outline-2">
+<h2 id="org200b867">ServiceAccount</h2>
+<div class="outline-text-2" id="text-org200b867">
+<pre class="example">
+ServiceAccount为了让pod中的进程可以调用Kubernate API或其他外部服务而设计的
+
+注意：Service Account为服务提供了一种方便的认证机制，但它不关心授权的问题。必须配合RBAC来为Service Account鉴权
+</pre>
+</div>
+
+<div id="outline-container-org066e2a3" class="outline-3">
+<h3 id="org066e2a3">创建</h3>
+<div class="outline-text-3" id="text-org066e2a3">
+<div class="org-src-container">
+<pre class="src src-sh">kubectl create serviceaccount my-serviceaccount
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org0e742c1" class="outline-3">
+<h3 id="org0e742c1">使用</h3>
+<div class="outline-text-3" id="text-org0e742c1">
+<p>
+在pod定义文件中指定 <span class="underline">serviceAccountName</span> 属性
+</p>
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #4eee94;">apiVersion</span>: v1
+<span style="color: #4eee94;">kind</span>: Pod
+<span style="color: #4eee94;">metadata</span>:
+  <span style="color: #4eee94;">name</span>: my-serviceaccount-pod
+<span style="color: #4eee94;">spec</span>:
+  <span style="color: #4eee94;">serviceAccountName</span>: my-serviceaccount
+  <span style="color: #4eee94;">containers</span>:
+  - <span style="color: #4eee94;">name</span>: myapp-container
+    <span style="color: #4eee94;">image</span>: busybox
+    <span style="color: #4eee94;">command</span>: [<span style="color: #deb887;">'sh'</span>, <span style="color: #deb887;">'-c'</span>, <span style="color: #deb887;">"echo Hello, Kubernetes! &amp;&amp; sleep 3600"</span>]
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgc98c7a7" class="outline-2">
+<h2 id="orgc98c7a7">资源限制</h2>
+<div class="outline-text-2" id="text-orgc98c7a7">
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #4eee94;">apiVersion</span>: v1
+<span style="color: #4eee94;">kind</span>: Pod
+<span style="color: #4eee94;">metadata</span>:
+  <span style="color: #4eee94;">name</span>: my-resource-pod
 <span style="color: #4eee94;">spec</span>:
   <span style="color: #4eee94;">containers</span>:
   - <span style="color: #4eee94;">name</span>: myapp-container
     <span style="color: #4eee94;">image</span>: busybox
     <span style="color: #4eee94;">command</span>: [<span style="color: #deb887;">'sh'</span>, <span style="color: #deb887;">'-c'</span>, <span style="color: #deb887;">'echo Hello Kubernetes! &amp;&amp; sleep 3600'</span>]
+    <span style="color: #4eee94;">resources</span>:
+      <span style="color: #4eee94;">requests</span>:
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">memory</span>: <span style="color: #deb887;">"64Mi"</span>
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">cpu</span>: <span style="color: #deb887;">"250m"</span>
+      <span style="color: #4eee94;">limits</span>:
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">memory</span>: <span style="color: #deb887;">"128Mi"</span>
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">cpu</span>: <span style="color: #deb887;">"500m"</span>
 </pre>
 </div>
 
-<p>
-从定义文件创建
-</p>
-<div class="org-src-container">
-<pre class="src src-sh">kubectl create -f my-pod.yml
-</pre>
-</div>
-</div>
-</div>
-
-<div id="outline-container-org7b48eb6" class="outline-3">
-<h3 id="org7b48eb6">修改</h3>
-<div class="outline-text-3" id="text-org7b48eb6">
-<p>
-编辑完定义文件，后执行：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-sh">kubectl apply -f my-pod.yml
-</pre>
-</div>
-
-<p>
-也可以执行：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-sh">kubectl edit pod my-pod
-</pre>
-</div>
-
-<pre class="example">
-   注意：不是所有的配置修改都可以通过edit命令完成
-</pre>
-</div>
-</div>
-
-<div id="outline-container-org7a4d2f7" class="outline-3">
-<h3 id="org7a4d2f7">删除</h3>
-<div class="outline-text-3" id="text-org7a4d2f7">
-<div class="org-src-container">
-<pre class="src src-sh">kubectl delete pod my-pod
-</pre>
-</div>
-</div>
-</div>
-</div>
-
-
-<div id="outline-container-org3e7ac5c" class="outline-2">
-<h2 id="org3e7ac5c">namespace</h2>
-<div class="outline-text-2" id="text-org3e7ac5c">
-<pre class="example">
-通过namespace可以隔离不同的pod
-</pre>
-
-<p>
-查询所有的namespace: 
-</p>
-
-<div class="org-src-container">
-<pre class="src src-sh">kubectl get namespaces
-</pre>
-</div>
-
-<p>
-增加一个namespace: 
-</p>
-
-<div class="org-src-container">
-<pre class="src src-sh">kubectl create ns my-ns
-</pre>
-</div>
-
-<p>
-为pod指定namesapce，在定义文件中设置 <span class="underline">metadata.namespace</span> 属性：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-yaml"><span style="color: #4eee94;">apiVersion</span>: v1
-<span style="color: #4eee94;">kind</span>: Pod
-<span style="color: #4eee94;">metadata</span>:
-  <span style="color: #4eee94;">name</span>: my-ns-pod
-  <span style="color: #4eee94;">namespace</span>: my-ns
-  <span style="color: #4eee94;">labels</span>:
-    <span style="color: #4eee94;">app</span>: myapp
-<span style="color: #4eee94;">spec</span>:
-  <span style="color: #4eee94;">containers</span>:
-  - <span style="color: #4eee94;">name</span>: myapp-container
-    <span style="color: #4eee94;">image</span>: busybox
-    <span style="color: #4eee94;">command</span>: [<span style="color: #deb887;">'sh'</span>, <span style="color: #deb887;">'-c'</span>, <span style="color: #deb887;">'echo Hello Kubernetes! &amp;&amp; sleep 3600'</span>]
-</pre>
-</div>
-
-<p>
-查询某个namesapce下的pod：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-sh">kubectl get pod -n my-ns
-</pre>
-</div>
-
-<p>
-查询某个pod的详细信息也必须指定namespace: 
-</p>
-
-<div class="org-src-container">
-<pre class="src src-sh">kubectl describe pod my-ns-pod -n my-ns
-</pre>
-</div>
-</div>
-</div>
-
-<div id="outline-container-orgfb2f0de" class="outline-2">
-<h2 id="orgfb2f0de">基本容器配置</h2>
-<div class="outline-text-2" id="text-orgfb2f0de">
-<p>
-添加启动执行命令 <span class="underline">command</span> ：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-yaml"><span style="color: #4eee94;">apiVersion</span>: v1
-<span style="color: #4eee94;">kind</span>: Pod
-<span style="color: #4eee94;">metadata</span>:
-  <span style="color: #4eee94;">name</span>: my-command-pod
-  <span style="color: #4eee94;">labels</span>:
-    <span style="color: #4eee94;">app</span>: myapp
-<span style="color: #4eee94;">spec</span>:
-  <span style="color: #4eee94;">containers</span>:
-  - <span style="color: #4eee94;">name</span>: myapp-container
-    <span style="color: #4eee94;">image</span>: busybox
-    <span style="color: #4eee94;">command</span>: [<span style="color: #deb887;">'echo'</span>]
-  <span style="color: #4eee94;">restartPolicy</span>: Never
-</pre>
-</div>
-
-<p>
-添加命令的参数 <span class="underline">args</span> ：
-</p>
-<div class="org-src-container">
-<pre class="src src-yaml"><span style="color: #4eee94;">apiVersion</span>: v1
-<span style="color: #4eee94;">kind</span>: Pod
-<span style="color: #4eee94;">metadata</span>:
-  <span style="color: #4eee94;">name</span>: my-args-pod
-  <span style="color: #4eee94;">labels</span>:
-    <span style="color: #4eee94;">app</span>: myapp
-<span style="color: #4eee94;">spec</span>:
-  <span style="color: #4eee94;">containers</span>:
-  - <span style="color: #4eee94;">name</span>: myapp-container
-    <span style="color: #4eee94;">image</span>: busybox
-    <span style="color: #4eee94;">command</span>: [<span style="color: #deb887;">'echo'</span>]
-    <span style="color: #4eee94;">args</span>: [<span style="color: #deb887;">'This is my custom argument'</span>]
-  <span style="color: #4eee94;">restartPolicy</span>: Never
-</pre>
-</div>
-
-<p>
-容器暴露的端口 <span class="underline">containerPort</span> ：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-yaml"><span style="color: #4eee94;">apiVersion</span>: v1
-<span style="color: #4eee94;">kind</span>: Pod
-<span style="color: #4eee94;">metadata</span>:
-  <span style="color: #4eee94;">name</span>: my-containerport-pod
-  <span style="color: #4eee94;">labels</span>:
-    <span style="color: #4eee94;">app</span>: myapp
-<span style="color: #4eee94;">spec</span>:
-  <span style="color: #4eee94;">containers</span>:
-  - <span style="color: #4eee94;">name</span>: myapp-container
-    <span style="color: #4eee94;">image</span>: nginx
-    <span style="color: #4eee94;">ports</span>:
-    - <span style="color: #4eee94;">containerPort</span>: 80
-</pre>
-</div>
-</div>
-</div>
-
-<div id="outline-container-orge988dfb" class="outline-2">
-<h2 id="orge988dfb">多容器的Pod</h2>
-<div class="outline-text-2" id="text-orge988dfb">
-<p>
-一个pod可以创建多个容器：
-</p>
-<div class="org-src-container">
-<pre class="src src-yaml"><span style="color: #4eee94;">apiVersion</span>: v1
-<span style="color: #4eee94;">kind</span>: Pod
-<span style="color: #4eee94;">metadata</span>:
-  <span style="color: #4eee94;">name</span>: multi-container-pod
-<span style="color: #4eee94;">spec</span>:
-  <span style="color: #4eee94;">containers</span>:
-  - <span style="color: #4eee94;">name</span>: nginx
-    <span style="color: #4eee94;">image</span>: nginx:1.15.8
-    <span style="color: #4eee94;">ports</span>:
-    - <span style="color: #4eee94;">containerPort</span>: 80
-  - <span style="color: #4eee94;">name</span>: busybox-sidecar
-    <span style="color: #4eee94;">image</span>: busybox
-    <span style="color: #4eee94;">command</span>: [<span style="color: #deb887;">'sh'</span>, <span style="color: #deb887;">'-c'</span>, <span style="color: #deb887;">'while true; do sleep 30; done;'</span>]
-</pre>
-</div>
+<ul class="org-ul">
+<li>resources.requests: 创建pod的时候申请的资源大小</li>
+<li>resources.limits: pod最多能使用的资源大小</li>
+<li>memory: "64Mi" 表示内存使用64MB</li>
+<li>cpu: "250m" 1000m代表一颗逻辑cpu，250m表示使用1/4core</li>
+</ul>
 </div>
 </div>
 </div>
