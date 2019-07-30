@@ -5,7 +5,7 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Pod设计</title>
+<title>持久化</title>
 <meta name="generator" content="Org mode" />
 <meta name="author" content="Wu, Shanliang" />
 <style type="text/css">
@@ -229,301 +229,142 @@ for the JavaScript code in this tag.
 </head>
 <body>
 <div id="content">
-<h1 class="title">Pod设计</h1>
+<h1 class="title">持久化</h1>
 <div id="table-of-contents">
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgdf0c5f6">标签</a>
-<ul>
-<li><a href="#orgb8c0d51">标签选择器</a></li>
-</ul>
-</li>
-<li><a href="#orge15e21e">注解</a></li>
-<li><a href="#org92a47f9">部署</a></li>
-<li><a href="#org6401f9c">滚动升级和回滚</a></li>
-<li><a href="#org2b6f284">任务</a>
-<ul>
-<li><a href="#orgc0cf1fc">定时任务</a></li>
-</ul>
-</li>
+<li><a href="#org75386f7">目录共享</a></li>
+<li><a href="#orgaaa9439">持久化卷</a></li>
 </ul>
 </div>
 </div>
-<div id="outline-container-orgdf0c5f6" class="outline-2">
-<h2 id="orgdf0c5f6">标签</h2>
-<div class="outline-text-2" id="text-orgdf0c5f6">
 <pre class="example">
-    用键值对来指定某些”有意义的并和用户有关的“对象属性
+  卷可以让容器之外的存储挂在到容器中的某个目录上，使得删除容器后修改不会丢失
 </pre>
+
+<div id="outline-container-org75386f7" class="outline-2">
+<h2 id="org75386f7">目录共享</h2>
+<div class="outline-text-2" id="text-org75386f7">
+<p>
+<span class="underline">EmptyDir</span> 使得多容器的pod可以很方便的共享读写某个目录/文件：
+</p>
 
 <div class="org-src-container">
 <pre class="src src-yaml"><span style="color: #4eee94;">apiVersion</span>: v1
 <span style="color: #4eee94;">kind</span>: Pod
 <span style="color: #4eee94;">metadata</span>:
-  <span style="color: #4eee94;">name</span>: my-production-label-pod
-  <span style="color: #4eee94;">labels</span>:
-    <span style="color: #4eee94;">app</span>: my-app
-    <span style="color: #4eee94;">environment</span>: production
+  <span style="color: #4eee94;">name</span>: volume-pod
 <span style="color: #4eee94;">spec</span>:
   <span style="color: #4eee94;">containers</span>:
-  - <span style="color: #4eee94;">name</span>: nginx
-    <span style="color: #4eee94;">image</span>: nginx
+  - <span style="color: #4eee94;">image</span>: busybox
+    <span style="color: #4eee94;">name</span>: busybox
+    <span style="color: #4eee94;">command</span>: [<span style="color: #deb887;">"/bin/sh"</span>, <span style="color: #deb887;">"-c"</span>, <span style="color: #deb887;">"while true; do sleep 3600; done"</span>]
+    <span style="color: #4eee94;">volumeMounts</span>:
+    - <span style="color: #4eee94;">mountPath</span>: /tmp/storage
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">  name</span>: my-volume
+  <span style="color: #4eee94;">volumes</span>:
+  - <span style="color: #4eee94;">name</span>: my-volume
+    <span style="color: #4eee94;">emptyDir</span>: {}
 </pre>
 </div>
 </div>
+</div>
 
-<div id="outline-container-orgb8c0d51" class="outline-3">
-<h3 id="orgb8c0d51">标签选择器</h3>
-<div class="outline-text-3" id="text-orgb8c0d51">
+<div id="outline-container-orgaaa9439" class="outline-2">
+<h2 id="orgaaa9439">持久化卷</h2>
+<div class="outline-text-2" id="text-orgaaa9439">
 <p>
-使用 <span class="underline">-l</span> 来过滤某些pod：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-sh">kubectl get pods -l <span style="color: #4eee94;">app</span>=my-app
-
-kubectl get pods -l <span style="color: #4eee94;">environment</span>=production
-
-kubectl get pods -l <span style="color: #4eee94;">environment</span>=development
-</pre>
-</div>
-
-<p>
-”取反“选择：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-sh">kubectl get pods -l environment!=production
-</pre>
-</div>
-
-<p>
-”集合“选择：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-sh">kubectl get pods -l <span style="color: #deb887;">'environment in (development,production)'</span>
-</pre>
-</div>
-
-<p>
-”交集“选择：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-sh">kubectl get pods -l <span style="color: #4eee94;">app</span>=my-app,<span style="color: #4eee94;">environment</span>=production
-</pre>
-</div>
-</div>
-</div>
-</div>
-
-
-<div id="outline-container-orge15e21e" class="outline-2">
-<h2 id="orge15e21e">注解</h2>
-<div class="outline-text-2" id="text-orge15e21e">
-<pre class="example">
-  注解和标签类似，区别是无法被用于选择器，只有客户端（如工具和库）才能检索
-</pre>
-
-<div class="org-src-container">
-<pre class="src src-yaml"><span style="color: #4eee94;">apiVersion</span>: v1
-<span style="color: #4eee94;">kind</span>: Pod
-<span style="color: #4eee94;">metadata</span>:
-  <span style="color: #4eee94;">name</span>: my-annotation-pod
-  <span style="color: #4eee94;">annotations</span>:
-    <span style="color: #4eee94;">owner</span>: terry@linuxacademy.com
-    <span style="color: #4eee94;">git-commit</span>: bdab0c6
-<span style="color: #4eee94;">spec</span>:
-  <span style="color: #4eee94;">containers</span>:
-  - <span style="color: #4eee94;">name</span>: nginx
-    <span style="color: #4eee94;">image</span>: nginx
-</pre>
-</div>
-</div>
-</div>
-
-<div id="outline-container-org92a47f9" class="outline-2">
-<h2 id="org92a47f9">部署</h2>
-<div class="outline-text-2" id="text-org92a47f9">
-<pre class="example">
-  部署：用来管理同一个pod的多个副本
-</pre>
-
-<p>
-一个pod三个副本
-</p>
-<div class="org-src-container">
-<pre class="src src-yaml"><span style="color: #4eee94;">apiVersion</span>: apps/v1
-<span style="color: #4eee94;">kind</span>: Deployment
-<span style="color: #4eee94;">metadata</span>:
-  <span style="color: #4eee94;">name</span>: nginx-deployment
-<span style="color: #4eee94;">spec</span>:
-  <span style="color: #4eee94;">replicas</span>: 3
-  <span style="color: #4eee94;">selector</span>:
-    <span style="color: #4eee94;">matchLabels</span>:
-      <span style="color: #4eee94;">app</span>: nginx
-  <span style="color: #4eee94;">template</span>:
-    <span style="color: #4eee94;">metadata</span>:
-      <span style="color: #4eee94;">labels</span>:
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">app</span>: nginx
-    <span style="color: #4eee94;">spec</span>:
-      <span style="color: #4eee94;">containers</span>:
-      - <span style="color: #4eee94;">name</span>: nginx
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">image</span>: nginx:1.7.9
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">ports</span>:
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">- containerPort</span>: 80
-</pre>
-</div>
-
-<p>
-查询部署信息：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-sh">kubectl get deployments
-
-kubectl get deployment &lt;deployment name&gt;
-
-kubectl describe deployment &lt;deployment name&gt;
-</pre>
-</div>
-
-<p>
-直接编辑：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-sh">kubectl edit deployment &lt;deployment name&gt;
-</pre>
-</div>
-
-<p>
-删除：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-sh">kubectl delete deployment &lt;deployment name&gt;
-</pre>
-</div>
-</div>
-</div>
-
-<div id="outline-container-org6401f9c" class="outline-2">
-<h2 id="org6401f9c">滚动升级和回滚</h2>
-<div class="outline-text-2" id="text-org6401f9c">
-<p>
-滚动升级：
-</p>
-<div class="org-src-container">
-<pre class="src src-sh">kubectl set image deployment/rolling-deployment <span style="color: #4eee94;">nginx</span>=nginx:1.7.9 --record
-</pre>
-</div>
-
-<pre class="example">
---record : 记录在更新历史中
-</pre>
-
-<p>
-查询更新历史：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-sh">kubectl rollout history deployment/rolling-deployment
-
-kubectl rollout history deployment/rolling-deployment --revision=2
-</pre>
-</div>
-
-<p>
-回滚到某个版本：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-sh">kubectl rollout undo deployment/rolling-deployment --to-revision=1
-</pre>
-</div>
-
-<p>
-以指定 <span class="underline">maxUnavailable</span> 和 <span class="underline">maxSurge</span> 来控制 rolling update 进程：
+Persistent Volume是对存储的抽象，这个抽象包含两个资源：
 </p>
 <ul class="org-ul">
-<li>.spec.strategy.rollingUpdate.maxUnavailable: 可选配置项，用来指定在升级过程中不可用Pod的最大数量</li>
-<li>.spec.strategy.rollingUpdate.maxSurge: 可选配置项，用来指定可以超过期望的Pod数量的最大个数</li>
+<li>持久化卷： PersistentVolume，简称PV， 是集群中的一块网络存储，也是Kubernetes集群的一种资源</li>
+<li>持久卷申请：PersistentVolumeClaim，简称PVC，是用户对PV资源的申请，例如申请特定的访问模式和大小</li>
 </ul>
-</div>
-</div>
 
-<div id="outline-container-org2b6f284" class="outline-2">
-<h2 id="org2b6f284">任务</h2>
-<div class="outline-text-2" id="text-org2b6f284">
 <pre class="example">
-  任务：执行完毕就自动停止的容器
+ Pod的Volume与PV的区别是：
+
+Volume的生命周期和Pod相同，Pod被删除时，Volume和保存在Volume中的数据就被删除了
+
+对于PV，即使挂载PV的Pod被删除了，PV仍然存在，PV上的数据也还在
 </pre>
 
+<p>
+PV定义文件：
+</p>
+
 <div class="org-src-container">
-<pre class="src src-yaml"><span style="color: #4eee94;">apiVersion</span>: batch/v1
-<span style="color: #4eee94;">kind</span>: Job
+<pre class="src src-yaml"><span style="color: #4eee94;">kind</span>: PersistentVolume
+<span style="color: #4eee94;">apiVersion</span>: v1
 <span style="color: #4eee94;">metadata</span>:
-  <span style="color: #4eee94;">name</span>: pi
+  <span style="color: #4eee94;">name</span>: my-pv
 <span style="color: #4eee94;">spec</span>:
-  <span style="color: #4eee94;">template</span>:
-    <span style="color: #4eee94;">spec</span>:
-      <span style="color: #4eee94;">containers</span>:
-      - <span style="color: #4eee94;">name</span>: pi
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">image</span>: perl
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">command</span>: [<span style="color: #deb887;">"perl"</span>,  <span style="color: #deb887;">"-Mbignum=bpi"</span>, <span style="color: #deb887;">"-wle"</span>, <span style="color: #deb887;">"print bpi(2000)"</span>]
-      <span style="color: #4eee94;">restartPolicy</span>: Never
-  <span style="color: #4eee94;">backoffLimit</span>: 4
+  <span style="color: #4eee94;">storageClassName</span>: local-storage
+  <span style="color: #4eee94;">capacity</span>:
+    <span style="color: #4eee94;">storage</span>: 1Gi
+  <span style="color: #4eee94;">accessModes</span>:
+    - ReadWriteOnce
+  <span style="color: #4eee94;">hostPath</span>:
+    <span style="color: #4eee94;">path</span>: <span style="color: #deb887;">"/mnt/data"</span>
 </pre>
 </div>
 
 <p>
-查询任务执行状态：
+PVC定义文件：
 </p>
 
 <div class="org-src-container">
-<pre class="src src-sh">kubectl get jobs 
-</pre>
-</div>
-</div>
-
-<div id="outline-container-orgc0cf1fc" class="outline-3">
-<h3 id="orgc0cf1fc">定时任务</h3>
-<div class="outline-text-3" id="text-orgc0cf1fc">
-<p>
-每分钟执行一次的定时任务：
-</p>
-<div class="org-src-container">
-<pre class="src src-yaml"><span style="color: #4eee94;">apiVersion</span>: batch/v1beta1
-<span style="color: #4eee94;">kind</span>: CronJob
+<pre class="src src-yaml"><span style="color: #4eee94;">apiVersion</span>: v1
+<span style="color: #4eee94;">kind</span>: PersistentVolumeClaim
 <span style="color: #4eee94;">metadata</span>:
-  <span style="color: #4eee94;">name</span>: hello
+  <span style="color: #4eee94;">name</span>: my-pvc
 <span style="color: #4eee94;">spec</span>:
-  <span style="color: #4eee94;">schedule</span>: <span style="color: #deb887;">"*/1 * * * *"</span>
-  <span style="color: #4eee94;">jobTemplate</span>:
-    <span style="color: #4eee94;">spec</span>:
-      <span style="color: #4eee94;">template</span>:
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">spec</span>:
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">  containers</span>:
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">  - name</span>: hello
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">    image</span>: busybox
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">    args</span>:
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span>    - /bin/sh
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span>    - -c
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span>    - date; echo Hello from the Kubernetes cluster
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">  restartPolicy</span>: OnFailure
+  <span style="color: #4eee94;">storageClassName</span>: local-storage
+  <span style="color: #4eee94;">accessModes</span>:
+    - ReadWriteOnce
+  <span style="color: #4eee94;">resources</span>:
+    <span style="color: #4eee94;">requests</span>:
+       <span style="color: #4eee94;">storage</span>: 512Mi
+</pre>
+</div>
+
+<pre class="example">
+1. PVC中的storageClassName 和 accessModes 必须和PV中的相同
+2. PVC的容量必须小于PV的容量
+</pre>
+
+<p>
+查询PV和PVC：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">kubectl get pv
+kubectl get pvc
 </pre>
 </div>
 
 <p>
-查询定时任务的执行状态：
+在Pod定义文件中使用创建好的PVC：
 </p>
+
 <div class="org-src-container">
-<pre class="src src-sh">kubectl get cronjobs 
+<pre class="src src-yaml"><span style="color: #4eee94;">kind</span>: Pod
+<span style="color: #4eee94;">apiVersion</span>: v1
+<span style="color: #4eee94;">metadata</span>:
+  <span style="color: #4eee94;">name</span>: my-pvc-pod
+<span style="color: #4eee94;">spec</span>:
+  <span style="color: #4eee94;">containers</span>:
+  - <span style="color: #4eee94;">name</span>: busybox
+    <span style="color: #4eee94;">image</span>: busybox
+    <span style="color: #4eee94;">command</span>: [<span style="color: #deb887;">"/bin/sh"</span>, <span style="color: #deb887;">"-c"</span>, <span style="color: #deb887;">"while true; do sleep 3600; done"</span>]
+    <span style="color: #4eee94;">volumeMounts</span>:
+    - <span style="color: #4eee94;">mountPath</span>: <span style="color: #deb887;">"/mnt/storage"</span>
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">   name</span>: my-storage
+  <span style="color: #4eee94;">volumes</span>:
+  - <span style="color: #4eee94;">name</span>: my-storage
+    <span style="color: #4eee94;">persistentVolumeClaim</span>:
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">  claimName</span>: my-pvc
 </pre>
-</div>
 </div>
 </div>
 </div>

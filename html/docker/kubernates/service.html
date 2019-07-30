@@ -5,7 +5,7 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Pod设计</title>
+<title>服务</title>
 <meta name="generator" content="Org mode" />
 <meta name="author" content="Wu, Shanliang" />
 <style type="text/css">
@@ -229,301 +229,138 @@ for the JavaScript code in this tag.
 </head>
 <body>
 <div id="content">
-<h1 class="title">Pod设计</h1>
+<h1 class="title">服务</h1>
 <div id="table-of-contents">
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgdf0c5f6">标签</a>
-<ul>
-<li><a href="#orgb8c0d51">标签选择器</a></li>
-</ul>
-</li>
-<li><a href="#orge15e21e">注解</a></li>
-<li><a href="#org92a47f9">部署</a></li>
-<li><a href="#org6401f9c">滚动升级和回滚</a></li>
-<li><a href="#org2b6f284">任务</a>
-<ul>
-<li><a href="#orgc0cf1fc">定时任务</a></li>
-</ul>
-</li>
+<li><a href="#orge406353">服务</a></li>
+<li><a href="#org3232b87">网络策略</a></li>
 </ul>
 </div>
 </div>
-<div id="outline-container-orgdf0c5f6" class="outline-2">
-<h2 id="orgdf0c5f6">标签</h2>
-<div class="outline-text-2" id="text-orgdf0c5f6">
+<div id="outline-container-orge406353" class="outline-2">
+<h2 id="orge406353">服务</h2>
+<div class="outline-text-2" id="text-orge406353">
 <pre class="example">
-    用键值对来指定某些”有意义的并和用户有关的“对象属性
+Deployment使得一组冗余的pod能够很方便地动态扩容，更新和替换。然而通过网络来访问这组pod变得相当困难
+
+Service提供了一个抽象层来处理这个问题：Service会动态地代理流量到这组的pod上去
 </pre>
+
+<p>
+服务定义文件：暴露8080端口，转发到pod的80端口上
+</p>
 
 <div class="org-src-container">
 <pre class="src src-yaml"><span style="color: #4eee94;">apiVersion</span>: v1
-<span style="color: #4eee94;">kind</span>: Pod
+<span style="color: #4eee94;">kind</span>: Service
 <span style="color: #4eee94;">metadata</span>:
-  <span style="color: #4eee94;">name</span>: my-production-label-pod
-  <span style="color: #4eee94;">labels</span>:
-    <span style="color: #4eee94;">app</span>: my-app
-    <span style="color: #4eee94;">environment</span>: production
+  <span style="color: #4eee94;">name</span>: my-service
 <span style="color: #4eee94;">spec</span>:
-  <span style="color: #4eee94;">containers</span>:
-  - <span style="color: #4eee94;">name</span>: nginx
-    <span style="color: #4eee94;">image</span>: nginx
-</pre>
-</div>
-</div>
-
-<div id="outline-container-orgb8c0d51" class="outline-3">
-<h3 id="orgb8c0d51">标签选择器</h3>
-<div class="outline-text-3" id="text-orgb8c0d51">
-<p>
-使用 <span class="underline">-l</span> 来过滤某些pod：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-sh">kubectl get pods -l <span style="color: #4eee94;">app</span>=my-app
-
-kubectl get pods -l <span style="color: #4eee94;">environment</span>=production
-
-kubectl get pods -l <span style="color: #4eee94;">environment</span>=development
-</pre>
-</div>
-
-<p>
-”取反“选择：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-sh">kubectl get pods -l environment!=production
-</pre>
-</div>
-
-<p>
-”集合“选择：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-sh">kubectl get pods -l <span style="color: #deb887;">'environment in (development,production)'</span>
-</pre>
-</div>
-
-<p>
-”交集“选择：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-sh">kubectl get pods -l <span style="color: #4eee94;">app</span>=my-app,<span style="color: #4eee94;">environment</span>=production
-</pre>
-</div>
-</div>
-</div>
-</div>
-
-
-<div id="outline-container-orge15e21e" class="outline-2">
-<h2 id="orge15e21e">注解</h2>
-<div class="outline-text-2" id="text-orge15e21e">
-<pre class="example">
-  注解和标签类似，区别是无法被用于选择器，只有客户端（如工具和库）才能检索
-</pre>
-
-<div class="org-src-container">
-<pre class="src src-yaml"><span style="color: #4eee94;">apiVersion</span>: v1
-<span style="color: #4eee94;">kind</span>: Pod
-<span style="color: #4eee94;">metadata</span>:
-  <span style="color: #4eee94;">name</span>: my-annotation-pod
-  <span style="color: #4eee94;">annotations</span>:
-    <span style="color: #4eee94;">owner</span>: terry@linuxacademy.com
-    <span style="color: #4eee94;">git-commit</span>: bdab0c6
-<span style="color: #4eee94;">spec</span>:
-  <span style="color: #4eee94;">containers</span>:
-  - <span style="color: #4eee94;">name</span>: nginx
-    <span style="color: #4eee94;">image</span>: nginx
-</pre>
-</div>
-</div>
-</div>
-
-<div id="outline-container-org92a47f9" class="outline-2">
-<h2 id="org92a47f9">部署</h2>
-<div class="outline-text-2" id="text-org92a47f9">
-<pre class="example">
-  部署：用来管理同一个pod的多个副本
-</pre>
-
-<p>
-一个pod三个副本
-</p>
-<div class="org-src-container">
-<pre class="src src-yaml"><span style="color: #4eee94;">apiVersion</span>: apps/v1
-<span style="color: #4eee94;">kind</span>: Deployment
-<span style="color: #4eee94;">metadata</span>:
-  <span style="color: #4eee94;">name</span>: nginx-deployment
-<span style="color: #4eee94;">spec</span>:
-  <span style="color: #4eee94;">replicas</span>: 3
+  <span style="color: #4eee94;">type</span>: ClusterIP
   <span style="color: #4eee94;">selector</span>:
+    <span style="color: #4eee94;">app</span>: nginx
+  <span style="color: #4eee94;">ports</span>:
+  - <span style="color: #4eee94;">protocol</span>: TCP
+    <span style="color: #4eee94;">port</span>: 8080
+    <span style="color: #4eee94;">targetPort</span>: 80
+</pre>
+</div>
+
+<p>
+查询所有的服务：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">kubectl get svc 
+</pre>
+</div>
+
+<p>
+查询某个服务暴露的端口：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">kubectl get endpoints my-service
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org3232b87" class="outline-2">
+<h2 id="org3232b87">网络策略</h2>
+<div class="outline-text-2" id="text-org3232b87">
+<pre class="example">
+    网络策略可以帮助用户限制对于pod端口的网络访问
+</pre>
+
+<p>
+安装支持网络策略的网络插件：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">wget -O canal.yaml https://docs.projectcalico.org/v3.5/getting-started/kubernetes/installation/hosted/canal/canal.yaml
+
+kubectl apply -f canal.yaml
+</pre>
+</div>
+
+<p>
+编写网络策略的定义文件：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #4eee94;">apiVersion</span>: networking.k8s.io/v1
+<span style="color: #4eee94;">kind</span>: NetworkPolicy
+<span style="color: #4eee94;">metadata</span>:
+  <span style="color: #4eee94;">name</span>: my-network-policy
+<span style="color: #4eee94;">spec</span>:
+  <span style="color: #4eee94;">podSelector</span>:
     <span style="color: #4eee94;">matchLabels</span>:
-      <span style="color: #4eee94;">app</span>: nginx
-  <span style="color: #4eee94;">template</span>:
-    <span style="color: #4eee94;">metadata</span>:
-      <span style="color: #4eee94;">labels</span>:
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">app</span>: nginx
-    <span style="color: #4eee94;">spec</span>:
-      <span style="color: #4eee94;">containers</span>:
-      - <span style="color: #4eee94;">name</span>: nginx
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">image</span>: nginx:1.7.9
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">ports</span>:
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">- containerPort</span>: 80
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">app</span>: secure-app
+  <span style="color: #4eee94;">policyTypes</span>:
+  - Ingress
+  - Egress
+  <span style="color: #4eee94;">ingress</span>:
+  - <span style="color: #4eee94;">from</span>:
+    - <span style="color: #4eee94;">podSelector</span>:
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">  matchLabels</span>:
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">     allow-access</span>: <span style="color: #deb887;">"true"</span>
+    <span style="color: #4eee94;">ports</span>:
+    - <span style="color: #4eee94;">protocol</span>: TCP
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">  port</span>: 80
+  <span style="color: #4eee94;">egress</span>:
+  - <span style="color: #4eee94;">to</span>:
+    - <span style="color: #4eee94;">podSelector</span>:
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">  matchLabels</span>:
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">      allow-access</span>: <span style="color: #deb887;">"true"</span>
+    <span style="color: #4eee94;">ports</span>:
+    - <span style="color: #4eee94;">protocol</span>: TCP
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">  port</span>: 80
 </pre>
 </div>
 
-<p>
-查询部署信息：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-sh">kubectl get deployments
-
-kubectl get deployment &lt;deployment name&gt;
-
-kubectl describe deployment &lt;deployment name&gt;
-</pre>
-</div>
-
-<p>
-直接编辑：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-sh">kubectl edit deployment &lt;deployment name&gt;
-</pre>
-</div>
-
-<p>
-删除：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-sh">kubectl delete deployment &lt;deployment name&gt;
-</pre>
-</div>
-</div>
-</div>
-
-<div id="outline-container-org6401f9c" class="outline-2">
-<h2 id="org6401f9c">滚动升级和回滚</h2>
-<div class="outline-text-2" id="text-org6401f9c">
-<p>
-滚动升级：
-</p>
-<div class="org-src-container">
-<pre class="src src-sh">kubectl set image deployment/rolling-deployment <span style="color: #4eee94;">nginx</span>=nginx:1.7.9 --record
-</pre>
-</div>
-
-<pre class="example">
---record : 记录在更新历史中
-</pre>
-
-<p>
-查询更新历史：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-sh">kubectl rollout history deployment/rolling-deployment
-
-kubectl rollout history deployment/rolling-deployment --revision=2
-</pre>
-</div>
-
-<p>
-回滚到某个版本：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-sh">kubectl rollout undo deployment/rolling-deployment --to-revision=1
-</pre>
-</div>
-
-<p>
-以指定 <span class="underline">maxUnavailable</span> 和 <span class="underline">maxSurge</span> 来控制 rolling update 进程：
-</p>
 <ul class="org-ul">
-<li>.spec.strategy.rollingUpdate.maxUnavailable: 可选配置项，用来指定在升级过程中不可用Pod的最大数量</li>
-<li>.spec.strategy.rollingUpdate.maxSurge: 可选配置项，用来指定可以超过期望的Pod数量的最大个数</li>
+<li>Ingress：进pod的流量</li>
+<li>Egress: 出pod的流量</li>
 </ul>
-</div>
-</div>
 
-<div id="outline-container-org2b6f284" class="outline-2">
-<h2 id="org2b6f284">任务</h2>
-<div class="outline-text-2" id="text-org2b6f284">
-<pre class="example">
-  任务：执行完毕就自动停止的容器
-</pre>
+<p>
+查询网络策略：
+</p>
 
 <div class="org-src-container">
-<pre class="src src-yaml"><span style="color: #4eee94;">apiVersion</span>: batch/v1
-<span style="color: #4eee94;">kind</span>: Job
-<span style="color: #4eee94;">metadata</span>:
-  <span style="color: #4eee94;">name</span>: pi
-<span style="color: #4eee94;">spec</span>:
-  <span style="color: #4eee94;">template</span>:
-    <span style="color: #4eee94;">spec</span>:
-      <span style="color: #4eee94;">containers</span>:
-      - <span style="color: #4eee94;">name</span>: pi
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">image</span>: perl
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">command</span>: [<span style="color: #deb887;">"perl"</span>,  <span style="color: #deb887;">"-Mbignum=bpi"</span>, <span style="color: #deb887;">"-wle"</span>, <span style="color: #deb887;">"print bpi(2000)"</span>]
-      <span style="color: #4eee94;">restartPolicy</span>: Never
-  <span style="color: #4eee94;">backoffLimit</span>: 4
+<pre class="src src-sh">kubectl get networkpolices 
 </pre>
 </div>
 
 <p>
-查询任务执行状态：
+查询某个特定网络的详细信息：
 </p>
 
 <div class="org-src-container">
-<pre class="src src-sh">kubectl get jobs 
+<pre class="src src-sh">kubectl describe networkpolicy my-network-policy
 </pre>
-</div>
-</div>
-
-<div id="outline-container-orgc0cf1fc" class="outline-3">
-<h3 id="orgc0cf1fc">定时任务</h3>
-<div class="outline-text-3" id="text-orgc0cf1fc">
-<p>
-每分钟执行一次的定时任务：
-</p>
-<div class="org-src-container">
-<pre class="src src-yaml"><span style="color: #4eee94;">apiVersion</span>: batch/v1beta1
-<span style="color: #4eee94;">kind</span>: CronJob
-<span style="color: #4eee94;">metadata</span>:
-  <span style="color: #4eee94;">name</span>: hello
-<span style="color: #4eee94;">spec</span>:
-  <span style="color: #4eee94;">schedule</span>: <span style="color: #deb887;">"*/1 * * * *"</span>
-  <span style="color: #4eee94;">jobTemplate</span>:
-    <span style="color: #4eee94;">spec</span>:
-      <span style="color: #4eee94;">template</span>:
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">spec</span>:
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">  containers</span>:
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">  - name</span>: hello
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">    image</span>: busybox
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">    args</span>:
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span>    - /bin/sh
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span>    - -c
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span>    - date; echo Hello from the Kubernetes cluster
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">  restartPolicy</span>: OnFailure
-</pre>
-</div>
-
-<p>
-查询定时任务的执行状态：
-</p>
-<div class="org-src-container">
-<pre class="src src-sh">kubectl get cronjobs 
-</pre>
-</div>
 </div>
 </div>
 </div>
