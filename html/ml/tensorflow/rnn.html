@@ -238,16 +238,16 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org543cb00">模型</a>
+<li><a href="#org73e1b5a">模型</a>
 <ul>
-<li><a href="#org25539c5">LSTM</a></li>
-<li><a href="#org5ddcf79">截断反向传播</a></li>
+<li><a href="#orgd7f2247">LSTM</a></li>
+<li><a href="#org3f9da5c">截断反向传播</a></li>
 </ul>
 </li>
-<li><a href="#orge0b3a9c">输入</a></li>
-<li><a href="#orgb076bcb">损失函数</a></li>
-<li><a href="#orgd68d74a">多个 LSTM 层堆叠</a></li>
-<li><a href="#org1345ca6">优化</a></li>
+<li><a href="#org8094b8b">输入</a></li>
+<li><a href="#orga43b9fd">损失函数</a></li>
+<li><a href="#org888e56c">多个 LSTM 层堆叠</a></li>
+<li><a href="#org266d4ea">优化</a></li>
 </ul>
 </div>
 </div>
@@ -255,13 +255,13 @@ for the JavaScript code in this tag.
 此教程将展示如何在高难度的语言模型中训练循环神经网络。该问题的目标是获得一个能确定语句概率的概率模型。为了做到这一点，通过之前已经给出的词语来预测后面的词语。将使用 PTB 数据集，这是一种常用来衡量模型的基准，同时它比较小而且训练起来相对快速
 </p>
 
-<div id="outline-container-org543cb00" class="outline-2">
-<h2 id="org543cb00">模型</h2>
-<div class="outline-text-2" id="text-org543cb00">
+<div id="outline-container-org73e1b5a" class="outline-2">
+<h2 id="org73e1b5a">模型</h2>
+<div class="outline-text-2" id="text-org73e1b5a">
 </div>
-<div id="outline-container-org25539c5" class="outline-3">
-<h3 id="org25539c5">LSTM</h3>
-<div class="outline-text-3" id="text-org25539c5">
+<div id="outline-container-orgd7f2247" class="outline-3">
+<h3 id="orgd7f2247">LSTM</h3>
+<div class="outline-text-3" id="text-orgd7f2247">
 <p>
 模型的核心由一个 <b>LSTM</b> 单元组成，其可以在某时刻处理一个词语，以及计算语句可能的延续性的概率。网络的存储状态由一个 <b>零矢量初始化</b> 并在读取每一个词语后更新。而且，由于计算上的原因，将以 batch_size 为最小批量来处理数据
 </p>
@@ -271,48 +271,48 @@ for the JavaScript code in this tag.
 </p>
 
 <div class="org-src-container">
-<pre class="src src-python"><span style="color: #4eee94;">lstm</span> = rnn_cell.BasicLSTMCell(lstm_size)
-<span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">&#21021;&#22987;&#21270; LSTM &#23384;&#20648;&#29366;&#24577;.</span>
-<span style="color: #4eee94;">state</span> = tf.zeros([batch_size, lstm.state_size])
+<pre class="src src-python"><span style="color: #eedd82;">lstm</span> = rnn_cell.BasicLSTMCell(lstm_size)
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#21021;&#22987;&#21270; LSTM &#23384;&#20648;&#29366;&#24577;.</span>
+<span style="color: #eedd82;">state</span> = tf.zeros([batch_size, lstm.state_size])
 
-<span style="color: #4eee94;">loss</span> = 0.0
-<span style="color: #00bfff; font-weight: bold;">for</span> current_batch_of_words <span style="color: #00bfff; font-weight: bold;">in</span> words_in_dataset:
-    <span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">&#27599;&#27425;&#22788;&#29702;&#19968;&#25209;&#35789;&#35821;&#21518;&#26356;&#26032;&#29366;&#24577;&#20540;.</span>
-    <span style="color: #4eee94;">output</span>, <span style="color: #4eee94;">state</span> = lstm(current_batch_of_words, state)
+<span style="color: #eedd82;">loss</span> = 0.0
+<span style="color: #00ffff;">for</span> current_batch_of_words <span style="color: #00ffff;">in</span> words_in_dataset:
+    <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#27599;&#27425;&#22788;&#29702;&#19968;&#25209;&#35789;&#35821;&#21518;&#26356;&#26032;&#29366;&#24577;&#20540;.</span>
+    <span style="color: #eedd82;">output</span>, <span style="color: #eedd82;">state</span> = lstm(current_batch_of_words, state)
 
-    <span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">LSTM &#36755;&#20986;&#21487;&#29992;&#20110;&#20135;&#29983;&#19979;&#19968;&#20010;&#35789;&#35821;&#30340;&#39044;&#27979;</span>
-    <span style="color: #4eee94;">logits</span> = tf.matmul(output, softmax_w) + softmax_b
-    <span style="color: #4eee94;">probabilities</span> = tf.nn.softmax(logits)
-    <span style="color: #4eee94;">loss</span> += loss_function(probabilities, target_words)
+    <span style="color: #ff4500;"># </span><span style="color: #ff4500;">LSTM &#36755;&#20986;&#21487;&#29992;&#20110;&#20135;&#29983;&#19979;&#19968;&#20010;&#35789;&#35821;&#30340;&#39044;&#27979;</span>
+    <span style="color: #eedd82;">logits</span> = tf.matmul(output, softmax_w) + softmax_b
+    <span style="color: #eedd82;">probabilities</span> = tf.nn.softmax(logits)
+    <span style="color: #eedd82;">loss</span> += loss_function(probabilities, target_words)
 </pre>
 </div>
 </div>
 </div>
 
-<div id="outline-container-org5ddcf79" class="outline-3">
-<h3 id="org5ddcf79">截断反向传播</h3>
-<div class="outline-text-3" id="text-org5ddcf79">
+<div id="outline-container-org3f9da5c" class="outline-3">
+<h3 id="org3f9da5c">截断反向传播</h3>
+<div class="outline-text-3" id="text-org3f9da5c">
 <p>
 为使学习过程易于处理，通常的做法是将反向传播的梯度在（按时间）展开的步骤上照一个固定长度(num_steps)截断。 通过在一次迭代中的每个时刻上提供长度为 num_steps 的输入和每次迭代完成之后反向传导，这会很容易实现
 </p>
 
 
 <div class="org-src-container">
-<pre class="src src-python"><span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">&#19968;&#27425;&#32473;&#23450;&#30340;&#36845;&#20195;&#20013;&#30340;&#36755;&#20837;&#21344;&#20301;&#31526;.</span>
-<span style="color: #4eee94;">words</span> = tf.placeholder(tf.int32, [batch_size, num_steps])
+<pre class="src src-python"><span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#19968;&#27425;&#32473;&#23450;&#30340;&#36845;&#20195;&#20013;&#30340;&#36755;&#20837;&#21344;&#20301;&#31526;.</span>
+<span style="color: #eedd82;">words</span> = tf.placeholder(tf.int32, [batch_size, num_steps])
 
-<span style="color: #4eee94;">lstm</span> = rnn_cell.BasicLSTMCell(lstm_size)
-<span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">&#21021;&#22987;&#21270; LSTM &#23384;&#20648;&#29366;&#24577;.</span>
-<span style="color: #4eee94;">initial_state</span> = <span style="color: #4eee94;">state</span> = tf.zeros([batch_size, lstm.state_size])
+<span style="color: #eedd82;">lstm</span> = rnn_cell.BasicLSTMCell(lstm_size)
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#21021;&#22987;&#21270; LSTM &#23384;&#20648;&#29366;&#24577;.</span>
+<span style="color: #eedd82;">initial_state</span> = <span style="color: #eedd82;">state</span> = tf.zeros([batch_size, lstm.state_size])
 
-<span style="color: #00bfff; font-weight: bold;">for</span> i <span style="color: #00bfff; font-weight: bold;">in</span> <span style="color: #f08080;">range</span>(<span style="color: #f08080;">len</span>(num_steps)):
-    <span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">&#27599;&#22788;&#29702;&#19968;&#25209;&#35789;&#35821;&#21518;&#26356;&#26032;&#29366;&#24577;&#20540;.</span>
-    <span style="color: #4eee94;">output</span>, <span style="color: #4eee94;">state</span> = lstm(words[:, i], state)
+<span style="color: #00ffff;">for</span> i <span style="color: #00ffff;">in</span> <span style="color: #b0c4de;">range</span>(<span style="color: #b0c4de;">len</span>(num_steps)):
+    <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#27599;&#22788;&#29702;&#19968;&#25209;&#35789;&#35821;&#21518;&#26356;&#26032;&#29366;&#24577;&#20540;.</span>
+    <span style="color: #eedd82;">output</span>, <span style="color: #eedd82;">state</span> = lstm(words[:, i], state)
 
-    <span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">&#20854;&#20313;&#30340;&#20195;&#30721;.</span>
-    <span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">...</span>
+    <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#20854;&#20313;&#30340;&#20195;&#30721;.</span>
+    <span style="color: #ff4500;"># </span><span style="color: #ff4500;">...</span>
 
-<span style="color: #4eee94;">final_state</span> = state
+<span style="color: #eedd82;">final_state</span> = state
 </pre>
 </div>
 
@@ -321,29 +321,29 @@ for the JavaScript code in this tag.
 </p>
 
 <div class="org-src-container">
-<pre class="src src-python"><span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">&#19968;&#20010; numpy &#25968;&#32452;&#65292;&#20445;&#23384;&#27599;&#19968;&#25209;&#35789;&#35821;&#20043;&#21518;&#30340; LSTM &#29366;&#24577;.</span>
-<span style="color: #4eee94;">numpy_state</span> = initial_state.<span style="color: #f08080;">eval</span>()
-<span style="color: #4eee94;">total_loss</span> = 0.0
-<span style="color: #00bfff; font-weight: bold;">for</span> current_batch_of_words <span style="color: #00bfff; font-weight: bold;">in</span> words_in_dataset:
-    <span style="color: #4eee94;">numpy_state</span>, <span style="color: #4eee94;">current_loss</span> = session.run([final_state, loss],
-        <span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">&#36890;&#36807;&#19978;&#19968;&#27425;&#36845;&#20195;&#32467;&#26524;&#21021;&#22987;&#21270; LSTM &#29366;&#24577;.</span>
+<pre class="src src-python"><span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#19968;&#20010; numpy &#25968;&#32452;&#65292;&#20445;&#23384;&#27599;&#19968;&#25209;&#35789;&#35821;&#20043;&#21518;&#30340; LSTM &#29366;&#24577;.</span>
+<span style="color: #eedd82;">numpy_state</span> = initial_state.<span style="color: #b0c4de;">eval</span>()
+<span style="color: #eedd82;">total_loss</span> = 0.0
+<span style="color: #00ffff;">for</span> current_batch_of_words <span style="color: #00ffff;">in</span> words_in_dataset:
+    <span style="color: #eedd82;">numpy_state</span>, <span style="color: #eedd82;">current_loss</span> = session.run([final_state, loss],
+        <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#36890;&#36807;&#19978;&#19968;&#27425;&#36845;&#20195;&#32467;&#26524;&#21021;&#22987;&#21270; LSTM &#29366;&#24577;.</span>
         feed_dict={initial_state: numpy_state, words: current_batch_of_words})
-    <span style="color: #4eee94;">total_loss</span> += current_loss
+    <span style="color: #eedd82;">total_loss</span> += current_loss
 </pre>
 </div>
 </div>
 </div>
 </div>
 
-<div id="outline-container-orge0b3a9c" class="outline-2">
-<h2 id="orge0b3a9c">输入</h2>
-<div class="outline-text-2" id="text-orge0b3a9c">
+<div id="outline-container-org8094b8b" class="outline-2">
+<h2 id="org8094b8b">输入</h2>
+<div class="outline-text-2" id="text-org8094b8b">
 <p>
 在输入 LSTM 前，词语 ID 被嵌入到了一个 <b>矢量表示</b> 中。这种方式允许模型高效地表示词语，也便于写代码：
 </p>
 <div class="org-src-container">
-<pre class="src src-python"><span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">embedding_matrix &#24352;&#37327;&#30340;&#24418;&#29366;&#26159;&#65306; [vocabulary_size, embedding_size]</span>
-<span style="color: #4eee94;">word_embeddings</span> = tf.nn.embedding_lookup(embedding_matrix, word_ids)
+<pre class="src src-python"><span style="color: #ff4500;"># </span><span style="color: #ff4500;">embedding_matrix &#24352;&#37327;&#30340;&#24418;&#29366;&#26159;&#65306; [vocabulary_size, embedding_size]</span>
+<span style="color: #eedd82;">word_embeddings</span> = tf.nn.embedding_lookup(embedding_matrix, word_ids)
 </pre>
 </div>
 
@@ -353,9 +353,9 @@ for the JavaScript code in this tag.
 </div>
 </div>
 
-<div id="outline-container-orgb076bcb" class="outline-2">
-<h2 id="orgb076bcb">损失函数</h2>
-<div class="outline-text-2" id="text-orgb076bcb">
+<div id="outline-container-orga43b9fd" class="outline-2">
+<h2 id="orga43b9fd">损失函数</h2>
+<div class="outline-text-2" id="text-orga43b9fd">
 <p>
 使目标词语的平均负对数概率最小：
 </p>
@@ -386,9 +386,9 @@ for the JavaScript code in this tag.
 </div>
 </div>
 
-<div id="outline-container-orgd68d74a" class="outline-2">
-<h2 id="orgd68d74a">多个 LSTM 层堆叠</h2>
-<div class="outline-text-2" id="text-orgd68d74a">
+<div id="outline-container-org888e56c" class="outline-2">
+<h2 id="org888e56c">多个 LSTM 层堆叠</h2>
+<div class="outline-text-2" id="text-org888e56c">
 <p>
 要想给模型更强的表达能力，可以添加多层 LSTM 来处理数据。第一层的输出作为第二层的输入，以此类推。
 </p>
@@ -399,26 +399,26 @@ for the JavaScript code in this tag.
 
 
 <div class="org-src-container">
-<pre class="src src-python"><span style="color: #4eee94;">lstm</span> = rnn_cell.BasicLSTMCell(lstm_size)
-<span style="color: #4eee94;">stacked_lstm</span> = rnn_cell.MultiRNNCell([lstm] * number_of_layers)
+<pre class="src src-python"><span style="color: #eedd82;">lstm</span> = rnn_cell.BasicLSTMCell(lstm_size)
+<span style="color: #eedd82;">stacked_lstm</span> = rnn_cell.MultiRNNCell([lstm] * number_of_layers)
 
-<span style="color: #4eee94;">initial_state</span> = <span style="color: #4eee94;">state</span> = stacked_lstm.zero_state(batch_size, tf.float32)
-<span style="color: #00bfff; font-weight: bold;">for</span> i <span style="color: #00bfff; font-weight: bold;">in</span> <span style="color: #f08080;">range</span>(<span style="color: #f08080;">len</span>(num_steps)):
-    <span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">&#27599;&#27425;&#22788;&#29702;&#19968;&#25209;&#35789;&#35821;&#21518;&#26356;&#26032;&#29366;&#24577;&#20540;.</span>
-    <span style="color: #4eee94;">output</span>, <span style="color: #4eee94;">state</span> = stacked_lstm(words[:, i], state)
+<span style="color: #eedd82;">initial_state</span> = <span style="color: #eedd82;">state</span> = stacked_lstm.zero_state(batch_size, tf.float32)
+<span style="color: #00ffff;">for</span> i <span style="color: #00ffff;">in</span> <span style="color: #b0c4de;">range</span>(<span style="color: #b0c4de;">len</span>(num_steps)):
+    <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#27599;&#27425;&#22788;&#29702;&#19968;&#25209;&#35789;&#35821;&#21518;&#26356;&#26032;&#29366;&#24577;&#20540;.</span>
+    <span style="color: #eedd82;">output</span>, <span style="color: #eedd82;">state</span> = stacked_lstm(words[:, i], state)
 
-    <span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">&#20854;&#20313;&#30340;&#20195;&#30721;.</span>
-    <span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">...</span>
+    <span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#20854;&#20313;&#30340;&#20195;&#30721;.</span>
+    <span style="color: #ff4500;"># </span><span style="color: #ff4500;">...</span>
 
-<span style="color: #4eee94;">final_state</span> = state
+<span style="color: #eedd82;">final_state</span> = state
 </pre>
 </div>
 </div>
 </div>
 
-<div id="outline-container-org1345ca6" class="outline-2">
-<h2 id="org1345ca6">优化</h2>
-<div class="outline-text-2" id="text-org1345ca6">
+<div id="outline-container-org266d4ea" class="outline-2">
+<h2 id="org266d4ea">优化</h2>
+<div class="outline-text-2" id="text-org266d4ea">
 <p>
 还有几个优化模型的技巧没有提到，包括：
 </p>
