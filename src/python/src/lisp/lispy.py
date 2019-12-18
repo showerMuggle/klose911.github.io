@@ -6,7 +6,8 @@
 
 from __future__ import division
 from __future__ import print_function
-import re, sys, StringIO
+import re, sys
+from io import StringIO
 
 class Symbol(str): pass
 
@@ -33,7 +34,7 @@ class Procedure(object):
 def parse(inport):
     "Parse a program: read and expand/error-check it."
     # Backwards compatibility: given a str, convert it to an InPort
-    if isinstance(inport, str): inport = InPort(StringIO.StringIO(inport))
+    if isinstance(inport, str): inport = InPort(StringIO(inport))
     return expand(read(inport), toplevel=True)
 
 eof_object = Symbol('#<eof-object>') # Note: uninterned; can't be read
@@ -158,7 +159,7 @@ def add_globals(self):
     self.update(vars(math))
     self.update(vars(cmath))
     self.update({
-     '+':op.add, '-':op.sub, '*':op.mul, '/':op.div, 'not':op.not_, 
+     '+':op.add, '-':op.sub, '*':op.mul, '/':op.truediv, 'not':op.not_, 
      '>':op.gt, '<':op.lt, '>=':op.ge, '<=':op.le, '=':op.eq, 
      'equal?':op.eq, 'eq?':op.is_, 'length':len, 'cons':cons,
      'car':lambda x:x[0], 'cdr':lambda x:x[1:], 'append':op.add,  
