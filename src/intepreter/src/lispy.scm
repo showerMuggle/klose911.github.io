@@ -65,3 +65,32 @@
 		    (sublis a (cdr y))))))
 
 (sublis '((X . SHAKESPARE) (Y . (THE TEMPEST))) '(X WROTE Y)) ;; (SHAKESPARE WROTE (THE TEMPEST))
+
+(define (my-eval e a)
+  (cond ((atom? e) (my-assoc e a))
+	((atom? (car e)) (cond ((eq? (car e) 'QUOTE) (cadr e))
+			       ((eq? (car e) 'COND) (evcon (cdr e) a))
+			       (else (my-apply (car e) (evlis (cdr e) a) a))))
+	(else (my-apply (car e) (evlis (cdr e) a) a))))
+
+(define (my-apply fn x a)
+  (cond ((atom? fn) (cond ((eq? fn 'CAR) (caar x))
+			  ((eq? fn 'CDR) (cdar x))
+			  ((eq? fn 'CONS) (cons (car x) (cadr x)))
+			  ((eq? fn 'ATOM?) (atom? (car x)))
+			  ((eq? fn 'EQ?) (eq? (car x) (cadr x)))
+			  (else (my-apply (my-eval fn a) x a))))
+	((eq? (car fn) 'LAMBDA) (my-eval (caddr fn) (pairlis (cadr fn) x a)))
+	((eq? (car fn) 'DEFINE) (my-apply (caddr fn) x (cons (cons (cadr fn) (caddr fn)) a)))))
+
+(define (evcon c a)
+  (cond ((my-eval (caar c) a) (my-eval (cadar c) a))
+	(else (envcon (cdr c) a))))
+
+(define (evlis m a)
+  (cond ((null? m) NIL)
+	(else (cons (my-eval (car m) a) (envlis (cdr m) a)))))  
+	
+	 
+			
+			      
