@@ -6,7 +6,7 @@
 (define (atom? x)
   (cond ((pair? x) #f)
 	(else #t))) 
-  
+
 (define (equal*? x y)
   (cond ((atom? x) (cond ((atom? y) (eq? x y))
 			 (else #f)))
@@ -89,8 +89,12 @@
 
 (define (evlis m a)
   (cond ((null? m) NIL)
-	(else (cons (my-eval (car m) a) (envlis (cdr m) a)))))  
-	
-	 
-			
-			      
+	(else (cons (my-eval (car m) a) (evlis (cdr m) a)))))
+
+(my-apply '(LAMBDA (x y) (CONS (CAR x) y)) '((A B) (C D)) NIL)	
+(car '(LAMBDA (x y) (CONS (CAR x) y))) ;; LAMBDA
+(caddr '(LAMBDA (x y) (CONS (CAR x) y))) ;;  (CONS (CAR x) y)
+(pairlis (cadr '(LAMBDA (x y) (CONS (CAR x) y))) '((A B) (C D)) NIL) ;; ((x A B) (y C D))
+
+(my-eval '(CONS (CAR x) y) '((x A B) (y C D))) ;; (x y C D) 
+
