@@ -2,7 +2,7 @@
 #+HTML_HEAD: <link rel="stylesheet" type="text/css" href="css/main.css" />
 #+HTML_LINK_UP: rust.html   
 #+HTML_LINK_HOME: rust.html
-#+OPTIONS: num:nil timestamp:nil
+#+OPTIONS: num:nil timestamp:nil ^:nil
 
 * Hello World 
 
@@ -72,3 +72,155 @@ Rust 是一种 *预编译静态* 类型语言，这意味着可以编译程序�
 
   接下来，要介绍一个叫做 Cargo 的工具，它会帮助编写真实世界中的 Rust 程序
 #+END_EXAMPLE
+
+_Cargo_ 是 Rust 的 *构建系统* 和 *包管理器* ，它可以为你处理很多任务，比如 _构建代码_ 、 _下载依赖库_ 并 _编译这些库_ 
+
+#+BEGIN_SRC sh 
+  $ cargo --version
+
+  cargo 1.40.0 (bc8e4c8be 2019-11-22)
+#+END_SRC
+
+如果看到了版本号，说明已安装
+
+** 使用 Cargo 创建项目
+#+BEGIN_SRC sh 
+  $ cargo new hello_cargo
+  $ cd hello_cargo
+#+END_SRC
+
++ 第一行命令 *新建* 了名为 hello_cargo 的目录。将项目命名为 hello_cargo，同时 Cargo 在一个同名目录中创建项目文件
++ 进入 hello_cargo 目录并列出文件。将会看到 Cargo 生成了两个文件和一个目录：
+  + 一个 _Cargo.toml_ 文件
+  + 一个 _src_ 目录
+    + 位于 src 目录中的 _main.rs_ 文件
+
+
+*** Cargo.toml
+#+BEGIN_SRC toml 
+  [package]
+  name = "hello_cargo"
+  version = "0.1.0"
+  authors = ["i514692 <klose.wu@sap.com>"]
+  edition = "2018"
+
+  # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+  [dependencies]
+#+END_SRC
+
+这个文件使用 _TOML_ 格式，这是 Cargo 配置文件的格式：
++ 第一行 _[package]_ ，是一个片段标题，表明下面的语句用来 *配置一个包* 
+  + 随着在这个文件增加更多的信息，还将增加其他片段
++ 接下来的四行设置了 Cargo 编译程序所需的配置：
+  + 项目的名称
+  + 版本
+  + 作者
+  + 要使用的 Rust 版本
+#+BEGIN_EXAMPLE
+  Cargo 从环境中获取你的名字和 email 信息，所以如果这些信息不正确，请修改并保存此文件
+#+END_EXAMPLE
++ 最后一行 _[dependencies]_ ，是罗列 *项目依赖* 的片段的开始
+#+BEGIN_EXAMPLE
+  在 Rust 中，代码包被称为 crates
+
+  这个项目并不需要其他的 crate
+#+END_EXAMPLE
+
+*** main.rs
+#+BEGIN_SRC rust
+  fn main() {
+      println!("Hello, world!");
+  }
+#+END_SRC
+
+Cargo 自动生成了一个 “Hello, world!” 程序
+
+#+BEGIN_EXAMPLE
+  Cargo 期望源文件存放在 src 目录中。项目根目录只存放 README、license 信息、配置文件和其他跟代码无关的文件
+
+  使用 Cargo 帮助你保持项目干净整洁，一切井井有条。
+#+END_EXAMPLE
+
+** 构建并运行
+#+BEGIN_SRC sh 
+  $ cargo build
+     Compiling hello_cargo v0.1.0 (/home/i514692/Documents/programming/html/klose911.github.io/src/rust/src/hello_cargo)
+      Finished dev [unoptimized + debuginfo] target(s) in 0.71s
+#+END_SRC
+
+这个命令会 *创建一个可执行文件* target/debug/hello_cargo 可以通过这个命令运行可执行文件：
+
+#+BEGIN_SRC sh 
+  $ ./target/debug/hello_cargo
+  Hello, world!
+#+END_SRC
+
+如果一切顺利，终端上应该会打印出 _Hello, world!_ 
+
+#+BEGIN_EXAMPLE
+  首次运行 cargo build 时，也会使 Cargo 在项目根目录创建一个新文件：Cargo.lock。这个文件记录项目依赖的实际版本
+
+  这个项目并没有依赖，所以其内容比较少。你自己永远也不需要碰这个文件，让 Cargo 处理它就行了。
+#+END_EXAMPLE
+
+也可以使用 _cargo run_ 在一个命令中 *同时编译并运行* 生成的可执行文件：
+#+BEGIN_SRC sh 
+  $ cargo run
+      Finished dev [unoptimized + debuginfo] target(s) in 0.04s
+       Running `target/debug/hello_cargo`
+  Hello, world!
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  注意这一次并没有出现表明 Cargo 正在编译 hello_cargo 的输出
+
+  Cargo 发现文件并没有被改变，就直接运行了二进制文件
+
+  如果修改了源文件的话，Cargo 会在运行之前重新构建项目
+#+END_EXAMPLE
+
+Cargo 还提供了一个叫 _cargo check_ 的命令。该命令 *快速检查代码确保其可以编译* ，但并不产生可执行文件：
+
+#+BEGIN_SRC sh 
+  $ cargo check
+      Checking hello_cargo v0.1.0 (/home/i514692/Documents/programming/html/klose911.github.io/src/rust/src/hello_cargo)
+      Finished dev [unoptimized + debuginfo] target(s) in 0.22s
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  通常 cargo check 要比 cargo build 快得多，因为它省略了生成可执行文件的步骤
+
+  如果你在编写代码时持续的进行检查，cargo check 会加速开发！
+
+  为此很多 Rustaceans 编写代码时定期运行 cargo check 确保它们可以编译。当准备好使用可执行文件时才运行 cargo build
+#+END_EXAMPLE
+
+回顾下已学习的 Cargo 内容：
++ 可以使用 cargo build 或 cargo check 构建项目
++ 可以使用 cargo run 一步构建并运行项目
++ 有别于将构建结果放在与源码相同的目录，Cargo 会将其放到 target/debug 目录
+
+** 发布构建
+当项目最终准备好发布时，可以使用 _cargo build --release_ 来 *优化编译* 项目。这会在 *target/release* 而不是 target/debug 下生成可执行文件
+
+#+BEGIN_EXAMPLE
+  这些优化可以让 Rust 代码运行的更快，不过启用这些优化也需要消耗更长的编译时间
+
+  这也就是为什么会有两种不同的配置：
+  一种是为了开发，你需要经常快速重新构建
+  另一种是为用户构建最终程序，它们不会经常重新构建，并且希望程序运行得越快越好
+
+  如果你在测试代码的运行时间，请确保运行 cargo build --release 并使用 target/release 下的可执行文件进行测试
+#+END_EXAMPLE
+
+** 把 Cargo 当成习惯
+#+BEGIN_EXAMPLE
+  对于简单项目，Cargo 并不比 rustc 提供了更多的优势，不过随着开发的深入，终将证明其价值
+
+  对于拥有多个 crate 的复杂项目，交给 Cargo 来协调构建将简单的多
+#+END_EXAMPLE
+
+[[file:concept.org][Next: 概念]]
+
+[[file://rust.org][Home: 目录]]
