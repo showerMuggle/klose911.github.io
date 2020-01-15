@@ -221,6 +221,193 @@ Cargo 还提供了一个叫 _cargo check_ 的命令。该命令 *快速检查代
   对于拥有多个 crate 的复杂项目，交给 Cargo 来协调构建将简单的多
 #+END_EXAMPLE
 
+* 猜猜看游戏
+** 创建一个新项目
+#+BEGIN_SRC sh 
+  $ cargo new guessing_game
+  $ cd guessing_game
+#+END_SRC
+
+** 处理一次猜测
+#+BEGIN_EXAMPLE
+  猜猜看程序的第一部分请求和处理用户输入，并检查输入是否符合预期的格式
+#+END_EXAMPLE
+首先，允许玩家输入猜测。在 src/main.rs 中输入的代码：
+
+#+BEGIN_SRC rust
+  use std::io;
+
+  fn main() {
+      println!("Guess the number!");
+
+      println!("Please input your guess.");
+
+      let mut guess = String::new();
+
+      io::stdin().read_line(&mut guess)
+	  .expect("Failed to read line");
+
+      println!("You guessed: {}", guess);
+  }
+#+END_SRC
+
+*** 导入包 
+为了获取用户输入并打印结果作为输出，需要将 *io* （ _输入/输出_ ）库引入当前作用域。io 库来自于 *标准库* （也被称为 _std_ ） 
+
+#+BEGIN_SRC rust
+  use std::io;
+#+END_SRC
+
+默认情况下，Rust 将 _prelude_ 模块中少量的类型引入到每个程序的作用域中。如果需要的类型不在 prelude 中，你必须使用 *use* 语句显式地将其引入作用域
+
+#+BEGIN_EXAMPLE
+  std::io 库提供很多有用的功能，包括接收用户输入的功能
+#+END_EXAMPLE
+
+*** 定义变量
+创建一个储存用户输入的地方：
+
+#+BEGIN_SRC rust
+  let mut guess = String::new();
+#+END_SRC
+
+这是一个 _let_ 语句，用来 *创建变量* 。这里是另外一个例子：
+
+#+BEGIN_SRC rust
+  let foo = 5; // 不可变的
+#+END_SRC
+
+在 Rust 中，变量 *默认是不可变* 的，程序里的 *mut* 用来定义 *可变的* 变量
+
+#+BEGIN_EXAMPLE
+  注意：// 语法开始一个注释，持续到行尾。Rust 忽略注释中的所有内容
+#+END_EXAMPLE
+ 
+*** new函数
+现在已经知道了 _let mut guess_ 会引入一个叫做 _guess_ 的可变变量。等号(=) 的右边是 guess 所绑定的值，它是 _String::new_ 的结果，这个函数会返回一个 String 的新实例
+
+#+BEGIN_EXAMPLE
+  String 是一个标准库提供的字符串类型，它是 UTF-8 编码的可增长文本块
+#+END_EXAMPLE
+
+_::new_ 那一行的 *::*  语法表明 _new_ 是 _String_ 类型的一个 *关联函数* ，关联函数是针对类型实现的
+#+BEGIN_EXAMPLE
+  一些语言中把它称为 静态方法
+
+  在这个例子中 new 函数是 String，而不是 String 的某个特定实例
+
+  new 函数创建了一个新的空字符串，很多类型上有 new 函数，因为它是创建类型实例的惯用函数名
+#+END_EXAMPLE
+
+*** 引用
+在程序的第一行使用 _use std::io_ ; 从标准库中引入了输入/输出功能。现在调用 io 的关联函数 _stdin_ ：
+
+#+BEGIN_SRC rust 
+  io::stdin().read_line(&mut guess)
+      .expect("Failed to read line");
+#+END_SRC
+
+_stdin_ 函数返回一个 _std::io::Stdin_ 的实例，这代表 *终端标准输入句柄的类型* 
+
+#+BEGIN_EXAMPLE
+  如果程序的开头没有 use std::io 这一行，可以把函数调用写成 std::io::stdin
+#+END_EXAMPLE
+
+_.read_line(&mut guess)_ : 调用 _read_line_ 方法从 _标准输入句柄_ *获取* _用户输入_ ，向 read_line() 传递了一个 _参数_ *&mut guess* 
++ 无论用户在标准输入中键入什么内容，都将其存入一个字符串中，因此它需要字符串作为参数
++ 这个字符串参数应该是 *可变的* ，以便 read_line 将用户输入附加上去
+
+#+BEGIN_EXAMPLE
+  引用是一个复杂的特性，Rust 的一个主要优势就是安全而简单的操纵引用
+
+  当然完成当前程序并不需要了解如此多细节
+#+END_EXAMPLE
+
+_&_ 表示这个参数是一个 *引用* ，它允许 *多处代码访问同一处数据* ，而 *无需在内存中多次拷贝* 
++ 它像变量一样，*默认是不可变的* 
++ 所以要写成 *&mut guess* 来使其可变，而不是 &guess
+
+*** 使用 Result 类型来处理潜在的错误 
+read_line 将用户输入附加到传递给它的字符串中，不过它也 *返回一个值* ：在这个例子中是 _io::Result_ 
+
+#+BEGIN_EXAMPLE
+  Rust 标准库中有很多叫做 Result 的类型
+
+  一个 Result 泛型以及对应子模块的特定版本，比如 io::Result
+#+END_EXAMPLE
+
+Result 类型是 *枚举* ，通常也写作 _enums_ 。枚举类型 *持有固定集合的值* ，这些值被称为枚举的 _成员_ 。Result 的成员是 _Ok_ 和 _Err_ 
++ Ok 成员表示操作成功，内部包含成功时产生的值
++ Err 成员则意味着操作失败，并且包含失败的前因后果
+
+#+BEGIN_EXAMPLE
+  这些 Result 类型的作用是编码错误处理信息
+#+END_EXAMPLE
+
+Result 类型的值，像其他类型一样，拥有定义于其上的方法。 _io::Result_  的实例拥有 _expect_  方法：
++ 如果 io::Result 实例的值是 Err，expect 会导致 *程序崩溃* ，并 *显示当做参数传递给 expect 的信息* 
+  + 如果 read_line 方法返回 Err，则可能是来源于 _底层操作系统错误的结果_ 
++ 如果 io::Result 实例的值是 Ok，expect 会 *获取 Ok 中的值* 并 *原样返回* 
+  + 这里这个值是 _用户输入到标准输入中的字节数_ 
+
+#+BEGIN_EXAMPLE
+  如果不调用 expect，程序也能编译，不过会出现一个警告：
+
+
+  $ cargo build
+     Compiling guessing_game v0.1.0 (file:///projects/guessing_game)
+  warning: unused `std::result::Result` which must be used
+    --> src/main.rs:10:5
+     |
+  10 |     io::stdin().read_line(&mut guess);
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: #[warn(unused_must_use)] on by default
+
+  Rust 警告没有使用 read_line 的返回值 Result，说明有一个可能的错误没有处理
+
+  消除警告的正确做法是实际编写错误处理代码，不过由于就是希望程序在出现问题时立即崩溃，所以直接使用 expect。
+#+END_EXAMPLE
+
+*** 使用 println! 占位符打印值
+
+#+BEGIN_SRC rust
+  println!("You guessed: {}", guess);
+#+END_SRC
+
+这行代码打印存储用户输入的字符串。第一个参数是 *格式化字符串* ：
++ 里面的 _{}_ 是 *预留在特定位置的占位符*
++ 使用 {} 也可以打印多个值：第一对 {} 使用格式化字符串之后的第一个值，第二对则使用第二个值，依此类推
+
+调用一次 println! 打印多个值看起来像这样：
+
+#+BEGIN_SRC rust
+  #![allow(unused_variables)]
+  fn main() {
+  let x = 5;
+  let y = 10;
+
+  println!("x = {} and y = {}", x, y);
+  }
+#+END_SRC
+
+这行代码会打印出 x = 5 and y = 10
+
+*** 测试第一部分代码
+使用 cargo run 运行：
+
+#+BEGIN_SRC sh 
+  $ cargo run
+     Compiling guessing_game v0.1.0 (/home/i514692/Documents/programming/html/klose911.github.io/src/rust/src/guessing_game)
+      Finished dev [unoptimized + debuginfo] target(s) in 0.76s
+       Running `target/debug/guessing_game`
+  Guess the number!
+  Please input your guess.
+  8
+  You guessed: 8
+#+END_SRC
+
+** 生成一个数字
 [[file:concept.org][Next: 概念]]
 
 [[file://rust.org][Home: 目录]]
