@@ -5,7 +5,7 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>概念</title>
+<title>基础概念</title>
 <meta name="generator" content="Org mode" />
 <meta name="author" content="Wu, Shanliang" />
 <style type="text/css">
@@ -233,7 +233,22 @@ for the JavaScript code in this tag.
  |
  <a accesskey="H" href="rust.html"> HOME </a>
 </div><div id="content">
-<h1 class="title">概念</h1>
+<h1 class="title">基础概念</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#org8ad86ea">变量</a>
+<ul>
+<li><a href="#org43fdded">不变性</a></li>
+<li><a href="#orga71993e">变量和常量的区别</a></li>
+<li><a href="#orgd3a6293">隐藏</a></li>
+</ul>
+</li>
+<li><a href="#org5b04c96">基本数据类型</a></li>
+</ul>
+</div>
+</div>
 <pre class="example">
   本章介绍一些几乎所有编程语言都有的概念，以及它们在 Rust 中是如何工作的
 
@@ -247,6 +262,259 @@ for the JavaScript code in this tag.
 <pre class="example">
   每一个 Rust 程序中都会用到这些基础知识，提早学习这些概念会让人在起步时就打下坚实的基础
 </pre>
+<div id="outline-container-org8ad86ea" class="outline-2">
+<h2 id="org8ad86ea">变量</h2>
+<div class="outline-text-2" id="text-org8ad86ea">
+</div>
+<div id="outline-container-org43fdded" class="outline-3">
+<h3 id="org43fdded">不变性</h3>
+<div class="outline-text-3" id="text-org43fdded">
+<pre class="example">
+  前面提到过，变量默认是不可改变的。这是推动充分利用 Rust 提供的安全性和简单并发性来编写代码的众多方式之一
+
+  不过，仍然可以使用可变变量。先来探讨一下 Rust 拥抱不可变性的原因及方法，以及何时不想使用不可变性
+</pre>
+
+<p>
+当变量不可变时，一旦值被绑定一个名称上，就不能改变这个值。为了对此进行说明，使用 <span class="underline">cargo new variables</span> 命令在 projects 目录生成一个叫做 variables 的新项目。
+</p>
+
+<p>
+接着，在新建的 variables 目录，打开 src/main.rs 并将代码替换为如下代码，这些代码还不能编译：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">x</span> = 5;
+    <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"The value of x is: </span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">"</span>, x);
+    x = 6;
+    <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"The value of x is: </span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">"</span>, x);
+}
+</pre>
+</div>
+
+<p>
+保存并使用 cargo build 运行程序。应该会看到一条错误信息，如下输出所示：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">$ cargo build
+   Compiling variables v0.1.0 (/home/i514692/Documents/programming/html/klose911.github.io/src/rust/src/variables)
+error[E0384]: cannot assign twice to immutable variable <span style="color: #fa8072;">`x`</span>
+ --&gt; src/main.rs:4:5
+  |
+2 |     <span style="color: #b0c4de;">let</span> x = 5;
+  |         -
+  |         |
+  |         first assignment to <span style="color: #fa8072;">`x`</span>
+  |         <span style="color: #b0c4de;">help</span>: make this binding mutable: <span style="color: #fa8072;">`mut x`</span>
+3 |     println!(<span style="color: #ffa07a;">"The value of x is: {}"</span>, x);
+4 |     x = 6;
+  |     ^^^^^ cannot assign twice to immutable variable
+
+error: aborting due to previous error
+
+For more information about this error, try <span style="color: #fa8072;">`rustc --explain E0384`</span><span style="color: #b0c4de;">.</span>
+error: could not compile <span style="color: #fa8072;">`variables`</span><span style="color: #b0c4de;">.</span>
+
+To learn more, run the command again with --verbose.
+</pre>
+</div>
+
+<p>
+错误信息指出错误的原因是 <b>不能对不可变变量 x 二次赋值</b> (cannot assign twice to immutable variable x)
+</p>
+
+<pre class="example">
+Rust 编译器保证，如果声明一个值不会变，它就真的不会变
+
+这意味着当阅读和编写代码时，不需要追踪一个值如何和在哪可能会被改变，从而使得代码易于推导
+</pre>
+
+<p>
+不过可变性也是非常有用的。变量只是默认不可变：可以在变量名之前加 <span class="underline">mut</span> 来使其可变
+</p>
+
+<pre class="example">
+  除了允许改变值之外，mut 向代码阅读者表明了其他代码将会改变这个变量值的意图
+</pre>
+
+<p>
+例如，将 src/main.rs 修改为如下代码：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
+    <span style="color: #00ffff;">let</span> <span style="color: #00ffff;">mut</span> <span style="color: #eedd82;">x</span> = 5;
+    <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"The value of x is: </span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">"</span>, x);
+    x = 6;
+    <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"The value of x is: </span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">"</span>, x);
+}
+</pre>
+</div>
+
+<p>
+现在运行这个程序：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ cargo run
+   Compiling variables v0.1.0 (/home/i514692/Documents/programming/html/klose911.github.io/src/rust/src/variables)
+    Finished dev [unoptimized + debuginfo] target(s) <span style="color: #00ffff;">in</span> 0.81s
+     Running <span style="color: #fa8072;">`target/debug/variables`</span>
+The value of x is: 5
+The value of x is: 6
+</pre>
+</div>
+
+<p>
+通过 mut，允许把绑定到 x 的值从 5 改成 6。在一些情况下，会想用可变变量，因为与只用不可变变量相比，它会让 <b>代码更容易编写</b> 
+</p>
+
+<pre class="example">
+  除了防止出现 bug 外，还有很多地方需要权衡取舍
+
+  例如，使用大型数据结构时，适当地使用可变变量，可能比复制和返回新分配的实例更快
+  对于较小的数据结构，总是创建新实例，采用更偏向函数式的编程风格，可能会使代码更易理解，为可读性而牺牲性能或许是值得的。
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orga71993e" class="outline-3">
+<h3 id="orga71993e">变量和常量的区别</h3>
+<div class="outline-text-3" id="text-orga71993e">
+<pre class="example">
+  不允许改变值的变量，可能会使你想起另一个大部分编程语言都有的概念：常量
+</pre>
+
+<p>
+类似于不可变变量，常量是绑定到一个名称的不允许改变的值，不过常量与变量还是有一些区别：
+</p>
+<ul class="org-ul">
+<li><b>不允许对常量使用 mut</b> ：常量不光默认不能变，它 <b>总是不能变</b></li>
+<li>声明常量使用 <b>const</b> 关键字而不是 <span class="underline">let</span> ，并且 <b>必须注明值的类型</b></li>
+</ul>
+<pre class="example">
+  在下一部分，“数据类型” 中会介绍类型和类型注解
+</pre>
+<ul class="org-ul">
+<li>常量可以在 <b>任何作用域中声明</b> ，包括 <span class="underline">全局作用域</span> ，这在一个值需要被很多部分的代码用到时很有用</li>
+<li>常量只能 <b>被设置为常量表达式</b> ，而不能是 <span class="underline">函数调用的结果</span> ，或任何其他 <span class="underline">只能在运行时计算出的值</span></li>
+</ul>
+
+
+<p>
+下面是一个声明常量的例子，它的名称是 MAX_POINTS，值是 100,000：
+</p>
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">const</span> <span style="color: #eedd82;">MAX_POINTS</span>: <span style="color: #98fb98;">u32</span> = 100_000;
+</pre>
+</div>
+
+<p>
+在声明它的作用域之中，常量在 <b>整个程序生命周期中都有效</b> ，这使得常量可以作为 <span class="underline">多处代码使用的全局范围的值</span> ，例如一个游戏中所有玩家可以获取的最高分或者光速
+</p>
+
+<pre class="example">
+  将遍布于应用程序中的硬编码值声明为常量，能帮助后来的代码维护人员了解值的意图
+
+  如果将来需要修改硬编码值，也只需修改汇聚于一处的硬编码值
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orgd3a6293" class="outline-3">
+<h3 id="orgd3a6293">隐藏</h3>
+<div class="outline-text-3" id="text-orgd3a6293">
+<p>
+可以定义一个与之前变量同名的新变量，而新变量会 <b>隐藏</b> 之前的变量。Rustacean 们称之为第一个变量被第二个 隐藏 了，这意味着使用这个变量时会看到第二个值。可以用相同变量名称来隐藏一个变量，以及重复使用 <span class="underline">let</span> 关键字来多次隐藏，如下所示：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">x</span> = 5;
+
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">x</span> = x + 1;
+
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">x</span> = x * 2;
+
+    <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"The value of x is: </span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">"</span>, x);
+}
+</pre>
+</div>
+
+<p>
+这个程序首先将 x 绑定到值 5 上。接着通过 let x = 隐藏 x，获取初始值并加 1，这样 x 的值就变成 6 了。第三个 let 语句也隐藏了 x，将之前的值乘以 2，x 最终的值是 12。运行这个程序，它会有如下输出：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ cargo run
+   Compiling shadowing v0.1.0 (/home/i514692/Documents/programming/html/klose911.github.io/src/rust/src/shadowing)
+    Finished dev [unoptimized + debuginfo] target(s) <span style="color: #00ffff;">in</span> 0.61s
+     Running <span style="color: #fa8072;">`target/debug/shadowing`</span>
+The value of x is: 12
+</pre>
+</div>
+
+<p>
+<span class="underline">隐藏</span> 与将变量 <span class="underline">标记为 mut</span> 是有区别的：
+</p>
+<ul class="org-ul">
+<li>当不小心尝试对变量重新赋值时：
+<ul class="org-ul">
+<li>如果 <span class="underline">没有使用 let</span> 关键字，就会导致 <b>编译时错误</b></li>
+<li>通过 <span class="underline">使用 let</span> ，可以用这个值进行一些计算，不过 <b>计算完之后变量仍然是不变的</b></li>
+</ul></li>
+<li>当再次使用 let 时，实际上 <b>创建了一个新变量</b> ，可以 <b>改变值的类型</b> ，但复用这个名字
+<ul class="org-ul">
+<li>例如，假设程序请求用户输入空格字符来说明希望在文本之间显示多少个空格，然而真正需要的是将输入存储成数字（多少个空格）：</li>
+</ul></li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">let</span> <span style="color: #eedd82;">spaces</span> = <span style="color: #ffa07a;">"   "</span>;
+<span style="color: #00ffff;">let</span> <span style="color: #eedd82;">spaces</span> = spaces.len();
+</pre>
+</div>
+
+<p>
+这里允许第一个 spaces 变量是字符串类型，而第二个 spaces 变量，它是一个恰巧与第一个变量同名的崭新变量，是数字类型。 <b>隐藏使我们不必使用不同的名字，如 spaces_str 和 spaces_num</b> ；相反，可以复用 spaces 这个更简单的名字。然而，如果尝试使用 mut：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">let</span> <span style="color: #00ffff;">mut</span> <span style="color: #eedd82;">spaces</span> = <span style="color: #ffa07a;">"   "</span>;
+spaces = spaces.len();
+</pre>
+</div>
+
+<p>
+将会得到一个编译时错误，如下所示：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">error[E0308]: mismatched types
+ --&gt; src/main.rs:3:14
+  |
+3 |     spaces = spaces.len();
+  |              ^^^^^^^^^^^^ expected &amp;str, found usize
+  |
+  = note: expected type <span style="color: #fa8072;">`&amp;str`</span>
+             found type <span style="color: #fa8072;">`usize`</span>
+</pre>
+</div>
+
+<p>
+这说明 mut 不能改变变量的类型
+</p>
+
+<pre class="example">
+  现在已经了解了变量如何工作，接下来看看变量可以拥有的更多数据类型
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org5b04c96" class="outline-2">
+<h2 id="org5b04c96">基本数据类型</h2>
+</div>
 </div>
 <div id="postamble" class="status">
 
