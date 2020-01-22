@@ -28,7 +28,16 @@
          :publishing-function org-publish-attachment
          )
 
-        ("rust" :components ("rust-notes" "rust-static"))
+	;; These are static files (images, pdf, etc)
+        ("rust-pic"
+         :base-directory "~/Documents/programming/html/klose911.github.io/src/rust/pic" ;; Change this to your local dir
+         :base-extension "svg\\|js\\|png\\|jpg\\|gif"
+         :publishing-directory "~/Documents/programming/html/klose911.github.io/html/rust/pic"
+         :recursive t
+         :publishing-function org-publish-attachment
+         )
+
+        ("rust" :components ("rust-notes" "rust-static" "rust-pic"))
         )
       )
 
