@@ -234,6 +234,328 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="rust.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">结构体</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#org96d7c53">定义</a>
+<ul>
+<li><a href="#orgf9ec6d9">简化语法</a>
+<ul>
+<li><a href="#org61e88fe">变量与字段同名时的字段初始化</a></li>
+<li><a href="#org848c2db">使用结构体更新语法从其他实例创建实例</a></li>
+<li><a href="#orge178abc">使用没有命名字段的元组结构体来创建不同的类型</a></li>
+<li><a href="#org433e9fd">没有任何字段的类单元结构体</a></li>
+</ul>
+</li>
+<li><a href="#org78d2cff">结构体的所有权</a></li>
+</ul>
+</li>
+<li><a href="#orgb56ac50">实例</a></li>
+</ul>
+</div>
+</div>
+<p>
+<span class="underline">struct</span> ，是一个 <span class="underline">自定义数据类型</span> ，允许 <b>命名和包装</b> <span class="underline">多个相关的值</span> ，从而形成一个 <b>有意义的组合</b> 
+</p>
+
+<pre class="example">
+  如果熟悉一门面向对象语言，struct 就像Class
+
+  在本章中，会对比元组与结构体的异同，演示结构体的用法，并讨论如何在结构体上定义方法和关联函数来指定与结构体数据相关的行为
+</pre>
+<div id="outline-container-org96d7c53" class="outline-2">
+<h2 id="org96d7c53">定义</h2>
+<div class="outline-text-2" id="text-org96d7c53">
+<pre class="example">
+  结构体和以前讨论过的元组类似：和元组一样，结构体的每一部分可以是不同类型
+
+  但不同于元组，结构体需要命名各部分数据以便能清楚的表明其值的意义
+  由于有了这些名字，结构体比元组更灵活：不需要依赖顺序来指定或访问实例中的值
+</pre>
+
+<p>
+定义结构体，需要使用 <span class="underline">struct</span> 关键字：
+</p>
+<ul class="org-ul">
+<li>为整个结构体提供一个 <span class="underline">名字</span> ，结构体的名字需要描述它所组合的数据的意义</li>
+<li>在 <span class="underline">大括号</span> 中，定义每一部分数据的名字和类型，称为 <span class="underline">字段</span></li>
+</ul>
+
+<p>
+下面示例展示了一个存储用户账号信息的结构体：
+</p>
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">struct</span> <span style="color: #98f5ff;">User</span> {
+    <span style="color: #4eee94;">username</span>: <span style="color: #98f5ff;">String</span>,
+    <span style="color: #4eee94;">email</span>: <span style="color: #98f5ff;">String</span>,
+    <span style="color: #4eee94;">sign_in_count</span>: <span style="color: #98f5ff;">u64</span>,
+    <span style="color: #4eee94;">active</span>: <span style="color: #98f5ff;">bool</span>,
+}
+</pre>
+</div>
+
+<p>
+一旦定义了结构体后，为了使用它，通过给 <span class="underline">每个字段</span> <b>指定</b> <span class="underline">具体值</span> 来 <b>创建</b> 这个结构体的 <span class="underline">实例</span> ：
+</p>
+<ul class="org-ul">
+<li>创建一个实例需要以 <span class="underline">结构体的名字</span> 开头</li>
+<li>在 <span class="underline">大括号</span> 中使用 <span class="underline">key: value</span> 键-值对的形式提供字段
+<ul class="org-ul">
+<li>key: <span class="underline">字段的名字</span></li>
+<li>value: 需要存储在 <span class="underline">字段中的数据值</span></li>
+</ul></li>
+<li>实例中 <b>字段的顺序不需要和它们在结构体中声明的顺序一致</b></li>
+</ul>
+
+<pre class="example">
+  换句话说：结构体的定义就像一个类型的通用模板
+  而实例则会在这个模板中放入特定数据来创建这个类型的值
+</pre>
+
+<p>
+例如，可以像下面实例这样来声明一个特定的用户：
+</p>
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">user1</span> = <span style="color: #98f5ff;">User</span> {
+    <span style="color: #4eee94;">email</span>: <span style="color: #98f5ff;">String</span>::from(<span style="color: #deb887;">"someone@example.com"</span>),
+    <span style="color: #4eee94;">username</span>: <span style="color: #98f5ff;">String</span>::from(<span style="color: #deb887;">"someusername123"</span>),
+    <span style="color: #4eee94;">active</span>: <span style="color: #00bfff; font-weight: bold;">true</span>,
+    <span style="color: #4eee94;">sign_in_count</span>: 1,
+};
+</pre>
+</div>
+
+<ul class="org-ul">
+<li>为了从结构体中 <b>获取</b> 某个特定的值，可以使用 <span class="underline">点号</span> ：如果只想要用户的邮箱地址，可以用 user1.email</li>
+<li>要 <b>更改</b> 结构体中的值，如果 <span class="underline">结构体的实例</span> 是 <span class="underline">可变的</span> ，可以使用 <span class="underline">点号</span> 并为对应的 <b>字段赋值</b></li>
+</ul>
+
+<p>
+下面示例展示了如何改变一个可变的 User 实例 email 字段的值：
+</p>
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #00bfff; font-weight: bold;">mut</span> <span style="color: #4eee94;">user1</span> = <span style="color: #98f5ff;">User</span> {
+    <span style="color: #4eee94;">email</span>: <span style="color: #98f5ff;">String</span>::from(<span style="color: #deb887;">"someone@example.com"</span>),
+    <span style="color: #4eee94;">username</span>: <span style="color: #98f5ff;">String</span>::from(<span style="color: #deb887;">"someusername123"</span>),
+    <span style="color: #4eee94;">active</span>: <span style="color: #00bfff; font-weight: bold;">true</span>,
+    <span style="color: #4eee94;">sign_in_count</span>: 1,
+};
+
+user1.email = <span style="color: #98f5ff;">String</span>::from(<span style="color: #deb887;">"anotheremail@example.com"</span>);
+</pre>
+</div>
+
+<pre class="example">
+注意：“整个实例”必须是可变的
+
+Rust 并不允许只将某个字段标记为可变
+</pre>
+
+<p>
+同其他任何表达式一样，可以在 <span class="underline">函数体的最后一个表达式</span> 中 <b>构造</b> 一个 <span class="underline">结构体的新实例</span> ，来 <b>隐式</b> 地 <span class="underline">返回</span> 这个实例。下面显示了一个 build_user 函数，它返回一个带有给定的 email 和用户名的 User 结构体实例。active 字段的值为 true，并且 sign_in_count 的值为 1：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">build_user</span>(<span style="color: #4eee94;">email</span>: <span style="color: #98f5ff;">String</span>, <span style="color: #4eee94;">username</span>: <span style="color: #98f5ff;">String</span>) -&gt; <span style="color: #98f5ff;">User</span> {
+    <span style="color: #98f5ff;">User</span> {
+        <span style="color: #4eee94;">email</span>: email,
+        <span style="color: #4eee94;">username</span>: username,
+        <span style="color: #4eee94;">active</span>: <span style="color: #00bfff; font-weight: bold;">true</span>,
+        <span style="color: #4eee94;">sign_in_count</span>: 1,
+    }
+}
+</pre>
+</div>
+
+<pre class="example">
+  为函数参数起与结构体字段相同的名字是可以理解的，但是不得不重复 email 和 username 字段名称与变量有些啰嗦。如果要重复更多这样的字段就显得更加烦人
+
+  幸运的是，rust提供了一些简便的方式
+</pre>
+</div>
+<div id="outline-container-orgf9ec6d9" class="outline-3">
+<h3 id="orgf9ec6d9">简化语法</h3>
+<div class="outline-text-3" id="text-orgf9ec6d9">
+</div>
+<div id="outline-container-org61e88fe" class="outline-4">
+<h4 id="org61e88fe">变量与字段同名时的字段初始化</h4>
+<div class="outline-text-4" id="text-org61e88fe">
+<p>
+函数的参数名与字段名都完全相同，可以使用 <span class="underline">字段初始化简写语法</span> 来重写 build_user，这样其行为与之前完全相同，不过无需重复 email 和 username 了，如示例所示：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">build_user</span>(<span style="color: #4eee94;">email</span>: <span style="color: #98f5ff;">String</span>, <span style="color: #4eee94;">username</span>: <span style="color: #98f5ff;">String</span>) -&gt; <span style="color: #98f5ff;">User</span> {
+    <span style="color: #98f5ff;">User</span> {
+        email,
+        username,
+        <span style="color: #4eee94;">active</span>: <span style="color: #00bfff; font-weight: bold;">true</span>,
+        <span style="color: #4eee94;">sign_in_count</span>: 1,
+    }
+}
+</pre>
+</div>
+
+<pre class="example">
+  这里创建了一个新的 User 结构体实例，它有一个叫做 email 的字段，然后想要将 email 字段的值设置为 build_user 函数 email 参数的值
+
+  因为 email 字段与 email 参数有着相同的名称，则只需编写 email 而不是 email: email
+</pre>
+</div>
+</div>
+<div id="outline-container-org848c2db" class="outline-4">
+<h4 id="org848c2db">使用结构体更新语法从其他实例创建实例</h4>
+<div class="outline-text-4" id="text-org848c2db">
+<pre class="example">
+  使用旧实例的大部分值，但改变其部分值来创建一个新的结构体实例，通常是很有帮助的
+</pre>
+<p>
+这可以通过 <span class="underline">结构体更新语法</span> 实现。首先，示例展示了不使用更新语法时，如何在 user2 中创建一个新 User 实例。为 email 和 username 设置了新的值，其他值则使用了前面创建的 user1 中的同名值：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">user2</span> = <span style="color: #98f5ff;">User</span> {
+    <span style="color: #4eee94;">email</span>: <span style="color: #98f5ff;">String</span>::from(<span style="color: #deb887;">"another@example.com"</span>),
+    <span style="color: #4eee94;">username</span>: <span style="color: #98f5ff;">String</span>::from(<span style="color: #deb887;">"anotherusername567"</span>),
+    <span style="color: #4eee94;">active</span>: user1.active,
+    <span style="color: #4eee94;">sign_in_count</span>: user1.sign_in_count,
+};
+</pre>
+</div>
+
+<p>
+使用结构体更新语法，通过更少的代码来达到相同的效果： <span class="underline">..</span>  语法指定了 <b>剩余未显式设置值</b> 的字段应有与 <span class="underline">给定实例</span> 对应字段相同的值。如下所示：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">user2</span> = <span style="color: #98f5ff;">User</span> {
+    <span style="color: #4eee94;">email</span>: <span style="color: #98f5ff;">String</span>::from(<span style="color: #deb887;">"another@example.com"</span>),
+    <span style="color: #4eee94;">username</span>: <span style="color: #98f5ff;">String</span>::from(<span style="color: #deb887;">"anotherusername567"</span>),
+    ..user1
+};
+</pre>
+</div>
+
+<pre class="example">
+  在 user2 中创建了一个新实例，其有不同的 email 和 username 值
+
+  不过 active 和 sign_in_count 字段的值与 user1 相同
+</pre>
+</div>
+</div>
+<div id="outline-container-orge178abc" class="outline-4">
+<h4 id="orge178abc">使用没有命名字段的元组结构体来创建不同的类型</h4>
+<div class="outline-text-4" id="text-orge178abc">
+<p>
+也可以定义与元组类似的结构体，称为 <span class="underline">元组结构体</span> ：元组结构体有着 <span class="underline">结构体名称</span> 提供的含义，但 <b>没有具体的字段名</b> ，只有 <b>字段的类型</b> 
+</p>
+<pre class="example">
+  当想给整个元组取一个名字，并使元组成为与其他元组不同的类型时，元组结构体是很有用的
+
+  这时像常规结构体那样为每个字段命名就显得多余和形式化了
+</pre>
+
+<p>
+要定义元组结构体，以 <span class="underline">struct</span> 关键字和 <span class="underline">结构体名</span> 开头并后跟 <span class="underline">元组中的类型</span> 。例如，下面是两个分别叫做 Color 和 Point 元组结构体的定义和用法：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">struct</span> <span style="color: #98f5ff;">Color</span>(<span style="color: #98f5ff;">i32</span>, <span style="color: #98f5ff;">i32</span>, <span style="color: #98f5ff;">i32</span>);
+<span style="color: #00bfff; font-weight: bold;">struct</span> <span style="color: #98f5ff;">Point</span>(<span style="color: #98f5ff;">i32</span>, <span style="color: #98f5ff;">i32</span>, <span style="color: #98f5ff;">i32</span>);
+
+<span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">black</span> = <span style="color: #98f5ff;">Color</span>(0, 0, 0);
+<span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">origin</span> = <span style="color: #98f5ff;">Point</span>(0, 0, 0);
+</pre>
+</div>
+
+<pre class="example">
+  注意： black 和 origin 值的类型不同，因为它们是不同的元组结构体的实例
+</pre>
+
+<ul class="org-ul">
+<li>定义的每一个结构体有其自己的类型，即使结构体中的字段有着相同的类型。例如，一个获取 Color 类型参数的函数不能接受 Point 作为参数，即便这两个类型都由三个 i32 值组成</li>
+<li>在其他方面，元组结构体实例类似于元组：可以将其解构为单独的部分，也可以使用 <span class="underline">.</span>  后跟索引来访问单独的值</li>
+</ul>
+</div>
+</div>
+<div id="outline-container-org433e9fd" class="outline-4">
+<h4 id="org433e9fd">没有任何字段的类单元结构体</h4>
+<div class="outline-text-4" id="text-org433e9fd">
+<p>
+也可以定义一个 <b>没有任何字段</b> 的结构体，这被称为 <span class="underline">类单元结构体</span> 因为它们类似于 <b>()</b> ，即 <span class="underline">unit 类型</span> 
+</p>
+
+<pre class="example">
+  类单元结构体常常在想要在某个类型上实现 trait ，但不需要在类型中存储数据的时候发挥作用
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org78d2cff" class="outline-3">
+<h3 id="org78d2cff">结构体的所有权</h3>
+<div class="outline-text-3" id="text-org78d2cff">
+<p>
+在 User 结构体的定义中，使用了 <b>自身拥有所有权</b> 的 <span class="underline">String 类型</span> 而不是  <span class="underline">&amp;str</span> 字符串 <b>slice 类型</b> 。这是一个有意而为之的选择，因为想要这个 <b>结构体拥有它所有的数据</b> ，为此 <b>只要整个结构体是有效的话其数据也是有效的</b> 
+</p>
+
+<pre class="example">
+  可以使结构体存储被其他对象拥有的数据的引用，不过这么做的话需要用上“生命周期”
+
+  生命周期确保“结构体引用的数据有效性”跟 “结构体本身”保持一致
+</pre>
+
+<p>
+如果尝试在结构体中存储一个 <span class="underline">引用</span> 而 <b>不指定生命周期</b> 将是无效的，比如这样：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">struct</span> <span style="color: #98f5ff;">User</span> {
+    <span style="color: #4eee94;">username</span>: &amp;<span style="color: #98f5ff;">str</span>,
+    <span style="color: #4eee94;">email</span>: &amp;<span style="color: #98f5ff;">str</span>,
+    <span style="color: #4eee94;">sign_in_count</span>: <span style="color: #98f5ff;">u64</span>,
+    <span style="color: #4eee94;">active</span>: <span style="color: #98f5ff;">bool</span>,
+}
+
+<span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">user1</span> = <span style="color: #98f5ff;">User</span> {
+        <span style="color: #4eee94;">email</span>: <span style="color: #deb887;">"someone@example.com"</span>,
+        <span style="color: #4eee94;">username</span>: <span style="color: #deb887;">"someusername123"</span>,
+        <span style="color: #4eee94;">active</span>: <span style="color: #00bfff; font-weight: bold;">true</span>,
+        <span style="color: #4eee94;">sign_in_count</span>: 1,
+    };
+}
+</pre>
+</div>
+
+<p>
+编译器会报错：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">error[E0106]: missing lifetime specifier
+ --&gt; src/main.rs:2:15
+  |
+2 |     username: &amp;str,
+  |               ^ expected lifetime parameter
+
+error[E0106]: missing lifetime specifier
+ --&gt; src/main.rs:3:12
+  |
+3 |     email: &amp;str,
+  |            ^ expected lifetime parameter
+
+error: aborting due to 2 previous errors
+
+For more information about this error, try <span style="color: #fa8072;">`rustc --explain E0106`</span>.
+error: could not compile <span style="color: #fa8072;">`reference_without_lifetime`</span>.
+</pre>
+</div>
+</div>
+</div>
+</div>
+<div id="outline-container-orgb56ac50" class="outline-2">
+<h2 id="orgb56ac50">实例</h2>
+</div>
 </div>
 <div id="postamble" class="status">
 
