@@ -3,3 +3,346 @@
 #+HTML_LINK_UP: struct.html   
 #+HTML_LINK_HOME: rust.html
 #+OPTIONS: num:nil timestamp:nil ^:nil
+
+本章介绍 *枚举* ，也被称作 _enums_ 。枚举允许通过列举 _可能的成员_ 来定义一个类型：
+1. 定义并使用一个枚举来展示它是如何连同数据一起编码信息的
+2. 探索一个特别有用的枚举 Option: 它代表一个值要么是某个值要么什么都不是
+3. 在 match 表达式中用模式匹配，针对不同的枚举值编写相应要执行的代码
+4. 介绍 if let，另一个简洁方便处理代码中枚举的结构
+
+#+BEGIN_EXAMPLE
+  枚举是一个很多语言都有的功能，不过不同语言中其功能各不相同
+
+  Rust 的枚举与 F#、OCaml 和 Haskell 这样的函数式编程语言中的”代数数据类型“最为相似
+#+END_EXAMPLE
+* 枚举
+#+BEGIN_EXAMPLE
+  首先看一个需要诉诸于代码的场景，来考虑为何此时使用枚举更为合适且实用
+
+  假设我们要处理 IP 地址。目前被广泛使用的两个主要 IP 标准：IPv4 和 IPv6
+  这是我们的程序可能会遇到的所有可能的 IP 地址类型：所以可以 枚举 出所有可能的值，这也正是此枚举名字的由来
+
+  任何一个 IP 地址要么是 IPv4 的要么是 IPv6 的，而且不能两者都是
+
+  IP 地址的这个特性使得枚举数据结构非常适合这个场景，因为枚举值只可能是其中一个成员
+  IPv4 和 IPv6 从根本上讲仍是 IP 地址，所以当代码在处理适用于任何类型的 IP 地址的场景时应该把它们当作相同的类型
+#+END_EXAMPLE
+
+通过在代码中定义一个 _IpAddrKind_ *枚举* 来表现这个概念并列出可能的 IP 地址类型， _V4_ 和 _V6_ 。这被称为枚举的 *成员* ：
+
+#+BEGIN_SRC rust 
+  enum IpAddrKind {
+      V4,
+      V6,
+  }
+#+END_SRC
+
+现在 IpAddrKind 就是一个可以在代码中使用的 *自定义数据类型* 了
+** 枚举值
+可以像这样 *创建* IpAddrKind 两个不同成员的 *实例* ： 
+#+BEGIN_SRC rust 
+  let four = IpAddrKind::V4;
+  let six = IpAddrKind::V6;
+#+END_SRC
+
+注意：枚举的 _成员_ 位于其 _标识符的命名空间_ 中，并使用 *两个冒号* 分开
+
+#+BEGIN_EXAMPLE
+  这么设计的益处是现在 IpAddrKind::V4 和 IpAddrKind::V6 都是 IpAddrKind 类型的
+#+END_EXAMPLE
+
+接着可以定义一个 _函数_ 来 *获取任何 IpAddrKind* ：
+
+#+BEGIN_SRC rust 
+  fn route(ip_type: IpAddrKind) { }
+#+END_SRC
+
+现在可以使用任一成员来调用这个函数：
+
+#+BEGIN_SRC rust 
+  route(IpAddrKind::V4);
+  route(IpAddrKind::V6);
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  进一步考虑一下 IP 地址类型，目前没有一个存储实际 IP 地址 数据 的方法：只知道它是什么 类型 的
+#+END_EXAMPLE
+考虑到已经学习过结构体了，可能会像下面那样处理这个问题：
+
+#+BEGIN_SRC rust 
+  enum IpAddrKind {
+      V4,
+      V6,
+  }
+
+  struct IpAddr {
+      kind: IpAddrKind,
+      address: String,
+  }
+
+  let home = IpAddr {
+      kind: IpAddrKind::V4,
+      address: String::from("127.0.0.1"),
+  };
+
+  let loopback = IpAddr {
+      kind: IpAddrKind::V6,
+      address: String::from("::1"),
+  };
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  这里定义了一个有两个字段的结构体 IpAddr：
+  1. IpAddrKind（之前定义的枚举）类型的 kind 字段
+  2. String 类型 address 字段
+
+  同时有这个结构体的两个实例：
+  1. home：它的 kind 的值是 IpAddrKind::V4 与之相关联的地址数据是 127.0.0.1
+  2. loopback：kind 的值是 IpAddrKind 的另一个成员，V6，关联的地址是 ::1
+
+  这里使用了一个结构体来将 kind 和 address 打包在一起，现在枚举成员就与值相关联了
+#+END_EXAMPLE
+
+可以使用一种更简洁的方式来表达相同的概念，仅仅使用枚举并 *将 _数据_ 直接放进每一个枚举成员* 而不是将枚举作为结构体的一部分。IpAddr 枚举的新定义表明了 V4 和 V6 成员都关联了 String 值：
+#+BEGIN_SRC rust 
+  enum IpAddr {
+      V4(String),
+      V6(String),
+  }
+
+  let home = IpAddr::V4(String::from("127.0.0.1"));
+
+  let loopback = IpAddr::V6(String::from("::1"));
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  直接将数据附加到枚举的每个成员上，这样就不需要一个额外的结构体了
+#+END_EXAMPLE
+
+用枚举替代结构体还有另一个优势： _每个成员_ 可以处理 *不同类型和数量* 的数据
+
+#+BEGIN_EXAMPLE
+  IPv4 版本的 IP 地址总是含有四个值在 0 和 255 之间的数字部分
+
+  如果我们想要将 V4 地址存储为四个 u8 值而 V6 地址仍然表现为一个 String，这就不能使用结构体了
+#+END_EXAMPLE
+
+枚举则可以轻易处理的这个情况：
+#+BEGIN_SRC rust 
+  enum IpAddr {
+      V4(u8, u8, u8, u8),
+      V6(String),
+  }
+
+  let home = IpAddr::V4(127, 0, 0, 1);
+
+  let loopback = IpAddr::V6(String::from("::1"));
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  这些代码展示了使用枚举来存储两种不同 IP 地址的几种可能的选择
+
+  然而，标准库提供了一个开箱即用的定义
+#+END_EXAMPLE
+
+标准库定义 IpAddr ：
++ 它正有着跟我们定义和使用的一样的枚举和成员
++ 不过它将 _成员中的地址数据_ *嵌入* 到了两个 _不同形式的结构体_ 中，它们对不同的成员的定义是不同的：
+
+#+BEGIN_SRC rust 
+  struct Ipv4Addr {
+      // --snip--
+  }
+
+  struct Ipv6Addr {
+      // --snip--
+  }
+
+  enum IpAddr {
+      V4(Ipv4Addr),
+      V6(Ipv6Addr),
+  }
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  这些代码展示了可以将任意类型的数据放入枚举成员中：例如字符串、数字类型或者结构体。甚至可以包含另一个枚举！
+
+  另外，标准库中的类型通常并不比你设想出来的要复杂多少
+
+  注意：虽然标准库中包含一个 IpAddr 的定义，仍然可以创建和使用自己的定义而不会有冲突
+  这是因为并没有将标准库中的定义引入作用域
+#+END_EXAMPLE
+
+来看看另一个枚举的例子：它的成员中内嵌了多种多样的类型：
+
+#+BEGIN_SRC rust 
+  enum Message {
+      Quit,
+      Move { x: i32, y: i32 },
+      Write(String),
+      ChangeColor(i32, i32, i32),
+  }
+#+END_SRC
+
+这个枚举有四个含有不同类型的成员：
++ Quit：没有关联任何数据
++ Move:  包含一个 _匿名结构体_
++ Write:  包含 _单独一个 String_
++ ChangeColor: 包含 _三个 i32_ 
+
+#+BEGIN_EXAMPLE
+  定义一个这样的有关联值的枚举的方式和定义多个不同类型的结构体的方式很相像
+
+  除了枚举不使用 struct 关键字以及其所有成员都被组合在一起位于 Message 类型中
+#+END_EXAMPLE
+
+下面这些结构体可以包含与之前枚举成员中相同的数据：
+#+BEGIN_SRC rust 
+  struct QuitMessage; // 类单元结构体
+  struct MoveMessage {
+      x: i32,
+      y: i32,
+  }
+  struct WriteMessage(String); // 元组结构体
+  struct ChangeColorMessage(i32, i32, i32); // 元组结构体
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  不过，如果使用不同的结构体，则它们都有不同的类型，
+
+  这样就不能轻易地定义一个能够“处理这些不同类型的结构体”的函数，反之枚举就可以
+#+END_EXAMPLE
+
+结构体和枚举还有另一个相似点：可以使用 _impl_ 来为结构体定义方法那样，也可以在 *枚举上定义方法* 。这是一个定义在 Message 枚举上的叫做 _call_ 的方法：
+
+#+BEGIN_SRC rust 
+  impl Message {
+      fn call(&self) {
+	  // 在这里定义方法体
+      }
+  }
+
+  let m = Message::Write(String::from("hello"));
+  m.call();
+#+END_SRC
+
+方法体使用了 _self_ 来获取调用方法的值：
++ 创建了一个值为  _Message::Write(String::from("hello"))_ 的变量 _m_
++ _m_ 就是当 m.call() 运行时 call 方法中的 _self_ 的值
+
+#+BEGIN_EXAMPLE
+  现在来看看标准库中的另一个非常常见且实用的枚举：Option
+#+END_EXAMPLE
+** Option 枚举
+#+BEGIN_EXAMPLE
+  在之前的部分，看到了 IpAddr 枚举如何利用 Rust 的类型系统在程序中编码更多信息而不单单是数据
+
+  接下来分析一个 Option 的案例，Option 是标准库定义的另一个枚举
+  Option 类型应用广泛因为它编码了一个非常普遍的场景，即一个值要么有值要么没值
+
+  从类型系统的角度来表达这个概念就意味着编译器需要检查是否处理了所有应该处理的情况
+  这样就可以避免在其他编程语言中非常常见的 bug
+#+END_EXAMPLE
+
+#+BEGIN_EXAMPLE
+  编程语言的设计经常要考虑包含哪些功能，但考虑排除哪些功能也很重要
+
+  Rust 并没有很多其他语言中有的空值(NULL)功能
+#+END_EXAMPLE
+_空值_ 是一个值，它 *代表没有值* 。在有空值的语言中，变量总是这两种状态之一： _空值_ 和 _非空值_ 
+
+#+BEGIN_EXAMPLE
+  空值的问题在于当你尝试像一个非空值那样使用一个空值，会出现某种形式的错误
+
+  因为空和非空的属性无处不在，非常容易出现这类错误
+#+END_EXAMPLE
+
+然而，空值尝试表达的概念仍然是有意义的：空值是一个 *因为某种原因目前无效或缺失的值* 
+
+#+BEGIN_EXAMPLE
+问题不在于概念而在于具体的实现
+#+END_EXAMPLE
+Rust 并没有空值，不过它确实拥有一个可以编码 *存在或不存在概念的枚举* 。这个枚举是 _Option<T>_ ，而且它定义于标准库中，如下:
+
+#+BEGIN_SRC rust 
+  enum Option<T> {
+      Some(T),
+      None,
+  }
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  Option<T> 枚举是如此有用以至于它甚至被包含在了 prelude 之中，不需要将其显式引入作用域
+
+  另外，它的成员也是如此，可以不需要 Option:: 前缀来直接使用 Some 和 None
+
+  即便如此 Option<T> 也仍是常规的枚举，Some(T) 和 None 仍是 Option<T> 的成员
+
+  <T> 语法一个泛型类型参数：意味着 Option 枚举的 Some 成员可以包含任意类型的数据
+#+END_EXAMPLE
+
+这里是一些包含数字类型和字符串类型 Option 值的例子：
+#+BEGIN_SRC rust 
+  let some_number = Some(5);
+  let some_string = Some("a string");
+
+  let absent_number: Option<i32> = None;
+#+END_SRC
+
+如果使用 _None_ 而不是 Some，需要告诉 Rust Option<T> 是什么 *类型* 的，因为编译器只通过 None 值无法推断出 Some 成员保存的值的类型
+
+#+BEGIN_EXAMPLE
+  当有一个 Some 值时，就知道存在一个值，而这个值保存在 Some 中
+
+  当有个 None 值时，在某种意义上，它跟空值具有相同的意义：并没有一个有效的值
+
+  那么，Option<T> 为什么就比空值要好呢？
+#+END_EXAMPLE
+
+简而言之，因为 _Option<T>_ 和  _T_ 是不同的类型，编译器 *不允许* 像一个 _肯定有效的值_ 那样使用 _Option<T>_ 。例如，这段代码不能编译，因为它尝试将 Option<i8> 与 i8 相加：
+
+#+BEGIN_SRC rust 
+  let x: i8 = 5;
+  let y: Option<i8> = Some(5);
+
+  let sum = x + y;
+#+END_SRC
+
+如果运行这段代码，将会编译报错：
+
+#+BEGIN_SRC sh 
+  error[E0277]: the trait bound `i8: std::ops::Add<std::option::Option<i8>>` is
+  not satisfied
+   -->
+    |
+  5 |     let sum = x + y;
+    |                 ^ no implementation for `i8 + std::option::Option<i8>`
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  错误信息意味着 Rust 不知道该如何将 Option<i8> 与 i8 相加，因为它们的类型不同
+
+  当在 Rust 中拥有一个像 i8 这样类型的值时，编译器确保它总是有一个有效的值。可以自信使用而无需做空值检查
+  只有当使用 Option<i8>（或者任何用到的类型）的时候需要担心可能没有值，而编译器会确保在使用值之前处理了为空的情况。
+
+  换句话说，在对 Option<T> 进行 T 的运算之前必须将其转换为 T
+  通常这能帮助捕获到空值最常见的问题之一：假设某值不为空但实际上为空的情况
+
+  不再担心会错误的假设一个非空值，会对代码更加有信心：
+  为了拥有一个可能为空的值，必须要显式的将其放入对应类型的 Option<T> 中，当使用这个值时，必须明确的处理值为空的情况
+  只要一个值不是 Option<T> 类型，就 可以 安全的认定它的值不为空
+
+  这是 Rust 的一个经过深思熟虑的设计决策，来限制空值的泛滥以增加 Rust 代码的安全性
+#+END_EXAMPLE
+
+那么当有一个 Option<T> 的值时，如何从 Some 成员中取出 T 的值来使用它呢？Option<T> 枚举拥有大量用于各种情况的方法：可以查看它的文档
+
+#+BEGIN_EXAMPLE
+  总的来说，为了使用 Option<T> 值，需要编写处理每个成员的代码：
+  1. 想要一些代码只当拥有 Some(T) 值时运行，允许这些代码使用其中的 T
+  2. 也希望一些代码在值为 None 时运行，这些代码并没有一个可用的 T 值
+
+  match 表达式就是这么一个处理枚举的控制流结构：
+  它会根据枚举的成员运行不同的代码，这些代码可以使用匹配到的值中的数据
+#+END_EXAMPLE
+* match 表达式
