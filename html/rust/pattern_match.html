@@ -244,7 +244,19 @@ for the JavaScript code in this tag.
 <li><a href="#orgccffc0a">Option 枚举</a></li>
 </ul>
 </li>
-<li><a href="#org270d641">match 表达式</a></li>
+<li><a href="#org270d641">match 表达式</a>
+<ul>
+<li><a href="#orge7d7a2f">绑定值的模式</a></li>
+<li><a href="#org3f61001">匹配 Option&lt;T&gt;</a>
+<ul>
+<li><a href="#org177004f">匹配 Some(T)</a></li>
+<li><a href="#org149ecfe">匹配是穷尽的</a></li>
+</ul>
+</li>
+<li><a href="#orgf0fc983">通配符</a></li>
+</ul>
+</li>
+<li><a href="#org3523a1a">if let</a></li>
 </ul>
 </div>
 </div>
@@ -676,6 +688,322 @@ match 表达式就是这么一个处理枚举的控制流结构：
 </div>
 <div id="outline-container-org270d641" class="outline-2">
 <h2 id="org270d641">match 表达式</h2>
+<div class="outline-text-2" id="text-org270d641">
+<p>
+Rust 有一个叫做 <span class="underline">match</span> 的极为强大的 <b>控制流运算符</b> ，它允许将 <span class="underline">一个值</span> 与 <span class="underline">一系列的模式</span> 相比较，并根据 <b>相匹配的模式执行相应代码</b> 。模式可由：
+</p>
+<ul class="org-ul">
+<li>字面值</li>
+<li>变量</li>
+<li>通配符</li>
+<li>许多其他内容构成</li>
+</ul>
+
+<p>
+match 的力量来源于模式的表现力以及编译器检查，它确保了所有可能的情况都得到处理
+</p>
+
+<pre class="example">
+  可以把 match 表达式想象成某种硬币分类器：
+  硬币滑入有着不同大小孔洞的轨道，每一个硬币都会掉入符合它大小的孔洞
+
+  同样地，值也会通过 match 的每一个模式，并且在遇到第一个 “符合” 的模式时，值会进入相关联的代码块并在执行中被使用
+</pre>
+
+<p>
+编写一个函数来获取一个未知的（美元）硬币，并以一种类似验钞机的方式，确定它是何种硬币并返回它的美分值，如下所示：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">enum</span> <span style="color: #98f5ff;">Coin</span> {
+    <span style="color: #98f5ff;">Penny</span>,
+    <span style="color: #98f5ff;">Nickel</span>,
+    <span style="color: #98f5ff;">Dime</span>,
+    <span style="color: #98f5ff;">Quarter</span>,
+}
+
+<span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">value_in_cents</span>(<span style="color: #4eee94;">coin</span>: <span style="color: #98f5ff;">Coin</span>) -&gt; <span style="color: #98f5ff;">u8</span> {
+    <span style="color: #00bfff; font-weight: bold;">match</span> coin {
+        <span style="color: #98f5ff;">Coin</span>::<span style="color: #98f5ff;">Penny</span> =&gt; 1,
+        <span style="color: #98f5ff;">Coin</span>::<span style="color: #98f5ff;">Nickel</span> =&gt; 5,
+        <span style="color: #98f5ff;">Coin</span>::<span style="color: #98f5ff;">Dime</span> =&gt; 10,
+        <span style="color: #98f5ff;">Coin</span>::<span style="color: #98f5ff;">Quarter</span> =&gt; 25,
+    }
+}
+</pre>
+</div>
+
+<p>
+拆开 value_in_cents 函数中的 match 来看：
+</p>
+<ul class="org-ul">
+<li>列出 match 关键字后跟一个表达式：例子中是 <span class="underline">coin 的值</span></li>
+</ul>
+<pre class="example">
+  这看起来非常像 if 使用的表达式，不过这里有一个非常大的区别：
+  对于 if，表达式必须返回一个布尔值，而这里它可以是任何类型的
+
+  例子中的 coin 的类型是定义的 Coin 枚举
+</pre>
+<ul class="org-ul">
+<li>接下来是 match 的分支。一个分支有两个部分：一个模式和一些代码 
+<ul class="org-ul">
+<li>第一个分支的模式是值 <span class="underline">Coin::Penny</span></li>
+<li>之后的 <span class="underline">=&gt;</span> 运算符将模式和将要 <b>运行的代码</b> 分开：这里的代码就仅仅是值 1
+<ul class="org-ul">
+<li>每个分支相关联的代码是一个表达式，而 <span class="underline">表达式的结果值</span> 将作为 <b>整个 match 表达式的返回值</b></li>
+</ul></li>
+<li>每一个分支之间使用 <span class="underline">逗号</span> 分隔</li>
+</ul></li>
+<li>当 match 表达式执行时，它将结果值按顺序与每一个分支的模式相比较：
+<ul class="org-ul">
+<li>如果模式 <b>匹配</b> 了这个值，这个模式相关联的 <b>代码将被执行</b></li>
+<li>如果模式并 <b>不匹配</b> 这个值，将继续 <b>执行下一个分支</b></li>
+</ul></li>
+</ul>
+
+<pre class="example">
+  这非常类似一个硬币分类器。可以拥有任意多的分支：示例中的 match 有四个分支
+</pre>
+
+<p>
+如果分支代码较短的话通常不使用大括号，正如上面示例中每个分支都只是返回一个值。如果想要在分支中运行多行代码，可以使用大括号： 
+</p>
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">value_in_cents</span>(<span style="color: #4eee94;">coin</span>: <span style="color: #98f5ff;">Coin</span>) -&gt; <span style="color: #98f5ff;">u8</span> {
+    <span style="color: #00bfff; font-weight: bold;">match</span> coin {
+        <span style="color: #98f5ff;">Coin</span>::<span style="color: #98f5ff;">Penny</span> =&gt; {
+            <span style="color: #f08080;">println!</span>(<span style="color: #deb887;">"Lucky penny!"</span>);
+            1
+        },
+        <span style="color: #98f5ff;">Coin</span>::<span style="color: #98f5ff;">Nickel</span> =&gt; 5,
+        <span style="color: #98f5ff;">Coin</span>::<span style="color: #98f5ff;">Dime</span> =&gt; 10,
+        <span style="color: #98f5ff;">Coin</span>::<span style="color: #98f5ff;">Quarter</span> =&gt; 25,
+    }
+}
+</pre>
+</div>
+
+<p>
+每次使用Coin::Penny 调用时都会打印出 “Lucky penny!”，同时仍然返回代码块最后的值 1
+</p>
+</div>
+<div id="outline-container-orge7d7a2f" class="outline-3">
+<h3 id="orge7d7a2f">绑定值的模式</h3>
+<div class="outline-text-3" id="text-orge7d7a2f">
+<p>
+匹配分支的另一个有用的功能：可以 <b>绑定</b> 匹配的 <span class="underline">模式的部分值</span> 。这也就是如何从枚举成员中提取值的
+</p>
+
+<pre class="example">
+1999 年到 2008 年间，美国在 25 美分的硬币的一侧为 50 个州的每一个都印刷了不同的设计
+
+其他的硬币都没有这种区分州的设计，所以只有这些 25 美分硬币有特殊的价值
+</pre>
+
+<p>
+可以将这些信息加入 enum，通过改变 Quarter 成员来包含一个 State 值，下面中完成了这些修改：
+</p>
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #ffd700;">#[derive(Debug)]</span> <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#36825;&#26679;&#21487;&#20197;&#21487;&#20197;&#31435;&#21051;&#30475;&#21040;&#24030;&#30340;&#21517;&#31216;</span>
+<span style="color: #00bfff; font-weight: bold;">enum</span> <span style="color: #98f5ff;">UsState</span> {
+    <span style="color: #98f5ff;">Alabama</span>,
+    <span style="color: #98f5ff;">Alaska</span>,
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
+}
+
+<span style="color: #00bfff; font-weight: bold;">enum</span> <span style="color: #98f5ff;">Coin</span> {
+    <span style="color: #98f5ff;">Penny</span>,
+    <span style="color: #98f5ff;">Nickel</span>,
+    <span style="color: #98f5ff;">Dime</span>,
+    <span style="color: #98f5ff;">Quarter</span>(<span style="color: #98f5ff;">UsState</span>),
+}
+</pre>
+</div>
+
+<pre class="example">
+  想象一下有一个朋友尝试收集所有 50 个州的 25 美分硬币
+
+  在根据硬币类型分类零钱的同时，也可以报告出每个 25 美分硬币所对应的州名称。这样如果他没有的话，可以将其加入收藏
+</pre>
+
+<p>
+在匹配 <span class="underline">Coin::Quarter</span> 成员的分支的模式中增加了一个叫做 <span class="underline">state</span> 的变量。当匹配到 Coin::Quarter 时，变量 state 将会 <b>绑定</b> <span class="underline">25美分硬币所对应州的值</span> 。接着在那个分支的代码中使用 state，如下：
+</p>
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">value_in_cents</span>(<span style="color: #4eee94;">coin</span>: <span style="color: #98f5ff;">Coin</span>) -&gt; <span style="color: #98f5ff;">u8</span> {
+    <span style="color: #00bfff; font-weight: bold;">match</span> coin {
+        <span style="color: #98f5ff;">Coin</span>::<span style="color: #98f5ff;">Penny</span> =&gt; 1,
+        <span style="color: #98f5ff;">Coin</span>::<span style="color: #98f5ff;">Nickel</span> =&gt; 5,
+        <span style="color: #98f5ff;">Coin</span>::<span style="color: #98f5ff;">Dime</span> =&gt; 10,
+        <span style="color: #98f5ff;">Coin</span>::<span style="color: #98f5ff;">Quarter</span>(state) =&gt; {
+            <span style="color: #f08080;">println!</span>(<span style="color: #deb887;">"State quarter from </span><span style="color: #deb887; font-style: italic;">{:?}</span><span style="color: #deb887;">!"</span>, state);
+            25
+        },
+    }
+}
+</pre>
+</div>
+
+<pre class="example">
+  如果调用 value_in_cents(Coin::Quarter(UsState::Alaska))，coin 将是 Coin::Quarter(UsState::Alaska)
+
+  当将值与每个分支相比较时，没有分支会匹配，直到遇到 Coin::Quarter(state)，这时，state 绑定的将会是值 UsState::Alaska
+
+  接着就可以在 println! 表达式中使用这个绑定了，像这样就可以获取 Coin 枚举的 Quarter 成员中内部的州的值
+</pre>
+</div>
+</div>
+<div id="outline-container-org3f61001" class="outline-3">
+<h3 id="org3f61001">匹配 Option&lt;T&gt;</h3>
+<div class="outline-text-3" id="text-org3f61001">
+<pre class="example">
+  在之前的部分中使用 Option&lt;T&gt; 时，是为了从 Some 中取出其内部的 T 值；还可以像处理 Coin 枚举那样使用 match 处理 Option&lt;T&gt;！
+
+  与其直接比较硬币，将比较 Option&lt;T&gt; 的成员，不过 match 表达式的工作方式保持不变
+
+  比如想要编写一个函数，它获取一个 Option&lt;i32&gt; 并且如果其中有一个值，将其加一。如果其中没有值，函数应该返回 None 值并不尝试执行任何操作
+</pre>
+<p>
+得益于 match，编写这个函数非常简单：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">plus_one</span>(<span style="color: #4eee94;">x</span>: <span style="color: #98f5ff;">Option</span>&lt;<span style="color: #98f5ff;">i32</span>&gt;) -&gt; <span style="color: #98f5ff;">Option</span>&lt;<span style="color: #98f5ff;">i32</span>&gt; {
+    <span style="color: #00bfff; font-weight: bold;">match</span> x {
+        <span style="color: #98f5ff;">None</span> =&gt; <span style="color: #98f5ff;">None</span>,
+        <span style="color: #98f5ff;">Some</span>(i) =&gt; <span style="color: #98f5ff;">Some</span>(i + 1),
+    }
+}
+
+<span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">five</span> = <span style="color: #98f5ff;">Some</span>(5);
+<span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">six</span> = plus_one(five);
+<span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">none</span> = plus_one(<span style="color: #98f5ff;">None</span>);
+</pre>
+</div>
+</div>
+<div id="outline-container-org177004f" class="outline-4">
+<h4 id="org177004f">匹配 Some(T)</h4>
+<div class="outline-text-4" id="text-org177004f">
+<p>
+更仔细地检查 plus_one 的第一行操作。当调用 plus_one(five) 时，plus_one 函数体中的 x 将会是值 Some(5)。接着将其与每个分支比较：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #98f5ff;">None</span> =&gt; <span style="color: #98f5ff;">None</span>,
+</pre>
+</div>
+
+<p>
+值 Some(5) 并不匹配模式 None，所以继续进行下一个分支：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #98f5ff;">Some</span>(i) =&gt; <span style="color: #98f5ff;">Some</span>(i + 1),
+</pre>
+</div>
+
+<p>
+Some(5) 与 Some(i) 匹配吗？当然匹配！它们是相同的成员。i 绑定了 Some 中包含的值，所以 <span class="underline">i</span> 的值是 <span class="underline">5</span> 。接着匹配分支的代码被执行，所以将 i 的值加一并返回一个 <span class="underline">含有值 6 的新 Some</span> 
+</p>
+
+<p>
+接着考虑 plus_one 的第二个调用，这里 x 是 None。进入 match 并与第一个分支相比较：
+</p>
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #98f5ff;">None</span> =&gt; <span style="color: #98f5ff;">None</span>,
+</pre>
+</div>
+<p>
+匹配上了！这里没有值来加一，所以程序结束并返回 =&gt; <span class="underline">右侧的值 None</span> ，因为第一个分支就匹配到了，其他的分支将不再比较
+</p>
+
+<pre class="example">
+  将 match 与枚举相结合在很多场景中都是有用的
+
+  会在 Rust 代码中看到很多这样的模式：match 一个枚举，绑定其中的值到一个变量，接着根据其值执行代码
+
+  这在一开始有点复杂，不过一旦习惯了，会希望所有语言都拥有它！这一直是用户的最爱
+</pre>
+</div>
+</div>
+<div id="outline-container-org149ecfe" class="outline-4">
+<h4 id="org149ecfe">匹配是穷尽的</h4>
+<div class="outline-text-4" id="text-org149ecfe">
+<p>
+考虑一下 plus_one 函数的这个版本，它有一个 bug 并不能编译：
+</p>
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">plus_one</span>(<span style="color: #4eee94;">x</span>: <span style="color: #98f5ff;">Option</span>&lt;<span style="color: #98f5ff;">i32</span>&gt;) -&gt; <span style="color: #98f5ff;">Option</span>&lt;<span style="color: #98f5ff;">i32</span>&gt; {
+    <span style="color: #00bfff; font-weight: bold;">match</span> x {
+        <span style="color: #98f5ff;">Some</span>(i) =&gt; <span style="color: #98f5ff;">Some</span>(i + 1),
+    }
+}
+</pre>
+</div>
+
+<p>
+因为没有处理 None 的情况，所以这些代码会造成一个 bug。幸运的是，这是一个 Rust 知道如何处理的 bug。如果尝试编译这段代码，会得到这个错误：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">error[E0004]: non-exhaustive patterns: <span style="color: #fa8072;">`None`</span> not covered
+ --&gt;
+  |
+6 |         match x {
+  |               ^ pattern <span style="color: #fa8072;">`None`</span> not covered
+</pre>
+</div>
+
+<p>
+Rust 知道没有覆盖所有可能的情况甚至知道哪些模式被忘记了！Rust 中的匹配是 <b>穷尽</b> 的：必须穷举到最后的可能性来使代码有效
+</p>
+
+<pre class="example">
+  特别的在这个 Option&lt;T&gt; 的例子中，Rust 防止忘记明确的处理 None 的情况
+
+  这使免于假设拥有一个实际上为空的值
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-orgf0fc983" class="outline-3">
+<h3 id="orgf0fc983">通配符</h3>
+<div class="outline-text-3" id="text-orgf0fc983">
+<p>
+Rust 也提供了一个模式用于 <b>不想列举出所有可能值</b> 的场景：
+</p>
+<pre class="example">
+  例如，u8 可以拥有 0 到 255 的有效的值，如果只关心 1、3、5 和 7 这几个值，就并不想必须列出 0、2、4、6、8、9 一直到 255 的值
+</pre>
+<p>
+这时候可以使用特殊的模式 <b>_</b> 替代：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">some_u8_value</span> = 0u8;
+<span style="color: #00bfff; font-weight: bold;">match</span> some_u8_value {
+    1 =&gt; <span style="color: #f08080;">println!</span>(<span style="color: #deb887;">"one"</span>),
+    3 =&gt; <span style="color: #f08080;">println!</span>(<span style="color: #deb887;">"three"</span>),
+    5 =&gt; <span style="color: #f08080;">println!</span>(<span style="color: #deb887;">"five"</span>),
+    7 =&gt; <span style="color: #f08080;">println!</span>(<span style="color: #deb887;">"seven"</span>),
+    _ =&gt; (),
+}
+</pre>
+</div>
+
+<p>
+_ 模式会匹配所有的值。通过将其放置于其他分支之后，_ 将会匹配所有之前没有指定的可能的值。() 就是 unit 值，所以 _ 的情况什么也不会发生，也不会做任何处理
+</p>
+
+<pre class="example">
+  然而，match 在只关心 一个 情况的场景中可能就有点啰嗦，所以 Rust 提供了 if let
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org3523a1a" class="outline-2">
+<h2 id="org3523a1a">if let</h2>
 </div>
 </div>
 <div id="postamble" class="status">
