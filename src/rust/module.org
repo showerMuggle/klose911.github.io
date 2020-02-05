@@ -3,3 +3,175 @@
 #+HTML_LINK_UP: pattern_match.html   
 #+HTML_LINK_HOME: rust.html
 #+OPTIONS: num:nil timestamp:nil ^:nil
+
+当编写大型程序时，组织代码显得尤为重要，因为想在脑海中通晓整个程序，那几乎是不可能完成的。通过对 _相关功能_ 进行 _分组_ 和 _划分_ 不同功能的代码，可以清楚 *在哪里可以找到实现了特定功能的代码* ，以及在 *哪里可以改变一个功能* 的工作方式
+
+#+BEGIN_EXAMPLE
+  到目前为止，我们编写的程序都在一个文件的一个模块中
+
+  伴随着项目的增长，可以通过将代码分解为多个模块和多个文件来组织代码：
+      一个包可以包含多个二进制 crate 项和一个可选的 crate 库
+      伴随着包的增长，还可以将包中的部分代码提取出来，做成独立的 crate，这些 crate 则作为外部依赖项
+#+END_EXAMPLE
+除了对功能进行分组以外， _封装实现细节_ 可以更高级地 *重用代码* ：实现了一个操作后，其他的代码可以通过该代码的公共接口来进行调用，而不需要知道它是如何实现的
+
+#+BEGIN_EXAMPLE
+  在编写代码时可以定义哪些部分是其他代码可以使用的公共部分，以及哪些部分是有权更改实现细节的私有部分
+
+  这是另一种减少脑海中记住项目内容数量的方法
+#+END_EXAMPLE
+
+这里有一个需要说明的概念 _作用域_ ： *代码所在的嵌套上下文* 有一组定义为 _in scope_  的 _名称_ 。当阅读、编写和编译代码时，程序员和编译器需要知道 _特定位置的特定名称_ 是否引用了 _变量_ 、 _函数_ 、 _结构体_ 、 _枚举_ 、 _模块_ 、 _常量_ 或者 _其他有意义的项_ 
+
+#+BEGIN_EXAMPLE
+  可以创建作用域，以及改变哪些名称在作用域内还是作用域外
+
+  同一个作用域内不能拥有两个相同名称的项
+
+  我们可以使用一些工具来解决名称冲突
+#+END_EXAMPLE
+
+Rust 有许多功能可以让管理代码的组织，包括哪些内容可以被公开，哪些内容作为私有部分，以及程序每个作用域中的名字。这些功能。被称为 _模块系统_ ，包括：
++ *包* ： Cargo 的一个功能，它允许你 _构建_ 、 _测试_ 和 _分享_  crate
++ *Crates* ：一个 _模块的树形结构_ ，它形成了 _库_ 或 _二进制项目_ 
++ *模块* 和 *use* ： 允许你控制 _作用域_ 和 _路径_ 的 _私有性_ 
++ *路径* ：一个命名例如 _结构体_ 、 _函数_ 或 _模块_ 等项的方式
+
+#+BEGIN_EXAMPLE
+  本章将会涵盖所有这些概念，讨论它们如何交互，并说明如何使用它们来管理作用域
+
+  到最后，会对模块系统有深入的了解，并且能够像专业人士一样使用作用域！
+
+  对于一个由一系列相互关联的包组合而成的超大型项目，Cargo 还提供了 “工作空间” 这一功能，本章暂时不做讲解
+#+END_EXAMPLE
+* 包和 crate 
+_crate_ 是一个 *二进制项* 或者 *库* ：
++ crate _root_ 是一个 *源文件* ：Rust 编译器以它为起始点，并构成 crate 的 _根模块_ 
++ _包_  ：提供一系列功能的 *一个或者多个 crate* 
+   + 一个包会包含有一个 _Cargo.toml_ 文件，阐述如何去 *构建这些 crate* 
+
+包中所包含的内容由几条规则来确立：
+1. 一个包中 *至多只能* 包含 _一个库 crate_ 
+2. 包中可以包含 *任意* 多个 _二进制 crate_ 
+3. 包中 *至少* 包含 _一个 crate_ ，无论是库的还是二进制的
+
+当输入命令 cargo new：
+#+BEGIN_SRC sh 
+  $ cargo new my-project
+       Created binary (application) `my-project` package
+  $ ls my-project
+  Cargo.toml
+  src
+  $ ls my-project/src
+  main.rs
+#+END_SRC
+
+Cargo 会给我们的包创建一个 _Cargo.toml_ 文件 
+
+** root 
+#+BEGIN_EXAMPLE
+  查看 Cargo.toml 的内容，却会发现并没有提到 src/main.rs
+#+END_EXAMPLE
+
+因为 Cargo 遵循的一个约定：
++ _src/main.rs_ : 就是一个与 _包同名_ 的 _二进制 crate_ 的 _crate 根_
++ 如果包目录中包含 _src/lib.rs_ ，则包带有与其 _同名_ 的 _库 crate_ ，且 src/lib.rs 是 _crate 根_ 
++ crate 根文件将由 Cargo 传递给 _rustc_ 来实际构建库或者二进制项目
+
+#+BEGIN_EXAMPLE
+  至此，已经有了一个只包含 src/main.rs 的包，意味着它只含有一个名为 my-project 的二进制 crate
+
+  如果一个包同时含有 src/main.rs 和 src/lib.rs，则它有两个 crate：一个库和一个二进制项，且名字都与包相同
+#+END_EXAMPLE
+
+通过将文件放在 _src/bin_ 目录下，一个包可以 *拥有多个二进制 crate* ：每个 src/bin 下的文件都会被编译成一个独立的二进制 crate
+** 作用
+一个 crate 会将一个作用域内的相关功能分组到一起，使得该功能可以很方便地在 *多个项目之间共享* 
+
+#+BEGIN_EXAMPLE
+  举一个例子，曾经使用的 rand crate 提供了生成随机数的功能
+
+  通过将 rand crate 加入到我们项目的作用域中，就可以在自己的项目中使用该功能
+
+  rand crate 提供的所有功能都可以通过该 crate 的名字：rand 进行访问
+#+END_EXAMPLE
+
+将一个 crate 的功能保持在其自身的作用域中，可以知晓一些特定的功能是在自己的 crate 中定义的还是在 rand crate 中定义的，这可以 *防止潜在的冲突* 
+
+#+BEGIN_EXAMPLE
+  例如，rand crate 提供了一个名为 Rng 的特性（trait），还可以在自己的 crate 中定义一个名为 Rng 的 struct
+
+  因为一个 crate 的功能是在自身的作用域进行命名的，所以编译器会知道：
+      Rng 这个名字指向的是我们自己定义的 struct Rng
+      rand::Rng 这一方式指向的才是 rand crate 中的 Rng 特性
+#+END_EXAMPLE
+* 模块
+#+BEGIN_EXAMPLE
+  在餐饮业，餐馆中会有一些地方被称之为前台，还有另外一些地方被称之为后台
+      前台：招待顾客的地方，在这里，店主可以为顾客安排座位，服务员接受顾客下单和付款，调酒师会制作饮品
+      后台：由厨师工作的厨房，洗碗工的工作地点，以及经理做行政工作的地方组成
+#+END_EXAMPLE
+
+可以将 _函数_ *放置* 到 _嵌套的模块_ 中，来使 crate 结构与实际的餐厅结构相同。通过执行 _cargo new --lib restaurant_ ，来创建一个新的名为 _restaurant 的库_ 。然后将下面所罗列出来的代码放入 src/lib.rs 中，来定义一些模块和函数：
+
+#+BEGIN_SRC rust 
+  mod front_of_house {
+      mod hosting {
+	  fn add_to_waitlist() {}
+
+	  fn seat_at_table() {}
+      }
+
+      mod serving {
+	  fn take_order() {}
+
+	  fn server_order() {}
+
+	  fn take_payment() {}
+      }
+  }
+#+END_SRC
+
+*定义一个模块* ，是以 _mod_ 关键字为起始，然后指定 _模块的名字_ （本例中叫做 front_of_house），并且用 _花括号_ 包围模块的主体
+  + 在模块内，还可以 *定义* _其他的模块_ ，就像本例中的 hosting 和 serving 模块
+  + 模块还可以 *保存* 一些定义的其他项，比如 _结构体_ 、 _枚举_ 、 _常量_ 、 _特性_ 、或者 _函数_ 
+
+#+BEGIN_EXAMPLE
+  通过使用模块，可以将相关的定义分组到一起，并指出他们为什么相关
+
+  程序员可以通过使用这段代码，更加容易地找到他们想要的定义，因为他们可以基于分组来对代码进行导航，而不需要阅读所有的定义
+
+  程序员向这段代码中添加一个新的功能时，他们也会知道代码应该放置在何处，可以保持程序的组织性
+#+END_EXAMPLE
+
++ 模块可以将一个 _crate_ 中的 *代码分组* ，以提高 _可读性_ 与 _重用性_ 
++ 模块还可以控制项的 *私有性* ：
+  + public: 项是可以被 _外部代码使用的_
+  + private: 作为一个 _内部实现_ 的内容，不能被外部代码使用
+
+** 模块树
+在前面提到了， _src/main.rs_ 和 _src/lib.rs_ 叫做 _crate 根_ 。之所以这样叫它们的原因是：这两个文件的内容都是一个从名为 crate 的模块作为 *根的 crate 模块结构* ，称为 _模块树_ ：
+
+#+BEGIN_SRC sh 
+  crate
+   └── front_of_house
+       ├── hosting
+       │   ├── add_to_waitlist
+       │   └── seat_at_table
+       └── serving
+	   ├── take_order
+	   ├── serve_order
+	   └── take_payment
+#+END_SRC
+
++ 这个树展示了一些模块是如何被嵌入到另一个模块的：例如，hosting 嵌套在 front_of_house 中
++ 这个树还展示了一些模块是互为 _兄弟_  的，这意味着它们定义在同一模块中：hosting 和 serving 被一起定义在 front_of_house 中
++ 如果一个模块 A 被包含在模块 B 中，将模块 A 称为模块 B 的  _子_ ，模块 B 则是模块 A 的 _父_ 
+   + 注意：整个模块树都植根于名为 _crate_ 的 *隐式模块* 下 
+
+#+BEGIN_EXAMPLE
+  这个模块树可能会令你想起电脑上文件系统的目录树：这是一个非常恰当的比喻！
+
+  就像文件系统的目录，可以使用模块来组织代码，并且，就像目录中的文件，需要一种方法来找到模块
+#+END_EXAMPLE
+* 路径
