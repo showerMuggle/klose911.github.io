@@ -482,3 +482,245 @@ Rust 有许多功能可以让管理代码的组织，包括哪些内容可以被
      将先单独介绍 use，然后展示如何结合使用 pub 和 use
    #+END_EXAMPLE
 * use 导入模块
+#+BEGIN_EXAMPLE
+  到目前为止，似乎编写的用于调用函数的路径都很冗长且重复，并不方便
+
+  例如，无论选择 add_to_waitlist 函数的绝对路径还是相对路径，每次想要调用 add_to_waitlist 时，都必须指定front_of_house 和 hosting
+
+  幸运的是，有一种方法可以简化这个过程。可以一次性将路径引入作用域，然后使用 use 关键字调用该路径中的项，就如同它们是本地项一样
+#+END_EXAMPLE
+
+使用 _use_ 将 *crate::front_of_house::hosting* 模块引入了 eat_at_restaurant 函数的作用域，这样只需要指定 _hosting::add_to_waitlist_ 即可在 eat_at_restaurant 中调用 _add_to_waitlist_ 函数
+
+#+BEGIN_SRC rust 
+  mod front_of_house {
+      pub mod hosting {
+	  pub fn add_to_waitlist() {}
+      }
+  }
+
+  use crate::front_of_house::hosting;
+
+  pub fn eat_at_restaurant() {
+      hosting::add_to_waitlist();
+      hosting::add_to_waitlist();
+      hosting::add_to_waitlist();
+  }
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  在作用域中增加 use 和路径类似于在文件系统中创建符号连接
+
+  通过在 crate 根增加 use crate::front_of_house::hosting，现在 hosting 在作用域中就是有效的名称了，如同 hosting 模块被定义于 crate 根一样
+
+  通过 use 引入作用域的路径也会检查私有性，同其它路径一样
+#+END_EXAMPLE
+
+还可以使用 use 和 _相对_ 路径来将一个项引入作用域：
+
+#+BEGIN_SRC rust 
+
+  mod front_of_house {
+      pub mod hosting {
+	  pub fn add_to_waitlist() {}
+      }
+  }
+
+  use front_of_house::hosting;
+
+  pub fn eat_at_restaurant() {
+      hosting::add_to_waitlist();
+      hosting::add_to_waitlist();
+      hosting::add_to_waitlist();
+  }
+#+END_SRC
+** 惯用的 use 路径 
+#+BEGIN_EXAMPLE
+  可能会比较疑惑，为什么是指定 use crate::front_of_house::hosting ，然后在 eat_at_restaurant 中调用 hosting::add_to_waitlist ，而不是通过指定一直到 add_to_waitlist 函数的 use 路径来得到相同的结果？
+#+END_EXAMPLE
+
+#+BEGIN_SRC rust 
+  mod front_of_house {
+      pub mod hosting {
+	  pub fn add_to_waitlist() {}
+      }
+  }
+
+  use crate::front_of_house::hosting::add_to_waitlist;
+
+  pub fn eat_at_restaurant() {
+      add_to_waitlist();
+      add_to_waitlist();
+      add_to_waitlist();
+  }
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  虽然上面示例也完成了相同的任务，但这样的代码不清楚 add_to_waitlist 究竟是在哪里被定义的
+
+  相比较而言，而在前面实例中，如果想使用 use 将函数的父模块引入作用域，必须在调用函数时指定父模块，这样可以清晰地表明函数不是在本地定义的，同时使完整路径的重复度最小化
+#+END_EXAMPLE
+
+另一方面，使用 use 引入 _结构体_ 、 _枚举_ 和 _其他项_ 时，习惯是指定它们的 *完整路径* 。下面展示了将 _HashMap_ 结构体引入二进制 crate 作用域的习惯用法：
+
+#+BEGIN_SRC rust 
+  use std::collections::HashMap;
+
+  fn main() {
+      let mut map = HashMap::new();
+      map.insert(1, 2);
+  }
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  这种习惯用法背后没有什么硬性要求：它只是一种惯例，人们已经习惯了以这种方式阅读和编写 Rust 代码
+#+END_EXAMPLE
+
+这个习惯用法有一个例外，那就是想使用 use 语句将 *两个具有相同名称的项* 带入作用域，因为 Rust 不允许这样做。下面展示了如何将两个具有相同名称但不同父模块的 Result 类型引入作用域，以及如何引用它们：
+
+#+BEGIN_SRC rust 
+  use std::fmt;
+  use std::io;
+
+  fn function1() -> fmt::Result {
+      // --snip--
+  }
+
+  fn function2() -> io::Result<()> {
+      // --snip--
+  }
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  如你所见，使用父模块可以区分这两个 Result 类型
+
+  如果指定 use std::fmt::Result 和 use std::io::Result，将在同一作用域拥有了两个 Result 类型，当使用 Result 时，Rust 则不知道我们要用的是哪个
+#+END_EXAMPLE
+*** 使用 as 关键字提供新的名称
+使用 use 将两个同名类型引入同一作用域这个问题还有另一个解决办法：在这个类型的路径后面，使用 _as_ 指定一个新的本地名称或者别名：
+
+#+BEGIN_SRC rust 
+  use std::fmt::Result;
+  use std::io::Result as IoResult;
+
+  fn function1() -> Result {
+      // --snip--
+  }
+
+  fn function2() -> IoResult<()> {
+      // --snip--
+  }
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  在第二个 use 语句中，选择 IoResult 作为 std::io::Result 的新名称，它与从 std::fmt 引入作用域的 Result 并不冲突
+
+  这与前一个实例的用法都是惯用的，如何选择都取决于你!
+#+END_EXAMPLE
+** 使用 pub use 重导出名称
+当使用 use 关键字将名称导入作用域时，在 _新作用域_ 中 _这个名称_ 是 *私有的* 。可以结合 _pub_ 和 _use_ ，这样做将项引入作用域并同时使其可 *供其他代码引入自己的作用域* ，这被称为 _重导出_ 
+
+#+BEGIN_SRC rust 
+  mod front_of_house {
+      pub mod hosting {
+	  pub fn add_to_waitlist() {}
+      }
+  }
+
+  pub use crate::front_of_house::hosting;
+
+  pub fn eat_at_restaurant() {
+      hosting::add_to_waitlist();
+      hosting::add_to_waitlist();
+      hosting::add_to_waitlist();
+  }
+#+END_SRC 
++ 通过 pub use，现在可以通过新路径 hosting::add_to_waitlist 来调用 add_to_waitlist 函数
++ 如果没有指定 pub use: eat_at_restaurant 函数可以在其作用域中调用 hosting::add_to_waitlist，但外部代码则不允许使用这个新路径
+
+#+BEGIN_EXAMPLE
+  当你的代码的内部结构与调用你的代码的程序员的思考领域不同时，重导出会很有用
+
+  例如，在这个餐馆的比喻中，经营餐馆的人会想到“前台”和“后台”，但顾客在光顾一家餐馆时，可能不会以这些术语来考虑餐馆的各个部分
+
+  使用 pub use，可以使用一种结构编写代码，却将不同的结构形式暴露出来。这样做使我们的库井井有条，方便开发这个库的程序员和调用这个库的程序员之间组织起来
+#+END_EXAMPLE
+** 使用外部包
+前面的猜猜看游戏。那个项目使用了一个外部包， _rand_ 来生成随机数。为了在项目中使用 rand，在 _Cargo.toml_ 中加入了如下行：
+#+BEGIN_SRC toml 
+  [dependencies]
+  rand = "0.5.5"
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  在 Cargo.toml 中加入 rand 依赖告诉了 Cargo 要从 crates.io 下载 rand 和其依赖，并使其可在项目代码中使用
+#+END_EXAMPLE
+
+为了将 rand 定义引入项目包的作用域，加入一行 use 起始的包名，它以 _rand_ *包名* 开头并列出了需要 *引入作用域的项* ：
+
+#+BEGIN_SRC rust 
+  use rand::Rng;
+
+  fn main() {
+      let secret_number = rand::thread_rng().gen_range(1, 101);
+  }
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  crates.io 上有很多 Rust 社区成员发布的包，将其引入你自己的项目都需要一道相同的步骤：在 Cargo.toml 列出它们并通过 use 将其中定义的项引入项目包的作用域中
+#+END_EXAMPLE
+
+注意： *标准库* _std_ 对于你的包来说也是 *外部* crate。因为标准库随 Rust 语言一同分发，无需修改 Cargo.toml 来引入 std，不过需要通过 _use_ 将标准库中定义的项引入项目包的作用域中来引用它们，比如使用的 HashMap：
+
+#+BEGIN_SRC rust 
+  use std::collections::HashMap;
+#+END_SRC
+
+这是一个以标准库 crate 名 std 开头的绝对路径
+** 嵌套路径来消除大量的 use 行
+当需要引入很多定义于 _相同包_ 或 _相同模块_ 的项时，为每一项单独列出一行会占用源码很大的空间。例如：
+
+#+BEGIN_SRC rust 
+  use std::cmp::Ordering;
+  use std::io;
+  // ---snip---
+#+END_SRC
+
+可以使用 _嵌套_ 路径将相同的项在一行中引入作用域。这么做需要指定 _路径的相同部分_ ，接着是 _两个冒号_ ，接着是 _大括号_ 中的各自 _不同的路径部分_ ，如下所示：
+
+#+BEGIN_SRC rust 
+  use std::{cmp::Ordering, io};
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  在较大的程序中，使用嵌套路径从相同包或模块中引入很多项，可以显著减少所需的独立 use 语句的数量！
+#+END_EXAMPLE
+
+可以在路径的任何层级使用嵌套路径，这在 *组合* 两个 _共享子路径_ 的 use 语句时非常有用。例如，下面展示了两个 use 语句：一个将 std::io 引入作用域，另一个将 std::io::Write 引入作用域：
+
+#+BEGIN_SRC rust 
+  use std::io;
+  use std::io::Write;
+#+END_SRC
+
+两个路径的相同部分是 _std::io_ ，这正是第一个路径。为了在一行 use 语句中引入这两个路径，可以在嵌套路径中使用 _self_ : 
+
+#+BEGIN_SRC rust 
+  use std::io::{self, Write};
+#+END_SRC
+
+这便将 std::io 和 std::io::Write 同时引入作用域
+** 通过 * 运算符将所有的公有定义引入作用域
+如果希望将一个路径下 *所有* _公有项_ 引入作用域，可以指定路径后跟 _*_ 运算符： 
+
+#+BEGIN_SRC rust 
+  use std::collections::*;
+#+END_SRC
+这个 use 语句将 std::collections 中定义的所有公有项引入当前作用域
+
+#+BEGIN_EXAMPLE
+  使用 glob 运算符时请多加小心：它会使得难以推导作用域中有什么名称和它们是在何处定义的
+
+  glob 运算符经常用于测试模块 tests 中，这时会将所有内容引入作用域，有时也用于 prelude 模式
+#+END_EXAMPLE
+* 将模块分割进不同文件
