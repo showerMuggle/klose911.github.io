@@ -18,6 +18,219 @@ Rust 标准库中包含一系列被称为 _集合_ ，非常有用的 *数据结
   接下来将讨论如何创建和更新 vector、字符串和哈希 map，以及它们有什么特别之处
 #+END_EXAMPLE
 * vector  
+  第一个类型是 _Vec<T>_ ，也被称为 vector。vector 允许在一个 *单独* 的数据结构中储存 *多于一个* 的值：
+  + 在 *内存中彼此相邻* 地排列所有的值
+  + 只能储存 *相同类型* 的值
+
+  #+BEGIN_EXAMPLE
+    在拥有一系列项的场景下非常实用，例如文件中的文本行或是购物车中商品的价格
+  #+END_EXAMPLE
+** 新建 vector
+   为了创建一个新的空 vector，可以调用 _Vec::new_ 函数，如下所示：
+
+   #+BEGIN_SRC rust 
+  let v: Vec<i32> = Vec::new();
+   #+END_SRC
+
+   注意：这里增加了一个 _类型_ 注解。因为没有向这个 vector 中插入任何值，Rust 并不知道想要储存什么类型的元素
+
+   #+BEGIN_EXAMPLE
+     这是一个非常重要的点：vector 是用泛型实现的，它可以存放任何类型
+
+     而当 Vec 存放某个特定类型时，那个类型位于尖括号中
+
+     在示例中，v 这个 Vec 将存放 i32 类型的元素
+   #+END_EXAMPLE
+
+   在更实际的代码中，一旦插入值 Rust 就可以推断出想要存放的类型，所以你很少会需要这些类型注解。更常见的做法是使用 _初始值_ 来创建一个 Vec，而且为了方便 Rust 提供了 _vec!_ 宏。这个宏会根据 _提供的值_ 来创建一个新的 Vec。下面新建一个拥有值 1、2 和 3 的 Vec<i32>：
+
+   #+BEGIN_SRC rust 
+  let v = vec![1, 2, 3];
+   #+END_SRC
+
+   因为提供了 i32 类型的初始值，Rust 可以推断出 v 的类型是 _Vec<i32>_ ，因此类型注解就不是必须的。接下来让看看如何修改一个 vector
+** 更改 vector
+   对于新建一个 vector 并向其增加元素，可以使用 _push_ 方法：
+
+   #+BEGIN_SRC rust 
+  let mut v = Vec::new();
+
+  v.push(5);
+  v.push(6);
+  v.push(7);
+  v.push(8);
+   #+END_SRC
+
+   + 如果想要能够改变它的值，必须使用 _mut_ 关键字使其可变
+   + 放入其中的所有值都是 _i32_ 类型的，而且 Rust 也根据数据做出如此判断，所以不需要 Vec<i32> 注解
+
+   #+BEGIN_EXAMPLE
+     另外除了 push 之外还有一个 pop 方法，它会移除并返回 vector 的最后一个元素
+   #+END_EXAMPLE
+
+** 丢弃 vector 时也会丢弃其所有元素 
+   类似于任何其他的 struct，vector 在其 *离开作用域时会被释放* ，如下面注释： 
+
+   #+BEGIN_SRC rust 
+  {
+      let v = vec![1, 2, 3, 4];
+
+      // 处理变量 v
+
+  } // <- 这里 v 离开作用域并被丢弃
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     当 vector 被丢弃时，所有其内容也会被丢弃，这意味着这里它包含的整数将被清理
+
+     这可能看起来非常直观，不过一旦开始使用 vector 元素的引用，情况就变得有些复杂了
+   #+END_EXAMPLE
+
+** 读取 vector 的元素
+
+   访问 vector 中一个值的两种方式， _索引_ 语法或者 _get_ 方法：
+
+   #+BEGIN_SRC rust 
+  let v = vec![1, 2, 3, 4, 5];
+
+  let third: &i32 = &v[2];
+  println!("The third element is {}", third);
+
+  match v.get(2) {
+      Some(third) => println!("The third element is {}", third),
+      None => println!("There is no third element."),
+  }
+   #+END_SRC
+
+   这里有两个需要注意的地方：
+   + 使用 _索引值 2_ 来获取 _第三个_ 元素，索引是从 _0_ 开始的
+   + 两个不同的获取第三个元素的方式分别为：
+     + 使用 _&_ 和 _[]_ 返回一个 *引用*
+     + 使用 _get_ 方法以索引作为参数来返回一个 *Option<&T>* 
+
+   #+BEGIN_EXAMPLE
+     Rust 有两个引用元素的方法的原因：程序可以选择如何处理当索引值在 vector 中没有对应值的情况
+   #+END_EXAMPLE
+
+   如果有一个有五个元素的 vector 接着尝试访问索引为 100 的元素时程序会如何处理，如下所示： 
+
+   #+BEGIN_SRC rust 
+  let v = vec![1, 2, 3, 4, 5];
+
+  let does_not_exist = &v[100];
+  let does_not_exist = v.get(100);
+   #+END_SRC
+
+   当运行这段代码，对于第一个 [] 方法，当引用一个不存在的元素时 Rust 会 *造成 panic* 
+   #+BEGIN_EXAMPLE
+     这个方法更适合当程序认为尝试访问超过 vector 结尾的元素是一个严重错误的情况，这时应该使程序崩溃
+   #+END_EXAMPLE
+
+   当 get 方法被传递了一个数组外的索引时，它不会 panic 而是 *返回 None* 
+
+   #+BEGIN_EXAMPLE
+     当偶尔出现超过 vector 范围的访问属于正常情况的时候可以考虑使用它，接着代码可以有处理 Some(&element) 或 None 的逻辑
+
+     例如 索引可能来源于用户输入的数字。如果它们不慎输入了一个过大的数字那么程序就会得到 None 值，可以告诉用户当前 vector 元素的数量并再请求它们输入一个有效的值
+
+     这就比因为输入错误而使程序崩溃要友好的多！
+   #+END_EXAMPLE
+
+   一旦程序获取了一个有效的引用，借用检查器将会执行 _所有权_ 和 _借用规则_ 来确保 vector 内容的这个引用和任何其他引用保持有效。当获取了 vector 的 _第一个元素的不可变引用_ 并尝试在 vector _末尾增加一个元素_ 的时候，这是行不通的：
+
+   #+BEGIN_SRC rust 
+  let mut v = vec![1, 2, 3, 4, 5];
+
+  let first = &v[0];
+
+  v.push(6);
+
+  println!("The first element is: {}", first);
+   #+END_SRC
+
+   这时候会有编译报错：
+   #+BEGIN_SRC sh 
+  error[E0502]: cannot borrow `v` as mutable because it is also borrowed as immutable
+   --> src/main.rs:7:5
+    |
+  5 |     let first = &v[0];
+    |                  - immutable borrow occurs here
+  6 |
+  7 |     v.push(6);
+    |     ^^^^^^^^^ mutable borrow occurs here
+  8 |
+  9 |     println!("The first element is: {}", first);
+    |                                          ----- immutable borrow later used here
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     不能这么做的原因是由于 vector 的工作方式：
+
+     在 vector 的结尾增加新元素时，在没有足够空间将所有所有元素依次相邻存放的情况下，可能会要求分配新内存并将老的元素拷贝到新的空间中
+
+     这时，第一个元素的引用就指向了被释放的内存
+
+     借用规则阻止程序陷入这种状况
+   #+END_EXAMPLE
+
+** 遍历 vector 中的元素 
+   如果想要依次访问 vector 中的每一个元素，可以遍历其所有的元素而无需通过索引一次一个的访问。下面展示了如何使用 _for_ 循环来获取 i32 值的 vector 中的每一个元素的 _不可变引用_ 并将其打印：
+
+   #+BEGIN_SRC rust 
+  let v = vec![100, 32, 57];
+  for i in &v {
+      println!("{}", i);
+  }
+   #+END_SRC 
+
+   也可以遍历可变 vector 的每一个元素的 _可变引用_ 以便能改变他们。下面的 for 循环会给每一个元素加 50：
+
+   #+BEGIN_SRC rust 
+  let mut v = vec![100, 32, 57];
+  for i in &mut v {
+      ,*i += 50;
+  }
+   #+END_SRC
+
+** 使用枚举来储存多种类型 
+   #+BEGIN_EXAMPLE
+     vector 只能储存相同类型的值。这是很不方便的；绝对会有需要储存一系列不同类型的值的用例
+   #+END_EXAMPLE
+
+   幸运的是， _枚举_ 的成员都被定义为相同的枚举类型，所以当需要在 vector 中储存不同类型值时，可以定义并使用一个枚举
+
+   #+BEGIN_EXAMPLE
+     假如想要从电子表格的一行中获取值，而这一行的有些列包含数字，有些包含浮点值，还有些是字符串
+
+     1. 可以定义一个枚举，其成员会存放这些不同类型的值，同时所有这些枚举成员都会被当作相同类型，那个枚举的类型
+
+     2. 接着可以创建一个储存枚举值的 vector，这样最终就能够储存不同类型的值了
+   #+END_EXAMPLE
+
+   #+BEGIN_SRC rust 
+  enum SpreadsheetCell {
+      Int(i32),
+      Float(f64),
+      Text(String),
+  }
+
+  let row = vec![
+      SpreadsheetCell::Int(3),
+      SpreadsheetCell::Text(String::from("blue")),
+      SpreadsheetCell::Float(10.12),
+  ];
+   #+END_SRC
+
+   Rust 在编译时就必须准确的知道 vector 中类型的原因：
+   1. 它需要知道 *储存每个元素* 到底 *需要多少内存*
+   2. 可以准确的知道这个 vector 中 *允许什么类型* 
+      + 如果 Rust 允许 vector 存放任意类型，那么当对 vector 元素执行操作时一个或多个类型的值就有可能会造成错误
+      + 用枚举外加 match 意味着 Rust 能在编译时就保证总是会处理所有可能的情况
+
+   #+BEGIN_EXAMPLE
+     如果在编写程序时不能确切无遗地知道运行时会储存进 vector 的所有类型，枚举技术就行不通了。相反，可以使用 trait 对象
+   #+END_EXAMPLE
 
 * String 
+
 * hashMap 
