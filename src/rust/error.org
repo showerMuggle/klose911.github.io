@@ -3,3 +3,179 @@
 #+HTML_LINK_UP: collection.html   
 #+HTML_LINK_HOME: rust.html
 #+OPTIONS: num:nil timestamp:nil ^:nil
+
+#+BEGIN_EXAMPLE
+  Rust 对可靠性的执着也延伸到了错误处理
+
+  错误对于软件来说是不可避免的，所以 Rust 有很多特性来处理出现错误的情况
+
+  在很多情况下，Rust 要求你承认出错的可能性，并在编译代码之前就采取行动
+
+  这些要求使得程序更为健壮，它们确保了你会在将代码部署到生产环境之前就发现错误并正确地处理它们！
+#+END_EXAMPLE
+
+Rust 将错误组合成两个主要类别：
++ 可恢复错误：通常代表向 _用户报告_ 错误和 _重试操作_ 是合理的情况，比如未找到文件
++ 不可恢复错误：不可恢复错误通常是 _bug_ 的同义词，比如尝试访问超过数组结尾的位置
+
+#+BEGIN_EXAMPLE
+  大部分语言并不区分这两类错误，并采用类似异常这样方式统一处理他们
+
+  Rust 并没有异常。相反，对于可恢复错误有 Result<T, E> 值，以及 panic!，它在遇到不可恢复错误时停止程序执行
+
+  这一章会首先介绍 panic! 调用，接着会讲到如何返回 Result<T, E>，还将探讨决定是尝试从错误中恢复还是停止执行时的注意事项
+#+END_EXAMPLE
+* panic! 与不可恢复的错误
+
+突然有一天，代码出问题了，而你对此束手无策。对于这种情况，Rust 有 _panic!宏_ 。当执行这个宏时：
+1. 程序会打印出一个错误信息
+2. 展开并清理栈数据
+3. 退出
+
+#+BEGIN_EXAMPLE
+  出现这种情况的场景通常是检测到一些类型的 bug，而且程序员并不清楚该如何处理它
+#+END_EXAMPLE
+** 对应 panic 时的栈展开或终止 
+当出现 panic 时，程序默认会开始  _展开_ ，这意味着 Rust 会 _回溯栈_ 并清理它遇到的每一个函数的数据，不过这个回溯并清理的过程有很多工作
+
+另一种选择是直接 _终止_ ，这会不清理数据就退出程序。那么程序所使用的内存需要由操作系统来清理
+#+BEGIN_EXAMPLE
+  如果需要项目的最终二进制文件越小越好，panic 时通过在 Cargo.toml 的 [profile] 部分增加 panic = 'abort'，可以由展开切换为终止
+#+END_EXAMPLE
+例如，如果想要在release模式中 panic 时直接终止：
+
+#+BEGIN_SRC toml 
+  [profile.release]
+  panic = 'abort'
+#+END_SRC
+** panic! 宏
+在一个简单的程序中调用 panic!：
+
+#+BEGIN_SRC rust 
+  fn main() {
+      panic!("crash and burn");
+  }
+#+END_SRC
+运行程序将会出现类似这样的输出：
+
+#+BEGIN_SRC sh 
+  $ cargo run
+     Compiling panic v0.1.0 (/mnt/c/Users/I514692/AppData/Roaming/Documents/programming/html/klose911.github.io/src/rust/src/error_handle/panic)
+      Finished dev [unoptimized + debuginfo] target(s) in 2.39s
+       Running `target/debug/panic`
+  thread 'main' panicked at 'crash and burn', src/main.rs:2:5
+  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace.
+#+END_SRC
+
+这里包含 panic! 调用造成的错误信息：
++ 显示了 panic 提供的信息
++ 指明了源码中 panic 出现的位置：src/main.rs:2:5
+   + src/main.rs 文件的第二行第五个字符
+
+#+BEGIN_EXAMPLE
+  在这个例子中，被指明的那一行是代码的一部分，而且查看这一行的话就会发现 panic! 宏的调用
+
+  在其他情况下，panic! 可能会出现在我们的代码所调用的代码中。错误信息报告的文件名和行号可能指向别人代码中的 panic! 宏调用，而不是我们代码中最终导致 panic! 的那一行
+
+  这时候可以使用 panic! 被调用的函数的 backtrace 来寻找代码中出问题的地方
+#+END_EXAMPLE
+** 使用 panic! 的 backtrace
+看看另一个因为我们代码中的 bug 引起的别的库中 panic! 的例子，而不是直接的宏调用。下面是一个尝试通过索引访问 vector 中元素的例子：
+
+#+BEGIN_SRC rust 
+  fn main() {
+      let v = vec![1, 2, 3];
+
+      v[99];
+  }
+#+END_SRC
+
+报错信息如下：
+#+BEGIN_SRC sh 
+  thread 'main' panicked at 'index out of bounds: the len is 3 but the index is 99', /rustc/73528e339aae0f17a15ffa49a8ac608f50c6cf14/src/libcore/slice/mod.rs:2796:10
+  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace.
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  这指向了一个不是自己编写的文件，libcore/slice/mod.rs。其为 Rust 源码中 slice 的实现
+
+  这是当对 vector v 使用 [] 时 libcore/slice/mod.rs 中会执行的代码，也是真正出现 panic! 的地方
+#+END_EXAMPLE
+
+接下来的几行提醒我们可以设置 _RUST_BACKTRACE_  环境变量来得到一个 backtrace： 这是一个执行到目前位置所有被调用的函数的列表
+
+#+BEGIN_EXAMPLE
+  Rust 的 backtrace 跟其他语言中的一样：
+
+  阅读 backtrace 的关键是从头开始读直到发现你编写的文件。这就是问题的发源地
+
+  这一行往上是你的代码所调用的代码；往下则是调用你的代码的代码
+
+  这些行可能包含核心 Rust 代码，标准库代码或用到的 crate 代码
+#+END_EXAMPLE
+将 RUST_BACKTRACE 环境变量设置为任何不是 0 的值来获取 backtrace 看看：
+
+#+BEGIN_SRC sh 
+  $ RUST_BACKTRACE=1 cargo run
+      Finished dev [unoptimized + debuginfo] target(s) in 0.00s
+       Running `target/debug/panic`
+  thread 'main' panicked at 'index out of bounds: the len is 3 but the index is 99', libcore/slice/mod.rs:2448:10
+  stack backtrace:
+     0: std::sys::unix::backtrace::tracing::imp::unwind_backtrace
+	       at libstd/sys/unix/backtrace/tracing/gcc_s.rs:49
+     1: std::sys_common::backtrace::print
+	       at libstd/sys_common/backtrace.rs:71
+	       at libstd/sys_common/backtrace.rs:59
+     2: std::panicking::default_hook::{{closure}}
+	       at libstd/panicking.rs:211
+     3: std::panicking::default_hook
+	       at libstd/panicking.rs:227
+     4: <std::panicking::begin_panic::PanicPayload<A> as core::panic::BoxMeUp>::get
+	       at libstd/panicking.rs:476
+     5: std::panicking::continue_panic_fmt
+	       at libstd/panicking.rs:390
+     6: std::panicking::try::do_call
+	       at libstd/panicking.rs:325
+     7: core::ptr::drop_in_place
+	       at libcore/panicking.rs:77
+     8: core::ptr::drop_in_place
+	       at libcore/panicking.rs:59
+     9: <usize as core::slice::SliceIndex<[T]>>::index
+	       at libcore/slice/mod.rs:2448
+    10: core::slice::<impl core::ops::index::Index<I> for [T]>::index
+	       at libcore/slice/mod.rs:2316
+    11: <alloc::vec::Vec<T> as core::ops::index::Index<I>>::index
+	       at liballoc/vec.rs:1653
+    12: panic::main
+	       at src/main.rs:4
+    13: std::rt::lang_start::{{closure}}
+	       at libstd/rt.rs:74
+    14: std::panicking::try::do_call
+	       at libstd/rt.rs:59
+	       at libstd/panicking.rs:310
+    15: macho_symbol_search
+	       at libpanic_unwind/lib.rs:102
+    16: std::alloc::default_alloc_error_hook
+	       at libstd/panicking.rs:289
+	       at libstd/panic.rs:392
+	       at libstd/rt.rs:58
+    17: std::rt::lang_start
+	       at libstd/rt.rs:74
+    18: panic::main
+#+END_SRC
+
+这里有大量的输出：
++ 实际看到的输出可能因 _不同的操作系统_ 和 _Rust 版本_ 而有所不同
++ 为了获取带有这些信息的 backtrace，必须 *启用 debug*  标识
+   + 当 *不使用*  _--release_ 参数运行 cargo build 或 cargo run 时 debug 标识会默认启用，就像这里一样 
+
+#+BEGIN_EXAMPLE
+  输出中，backtrace 的 12 行指向了我们项目中造成问题的行：src/main.rs 的第 4 行
+
+  如果你不希望程序 panic，第一个提到我们编写的代码行的位置是你应该开始调查的，以便查明是什么值如何在这个地方引起了 panic
+
+  在示例中，我们故意编写会 panic 的代码来演示如何使用 backtrace，修复这个 panic 的方法就是不要尝试在一个只包含三个项的 vector 中请求索引是 100 的元素
+
+  当将来你的代码出现了 panic，你需要搞清楚在这特定的场景下代码中执行了什么操作和什么值导致了 panic，以及应当如何处理才能避免这个问题
+#+END_EXAMPLE
+* Result 与可恢复的错误
