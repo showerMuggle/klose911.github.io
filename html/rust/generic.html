@@ -234,6 +234,191 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="rust.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">泛型</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#org472867a">提取函数来减少重复</a></li>
+<li><a href="#orgc32c847">泛型</a></li>
+</ul>
+</div>
+</div>
+<p>
+每一个编程语言都有高效处理重复概念的工具。在 Rust 中其工具之一就是 <span class="underline">泛型</span> （generics）。泛型是 <span class="underline">具体类型</span> 或 <span class="underline">其他属性</span> 的 <b>抽象替代</b> 
+</p>
+<pre class="example">
+  泛型可以表达泛型的属性 ，比如他们的行为或如何与其他泛型相关联，而不需要在编写和编译代码时知道他们在这里实际上代表什么
+
+  当然可以编写一份可以用于多种具体值的代码，函数并不知道其参数为何值，这时就可以让函数获取泛型而不是像 i32 或 String 这样的具体值
+
+  前面讨论过的 Option&lt;T&gt;，Vec&lt;T&gt; 和 HashMap&lt;K, V&gt;，以及 Result&lt;T, E&gt; 这些都属于泛型
+</pre>
+<p>
+这里将：
+</p>
+<ol class="org-ol">
+<li>回顾一下提取函数以减少代码重复的机制</li>
+<li>使用相同的技术，从两个仅参数类型不同的函数中创建一个泛型函数</li>
+<li>结构体和枚举定义中的泛型</li>
+</ol>
+
+<p>
+之后讨论 <span class="underline">trait</span> ，这是一个 <b>定义泛型行为</b> 的方法
+</p>
+
+<pre class="example">
+trait 可以与泛型结合来将泛型限制为拥有特定行为的类型，而不是任意类型
+</pre>
+
+<p>
+最后介绍 <span class="underline">生命周期</span> ，它是一类允许向 <span class="underline">编译器</span> 提供 <span class="underline">引用如何相互关联</span> 的泛型
+</p>
+
+<pre class="example">
+Rust 的生命周期功能允许在很多场景下借用值的同时仍然使编译器能够检查这些引用的有效性
+</pre>
+
+<div id="outline-container-org472867a" class="outline-2">
+<h2 id="org472867a">提取函数来减少重复</h2>
+<div class="outline-text-2" id="text-org472867a">
+<pre class="example">
+  在介绍泛型语法之前，首先来回顾一个不使用泛型的处理重复的技术：提取一个函数
+
+  当熟悉了这个技术以后，将使用相同的机制来提取一个泛型函数！
+
+  如同你识别出可以提取到函数中重复代码那样，你也会开始识别出能够使用泛型的重复代码
+</pre>
+
+<p>
+考虑一下这个寻找列表中最大值的小程序，如下所示：
+</p>
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">number_list</span> = <span style="color: #7fffd4;">vec!</span>[34, 50, 25, 100, 65];
+
+    <span style="color: #00ffff;">let</span> <span style="color: #00ffff;">mut</span> <span style="color: #eedd82;">largest</span> = number_list[0];
+
+    <span style="color: #00ffff;">for</span> <span style="color: #eedd82;">number</span> <span style="color: #00ffff;">in</span> number_list {
+        <span style="color: #00ffff;">if</span> number &gt; largest {
+            largest = number;
+        }
+    }
+
+    <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"The largest number is </span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">"</span>, largest);
+}
+</pre>
+</div>
+
+<pre class="example">
+1. 这段代码获取一个整型列表，存放在变量 number_list 中。它将列表的第一项放入了变量 largest 中
+2. 接着遍历了列表中的所有数字，如果当前值大于 largest 中储存的值，将 largest 替换为这个值
+3. 如果当前值小于或者等于目前为止的最大值，largest 保持不变
+4. 当列表中所有值都被考虑到之后，largest 将会是最大值，在这里也就是 100
+</pre>
+
+<p>
+如果需要在两个不同的列表中寻找最大值，可以重复上面示例种的代码，这样程序中就会存在两段相同逻辑的代码：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">number_list</span> = <span style="color: #7fffd4;">vec!</span>[34, 50, 25, 100, 65];
+
+    <span style="color: #00ffff;">let</span> <span style="color: #00ffff;">mut</span> <span style="color: #eedd82;">largest</span> = number_list[0];
+
+    <span style="color: #00ffff;">for</span> <span style="color: #eedd82;">number</span> <span style="color: #00ffff;">in</span> number_list {
+        <span style="color: #00ffff;">if</span> number &gt; largest {
+            largest = number;
+        }
+    }
+
+    <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"The largest number is </span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">"</span>, largest);
+
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">number_list</span> = <span style="color: #7fffd4;">vec!</span>[102, 34, 6000, 89, 54, 2, 43, 8];
+
+    <span style="color: #00ffff;">let</span> <span style="color: #00ffff;">mut</span> <span style="color: #eedd82;">largest</span> = number_list[0];
+
+    <span style="color: #00ffff;">for</span> <span style="color: #eedd82;">number</span> <span style="color: #00ffff;">in</span> number_list {
+        <span style="color: #00ffff;">if</span> number &gt; largest {
+            largest = number;
+        }
+    }
+
+    <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"The largest number is </span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">"</span>, largest);
+}
+</pre>
+</div>
+
+<pre class="example">
+虽然代码能够执行，但是重复的代码是冗余且容易出错的，并且意味着当更新逻辑时需要修改多处地方的代码
+</pre>
+
+<p>
+为了消除重复，可以创建一层抽象，在这个例子中将表现为一个获取任意整型列表作为参数并对其进行处理的函数
+</p>
+
+<pre class="example">
+这将增加代码的简洁性并将表达和推导寻找列表中最大值的这个概念与使用这个概念的特定位置相互独立
+</pre>
+
+<p>
+将寻找最大值的代码提取到了一个叫做 <span class="underline">largest</span> 的 <b>函数</b> 中。这不同于前面的代码只能在一个特定的列表中找到最大的数字，这个程序可以在两个不同的列表中找到最大的数字：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">largest</span>(<span style="color: #eedd82;">list</span>: &amp;[<span style="color: #98fb98;">i32</span>]) -&gt; <span style="color: #98fb98;">i32</span> {
+    <span style="color: #00ffff;">let</span> <span style="color: #00ffff;">mut</span> <span style="color: #eedd82;">largest</span> = list[0];
+
+    <span style="color: #00ffff;">for</span> &amp;item <span style="color: #00ffff;">in</span> list {
+        <span style="color: #00ffff;">if</span> item &gt; largest {
+            largest = item;
+        }
+    }
+
+    largest
+}
+
+<span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">number_list</span> = <span style="color: #7fffd4;">vec!</span>[34, 50, 25, 100, 65];
+
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">result</span> = largest(&amp;number_list);
+    <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"The largest number is </span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">"</span>, result);
+
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">number_list</span> = <span style="color: #7fffd4;">vec!</span>[102, 34, 6000, 89, 54, 2, 43, 8];
+
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">result</span> = largest(&amp;number_list);
+    <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"The largest number is </span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">"</span>, result);
+}
+</pre>
+</div>
+
+<pre class="example">
+largest 函数有一个参数 list，它代表会传递给函数的任何具体的 i32值的 slice
+
+函数定义中的 list 代表任何 &amp;[i32]。当调用 largest 函数时，其代码实际上运行于传递的特定值上
+
+</pre>
+<p>
+总的来说，经历了如下几步：
+</p>
+<ol class="org-ol">
+<li>找出重复代码</li>
+<li>将重复代码提取到了一个函数中，并在函数签名中指定了代码中的输入和返回值</li>
+<li>将重复代码的两个实例，改为调用函数</li>
+</ol>
+
+<pre class="example">
+  如果我们有两个函数，一个寻找一个 i32 值的 slice 中的最大项而另一个寻找 char 值的 slice 中的最大项该怎么办？该如何消除重复呢？
+</pre>
+
+<p>
+在不同的场景使用不同的方式，可以利用相同的步骤和泛型来减少重复代码。与函数体可以在抽象list而不是特定值上操作的方式相同，泛型允许代码对抽象类型进行操作
+</p>
+</div>
+</div>
+<div id="outline-container-orgc32c847" class="outline-2">
+<h2 id="orgc32c847">泛型</h2>
+</div>
 </div>
 <div id="postamble" class="status">
 
