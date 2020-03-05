@@ -1049,3 +1049,169 @@ New article available! (Read more...)。
      另外，也无需编写运行时检查行为的代码，因为在编译时就已经检查过了，这样相比其他那些不愿放弃泛型灵活性的语言有更好的性能
    #+END_EXAMPLE
 * 生命周期
+前面在讨论 _引用和借用_ 部分时，遗漏了一个重要的细节：Rust 中的每一个引用都有其 _生命周期_ (lifetime) ，也就是 *引用保持有效的作用域* 
+
+#+BEGIN_EXAMPLE
+  大部分时候生命周期是隐含并可以推断的，正如大部分时候类型也是可以推断的一样
+
+  但是类似于当因为有多种可能类型的时候必须注明类型，也可能会出现引用的生命周期以一些不同方式相关联的情况
+
+  Rust 需要使用泛型生命周期参数来注明他们的关系，这样就能确保运行时实际使用的引用绝对是有效的
+
+  生命周期的概念某种程度上说不同于其他语言中类似的工具，毫无疑问这是 Rust 最与众不同的功能
+
+  这里只会讲到一些通常可能会遇到的生命周期语法以便熟悉这个概念
+#+END_EXAMPLE
+** 生命周期避免了悬垂引用
+生命周期的主要目标是 *避免悬垂引用* ，它会导致程序引用了非预期引用的数据。下面的程序，它有一个外部作用域和一个内部作用域：
+
+#+BEGIN_SRC rust 
+  {
+      let r;
+
+      {
+	  let x = 5;
+	  r = &x;
+      }
+
+      println!("r: {}", r);
+  }
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  注意：这里确实声明了没有初始值的变量，所以这些变量存在于外部作用域。这乍看之下好像和 Rust 不允许存在空值相冲突
+
+  然而如果尝试在给它一个值之前使用这个变量，会出现一个编译时错误，这就说明了 Rust 确实不允许空值
+#+END_EXAMPLE
+
+1. 外部作用域声明了一个没有初值的变量 r
+2. 内部作用域声明了一个初值为 5 的变量x：在内部作用域中，尝试将 r 的值设置为一个 x 的引用
+3. 在内部作用域结束后，尝试打印出 r 的值
+
+这段代码不能编译因为 r 引用的值在 *尝试使用之前就离开了作用域* 。如下是错误信息：
+
+#+BEGIN_SRC sh 
+  error[E0597]: `x` does not live long enough
+    --> src/main.rs:7:5
+     |
+  6  |         r = &x;
+     |              - borrow occurs here
+  7  |     }
+     |     ^ `x` dropped here while still borrowed
+  ...
+  10 | }
+     | - borrowed value needs to live until here
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  变量 x 并没有 “存在的足够久”。其原因是 x 在到达第 7 行内部作用域结束时就离开了作用域
+
+  不过 r 在外部作用域仍是有效的；作用域越大就说它 “存在的越久”
+
+  如果 Rust 允许这段代码工作，r 将会引用在 x 离开作用域时被释放的内存，这时尝试对 r 做任何操作都不能正常工作
+
+  那么 Rust 是如何决定这段代码是不被允许的呢？这得益于借用检查器
+#+END_EXAMPLE
+*** 借用检查器 
+Rust 编译器有一个 _借用检查器_ ，它比较作用域来确保所有的借用都是有效的。下面展示了带有变量生命周期的注释：
+
+#+BEGIN_SRC rust 
+  {
+      let r;                // ---------+-- 'a
+			    //          |
+      {                     //          |
+	  let x = 5;        // -+-- 'b  |
+	  r = &x;           //  |       |
+      }                     // -+       |
+			    //          |
+      println!("r: {}", r); //          |
+  }              
+#+END_SRC
+
+这里将 _r_ 的生命周期标记为 _'a_  并将 _x_ 的生命周期标记为 _'b_ ，内部的 'b 块要比外部的生命周期 'a 小得多
+
+#+BEGIN_EXAMPLE
+  在编译时，Rust 比较这两个生命周期的大小，并发现 r 拥有生命周期 'a，不过它引用了一个拥有生命周期 'b 的对象
+
+  程序被拒绝编译，因为生命周期 'b 比生命周期 'a 要小：被引用的对象比它的引用者存在的时间更短 
+#+END_EXAMPLE
+
+现在修改成没有产生悬垂引用且可以正确编译：
+
+#+BEGIN_SRC rust 
+  {
+      let x = 5;            // ----------+-- 'b
+			    //           |
+      let r = &x;           // --+-- 'a  |
+			    //   |       |
+      println!("r: {}", r); //   |       |
+			    // --+       |
+  }                         // ----------+
+#+END_SRC
+
+这里 x 拥有生命周期 'b，比 'a 要大
+
+#+BEGIN_EXAMPLE
+  这就意味着 r 可以引用 x：Rust 知道 r 中的引用在 x 有效的时候也总是有效的
+#+END_EXAMPLE
+
+接下来看看在 _函数的上下文_ 中 _参数_ 和 _返回值_ 的 _泛型生命周期_ 
+** 函数中的泛型生命周期
+假设有一个返回两个字符串 slice 中较长者的函数。这个函数获取两个字符串 slice 并返回一个字符串 slice：
+
+#+BEGIN_SRC rust 
+  fn main() {
+      let string1 = String::from("abcd");
+      let string2 = "xyz";
+
+      let result = longest(string1.as_str(), string2);
+      println!("The longest string is {}", result);
+  }
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  注意：这个函数获取作为引用的字符串 slice，因为不希望 longest 函数获取参数的所有权，期望该函数接受 String 的 slice 和 字符串字面值
+#+END_EXAMPLE
+
+上面代码应该会打印出：
+#+BEGIN_SRC sh 
+The longest string is abcd 
+#+END_SRC
+
+如果尝试像下面那样来实现 longest 函数，它并不能编译：
+
+#+BEGIN_SRC rust 
+  fn longest(x: &str, y: &str) -> &str {
+      if x.len() > y.len() {
+	  x
+      } else {
+	  y
+      }
+  }
+#+END_SRC
+
+相应地会出现如下有关生命周期的错误：
+
+#+BEGIN_SRC sh 
+  error[E0106]: missing lifetime specifier
+   --> src/main.rs:1:33
+    |
+  1 | fn longest(x: &str, y: &str) -> &str {
+    |                                 ^ expected lifetime parameter
+    |
+    = help: this function's return type contains a borrowed value, but the
+  signature does not say whether it is borrowed from `x` or `y`
+#+END_SRC
+
+报错显示了 _返回值_ 需要一个 _泛型生命周期参数_ ，因为 Rust 并不知道将要返回的引用是指向 x 或 y。事实上我们也不知道，因为函数体中 if 块返回一个 x 的引用而 else 块返回一个 y 的引用 
+
+#+BEGIN_EXAMPLE
+  当定义这个函数的时候，并不知道传递给函数的具体值，所以也不知道到底是 if 还是 else 会被执行
+
+  同样也不知道传入的引用的具体生命周期，所以也就不能通过观察作用域来确定返回的引用是否总是有效
+
+  借用检查器自身同样也无法确定，因为它不知道 x 和 y 的生命周期是如何与返回值的生命周期相关联的
+#+END_EXAMPLE
+
+  为了修复这个错误，必须增加泛型生命周期参数来定义引用间的关系以便借用检查器可以进行分析
+** 生命周期注解语法
