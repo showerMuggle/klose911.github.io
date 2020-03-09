@@ -538,6 +538,198 @@ assert_eq! 和 assert_ne! 宏在底层分别使用了 _==_ 和 _!=_ 。当断言
 #+END_EXAMPLE
 
 ** 使用 should_panic 检查 panic
+除了检查代码是否返回期望的正确的值之外，检查代码是否 *按照期望处理错误* 也是很重要的
 
+#+BEGIN_EXAMPLE
+  例如，考虑前面创建的 Guess 类型。其他使用 Guess 的代码都是基于 Guess 实例仅有的值范围在 1 到 100 的前提
+
+  可以编写一个测试来确保创建一个超出范围的值的 Guess 实例会 panic
+#+END_EXAMPLE
+
+通过对函数增加另一个属性 _should_panic_ 来实现这些：
++ 函数中的代码 panic 时会通过
++ 其中的代码没有 panic 时失败
+
+下面展示了一个检查 Guess::new 是否按照期望出错的测试：
+
+#+BEGIN_SRC rust 
+  pub struct Guess {
+      value: i32,
+  }
+
+  impl Guess {
+      pub fn new(value: i32) -> Guess {
+	  if value < 1 || value > 100 {
+	      panic!("Guess value must be between 1 and 100, got {}.", value);
+	  }
+
+	  Guess {
+	      value
+	  }
+      }
+  }
+
+  #[cfg(test)]
+  mod tests {
+      use super::*;
+
+      #[test]
+      #[should_panic]
+      fn greater_than_100() {
+	  Guess::new(200);
+      }
+  }
+#+END_SRC
+
+_#[should_panic]_ 属性位于 _#[test]_ 之后，对应的测试函数之前。运行测试后：
+
+#+BEGIN_SRC sh 
+  running 1 test
+  test tests::greater_than_100 ... ok
+
+  test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+#+END_SRC
+
+在代码中引入 bug，移除 new 函数在值大于 100 时会 panic 的条件：
+
+#+BEGIN_SRC rust 
+  // --snip--
+
+  impl Guess {
+      pub fn new(value: i32) -> Guess {
+	  if value < 1  {
+	      panic!("Guess value must be between 1 and 100, got {}.", value);
+	  }
+
+	  Guess {
+	      value
+	  }
+      }
+  }
+#+END_SRC
+
+再次运行测试：
+#+BEGIN_SRC sh 
+  running 1 test
+  test tests::greater_than_100 ... FAILED
+
+  failures:
+
+  failures:
+      tests::greater_than_100
+
+  test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  这回并没有得到非常有用的信息，不过一旦观察测试函数，会发现它标注了 #[should_panic]
+
+  这个错误意味着代码中测试函数 Guess::new(200) 并没有产生 panic
+#+END_EXAMPLE
+
+有时 should_panic 测试结果可能会非常含糊不清，因为它只是告诉我们代码并没有产生 panic。should_panic 甚至在一些不是期望的原因而导致 panic 时也会通过。为了使 should_panic 测试结果更精确，可以给 should_panic 属性增加一个可选的 expected 参数。测试工具会确保错误信息中包含其提供的文本。例如，修改过的 Guess，这里 new 函数根据其值是过大还或者过小而提供不同的 panic 信息： 
+
+#+BEGIN_SRC rust 
+  impl Guess {
+      pub fn new(value: i32) -> Guess {
+	  if value < 1 {
+	      panic!("Guess value must be greater than or equal to 1, got {}.",
+		     value);
+	  } else if value > 100 {
+	      panic!("Guess value must be less than or equal to 100, got {}.",
+		     value);
+	  }
+
+	  Guess {
+	      value
+	  }
+      }
+  }
+
+  #[cfg(test)]
+  mod tests {
+      use super::*;
+
+      #[test]
+      #[should_panic(expected = "Guess value must be less than or equal to 100")]
+      fn greater_than_100() {
+	  Guess::new(200);
+      }
+  }
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  这个测试会通过，因为 should_panic 属性中 expected 参数提供的值是 Guess::new 函数 panic 信息的子串
+
+  可以指定期望的整个 panic 信息，在这个例子中是 Guess value must be less than or equal to 100, got 200. 。
+
+  expected 信息的选择取决于 panic 信息有多独特或动态，和希望测试有多准确
+
+  在这个例子中，错误信息的子字符串足以确保函数在 else if value > 100 的情况下运行
+#+END_EXAMPLE
+
+为了观察带有 expected 信息的 should_panic 测试失败时会发生什么，再次引入一个 bug，将 if value < 1 和 else if value > 100 的代码块对换：
+
+#+BEGIN_SRC rust 
+  if value < 1 {
+      panic!("Guess value must be less than or equal to 100, got {}.", value);
+  } else if value > 100 {
+      panic!("Guess value must be greater than or equal to 1, got {}.", value);
+  }
+#+END_SRC
+
+这一次运行 should_panic 测试，它会失败：
+
+#+BEGIN_SRC sh 
+  running 1 test
+  test tests::greater_than_100 ... FAILED
+
+  failures:
+
+  ---- tests::greater_than_100 stdout ----
+  thread 'tests::greater_than_100' panicked at 'Guess value must be
+  greater than or equal to 1, got 200.', src/lib.rs:11:13
+  note: Run with `RUST_BACKTRACE=1` for a backtrace.
+  note: Panic did not include expected string 'Guess value must be less than or
+  equal to 100'
+
+  failures:
+      tests::greater_than_100
+
+  test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  失败信息表明测试确实如期望 panic 了，不过 panic 信息中并没有包含 expected 信息 'Guess value must be less than or equal to 100'
+
+  而我们得到的 panic 信息是 'Guess value must be greater than or equal to 1, got 200.'。这样就可以开始寻找 bug 在哪了！
+#+END_EXAMPLE
 
 ** 将 Result<T, E> 用于测试
+目前为止，编写的测试在失败时就会 panic。也可以使用 _Result<T, E>_ 编写测试！这里是第一个例子采用了 Result：
+
+#+BEGIN_SRC rust 
+  #[cfg(test)]
+  mod tests {
+      #[test]
+      fn it_works() -> Result<(), String> {
+	  if 2 + 2 == 4 {
+	      Ok(())
+	  } else {
+	      Err(String::from("two plus two does not equal four"))
+	  }
+      }
+  }
+#+END_SRC
+
+现在 it_works 函数的返回值类型为 _Result<(), String>_ 。在函数体中，不同于调用 assert_eq! 宏，而是：
++ 在测试通过时返回 _Ok(())_
++ 测试失败时返回带有 _String 的 Err_ 
+
+#+BEGIN_EXAMPLE
+  编写测试来返回 Result<T, E> 就可以在函数体中使用“问号”运算符，如此可以方便的编写任何运算符会返回 Err 成员的测试
+#+END_EXAMPLE
+
+*不能* 对这些使用 Result<T, E> 的测试使用 _#[should_panic] 注解_ 。相反应该在测试失败时 _直接返回 Err 值_ 
+
+* 运行测试
