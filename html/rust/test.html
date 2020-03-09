@@ -251,6 +251,7 @@ for the JavaScript code in this tag.
 <li><a href="#org8f1b7e2">将 Result&lt;T, E&gt; 用于测试</a></li>
 </ul>
 </li>
+<li><a href="#org724c3d2">运行测试</a></li>
 </ul>
 </div>
 </div>
@@ -928,12 +929,246 @@ failures:
 
 <div id="outline-container-orgf8cced9" class="outline-3">
 <h3 id="orgf8cced9">使用 should_panic 检查 panic</h3>
+<div class="outline-text-3" id="text-orgf8cced9">
+<p>
+除了检查代码是否返回期望的正确的值之外，检查代码是否 <b>按照期望处理错误</b> 也是很重要的
+</p>
+
+<pre class="example">
+  例如，考虑前面创建的 Guess 类型。其他使用 Guess 的代码都是基于 Guess 实例仅有的值范围在 1 到 100 的前提
+
+  可以编写一个测试来确保创建一个超出范围的值的 Guess 实例会 panic
+</pre>
+
+<p>
+通过对函数增加另一个属性 <span class="underline">should_panic</span> 来实现这些：
+</p>
+<ul class="org-ul">
+<li>函数中的代码 panic 时会通过</li>
+<li>其中的代码没有 panic 时失败</li>
+</ul>
+
+<p>
+下面展示了一个检查 Guess::new 是否按照期望出错的测试：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">pub</span> <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">Guess</span> {
+    <span style="color: #eedd82;">value</span>: <span style="color: #98fb98;">i32</span>,
+}
+
+<span style="color: #00ffff;">impl</span> <span style="color: #98fb98;">Guess</span> {
+    <span style="color: #00ffff;">pub</span> <span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">new</span>(<span style="color: #eedd82;">value</span>: <span style="color: #98fb98;">i32</span>) -&gt; <span style="color: #98fb98;">Guess</span> {
+        <span style="color: #00ffff;">if</span> value &lt; 1 || value &gt; 100 {
+            <span style="color: #7fffd4;">panic!</span>(<span style="color: #ffa07a;">"Guess value must be between 1 and 100, got {}."</span>, value);
+        }
+
+        <span style="color: #98fb98;">Guess</span> {
+            value
+        }
+    }
+}
+
+<span style="color: #7fffd4;">#[cfg(test)]</span>
+<span style="color: #00ffff;">mod</span> <span style="color: #7fffd4;">tests</span> {
+    <span style="color: #00ffff;">use</span> <span style="color: #00ffff;">super</span>::*;
+
+    <span style="color: #7fffd4;">#[test]</span>
+    <span style="color: #7fffd4;">#[should_panic]</span>
+    <span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">greater_than_100</span>() {
+        <span style="color: #98fb98;">Guess</span>::new(200);
+    }
+}
+</pre>
 </div>
 
+<p>
+<span class="underline">#[should_panic]</span> 属性位于 <span class="underline">#[test]</span> 之后，对应的测试函数之前。运行测试后：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">running 1 test
+<span style="color: #b0c4de;">test</span> tests::greater_than_100 ... ok
+
+<span style="color: #b0c4de;">test</span> result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+</pre>
+</div>
+
+<p>
+在代码中引入 bug，移除 new 函数在值大于 100 时会 panic 的条件：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">--snip--</span>
+
+<span style="color: #00ffff;">impl</span> <span style="color: #98fb98;">Guess</span> {
+    <span style="color: #00ffff;">pub</span> <span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">new</span>(<span style="color: #eedd82;">value</span>: <span style="color: #98fb98;">i32</span>) -&gt; <span style="color: #98fb98;">Guess</span> {
+        <span style="color: #00ffff;">if</span> value &lt; 1  {
+            <span style="color: #7fffd4;">panic!</span>(<span style="color: #ffa07a;">"Guess value must be between 1 and 100, got {}."</span>, value);
+        }
+
+        <span style="color: #98fb98;">Guess</span> {
+            value
+        }
+    }
+}
+</pre>
+</div>
+
+<p>
+再次运行测试：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">running 1 test
+<span style="color: #b0c4de;">test</span> tests::greater_than_100 ... FAILED
+
+failures:
+
+failures:
+    tests::greater_than_100
+
+<span style="color: #b0c4de;">test</span> result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out
+</pre>
+</div>
+
+<pre class="example">
+  这回并没有得到非常有用的信息，不过一旦观察测试函数，会发现它标注了 #[should_panic]
+
+  这个错误意味着代码中测试函数 Guess::new(200) 并没有产生 panic
+</pre>
+
+<p>
+有时 should_panic 测试结果可能会非常含糊不清，因为它只是告诉我们代码并没有产生 panic。should_panic 甚至在一些不是期望的原因而导致 panic 时也会通过。为了使 should_panic 测试结果更精确，可以给 should_panic 属性增加一个可选的 expected 参数。测试工具会确保错误信息中包含其提供的文本。例如，修改过的 Guess，这里 new 函数根据其值是过大还或者过小而提供不同的 panic 信息： 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">impl</span> <span style="color: #98fb98;">Guess</span> {
+    <span style="color: #00ffff;">pub</span> <span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">new</span>(<span style="color: #eedd82;">value</span>: <span style="color: #98fb98;">i32</span>) -&gt; <span style="color: #98fb98;">Guess</span> {
+        <span style="color: #00ffff;">if</span> value &lt; 1 {
+            <span style="color: #7fffd4;">panic!</span>(<span style="color: #ffa07a;">"Guess value must be greater than or equal to 1, got {}."</span>,
+                   value);
+        } <span style="color: #00ffff;">else</span> <span style="color: #00ffff;">if</span> value &gt; 100 {
+            <span style="color: #7fffd4;">panic!</span>(<span style="color: #ffa07a;">"Guess value must be less than or equal to 100, got {}."</span>,
+                   value);
+        }
+
+        <span style="color: #98fb98;">Guess</span> {
+            value
+        }
+    }
+}
+
+<span style="color: #7fffd4;">#[cfg(test)]</span>
+<span style="color: #00ffff;">mod</span> <span style="color: #7fffd4;">tests</span> {
+    <span style="color: #00ffff;">use</span> <span style="color: #00ffff;">super</span>::*;
+
+    <span style="color: #7fffd4;">#[test]</span>
+    <span style="color: #7fffd4;">#[should_panic(expected = </span><span style="color: #ffa07a;">"Guess value must be less than or equal to 100"</span><span style="color: #7fffd4;">)]</span>
+    <span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">greater_than_100</span>() {
+        <span style="color: #98fb98;">Guess</span>::new(200);
+    }
+}
+</pre>
+</div>
+
+<pre class="example">
+这个测试会通过，因为 should_panic 属性中 expected 参数提供的值是 Guess::new 函数 panic 信息的子串
+
+可以指定期望的整个 panic 信息，在这个例子中是 Guess value must be less than or equal to 100, got 200. 。
+
+expected 信息的选择取决于 panic 信息有多独特或动态，和希望测试有多准确
+
+在这个例子中，错误信息的子字符串足以确保函数在 else if value &gt; 100 的情况下运行
+</pre>
+
+<p>
+为了观察带有 expected 信息的 should_panic 测试失败时会发生什么，再次引入一个 bug，将 if value &lt; 1 和 else if value &gt; 100 的代码块对换：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">if</span> value &lt; 1 {
+    <span style="color: #7fffd4;">panic!</span>(<span style="color: #ffa07a;">"Guess value must be less than or equal to 100, got {}."</span>, value);
+} <span style="color: #00ffff;">else</span> <span style="color: #00ffff;">if</span> value &gt; 100 {
+    <span style="color: #7fffd4;">panic!</span>(<span style="color: #ffa07a;">"Guess value must be greater than or equal to 1, got {}."</span>, value);
+}
+</pre>
+</div>
+
+<p>
+这一次运行 should_panic 测试，它会失败：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">running 1 test
+<span style="color: #b0c4de;">test</span> tests::greater_than_100 ... FAILED
+
+failures:
+
+---- tests::greater_than_100 stdout ----
+thread <span style="color: #ffa07a;">'tests::greater_than_100'</span> panicked at <span style="color: #ffa07a;">'Guess value must be</span>
+<span style="color: #ffa07a;">greater than or equal to 1, got 200.'</span>, src/lib.rs:11:13
+note: Run with <span style="color: #fa8072;">`RUST_BACKTRACE=1`</span> <span style="color: #00ffff;">for</span> a backtrace.
+note: Panic did not include expected string <span style="color: #ffa07a;">'Guess value must be less than or</span>
+<span style="color: #ffa07a;">equal to 100'</span>
+
+failures:
+    tests::greater_than_100
+
+<span style="color: #b0c4de;">test</span> result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out
+</pre>
+</div>
+
+<pre class="example">
+  失败信息表明测试确实如期望 panic 了，不过 panic 信息中并没有包含 expected 信息 'Guess value must be less than or equal to 100'
+
+  而我们得到的 panic 信息是 'Guess value must be greater than or equal to 1, got 200.'。这样就可以开始寻找 bug 在哪了！
+</pre>
+</div>
+</div>
 
 <div id="outline-container-org8f1b7e2" class="outline-3">
 <h3 id="org8f1b7e2">将 Result&lt;T, E&gt; 用于测试</h3>
+<div class="outline-text-3" id="text-org8f1b7e2">
+<p>
+目前为止，编写的测试在失败时就会 panic。也可以使用 <span class="underline">Result&lt;T, E&gt;</span> 编写测试！这里是第一个例子采用了 Result：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #7fffd4;">#[cfg(test)]</span>
+<span style="color: #00ffff;">mod</span> <span style="color: #7fffd4;">tests</span> {
+    <span style="color: #7fffd4;">#[test]</span>
+    <span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">it_works</span>() -&gt; <span style="color: #98fb98;">Result</span>&lt;(), <span style="color: #98fb98;">String</span>&gt; {
+        <span style="color: #00ffff;">if</span> 2 + 2 == 4 {
+            <span style="color: #98fb98;">Ok</span>(())
+        } <span style="color: #00ffff;">else</span> {
+            <span style="color: #98fb98;">Err</span>(<span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"two plus two does not equal four"</span>))
+        }
+    }
+}
+</pre>
 </div>
+
+<p>
+现在 it_works 函数的返回值类型为 <span class="underline">Result&lt;(), String&gt;</span> 。在函数体中，不同于调用 assert_eq! 宏，而是：
+</p>
+<ul class="org-ul">
+<li>在测试通过时返回 <span class="underline">Ok(())</span></li>
+<li>测试失败时返回带有 <span class="underline">String 的 Err</span></li>
+</ul>
+
+<pre class="example">
+  编写测试来返回 Result&lt;T, E&gt; 就可以在函数体中使用“问号”运算符，如此可以方便的编写任何运算符会返回 Err 成员的测试
+</pre>
+
+<p>
+<b>不能</b> 对这些使用 Result&lt;T, E&gt; 的测试使用 <span class="underline">#[should_panic] 注解</span> 。相反应该在测试失败时 <span class="underline">直接返回 Err 值</span> 
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org724c3d2" class="outline-2">
+<h2 id="org724c3d2">运行测试</h2>
 </div>
 </div>
 <div id="postamble" class="status">
