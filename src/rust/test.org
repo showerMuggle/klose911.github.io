@@ -440,6 +440,104 @@ assert_eq! 和 assert_ne! 宏在底层分别使用了 _==_ 和 _!=_ 。当断言
   因为这两个 trait 都是派生 trait，如在讨论“结构体和枚举时”所提到的，通常可以直接在结构体或枚举上添加 #[derive(PartialEq, Debug)] 注解
 #+END_EXAMPLE
 *** 自定义失败信息
+可以向 assert!、assert_eq! 和 assert_ne! 宏传递一个 _可选的失败信息参数_ ，在测试失败时将自定义失败信息一同打印出来。任何在 assert! 的一个必需参数和 assert_eq! 和 assert_ne! 的两个必需参数之后指定的参数都会传递给 _format! 宏_ 
+
+#+BEGIN_EXAMPLE
+自定义信息有助于记录断言的意义；当测试失败时就能更好的理解代码出了什么问题
+#+END_EXAMPLE
+
+例如，比如说有一个根据人名进行问候的函数，希望测试将传递给函数的人名显示在输出中：
+
+#+BEGIN_SRC rust 
+  pub fn greeting(name: &str) -> String {
+      format!("Hello {}!", name)
+  }
+
+  #[cfg(test)]
+  mod tests {
+      use super::*;
+
+      #[test]
+      fn greeting_contains_name() {
+	  let result = greeting("Carol");
+	  assert!(result.contains("Carol"));
+      }
+  }
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  这个程序的需求还没有被确定，因此问候文本开头的 Hello 文本很可能会改变
+
+  然而并不想在需求改变时不得不更新测试，所以相比检查 greeting 函数返回的确切值，仅仅断言输出的文本中包含输入参数
+#+END_EXAMPLE
+
+通过将 greeting 改为不包含 name 来在代码中引入一个 bug 来测试失败时是怎样的：
+
+#+BEGIN_SRC rust 
+  pub fn greeting(name: &str) -> String {
+      String::from("Hello!")
+  }
+#+END_SRC
+
+运行测试：
+#+BEGIN_SRC sh 
+  running 1 test
+  test tests::greeting_contains_name ... FAILED
+
+  failures:
+
+  ---- tests::greeting_contains_name stdout ----
+  thread 'tests::greeting_contains_name' panicked at 'assertion failed:
+  result.contains("Carol")', src/lib.rs:12:9
+  note: Run with `RUST_BACKTRACE=1` for a backtrace.
+
+  failures:
+      tests::greeting_contains_name
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  结果仅仅告诉了断言失败了和失败的行号
+
+  一个更有用的失败信息应该打印出 greeting 函数的值
+#+END_EXAMPLE
+
+为测试函数增加一个自定义失败信息参数：带占位符的格式字符串，以及 greeting 函数的值：
+
+#+BEGIN_SRC rust 
+  #[test]
+  fn greeting_contains_name() {
+      let result = greeting("Carol");
+      assert!(
+	  result.contains("Carol"),
+	  "Greeting did not contain name, value was `{}`", result
+      );
+  }
+#+END_SRC
+
+再次运行测试，将会看到更有价值的信息：
+
+#+BEGIN_SRC sh 
+  running 1 test
+  test tests::greeting_contains_name ... FAILED
+
+  failures:
+
+  ---- tests::greeting_contains_name stdout ----
+  thread 'tests::greeting_contains_name' panicked at 'Greeting did not contain name, value was `Hello!`', src/lib.rs:19:2
+  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace.
+
+
+  failures:
+      tests::greeting_contains_name
+
+  test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  在测试输出中看到所取得的确切的值，这会帮助理解真正发生了什么，而不是期望发生什么
+#+END_EXAMPLE
 
 ** 使用 should_panic 检查 panic
+
+
 ** 将 Result<T, E> 用于测试

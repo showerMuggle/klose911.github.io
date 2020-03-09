@@ -808,12 +808,129 @@ assert_eq! 和 assert_ne! 宏在底层分别使用了 <span class="underline">==
 </div>
 <div id="outline-container-org8a8cb36" class="outline-4">
 <h4 id="org8a8cb36">自定义失败信息</h4>
+<div class="outline-text-4" id="text-org8a8cb36">
+<p>
+可以向 assert!、assert_eq! 和 assert_ne! 宏传递一个 <span class="underline">可选的失败信息参数</span> ，在测试失败时将自定义失败信息一同打印出来。任何在 assert! 的一个必需参数和 assert_eq! 和 assert_ne! 的两个必需参数之后指定的参数都会传递给 <span class="underline">format! 宏</span> 
+</p>
+
+<pre class="example">
+自定义信息有助于记录断言的意义；当测试失败时就能更好的理解代码出了什么问题
+</pre>
+
+<p>
+例如，比如说有一个根据人名进行问候的函数，希望测试将传递给函数的人名显示在输出中：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">pub</span> <span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">greeting</span>(<span style="color: #eedd82;">name</span>: &amp;<span style="color: #98fb98;">str</span>) -&gt; <span style="color: #98fb98;">String</span> {
+    <span style="color: #b0c4de;">format!</span>(<span style="color: #ffa07a;">"Hello </span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">!"</span>, name)
+}
+
+<span style="color: #7fffd4;">#[cfg(test)]</span>
+<span style="color: #00ffff;">mod</span> <span style="color: #7fffd4;">tests</span> {
+    <span style="color: #00ffff;">use</span> <span style="color: #00ffff;">super</span>::*;
+
+    <span style="color: #7fffd4;">#[test]</span>
+    <span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">greeting_contains_name</span>() {
+        <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">result</span> = greeting(<span style="color: #ffa07a;">"Carol"</span>);
+        <span style="color: #7fffd4;">assert!</span>(result.contains(<span style="color: #ffa07a;">"Carol"</span>));
+    }
+}
+</pre>
+</div>
+
+<pre class="example">
+  这个程序的需求还没有被确定，因此问候文本开头的 Hello 文本很可能会改变
+
+  然而并不想在需求改变时不得不更新测试，所以相比检查 greeting 函数返回的确切值，仅仅断言输出的文本中包含输入参数
+</pre>
+
+<p>
+通过将 greeting 改为不包含 name 来在代码中引入一个 bug 来测试失败时是怎样的：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">pub</span> <span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">greeting</span>(<span style="color: #eedd82;">name</span>: &amp;<span style="color: #98fb98;">str</span>) -&gt; <span style="color: #98fb98;">String</span> {
+    <span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"Hello!"</span>)
+}
+</pre>
+</div>
+
+<p>
+运行测试：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">running 1 test
+<span style="color: #b0c4de;">test</span> tests::greeting_contains_name ... FAILED
+
+failures:
+
+---- tests::greeting_contains_name stdout ----
+thread <span style="color: #ffa07a;">'tests::greeting_contains_name'</span> panicked at <span style="color: #ffa07a;">'assertion failed:</span>
+<span style="color: #ffa07a;">result.contains("Carol")'</span>, src/lib.rs:12:9
+note: Run with <span style="color: #fa8072;">`RUST_BACKTRACE=1`</span> <span style="color: #00ffff;">for</span> a backtrace.
+
+failures:
+    tests::greeting_contains_name
+</pre>
+</div>
+
+<pre class="example">
+  结果仅仅告诉了断言失败了和失败的行号
+
+  一个更有用的失败信息应该打印出 greeting 函数的值
+</pre>
+
+<p>
+为测试函数增加一个自定义失败信息参数：带占位符的格式字符串，以及 greeting 函数的值：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #7fffd4;">#[test]</span>
+<span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">greeting_contains_name</span>() {
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">result</span> = greeting(<span style="color: #ffa07a;">"Carol"</span>);
+    <span style="color: #7fffd4;">assert!</span>(
+        result.contains(<span style="color: #ffa07a;">"Carol"</span>),
+        <span style="color: #ffa07a;">"Greeting did not contain name, value was `{}`"</span>, result
+    );
+}
+</pre>
+</div>
+
+<p>
+再次运行测试，将会看到更有价值的信息：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">running 1 test
+<span style="color: #b0c4de;">test</span> tests::greeting_contains_name ... FAILED
+
+failures:
+
+---- tests::greeting_contains_name stdout ----
+thread <span style="color: #ffa07a;">'tests::greeting_contains_name'</span> panicked at <span style="color: #ffa07a;">'Greeting did not contain name, value was `Hello!`'</span>, src/lib.rs:19:2
+note: run with <span style="color: #fa8072;">`RUST_BACKTRACE=1`</span> environment variable to display a backtrace.
+
+
+failures:
+    tests::greeting_contains_name
+
+<span style="color: #b0c4de;">test</span> result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out
+</pre>
+</div>
+
+<pre class="example">
+  在测试输出中看到所取得的确切的值，这会帮助理解真正发生了什么，而不是期望发生什么
+</pre>
+</div>
 </div>
 </div>
 
 <div id="outline-container-orgf8cced9" class="outline-3">
 <h3 id="orgf8cced9">使用 should_panic 检查 panic</h3>
 </div>
+
+
 <div id="outline-container-org8f1b7e2" class="outline-3">
 <h3 id="org8f1b7e2">将 Result&lt;T, E&gt; 用于测试</h3>
 </div>
