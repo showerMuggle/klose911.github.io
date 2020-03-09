@@ -241,7 +241,14 @@ for the JavaScript code in this tag.
 <li><a href="#orgc0d85f1">如何编写测试</a>
 <ul>
 <li><a href="#orge57b548">测试函数剖析</a></li>
-<li><a href="#org114a098">使用 assert! 宏来检查结果</a></li>
+<li><a href="#org114a098">使用 assert! 宏来检查结果</a>
+<ul>
+<li><a href="#org36f060b">使用 assert_eq! 和 assert_ne! 宏来测试相等</a></li>
+<li><a href="#org8a8cb36">自定义失败信息</a></li>
+</ul>
+</li>
+<li><a href="#orgf8cced9">使用 should_panic 检查 panic</a></li>
+<li><a href="#org8f1b7e2">将 Result&lt;T, E&gt; 用于测试</a></li>
 </ul>
 </li>
 </ul>
@@ -498,6 +505,317 @@ error: test failed
 </div>
 <div id="outline-container-org114a098" class="outline-3">
 <h3 id="org114a098">使用 assert! 宏来检查结果</h3>
+<div class="outline-text-3" id="text-org114a098">
+<p>
+<span class="underline">assert! 宏</span> 由 <span class="underline">标准库</span> 提供，在希望确保测试中一些条件为 true 时非常有用。需要向 assert! 宏提供一个求值为 <span class="underline">布尔值</span> 的参数：
+</p>
+<ul class="org-ul">
+<li>如果值是 true，assert! 什么也不做，同时测试会通过</li>
+<li>如果值为 false，assert! 调用 panic! 宏，这会导致测试失败</li>
+</ul>
+
+<pre class="example">
+assert! 宏用来检查代码是否以期望的方式运行
+</pre>
+
+<p>
+前面有一个 Rectangle 结构体和一个 can_hold 方法，这里将他们放进 src/lib.rs：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #7fffd4;">#[derive(Debug)]</span>
+<span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">Rectangle</span> {
+    <span style="color: #eedd82;">width</span>: <span style="color: #98fb98;">u32</span>,
+    <span style="color: #eedd82;">height</span>: <span style="color: #98fb98;">u32</span>,
+}
+
+<span style="color: #00ffff;">impl</span> <span style="color: #98fb98;">Rectangle</span> {
+    <span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">can_hold</span>(&amp;<span style="color: #00ffff;">self</span>, <span style="color: #eedd82;">other</span>: &amp;<span style="color: #98fb98;">Rectangle</span>) -&gt; <span style="color: #98fb98;">bool</span> {
+        <span style="color: #00ffff;">self</span>.width &gt; other.width &amp;&amp; <span style="color: #00ffff;">self</span>.height &gt; other.height
+    }
+}
+</pre>
+</div>
+
+<p>
+在下面代码中，编写一个 larger_can_hold_smaller 方法来测试，这里创建一个长为 8 宽为 7 的 Rectangle 实例，并假设它可以放得下另一个长为 5 宽为 1 的 Rectangle 实例：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {}
+<span style="color: #7fffd4;">#[cfg(test)]</span>
+<span style="color: #00ffff;">mod</span> <span style="color: #7fffd4;">tests</span> {
+    <span style="color: #00ffff;">use</span> <span style="color: #00ffff;">super</span>::*;
+
+    <span style="color: #7fffd4;">#[test]</span>
+    <span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">larger_can_hold_smaller</span>() {
+        <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">larger</span> = <span style="color: #98fb98;">Rectangle</span> { <span style="color: #eedd82;">width</span>: 8, <span style="color: #eedd82;">height</span>: 7 };
+        <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">smaller</span> = <span style="color: #98fb98;">Rectangle</span> { <span style="color: #eedd82;">width</span>: 5, <span style="color: #eedd82;">height</span>: 1 };
+
+        <span style="color: #7fffd4;">assert!</span>(larger.can_hold(&amp;smaller));
+    }
+}
+</pre>
+</div>
+
+<p>
+注意：在 tests 模块中新增加了一行：_use super::*;_ 。tests 是一个普通的模块，它遵循模块的可见性规则：
+</p>
+<ul class="org-ul">
+<li>因为这是一个内部模块，要测试外部模块中的代码，需要将其引入到内部模块的作用域中</li>
+<li>这里选择使用 glob 全局导入，以便在 tests 模块中使用所有在外部模块定义的内容</li>
+</ul>
+
+<pre class="example">
+  将测试命名为 larger_can_hold_smaller，并创建所需的两个 Rectangle 实例
+
+  接着调用 assert! 宏并传递 larger.can_hold(&amp;smaller) 调用的结果作为参数
+
+  这个表达式预期会返回 true，所以测试应该通过。让我们拭目以待！
+</pre>
+
+<p>
+运行 cargo test: 
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">running 1 test
+<span style="color: #b0c4de;">test</span> tests::larger_can_hold_smaller ... ok
+
+<span style="color: #b0c4de;">test</span> result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+</pre>
+</div>
+
+<p>
+再来增加另一个测试，这一回断言一个更小的矩形不能放下一个更大的矩形：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #7fffd4;">#[cfg(test)]</span>
+<span style="color: #00ffff;">mod</span> <span style="color: #7fffd4;">tests</span> {
+    <span style="color: #00ffff;">use</span> <span style="color: #00ffff;">super</span>::*;
+
+    <span style="color: #7fffd4;">#[test]</span>
+    <span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">larger_can_hold_smaller</span>() {
+        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">--snip--</span>
+    }
+
+    <span style="color: #7fffd4;">#[test]</span>
+    <span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">smaller_cannot_hold_larger</span>() {
+        <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">larger</span> = <span style="color: #98fb98;">Rectangle</span> { <span style="color: #eedd82;">width</span>: 8, <span style="color: #eedd82;">height</span>: 7 };
+        <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">smaller</span> = <span style="color: #98fb98;">Rectangle</span> { <span style="color: #eedd82;">width</span>: 5, <span style="color: #eedd82;">height</span>: 1 };
+
+        <span style="color: #7fffd4;">assert!</span>(!smaller.can_hold(&amp;larger));
+    }
+}
+</pre>
+</div>
+
+<pre class="example">
+  因为这里 can_hold 函数的正确结果是 false ，所以将这个结果取反后传递给 assert! 宏
+
+  同样can_hold 返回 false 时测试就会通过：
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-sh">running 2 tests
+<span style="color: #b0c4de;">test</span> tests::smaller_cannot_hold_larger ... ok
+<span style="color: #b0c4de;">test</span> tests::larger_can_hold_smaller ... ok
+
+<span style="color: #b0c4de;">test</span> result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+</pre>
+</div>
+
+<p>
+现在看看如果引入一个 bug 的话测试结果会发生什么。将 can_hold 方法中比较长度时本应使用大于号的地方改成小于号：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">--snip--</span>
+
+<span style="color: #00ffff;">impl</span> <span style="color: #98fb98;">Rectangle</span> {
+    <span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">can_hold</span>(&amp;<span style="color: #00ffff;">self</span>, <span style="color: #eedd82;">other</span>: &amp;<span style="color: #98fb98;">Rectangle</span>) -&gt; <span style="color: #98fb98;">bool</span> {
+        <span style="color: #00ffff;">self</span>.width &lt; other.width &amp;&amp; <span style="color: #00ffff;">self</span>.height &gt; other.height
+    }
+}
+</pre>
+</div>
+
+<p>
+现在运行测试会产生：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">running 2 tests
+<span style="color: #b0c4de;">test</span> tests::smaller_cannot_hold_larger ... ok
+<span style="color: #b0c4de;">test</span> tests::larger_can_hold_smaller ... FAILED
+
+failures:
+
+---- tests::larger_can_hold_smaller stdout ----
+thread <span style="color: #ffa07a;">'tests::larger_can_hold_smaller'</span> panicked at <span style="color: #ffa07a;">'assertion failed:</span>
+<span style="color: #ffa07a;">larger.can_hold(&amp;smaller)'</span>, src/lib.rs:22:9
+note: Run with <span style="color: #fa8072;">`RUST_BACKTRACE=1`</span> <span style="color: #00ffff;">for</span> a backtrace.
+
+failures:
+    tests::larger_can_hold_smaller
+
+<span style="color: #b0c4de;">test</span> result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out
+</pre>
+</div>
+
+<pre class="example">
+  测试捕获了 bug！
+
+  因为 larger.length 是 8 而 smaller.length 是 5，can_hold 中的长度比较现在因为 8 不小于 5 而返回 false
+</pre>
+</div>
+<div id="outline-container-org36f060b" class="outline-4">
+<h4 id="org36f060b">使用 assert_eq! 和 assert_ne! 宏来测试相等</h4>
+<div class="outline-text-4" id="text-org36f060b">
+<pre class="example">
+  测试功能的一个常用方法是将需要“测试代码的值”与“期望值”做比较，并检查是否相等
+
+  这可以通过向 assert! 宏传递一个使用 == 运算符的表达式来做到
+
+  不过这个操作实在是太常见了
+</pre>
+<p>
+标准库提供了一对宏来更方便的处理这些操作 <span class="underline">assert_eq!</span> 和 <span class="underline">assert_ne!</span> ：
+</p>
+<ul class="org-ul">
+<li>这两个宏分别 <b>比较</b> 两个值是 <span class="underline">相等</span> 还是 <span class="underline">不相等</span></li>
+<li>当断言失败时他们也会打印出这两个值具体是什么，以便于观察测试 为什么 失败</li>
+</ul>
+
+<pre class="example">
+assert! 只会打印出它从 == 表达式中得到了 false 值，而不是导致 false 的两个值
+</pre>
+
+<p>
+下面编写一个对其参数加二并返回结果的函数 add_two。接着使用 assert_eq! 宏测试这个函数：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">pub</span> <span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">add_two</span>(<span style="color: #eedd82;">a</span>: <span style="color: #98fb98;">i32</span>) -&gt; <span style="color: #98fb98;">i32</span> {
+    a + 2
+}
+
+<span style="color: #7fffd4;">#[cfg(test)]</span>
+<span style="color: #00ffff;">mod</span> <span style="color: #7fffd4;">tests</span> {
+    <span style="color: #00ffff;">use</span> <span style="color: #00ffff;">super</span>::*;
+
+    <span style="color: #7fffd4;">#[test]</span>
+    <span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">it_adds_two</span>() {
+        <span style="color: #7fffd4;">assert_eq!</span>(4, add_two(2));
+    }
+}
+</pre>
+</div>
+
+<p>
+测试通过了：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">running 1 test
+<span style="color: #b0c4de;">test</span> tests::it_adds_two ... ok
+
+<span style="color: #b0c4de;">test</span> result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+</pre>
+</div>
+
+<pre class="example">
+  传递给 assert_eq! 宏的第一个参数 4 ，等于调用 add_two(2) 的结果
+
+  测试中的这一行 test tests::it_adds_two ... ok 中 ok 表明测试通过！
+</pre>
+
+<p>
+在代码中引入一个 bug 来看看使用 assert_eq! 的测试失败是什么样的。修改 add_two 函数的实现使其加 3：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">pub</span> <span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">add_two</span>(<span style="color: #eedd82;">a</span>: <span style="color: #98fb98;">i32</span>) -&gt; <span style="color: #98fb98;">i32</span> {
+    a + 3
+}
+</pre>
+</div>
+
+<p>
+再次运行测试：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">running 1 test
+<span style="color: #b0c4de;">test</span> tests::it_adds_two ... FAILED
+
+failures:
+
+---- tests::it_adds_two stdout ----
+thread <span style="color: #ffa07a;">'tests::it_adds_two'</span> panicked at <span style="color: #ffa07a;">'assertion failed: `(left == right)`</span>
+<span style="color: #ffa07a;">  left: `4`,</span>
+<span style="color: #ffa07a;"> right: `5`'</span>, src/lib.rs:11:9
+note: Run with <span style="color: #fa8072;">`RUST_BACKTRACE=1`</span> <span style="color: #00ffff;">for</span> a backtrace.
+
+failures:
+    tests::it_adds_two
+
+<span style="color: #b0c4de;">test</span> result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out
+</pre>
+</div>
+
+<pre class="example">
+测试捕获到了 bug！
+
+it_adds_two 测试失败，显示信息 assertion failed: `(left == right)` 并表明 left 是 4 而 right 是 5
+
+这个信息有助于开始调试：它说 assert_eq! 的 left 参数是 4，而 right 参数，也就是 add_two(2) 的结果，是 5
+
+</pre>
+
+<p>
+在一些语言和测试框架中，断言两个值相等的函数的参数叫做 <span class="underline">expected</span> 和 <span class="underline">actual</span> ，而且指定参数的顺序是很关键的。然而在 Rust 中，他们则叫做 <span class="underline">left</span> 和 <span class="underline">right</span> ，同时指定期望的值和被测试代码产生的 <b>值的顺序并不重要</b> 
+</p>
+
+<pre class="example">
+  这个测试中的断言也可以写成 assert_eq!(add_two(2), 4)
+
+  这时失败信息会变成 assertion failed: `(left == right)` 其中 left 是 5 而 right 是 4
+</pre>
+
+<p>
+assert_ne! 宏在传递给它的两个值不相等时通过，而在相等时失败
+</p>
+
+<pre class="example">
+  在代码按预期运行，不确定值“会”是什么，不过能确定值绝对“不会”是什么的时候，这个宏最有用处
+
+  例如，如果一个函数保证会以某种方式改变其输出，不过这种改变方式是由运行测试时是星期几来决定的，这时最好的断言可能就是函数的输出不等于其输入
+</pre>
+
+<p>
+assert_eq! 和 assert_ne! 宏在底层分别使用了 <span class="underline">==</span> 和 <span class="underline">!=</span> 。当断言失败时，这些宏会使用调试格式打印出其参数，这意味着 <span class="underline">被比较的值</span> 必需 <b>实现</b> 了 <span class="underline">PartialEq</span> 和 <span class="underline">Debug</span> trait 
+</p>
+
+<pre class="example">
+  所有的基本类型和大部分标准库类型都实现了这些 trait
+
+  对于自定义的结构体和枚举，需要实现 PartialEq 才能断言他们的值是否相等，需要实现 Debug 才能在断言失败时打印他们的值
+
+  因为这两个 trait 都是派生 trait，如在讨论“结构体和枚举时”所提到的，通常可以直接在结构体或枚举上添加 #[derive(PartialEq, Debug)] 注解
+</pre>
+</div>
+</div>
+<div id="outline-container-org8a8cb36" class="outline-4">
+<h4 id="org8a8cb36">自定义失败信息</h4>
+</div>
+</div>
+
+<div id="outline-container-orgf8cced9" class="outline-3">
+<h3 id="orgf8cced9">使用 should_panic 检查 panic</h3>
+</div>
+<div id="outline-container-org8f1b7e2" class="outline-3">
+<h3 id="org8f1b7e2">将 Result&lt;T, E&gt; 用于测试</h3>
 </div>
 </div>
 </div>
