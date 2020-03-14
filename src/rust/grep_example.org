@@ -4,8 +4,236 @@
 #+HTML_LINK_HOME: rust.html
 #+OPTIONS: num:nil timestamp:nil ^:nil
 
-[[file:fp.org][Next：函数式范式]]
+本章既是一个目前所学的很多技能的概括，也是一个更多标准库功能的探索。将构建一个与文件和命令行输入/输出交互的命令行工具来练习现在一些已经掌握的 Rust 技能
 
-[[file:test.org][Previous：测试]]
+#+BEGIN_EXAMPLE
+  Rust 的运行速度、安全性、单二进制文件输出和跨平台支持使其成为创建命令行程序的绝佳选择，所以我们的项目将创建一个自己版本的经典命令行工具：grep
 
-[[file:rust.org][Home: 目录]]
+  grep 是 “Globally search a Regular Expression and Print.” 的首字母缩写
+
+  grep 最简单的使用场景是在特定文件中搜索指定字符串。为此，grep 获取一个文件名和一个字符串作为参数，接着读取文件并找到其中包含字符串参数的行，然后打印出这些行
+#+END_EXAMPLE
+在这个过程中，会展示如何让这个命令行工具利用很多命令行工具中用到的终端功能：
++ 读取环境变量来使得用户可以配置工具的行为
++ 打印到标准错误控制流，而不是标准输出，这样用户可以选择将成功输出重定向到文件中的同时仍然在屏幕上显示错误信息
+  
+#+BEGIN_EXAMPLE
+  一位 Rust 社区的成员，Andrew Gallant，已经创建了一个功能完整且非常快速的 grep 版本，叫做 ripgrep
+
+  相比之下，我们的 grep 版本将非常简单，但能帮助理解像 ripgrep 这样真实项目的背景知识
+#+END_EXAMPLE
+
+这里将会结合之前所学的一些内容：
++ 代码组织
++ vector 和字符串
++ 错误处理
++ 合理的使用 trait 和生命周期
++ 测试
+  
+* 接受命令行参数
+  使用 cargo new 新建一个项目，称之为 minigrep 以便与可能已经安装在系统上的 grep 工具相区别：
+  #+BEGIN_SRC sh 
+  $ cargo new minigrep
+       Created binary (application) `minigrep` project
+  #+END_SRC
+  
+  第一个任务是让 minigrep 能够接受两个命令行参数：
++ 文件名
++ 要搜索的字符串
+  
+也就是说希望能够使用 cargo run、要搜索的字符串和被搜索的文件的路径来运行程序，像这样：
+
+#+BEGIN_SRC sh 
+  $ cargo run searchstring example-filename.txt
+#+END_SRC
+
+现在 cargo new 生成的程序忽略任何传递给它的参数
+
+#+BEGIN_EXAMPLE
+Crates.io 上有一些现成的库可以帮助接受命令行参数，不过我们正在学习这些内容，让我们自己来实现一个
+#+END_EXAMPLE
+
+** 读取参数值
+   为了确保 minigrep 能够获取传递给它的命令行参数的值，需要一个 Rust 标准库提供的函数，也就是 _std::env::args_ ，这个函数返回一个传递给程序的 _命令行参数_ 的 _迭代器_ 
+   #+BEGIN_EXAMPLE
+   现在只需理解迭代器的两个细节：
+   1. 迭代器生成一系列的值
+   2. 可以在迭代器上调用 collect 方法将其转换为一个集合，比如包含所有迭代器产生元素的 vector
+   #+END_EXAMPLE
+   
+   下面代码来读取任何传递给 minigrep 的命令行参数并将其收集到一个 vector 中：
+   
+   #+BEGIN_SRC rust 
+  use std::env;
+
+  fn main() {
+      let args: Vec<String> = env::args().collect();
+      println!("{:?}", args);
+  }
+   #+END_SRC
+   
+   首先使用 _use_ 语句来将 _std::env_ 模块引入作用域以便可以使用它的 args 函数。注意 std::env::args 函数被嵌套进了两层模块中，这里有两个原因：
++ 当所需函数嵌套了多于一层模块时，通常将父模块引入作用域，而不是其自身，这便于利用 std::env 中的其他函数
++ 这比仅仅使用 args 调用函数要更明确一些，因为 args 容易被错认成一个定义于当前模块的函数
+  
+#+BEGIN_EXAMPLE
+  std::env::args 在其任何参数包含无效 Unicode 字符时会 panic！！！
+
+  如果需要接受包含无效 Unicode 字符的参数，使用 std::env::args_os 代替
+
+  这个函数返回 OsString 值而不是 String 值
+
+  这里出于简单考虑使用了 std::env::args，因为 OsString 值每个平台都不一样而且比 String 值处理起来更为复杂
+#+END_EXAMPLE
+在 main 函数的第一行，调用了 _env::args_ ，并立即使用 _collect_ 来 *创建* 了一个包含 *迭代器* 所有值的 _vector_
+#+BEGIN_EXAMPLE
+  collect 可以被用来创建很多类型的集合，所以这里显式注明 args 的类型来指定需要一个字符串 vector
+
+  虽然在 Rust 中很少会需要注明类型，然而 collect 是一个经常需要注明类型的函数，因为 Rust 不能推断出想要什么类型的集合
+#+END_EXAMPLE
+
+最后，使用 *调试* 格式 _:?_ 打印出 vector。现在尝试分别用两种方式（不包含参数和包含参数）运行代码：
+
+#+BEGIN_SRC sh 
+  $ cargo run 
+      Finished dev [unoptimized + debuginfo] target(s) in 0.00s
+       Running `target/debug/minigrep`
+  ["target/debug/minigrep"]
+
+  $ cargo run needle haystack 
+      Finished dev [unoptimized + debuginfo] target(s) in 0.00s
+       Running `target/debug/minigrep needle haystack`
+  ["target/debug/minigrep", "needle", "haystack"]
+#+END_SRC
+
+注意 vector 的第一个值是 _target/debug/minigrep_ ，它是我们 *二进制文件的名称* 
+
+#+BEGIN_EXAMPLE
+  这与 C 中的参数列表的行为相匹配，让程序使用在执行时调用它们的名称
+
+  如果要在消息中打印它或者根据用于调用程序的命令行别名更改程序的行为，通常可以方便地访问程序名称
+
+  不过考虑到本章的目的，我们将忽略它并只保存所需的两个参数
+#+END_EXAMPLE
+
+** 将参数值保存进变量
+   #+BEGIN_EXAMPLE
+   打印出参数 vector 中的值展示了程序可以访问指定为命令行参数的值
+   #+END_EXAMPLE
+   现在需要将这两个参数的值保存进变量这样就可以在程序的余下部分使用这些值了：
+   
+   #+BEGIN_SRC rust 
+  use std::env;
+
+  fn main() {
+      let args: Vec<String> = env::args().collect();
+
+      let query = &args[1];
+      let filename = &args[2];
+
+      println!("Searching for {}", query);
+      println!("In file {}", filename);
+  }
+   #+END_SRC
+   
+   #+BEGIN_EXAMPLE
+   正如之前打印出 vector 时所所看到的，程序的名称占据了 vector 的第一个值 args[0]，所以从索引 1 开始
+   
+   minigrep 获取的第一个参数是需要搜索的字符串，所以将其将第一个参数的引用存放在变量 query 中
+   
+   第二个参数将是文件名，所以将第二个参数的引用放入变量 filename 中
+   
+   #+END_EXAMPLE
+   使用参数 test 和 sample.txt 再次运行这个程序：
+   
+   #+BEGIN_SRC sh 
+  $ cargo run test sample.txt
+     Compiling minigrep v0.1.0 (file:///projects/minigrep)
+      Finished dev [unoptimized + debuginfo] target(s) in 0.0 secs
+       Running `target/debug/minigrep test sample.txt`
+  Searching for test
+  In file sample.txt
+   #+END_SRC
+   
+   #+BEGIN_EXAMPLE
+   之后会增加一些错误处理来应对类似用户没有提供参数的情况，不过现在将忽略他们并开始增加读取文件功能
+   #+END_EXAMPLE
+   
+* 读取文件
+  首先，需要一个用来测试的示例文件：用来确保 minigrep 正常工作的最好的文件是拥有多行少量文本且有一些重复单词的文件
+  #+BEGIN_EXAMPLE
+  一首艾米莉·狄金森（Emily Dickinson）的诗，它正适合这个工作！
+  #+END_EXAMPLE
+  在项目根目录创建一个文件 poem.txt：
+  
+  #+BEGIN_EXAMPLE
+  I'm nobody! Who are you?
+  Are you nobody, too?
+  Then there's a pair of us - don't tell!
+  They'd banish us, you know.
+  
+  How dreary to be somebody!
+  How public, like a frog
+  To tell your name the livelong day
+  To an admiring bog!
+  #+END_EXAMPLE
+  
+  创建完这个文件之后，修改 src/main.rs 并增加下面所示的打开文件的代码：
+  #+BEGIN_SRC rust 
+  use std::env;
+  use std::fs;
+
+  fn main() {
+      // --snip--
+      println!("In file {}", filename);
+
+      let contents = fs::read_to_string(filename)
+          .expect("Something went wrong reading the file");
+
+      println!("With text:\n{}", contents);
+  }
+  #+END_SRC
+  
+1. 增加了一个 use 语句来引入标准库中的相关部分：需要 _std::fs_ 来处理文件
+2. 在 main 中新增了一行语句：fs::read_to_string 接受 filename，打开文件，接着返回包含其内容的 Result<String>
+3. 增加了临时的 println! 打印出读取文件之后 contents 的值，这样就可以检查目前为止的程序能否工作 
+   
+尝试运行这些代码，随意指定一个字符串作为第一个命令行参数（因为还未实现搜索功能的部分）而将 poem.txt 文件将作为第二个参数：
+
+#+BEGIN_SRC sh 
+  $ cargo run the poem.txt
+     Compiling minigrep v0.1.0 (file:///projects/minigrep)
+      Finished dev [unoptimized + debuginfo] target(s) in 0.0 secs
+       Running `target/debug/minigrep the poem.txt`
+  Searching for the
+  In file poem.txt
+  With text:
+  I'm nobody! Who are you?
+  Are you nobody, too?
+  Then there's a pair of us — don't tell!
+  They'd banish us, you know.
+
+  How dreary to be somebody!
+  How public, like a frog
+  To tell your name the livelong day
+  To an admiring bog!
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  虽然它还有一些瑕疵：
+  1. main 函数有着多个职能，通常函数只负责一个功能的话会更简洁并易于维护
+  2. 没有尽可能的处理错误
+
+  虽然这个程序还很小，这些瑕疵并不是什么大问题，不过随着程序功能的丰富，将会越来越难以用简单的方法修复他们
+
+  在开发程序时，及早开始重构是一个最佳实践，因为重构少量代码时要容易的多，所以现在就开始吧
+#+END_EXAMPLE
+* 重构改进模块性和错误处理
+  
+  [[file:fp.org][Next：函数式范式]]
+  
+  [[file:test.org][Previous：测试]]
+  
+  [[file:rust.org][Home: 目录]]
+  
+  
