@@ -684,8 +684,88 @@ new 函数体中有两处修改，这些修改使得函数符合其新的类型�
 #+END_EXAMPLE
 
 ** 将代码拆分到库 crate
+#+BEGIN_EXAMPLE
+现在将要拆分 src/main.rs 并将一些代码放入 src/lib.rs，这样就能测试他们并拥有一个含有更少功能的 main 函数
+#+END_EXAMPLE
+将所有不是 main 函数的代码从 src/main.rs 移动到新文件 _src/lib.rs_ 中：
++ run 函数定义
++ 相关的 use 语句
++ Config 的定义
++ Config::new 函数定义
 
+现在 src/lib.rs 的内容应该看起来像下面一样：
 
+#+BEGIN_SRC rust 
+  use std::error::Error;
+  use std::fs;
+
+  pub struct Config {
+      pub query: String,
+      pub filename: String,
+  }
+
+  impl Config {
+      pub fn new(args: &[String]) -> Result<Config, &'static str> {
+          // --snip--
+      }
+  }
+
+  pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
+      // --snip--
+  }
+#+END_SRC
+这里使用了公有的 _pub_ 关键字：在 Config、其字段和其 new 方法，以及 run 函数上
+
+#+BEGIN_EXAMPLE
+  现在有了一个拥有可以测试的公有 API 的库 crate 了，但是直到下一个示例修改完 src/main.rs 之后，代码还不能编译
+#+END_EXAMPLE
+
+需要在 src/main.rs 中将移动到 _src/lib.rs 的代码_ 引入二进制 crate 的 _作用域_ 中 ：
+
+#+BEGIN_SRC rust 
+  use std::env;
+  use std::process;
+
+  use minigrep::Config;
+
+  fn main() {
+      // --snip--
+      if let Err(e) = minigrep::run(config) {
+          // --snip--
+      }
+  }
+#+END_SRC
+1. 为了将库 crate 引入二进制 crate，使用了 _use minigrep_ 
+2. _use minigrep::Config_ 将 Config 类型引入作用域
+3. 并使用 _crate 名称_ 作为 _run 函数的前缀_ 
+
+通过这些重构，所有功能应该能够联系在一起并运行了。运行 cargo run 来确保一切都正确的衔接在一起：
+
+#+BEGIN_SRC sh 
+  $ cargo run abc poem.txt  
+      Finished dev [unoptimized + debuginfo] target(s) in 0.00s
+       Running `target/debug/minigrep abc poem.txt`
+  Searching for abc
+  In file poem.txt
+  With text:
+  I'm nobody! Who are you?
+  Are you nobody, too?
+  Then there's a pair of us - don't tell!
+  They'd banish us, you know.
+
+  How dreary to be somebody!
+  How public, like a frog
+  To tell your name the livelong day
+  To an admiring bog!
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  从现在开始几乎所有的工作都将在 src/lib.rs 中进行
+
+  利用这些新创建的模块的优势来进行一些在旧代码中难以展开的工作，这些工作在新代码中非常容易实现，那就是：编写测试！
+#+END_EXAMPLE
+
+* 采用测试驱动开发完善库的功能
   [[file:fp.org][Next：函数式范式]]
   
   [[file:test.org][Previous：测试]]

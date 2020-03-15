@@ -178,6 +178,7 @@ for the JavaScript code in this tag.
 <li><a href="#sec-3-6">将代码拆分到库 crate</a></li>
 </ul>
 </li>
+<li><a href="#sec-4">采用测试驱动开发完善库的功能</a></li>
 </ul>
 </div>
 </div>
@@ -1174,6 +1175,120 @@ run 并不返回像 Config::new 那样需要 unwrap 的值，因为 run 在成�
 <div id="outline-container-sec-3-6" class="outline-3">
 <h3 id="sec-3-6">将代码拆分到库 crate</h3>
 <div class="outline-text-3" id="text-3-6">
+<pre class="example">
+现在将要拆分 src/main.rs 并将一些代码放入 src/lib.rs，这样就能测试他们并拥有一个含有更少功能的 main 函数
+</pre>
+<p>
+将所有不是 main 函数的代码从 src/main.rs 移动到新文件 <span class="underline">src/lib.rs</span> 中：
+</p>
+<ul class="org-ul">
+<li>run 函数定义
+</li>
+<li>相关的 use 语句
+</li>
+<li>Config 的定义
+</li>
+<li>Config::new 函数定义
+</li>
+</ul>
+
+<p>
+现在 src/lib.rs 的内容应该看起来像下面一样：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::<span style="color: #ffd700;">error</span>::<span style="color: #98f5ff;">Error</span>;
+<span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::fs;
+
+<span style="color: #00bfff; font-weight: bold;">pub</span> <span style="color: #00bfff; font-weight: bold;">struct</span> <span style="color: #98f5ff;">Config</span> {
+    <span style="color: #00bfff; font-weight: bold;">pub</span> <span style="color: #4eee94;">query</span>: <span style="color: #98f5ff;">String</span>,
+    <span style="color: #00bfff; font-weight: bold;">pub</span> <span style="color: #4eee94;">filename</span>: <span style="color: #98f5ff;">String</span>,
+}
+
+<span style="color: #00bfff; font-weight: bold;">impl</span> <span style="color: #98f5ff;">Config</span> {
+    <span style="color: #00bfff; font-weight: bold;">pub</span> <span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">new</span>(<span style="color: #4eee94;">args</span>: &amp;[<span style="color: #98f5ff;">String</span>]) -&gt; <span style="color: #98f5ff;">Result</span>&lt;<span style="color: #98f5ff;">Config</span>, &amp;'<span style="color: #00bfff; font-weight: bold;">static</span> <span style="color: #98f5ff;">str</span>&gt; {
+        <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
+    }
+}
+
+<span style="color: #00bfff; font-weight: bold;">pub</span> <span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">run</span>(<span style="color: #4eee94;">config</span>: <span style="color: #98f5ff;">Config</span>) -&gt; <span style="color: #98f5ff;">Result</span>&lt;(), <span style="color: #98f5ff;">Box</span>&lt;<span style="color: #00bfff; font-weight: bold;">dyn</span> <span style="color: #98f5ff;">Error</span>&gt;&gt; {
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
+}
+</pre>
+</div>
+<p>
+这里使用了公有的 <span class="underline">pub</span> 关键字：在 Config、其字段和其 new 方法，以及 run 函数上
+</p>
+
+<pre class="example">
+  现在有了一个拥有可以测试的公有 API 的库 crate 了，但是直到下一个示例修改完 src/main.rs 之后，代码还不能编译
+</pre>
+
+<p>
+需要在 src/main.rs 中将移动到 <span class="underline">src/lib.rs 的代码</span> 引入二进制 crate 的 <span class="underline">作用域</span> 中 ：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::env;
+<span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::process;
+
+<span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">minigrep</span>::<span style="color: #98f5ff;">Config</span>;
+
+<span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
+    <span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #98f5ff;">Err</span>(e) = <span style="color: #ffd700;">minigrep</span>::run(config) {
+        <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
+    }
+}
+</pre>
+</div>
+<ol class="org-ol">
+<li>为了将库 crate 引入二进制 crate，使用了 <span class="underline">use minigrep</span> 
+</li>
+<li><span class="underline">use minigrep::Config</span> 将 Config 类型引入作用域
+</li>
+<li>并使用 <span class="underline">crate 名称</span> 作为 <span class="underline">run 函数的前缀</span> 
+</li>
+</ol>
+
+<p>
+通过这些重构，所有功能应该能够联系在一起并运行了。运行 cargo run 来确保一切都正确的衔接在一起：
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-sh">$ cargo run abc poem.txt  
+    Finished dev [unoptimized + debuginfo] target(s) <span style="color: #00bfff; font-weight: bold;">in</span> 0.00s
+     Running <span style="color: #fa8072;">`target/debug/minigrep abc poem.txt`</span>
+Searching for abc
+In file poem.txt
+With text:
+I<span style="color: #deb887;">'m nobody! Who are you?</span>
+<span style="color: #deb887;">Are you nobody, too?</span>
+<span style="color: #deb887;">Then there'</span>s a pair of us - don<span style="color: #deb887;">'t tell!</span>
+<span style="color: #deb887;">They'</span>d banish us, you know.
+
+How dreary to be somebody!
+How public, like a frog
+To tell your name the livelong day
+To an admiring bog!
+</pre>
+</div>
+
+<pre class="example">
+  从现在开始几乎所有的工作都将在 src/lib.rs 中进行
+
+  利用这些新创建的模块的优势来进行一些在旧代码中难以展开的工作，这些工作在新代码中非常容易实现，那就是：编写测试！
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-4" class="outline-2">
+<h2 id="sec-4">采用测试驱动开发完善库的功能</h2>
+<div class="outline-text-2" id="text-4">
 <p>
 <a href="fp.html">Next：函数式范式</a>
 </p>
@@ -1185,7 +1300,6 @@ run 并不返回像 Config::new 那样需要 unwrap 的值，因为 run 在成�
 <p>
 <a href="rust.html">Home: 目录</a>
 </p>
-</div>
 </div>
 </div>
 </div>
