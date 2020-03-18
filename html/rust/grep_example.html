@@ -284,7 +284,14 @@ for the JavaScript code in this tag.
 </li>
 </ul>
 </li>
-<li><a href="#orgd4c41f5">处理环境变量</a></li>
+<li><a href="#orgd4c41f5">处理环境变量</a>
+<ul>
+<li><a href="#orgae1292e">编写一个大小写不敏感 search 函数的失败测试</a></li>
+<li><a href="#org9201e48">实现 search_case_insensitive 函数</a></li>
+<li><a href="#orgd6f17ee">使用新的 search_case_insensitive 函数</a></li>
+<li><a href="#org14e16e5">验证修改</a></li>
+</ul>
+</li>
 <li><a href="#org11327c0">将错误输出到标准错误上</a></li>
 </ul>
 </div>
@@ -1641,6 +1648,278 @@ How dreary to be somebody!
 
 <div id="outline-container-orgd4c41f5" class="outline-2">
 <h2 id="orgd4c41f5">处理环境变量</h2>
+<div class="outline-text-2" id="text-orgd4c41f5">
+<pre class="example">
+  这次将增加一个额外的功能来改进 minigrep：用户可以通过设置环境变量来设置搜索是否是大小写敏感的
+
+  当然，也可以将其设计为一个命令行参数并要求用户每次需要时都加上它
+
+  不过在这里我们将使用环境变量。这允许用户设置环境变量一次之后在整个终端会话中所有的搜索都将是大小写不敏感的
+</pre>
+</div>
+
+<div id="outline-container-orgae1292e" class="outline-3">
+<h3 id="orgae1292e">编写一个大小写不敏感 search 函数的失败测试</h3>
+<div class="outline-text-3" id="text-orgae1292e">
+<p>
+增加一个新函数 search_case_insensitive，并将会在设置了环境变量时调用它。这里将继续遵循 TDD 过程，其第一步是再次编写一个失败测试。将为新的大小写不敏感搜索函数新增一个测试函数，并将老的测试函数从 one_result 改名为 case_sensitive 来更清楚的表明这两个测试的区别，所示：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #7fffd4;">#[cfg(test)]</span>
+<span style="color: #00ffff;">mod</span> <span style="color: #7fffd4;">tests</span> {
+    <span style="color: #00ffff;">use</span> <span style="color: #00ffff;">super</span>::*;
+
+    <span style="color: #7fffd4;">#[test]</span>
+    <span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">case_sensitive</span>() {
+        <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">query</span> = <span style="color: #ffa07a;">"duct"</span>;
+        <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">contents</span> = <span style="color: #ffa07a;">"\</span>
+<span style="color: #ffa07a;">        Rust:</span>
+<span style="color: #ffa07a;">safe, fast, productive.</span>
+<span style="color: #ffa07a;">Pick three.</span>
+<span style="color: #ffa07a;">Duct tape."</span>;
+
+        <span style="color: #7fffd4;">assert_eq!</span>(
+            <span style="color: #7fffd4;">vec!</span>[<span style="color: #ffa07a;">"safe, fast, productive."</span>],
+            search(query, contents)
+        );
+    }
+
+    <span style="color: #7fffd4;">#[test]</span>
+    <span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">case_insensitive</span>() {
+        <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">query</span> = <span style="color: #ffa07a;">"rUsT"</span>;
+        <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">contents</span> = <span style="color: #ffa07a;">"\</span>
+<span style="color: #ffa07a;">        Rust:</span>
+<span style="color: #ffa07a;">safe, fast, productive.</span>
+<span style="color: #ffa07a;">Pick three.</span>
+<span style="color: #ffa07a;">Trust me."</span>;
+
+        <span style="color: #7fffd4;">assert_eq!</span>(
+            <span style="color: #7fffd4;">vec!</span>[<span style="color: #ffa07a;">"Rust:"</span>, <span style="color: #ffa07a;">"Trust me."</span>],
+            search_case_insensitive(query, contents)
+        );
+    }
+}
+</pre>
+</div>
+
+<pre class="example">
+  注意：这里也改变了老测试中 contents 的值
+
+  新增了一个含有文本 "Duct tape." 的行，它有一个大写的 D，这在大小写敏感搜索时不应该匹配 "duct"
+
+  修改这个测试以确保不会意外破坏已经实现的大小写敏感搜索功能；这个测试现在应该能通过并在处理大小写不敏感搜索时应该能一直通过
+</pre>
+<p>
+大小写不敏感搜索的新测试使用 "rUsT" 作为其查询字符串。将要增加的 search_case_insensitive 函数中，"rUsT" 查询应该包含带有一个大写 R 的 "Rust:" 还有 "Trust me." 这两行，即便他们与查询的大小写都不同
+</p>
+
+<pre class="example">
+  这个测试现在会编译失败因为还没有定义 search_case_insensitive 函数
+
+  请随意增加一个总是返回空 vector 的骨架实现
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org9201e48" class="outline-3">
+<h3 id="org9201e48">实现 search_case_insensitive 函数</h3>
+<div class="outline-text-3" id="text-org9201e48">
+<p>
+search_case_insensitive 函数，将与 search 函数基本相同。唯一的区别是它会将 query 变量和每一 line 都变为小写，这样不管输入参数是大写还是小写，在检查该行是否包含查询字符串时都会是小写
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">pub</span> <span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">search_case_insensitive</span>&lt;'<span style="color: #eedd82;">a</span>&gt;(<span style="color: #eedd82;">query</span>: &amp;<span style="color: #98fb98;">str</span>, <span style="color: #eedd82;">contents</span>: &amp;'<span style="color: #eedd82;">a</span> <span style="color: #98fb98;">str</span>) -&gt; <span style="color: #98fb98;">Vec</span>&lt;&amp;'<span style="color: #eedd82;">a</span> <span style="color: #98fb98;">str</span>&gt; {
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">query</span> = query.to_lowercase();
+    <span style="color: #00ffff;">let</span> <span style="color: #00ffff;">mut</span> <span style="color: #eedd82;">results</span> = <span style="color: #98fb98;">Vec</span>::new();
+
+    <span style="color: #00ffff;">for</span> <span style="color: #eedd82;">line</span> <span style="color: #00ffff;">in</span> contents.lines() {
+        <span style="color: #00ffff;">if</span> line.to_lowercase().contains(&amp;query) {
+            results.push(line);
+        }
+    }
+
+    results
+}
+</pre>
+</div>
+
+<pre class="example">
+  首先将 query 字符串转换为小写，并将其覆盖到同名的变量中
+
+  对查询字符串调用 to_lowercase 是必需的，这样不管用户的查询是 "rust"、"RUST"、"Rust" 或者 "rUsT"，都将其当作 "rust" 处理并对大小写不敏感
+</pre>
+<p>
+注意： query 现在是一个 <span class="underline">String</span> 而不是 <span class="underline">字符串 slice</span> ，因为调用 to_lowercase 是在 <b>创建</b> 新数据，而不是 <span class="underline">引用</span> 现有数据：
+</p>
+<ul class="org-ul">
+<li>如果查询字符串是 "rUsT"，这个字符串 slice 并不包含可供使用的小写的 u 或 t，所以必需分配一个包含 "rust" 的新 String</li>
+<li>所以将 query 作为一个参数传递给 contains 方法时，需要增加一个 <span class="underline">&amp;</span> 因为 contains 的签名被定义为获取一个字符串 slice。</li>
+</ul>
+
+<pre class="example">
+  接下来在检查每个 line 是否包含 search 之前增加了一个 to_lowercase 调用将他们都变为小写
+
+  现在将 line 和 query 都转换成了小写，这样就可以不管查询的大小写进行匹配了
+</pre>
+
+<p>
+看看这个实现能否通过测试：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">running 2 tests
+<span style="color: #b0c4de;">test</span> tests::case_insensitive ... ok
+<span style="color: #b0c4de;">test</span> tests::case_sensitive ... ok
+
+<span style="color: #b0c4de;">test</span> result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgd6f17ee" class="outline-3">
+<h3 id="orgd6f17ee">使用新的 search_case_insensitive 函数</h3>
+<div class="outline-text-3" id="text-orgd6f17ee">
+<p>
+首先在 Config 结构体中增加一个配置项来切换大小写敏感和大小写不敏感搜索：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">pub</span> <span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">Config</span> {
+    <span style="color: #00ffff;">pub</span> <span style="color: #eedd82;">query</span>: <span style="color: #98fb98;">String</span>,
+    <span style="color: #00ffff;">pub</span> <span style="color: #eedd82;">filename</span>: <span style="color: #98fb98;">String</span>,
+    <span style="color: #00ffff;">pub</span> <span style="color: #eedd82;">case_sensitive</span>: <span style="color: #98fb98;">bool</span>,
+}
+</pre>
+</div>
+
+<p>
+这里增加了 case_sensitive 字符来存放一个布尔值
+</p>
+<pre class="example">
+现在增加这些字段会导致编译错误，因为还没有在任何地方初始化这些字段
+</pre>
+
+<p>
+接着需要 run 函数检查 case_sensitive 字段的值并使用它来决定是否调用 search 函数或 search_case_insensitive 函数：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">pub</span> <span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">run</span>(<span style="color: #eedd82;">config</span>: <span style="color: #98fb98;">Config</span>) -&gt; <span style="color: #98fb98;">Result</span>&lt;(), <span style="color: #98fb98;">Box</span>&lt;<span style="color: #00ffff;">dyn</span> <span style="color: #98fb98;">Error</span>&gt;&gt; {
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">contents</span> = <span style="color: #7fffd4;">fs</span>::read_to_string(config.filename)<span style="color: #b0c4de; font-weight: bold;">?</span>;
+
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">results</span> = <span style="color: #00ffff;">if</span> config.case_sensitive {
+        search(&amp;config.query, &amp;contents)
+    } <span style="color: #00ffff;">else</span> {
+        search_case_insensitive(&amp;config.query, &amp;contents)
+    };
+
+    <span style="color: #00ffff;">for</span> <span style="color: #eedd82;">line</span> <span style="color: #00ffff;">in</span> results {
+        <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"</span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">"</span>, line);
+    }
+
+    <span style="color: #98fb98;">Ok</span>(())
+}
+</pre>
+</div>
+
+<p>
+现在需要实际检查环境变量。处理环境变量的函数位于标准库的 <span class="underline">env 模块</span> 中，所以需要在 src/lib.rs 的开头增加一个 <span class="underline">use std::env;</span> 行将这个模块引入作用域中。接着在 Config::new 中使用 env 模块的 <span class="underline">var 方法</span> 来检查一个叫做 CASE_INSENSITIVE 的环境变量，如下所示：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::env;
+
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">--snip--</span>
+
+<span style="color: #00ffff;">impl</span> <span style="color: #98fb98;">Config</span> {
+    <span style="color: #00ffff;">pub</span> <span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">new</span>(<span style="color: #eedd82;">args</span>: &amp;[<span style="color: #98fb98;">String</span>]) -&gt; <span style="color: #98fb98;">Result</span>&lt;<span style="color: #98fb98;">Config</span>, &amp;'<span style="color: #00ffff;">static</span> <span style="color: #98fb98;">str</span>&gt; {
+        <span style="color: #00ffff;">if</span> args.len() &lt; 3 {
+            <span style="color: #00ffff;">return</span> <span style="color: #98fb98;">Err</span>(<span style="color: #ffa07a;">"not enough arguments"</span>);
+        }
+
+        <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">query</span> = args[1].clone();
+        <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">filename</span> = args[2].clone();
+
+        <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">case_sensitive</span> = <span style="color: #7fffd4;">env</span>::var(<span style="color: #ffa07a;">"CASE_INSENSITIVE"</span>).is_err();
+
+        <span style="color: #98fb98;">Ok</span>(<span style="color: #98fb98;">Config</span> { query, filename, case_sensitive })
+    }
+}
+</pre>
+</div>
+
+<pre class="example">
+  这里创建了一个新变量 case_sensitive
+
+  为了设置它的值，需要调用 env::var 函数并传递需要寻找的环境变量名称 CASE_INSENSITIVE
+</pre>
+<p>
+env::var 函数会返回一个 Result：
+</p>
+<ul class="org-ul">
+<li>在环境变量被设置时返回包含其值的 Ok 成员</li>
+<li>在环境变量未被设置时返回 Err 成员</li>
+</ul>
+
+<p>
+这里使用 Result 的 is_err 方法来 <b>检查</b> 其是否是一个 <span class="underline">error</span> ，也就是环境变量未被设置的情况
+</p>
+<pre class="example">
+  如果CASE_INSENSITIVE 环境变量被设置为任何值，is_err 会返回 false 并将进行大小写不敏感搜索
+
+  并不关心环境变量所设置的值，只关心它是否被设置了，所以检查 is_err 而不是 unwrap、expect 或任何已经见过的 Result 的方法
+</pre>
+
+<p>
+最后将变量 case_sensitive 的值传递给 Config 实例，这样 run 函数可以读取其值并决定是否调用 search 还是 search_case_insensitive
+</p>
+</div>
+</div>
+<div id="outline-container-org14e16e5" class="outline-3">
+<h3 id="org14e16e5">验证修改</h3>
+<div class="outline-text-3" id="text-org14e16e5">
+<p>
+首先不设置环境变量并使用查询 to 运行程序，这应该会匹配任何全小写的单词 “to” 的行：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ cargo run to poem.txt
+   Compiling minigrep v0.1.0 (file:///projects/minigrep)
+    Finished dev [unoptimized + debuginfo] target(s) <span style="color: #00ffff;">in</span> 0.0 secs
+     Running <span style="color: #fa8072;">`target/debug/minigrep to poem.txt`</span>
+Are you nobody, too?
+How dreary to be somebody!
+</pre>
+</div>
+
+<p>
+看起来程序仍然能够工作！现在将 CASE_INSENSITIVE 设置为 1 并仍使用相同的查询 to：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ <span style="color: #eedd82;">CASE_INSENSITIVE</span>=1 cargo run to poem.txt
+    Finished dev [unoptimized + debuginfo] target(s) <span style="color: #00ffff;">in</span> 0.0 secs
+     Running <span style="color: #fa8072;">`target/debug/minigrep to poem.txt`</span>
+Are you nobody, too?
+How dreary to be somebody!
+To tell your name the livelong day
+To an admiring bog!
+</pre>
+</div>
+
+<p>
+好极了，也得到了包含 “To” 的行！
+</p>
+
+<pre class="example">
+  一些程序允许对相同配置同时使用参数 和 环境变量
+
+  在这种情况下，程序来决定参数和环境变量的优先级
+</pre>
+</div>
+</div>
 </div>
 
 <div id="outline-container-org11327c0" class="outline-2">
