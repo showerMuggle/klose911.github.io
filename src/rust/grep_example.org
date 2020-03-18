@@ -1007,18 +1007,18 @@
     #+END_EXAMPLE
 
 * 处理环境变量
-#+BEGIN_EXAMPLE
-  这次将增加一个额外的功能来改进 minigrep：用户可以通过设置环境变量来设置搜索是否是大小写敏感的
+  #+BEGIN_EXAMPLE
+    这次将增加一个额外的功能来改进 minigrep：用户可以通过设置环境变量来设置搜索是否是大小写敏感的
 
-  当然，也可以将其设计为一个命令行参数并要求用户每次需要时都加上它
+    当然，也可以将其设计为一个命令行参数并要求用户每次需要时都加上它
 
-  不过在这里我们将使用环境变量。这允许用户设置环境变量一次之后在整个终端会话中所有的搜索都将是大小写不敏感的
-#+END_EXAMPLE
+    不过在这里我们将使用环境变量。这允许用户设置环境变量一次之后在整个终端会话中所有的搜索都将是大小写不敏感的
+  #+END_EXAMPLE
 
 ** 编写一个大小写不敏感 search 函数的失败测试
-增加一个新函数 search_case_insensitive，并将会在设置了环境变量时调用它。这里将继续遵循 TDD 过程，其第一步是再次编写一个失败测试。将为新的大小写不敏感搜索函数新增一个测试函数，并将老的测试函数从 one_result 改名为 case_sensitive 来更清楚的表明这两个测试的区别，所示：
+   增加一个新函数 search_case_insensitive，并将会在设置了环境变量时调用它。这里将继续遵循 TDD 过程，其第一步是再次编写一个失败测试。将为新的大小写不敏感搜索函数新增一个测试函数，并将老的测试函数从 one_result 改名为 case_sensitive 来更清楚的表明这两个测试的区别，所示：
 
-#+BEGIN_SRC rust 
+   #+BEGIN_SRC rust 
   #[cfg(test)]
   mod tests {
       use super::*;
@@ -1053,27 +1053,27 @@
 	  );
       }
   }
-#+END_SRC
+   #+END_SRC
 
-#+BEGIN_EXAMPLE
-  注意：这里也改变了老测试中 contents 的值
+   #+BEGIN_EXAMPLE
+     注意：这里也改变了老测试中 contents 的值
 
-  新增了一个含有文本 "Duct tape." 的行，它有一个大写的 D，这在大小写敏感搜索时不应该匹配 "duct"
+     新增了一个含有文本 "Duct tape." 的行，它有一个大写的 D，这在大小写敏感搜索时不应该匹配 "duct"
 
-  修改这个测试以确保不会意外破坏已经实现的大小写敏感搜索功能；这个测试现在应该能通过并在处理大小写不敏感搜索时应该能一直通过
-#+END_EXAMPLE
-大小写不敏感搜索的新测试使用 "rUsT" 作为其查询字符串。将要增加的 search_case_insensitive 函数中，"rUsT" 查询应该包含带有一个大写 R 的 "Rust:" 还有 "Trust me." 这两行，即便他们与查询的大小写都不同
+     修改这个测试以确保不会意外破坏已经实现的大小写敏感搜索功能；这个测试现在应该能通过并在处理大小写不敏感搜索时应该能一直通过
+   #+END_EXAMPLE
+   大小写不敏感搜索的新测试使用 "rUsT" 作为其查询字符串。将要增加的 search_case_insensitive 函数中，"rUsT" 查询应该包含带有一个大写 R 的 "Rust:" 还有 "Trust me." 这两行，即便他们与查询的大小写都不同
 
-#+BEGIN_EXAMPLE
-  这个测试现在会编译失败因为还没有定义 search_case_insensitive 函数
+   #+BEGIN_EXAMPLE
+     这个测试现在会编译失败因为还没有定义 search_case_insensitive 函数
 
-  请随意增加一个总是返回空 vector 的骨架实现
-#+END_EXAMPLE
+     请随意增加一个总是返回空 vector 的骨架实现
+   #+END_EXAMPLE
 
 ** 实现 search_case_insensitive 函数
-search_case_insensitive 函数，将与 search 函数基本相同。唯一的区别是它会将 query 变量和每一 line 都变为小写，这样不管输入参数是大写还是小写，在检查该行是否包含查询字符串时都会是小写
+   search_case_insensitive 函数，将与 search 函数基本相同。唯一的区别是它会将 query 变量和每一 line 都变为小写，这样不管输入参数是大写还是小写，在检查该行是否包含查询字符串时都会是小写
 
-#+BEGIN_SRC rust 
+   #+BEGIN_SRC rust 
   pub fn search_case_insensitive<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
       let query = query.to_lowercase();
       let mut results = Vec::new();
@@ -1086,51 +1086,51 @@ search_case_insensitive 函数，将与 search 函数基本相同。唯一的区
 
       results
   }
-#+END_SRC
+   #+END_SRC
 
-#+BEGIN_EXAMPLE
-  首先将 query 字符串转换为小写，并将其覆盖到同名的变量中
+   #+BEGIN_EXAMPLE
+     首先将 query 字符串转换为小写，并将其覆盖到同名的变量中
 
-  对查询字符串调用 to_lowercase 是必需的，这样不管用户的查询是 "rust"、"RUST"、"Rust" 或者 "rUsT"，都将其当作 "rust" 处理并对大小写不敏感
-#+END_EXAMPLE
-注意： query 现在是一个 _String_ 而不是 _字符串 slice_ ，因为调用 to_lowercase 是在 *创建* 新数据，而不是 _引用_ 现有数据：
-+ 如果查询字符串是 "rUsT"，这个字符串 slice 并不包含可供使用的小写的 u 或 t，所以必需分配一个包含 "rust" 的新 String
-+ 所以将 query 作为一个参数传递给 contains 方法时，需要增加一个 _&_ 因为 contains 的签名被定义为获取一个字符串 slice。
+     对查询字符串调用 to_lowercase 是必需的，这样不管用户的查询是 "rust"、"RUST"、"Rust" 或者 "rUsT"，都将其当作 "rust" 处理并对大小写不敏感
+   #+END_EXAMPLE
+   注意： query 现在是一个 _String_ 而不是 _字符串 slice_ ，因为调用 to_lowercase 是在 *创建* 新数据，而不是 _引用_ 现有数据：
+   + 如果查询字符串是 "rUsT"，这个字符串 slice 并不包含可供使用的小写的 u 或 t，所以必需分配一个包含 "rust" 的新 String
+   + 所以将 query 作为一个参数传递给 contains 方法时，需要增加一个 _&_ 因为 contains 的签名被定义为获取一个字符串 slice。
 
-#+BEGIN_EXAMPLE
-  接下来在检查每个 line 是否包含 search 之前增加了一个 to_lowercase 调用将他们都变为小写
+   #+BEGIN_EXAMPLE
+     接下来在检查每个 line 是否包含 search 之前增加了一个 to_lowercase 调用将他们都变为小写
 
-  现在将 line 和 query 都转换成了小写，这样就可以不管查询的大小写进行匹配了
-#+END_EXAMPLE
+     现在将 line 和 query 都转换成了小写，这样就可以不管查询的大小写进行匹配了
+   #+END_EXAMPLE
 
-看看这个实现能否通过测试：
-#+BEGIN_SRC sh 
+   看看这个实现能否通过测试：
+   #+BEGIN_SRC sh 
   running 2 tests
   test tests::case_insensitive ... ok
   test tests::case_sensitive ... ok
 
   test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
-#+END_SRC
+   #+END_SRC
 
 ** 使用新的 search_case_insensitive 函数
-首先在 Config 结构体中增加一个配置项来切换大小写敏感和大小写不敏感搜索：
+   首先在 Config 结构体中增加一个配置项来切换大小写敏感和大小写不敏感搜索：
 
-#+BEGIN_SRC rust 
+   #+BEGIN_SRC rust 
   pub struct Config {
       pub query: String,
       pub filename: String,
       pub case_sensitive: bool,
   }
-#+END_SRC
+   #+END_SRC
 
-这里增加了 case_sensitive 字符来存放一个布尔值
-#+BEGIN_EXAMPLE
-现在增加这些字段会导致编译错误，因为还没有在任何地方初始化这些字段
-#+END_EXAMPLE
+   这里增加了 case_sensitive 字符来存放一个布尔值
+   #+BEGIN_EXAMPLE
+   现在增加这些字段会导致编译错误，因为还没有在任何地方初始化这些字段
+   #+END_EXAMPLE
 
-接着需要 run 函数检查 case_sensitive 字段的值并使用它来决定是否调用 search 函数或 search_case_insensitive 函数：
+   接着需要 run 函数检查 case_sensitive 字段的值并使用它来决定是否调用 search 函数或 search_case_insensitive 函数：
 
-#+BEGIN_SRC rust 
+   #+BEGIN_SRC rust 
   pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
       let contents = fs::read_to_string(config.filename)?;
 
@@ -1146,11 +1146,11 @@ search_case_insensitive 函数，将与 search 函数基本相同。唯一的区
 
       Ok(())
   }
-#+END_SRC
+   #+END_SRC
 
-现在需要实际检查环境变量。处理环境变量的函数位于标准库的 _env 模块_ 中，所以需要在 src/lib.rs 的开头增加一个 _use std::env;_ 行将这个模块引入作用域中。接着在 Config::new 中使用 env 模块的 _var 方法_ 来检查一个叫做 CASE_INSENSITIVE 的环境变量，如下所示：
+   现在需要实际检查环境变量。处理环境变量的函数位于标准库的 _env 模块_ 中，所以需要在 src/lib.rs 的开头增加一个 _use std::env;_ 行将这个模块引入作用域中。接着在 Config::new 中使用 env 模块的 _var 方法_ 来检查一个叫做 CASE_INSENSITIVE 的环境变量，如下所示：
 
-#+BEGIN_SRC rust 
+   #+BEGIN_SRC rust 
   use std::env;
 
   // --snip--
@@ -1169,40 +1169,40 @@ search_case_insensitive 函数，将与 search 函数基本相同。唯一的区
 	  Ok(Config { query, filename, case_sensitive })
       }
   }
-#+END_SRC
+   #+END_SRC
 
-#+BEGIN_EXAMPLE
-  这里创建了一个新变量 case_sensitive
+   #+BEGIN_EXAMPLE
+     这里创建了一个新变量 case_sensitive
 
-  为了设置它的值，需要调用 env::var 函数并传递需要寻找的环境变量名称 CASE_INSENSITIVE
-#+END_EXAMPLE
-env::var 函数会返回一个 Result：
-+ 在环境变量被设置时返回包含其值的 Ok 成员
-+ 在环境变量未被设置时返回 Err 成员
+     为了设置它的值，需要调用 env::var 函数并传递需要寻找的环境变量名称 CASE_INSENSITIVE
+   #+END_EXAMPLE
+   env::var 函数会返回一个 Result：
+   + 在环境变量被设置时返回包含其值的 Ok 成员
+   + 在环境变量未被设置时返回 Err 成员
 
-这里使用 Result 的 is_err 方法来 *检查* 其是否是一个 _error_ ，也就是环境变量未被设置的情况
-#+BEGIN_EXAMPLE
-  如果CASE_INSENSITIVE 环境变量被设置为任何值，is_err 会返回 false 并将进行大小写不敏感搜索
+   这里使用 Result 的 is_err 方法来 *检查* 其是否是一个 _error_ ，也就是环境变量未被设置的情况
+   #+BEGIN_EXAMPLE
+     如果CASE_INSENSITIVE 环境变量被设置为任何值，is_err 会返回 false 并将进行大小写不敏感搜索
 
-  并不关心环境变量所设置的值，只关心它是否被设置了，所以检查 is_err 而不是 unwrap、expect 或任何已经见过的 Result 的方法
-#+END_EXAMPLE
+     并不关心环境变量所设置的值，只关心它是否被设置了，所以检查 is_err 而不是 unwrap、expect 或任何已经见过的 Result 的方法
+   #+END_EXAMPLE
 
-最后将变量 case_sensitive 的值传递给 Config 实例，这样 run 函数可以读取其值并决定是否调用 search 还是 search_case_insensitive
+   最后将变量 case_sensitive 的值传递给 Config 实例，这样 run 函数可以读取其值并决定是否调用 search 还是 search_case_insensitive
 ** 验证修改
-首先不设置环境变量并使用查询 to 运行程序，这应该会匹配任何全小写的单词 “to” 的行：
+   首先不设置环境变量并使用查询 to 运行程序，这应该会匹配任何全小写的单词 “to” 的行：
 
-#+BEGIN_SRC sh 
+   #+BEGIN_SRC sh 
   $ cargo run to poem.txt
      Compiling minigrep v0.1.0 (file:///projects/minigrep)
       Finished dev [unoptimized + debuginfo] target(s) in 0.0 secs
        Running `target/debug/minigrep to poem.txt`
   Are you nobody, too?
   How dreary to be somebody!
-#+END_SRC
+   #+END_SRC
 
-看起来程序仍然能够工作！现在将 CASE_INSENSITIVE 设置为 1 并仍使用相同的查询 to：
+   看起来程序仍然能够工作！现在将 CASE_INSENSITIVE 设置为 1 并仍使用相同的查询 to：
 
-#+BEGIN_SRC sh 
+   #+BEGIN_SRC sh 
   $ CASE_INSENSITIVE=1 cargo run to poem.txt
       Finished dev [unoptimized + debuginfo] target(s) in 0.0 secs
        Running `target/debug/minigrep to poem.txt`
@@ -1210,17 +1210,107 @@ env::var 函数会返回一个 Result：
   How dreary to be somebody!
   To tell your name the livelong day
   To an admiring bog!
-#+END_SRC
+   #+END_SRC
 
-好极了，也得到了包含 “To” 的行！
+   好极了，也得到了包含 “To” 的行！
 
-#+BEGIN_EXAMPLE
-  一些程序允许对相同配置同时使用参数 和 环境变量
+   #+BEGIN_EXAMPLE
+     一些程序允许对相同配置同时使用参数 和 环境变量
 
-  在这种情况下，程序来决定参数和环境变量的优先级
-#+END_EXAMPLE
+     在这种情况下，程序来决定参数和环境变量的优先级
+   #+END_EXAMPLE
 
 * 将错误输出到标准错误上
+  #+BEGIN_EXAMPLE
+    目前为止，将所有的输出都 println! 到了终端
+
+    大部分终端都提供了两种输出：标准输出用于一般输出，标准错误则用于错误信息
+
+    这种区别允许用户选择将程序正常输出定向到一个文件中并仍将错误信息打印到屏幕上
+
+    但是 println! 函数只能够打印到标准输出，所以必需使用其他方法来打印到标准错误
+  #+END_EXAMPLE
+
+** 检查错误应该写入何处
+   首先，观察一下目前 minigrep 打印的所有内容是如何被写入标准输出的，包括那些应该被写入标准错误的错误信息。可以通过将标准输出流重定向到一个文件同时有意产生一个错误来做到这一点。因为没有重定向标准错误流，所以任何发送到标准错误的内容将会继续显示在屏幕上
+
+   #+BEGIN_EXAMPLE
+     命令行程序被期望将错误信息发送到标准错误流，这样即便选择将标准输出流重定向到文件中时仍然能看到错误信息
+
+     目前我们的程序并不符合期望；相反将看到它将错误信息输出保存到了文件中
+   #+END_EXAMPLE
+
+   通过 > 和文件名 output.txt 来运行程序，期望重定向标准输出流到该文件中。在这里，没有传递任何参数，所以会产生一个错误：
+
+   #+BEGIN_SRC sh 
+  $ cargo run > output.txt
+   #+END_SRC
+
+   并没有看到期望的错误信息打印到屏幕上，所以这意味着它一定被写入了文件中。如下是 output.txt 所包含的：
+   #+BEGIN_SRC sh 
+  Problem parsing arguments: not enough arguments
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     错误信息被打印到了标准输出中
+
+     像这样的错误信息被打印到标准错误中将会有用的多，并且只将成功运行的信息写入文件
+   #+END_EXAMPLE
+   接下来将对程序进行修改从而以这种方式进行输出
+
+** 将错误打印到标准错误
+   得益于本章早些时候的重构，所有打印错误信息的代码都位于 main 一个函数中。标准库提供了 _eprintln!_ 宏来打印到标准错误流，所以将两个调用 println! 打印错误信息的位置替换为 eprintln!：
+
+   #+BEGIN_SRC rust 
+  fn main() {
+      let args: Vec<String> = env::args().collect();
+
+      let config = Config::new(&args).unwrap_or_else(|err| {
+	  eprintln!("Problem parsing arguments: {}", err);
+	  process::exit(1);
+      });
+
+      if let Err(e) = minigrep::run(config) {
+	  eprintln!("Application error: {}", e);
+
+	  process::exit(1);
+      }
+  }
+   #+END_SRC 
+
+   再次尝试用同样的方式运行程序，不使用任何参数并通过 > 重定向标准输出：
+
+   #+BEGIN_SRC sh 
+  $ cargo run > output.txt
+  Problem parsing arguments: not enough arguments
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     现在看到了屏幕上的错误信息，同时 output.txt 里什么也没有，这正是命令行程序所期望的行为
+   #+END_EXAMPLE
+
+   如果使用不会造成错误的参数再次运行程序，不过仍然将标准输出重定向到一个文件，像这样：
+   #+BEGIN_SRC sh 
+  $ cargo run to poem.txt > output.txt
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     并不会在终端看到任何输出，同时 output.txt 将会包含其结果：
+
+     Are you nobody, too?
+     How dreary to be somebody!
+   #+END_EXAMPLE
+
+* 总结
+  #+BEGIN_EXAMPLE
+    这个例子回顾了目前为止的一些主要知识并涉及了如何在 Rust 环境中进行常规的 I/O 操作
+
+    通过使用命令行参数、文件、环境变量和打印错误的 eprintln! 宏，现在已经准备好编写命令行程序了
+
+    同时代码将会是组织良好的，并能有效的将数据存储到合适的数据结构中、更好的处理错误，并且还是经过良好测试的
+  #+END_EXAMPLE
+
+  接下来，让探索一些 Rust 中受函数式编程语言影响的功能： _闭包_ 和 _迭代器_ 
 
   [[file:fp.org][Next：函数式范式]]
   
