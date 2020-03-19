@@ -1,5 +1,309 @@
-#+TITLE: 函数式范式
+#+TITLE: 闭包和迭代器
 #+HTML_HEAD: <link rel="stylesheet" type="text/css" href="css/main.css" />
 #+HTML_LINK_UP: grep_example.html   
 #+HTML_LINK_HOME: rust.html
 #+OPTIONS: num:nil timestamp:nil ^:nil
+
+Rust 的设计灵感来源于很多现存的语言和技术。其中一个显著的影响就是 _函数式编程_ 。通常包含：
++ 将函数作为 _参数值_ 或其他函数的 _返回值_
++ 将函数赋值给 _变量_ 以供之后执行
++ ......
+
+#+BEGIN_EXAMPLE
+本章不会讨论函数式编程是或不是什么的问题，而是展示 Rust 的一些在功能上与其他被认为是函数式语言类似的特性
+#+END_EXAMPLE
+更具体的，将要涉及：
++ _闭包_ ：一个可以储存在变量里的类似函数的结构
++ _迭代器_ ：一种处理元素序列的方式
++ 如何使用这些功能来改进前面的minigrep项目
++ 这两个功能的性能
+
+#+BEGIN_EXAMPLE
+  还有其它受函数式风格影响的 Rust 功能，比如模式匹配和枚举，这些已经在其他章节中讲到过了
+
+  掌握闭包和迭代器则是编写符合语言风格的高性能 Rust 代码的重要一环，所以将专门用一整章来讲解他们
+#+END_EXAMPLE
+* 闭包：可以捕获环境的匿名函数
+Rust 的 _闭包_ 是可以 *保存* 进 _变量_ 或作为 _参数传递_ 给其他函数的 *匿名函数* ：
++ 可以在一个地方 *创建* 闭包，然后在 _不同的上下文_ 中 *执行* _闭包运算_ 
++ 不同于函数，闭包允许 *捕获* _调用者作用域_ 中的值
+
+接下来将展示闭包的这些功能如何复用代码和自定义行为
+** 使用闭包创建行为的抽象
+#+BEGIN_EXAMPLE
+  考虑一下这个假想的情况：在一个通过 app 生成自定义健身计划的初创企业工作，其后端使用 Rust 编写
+
+  生成健身计划的算法需要考虑很多不同的因素，比如用户的年龄、身体质量指数、用户喜好、最近的健身活动和用户指定的强度系数
+
+  本例中实际的算法并不重要，重要的是这个计算只花费几秒钟。但希望在需要时调用算法，并且只希望调用一次，这样就不会让用户等得太久
+#+END_EXAMPLE
+
+这里将通过调用 simulated_expensive_calculation 函数来模拟调用假象的算法，它会打印出 calculating slowly...，等待两秒，并接着返回传递给它的数字：
+
+#+BEGIN_SRC rust 
+  use std::thread;
+  use std::time::Duration;
+
+  fn simulated_expensive_calculation(intensity: u32) -> u32 {
+      println!("calculating slowly...");
+      thread::sleep(Duration::from_secs(2));
+      intensity
+  }
+#+END_SRC
+
+接下来，main 函数中将会包含本例的健身 app 中的重要部分。这代表当用户请求健身计划时 app 会调用的代码。因为与 app 前端的交互与闭包的使用并不相关，所以将硬编码代表程序输入的值并打印输出。所需的输入有这些：
++ 一个来自用户的 intensity 数字，请求健身计划时指定，它代表用户喜好低强度还是高强度健身
++ 一个随机数，其会在健身计划中生成变化 
+
+程序的输出将会是建议的锻炼计划。下面展示了将要使用的 main 函数：
+
+#+BEGIN_SRC rust 
+  fn main() {
+      let simulated_user_specified_value = 10;
+      let simulated_random_number = 7;
+
+      generate_workout(
+	  simulated_user_specified_value,
+	  simulated_random_number
+      );
+  }
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  出于简单考虑这里硬编码了 simulated_user_specified_value 变量的值为 10 和 simulated_random_number 变量的值为 7
+
+  一个实际的程序会从 app 前端获取强度系数并使用 rand crate 来生成随机数，main 函数使用模拟的输入值调用 generate_workout 函数
+#+END_EXAMPLE
+
+现在有了执行上下文，开始编写算法。下面的 generate_workout 函数包含最关心的 app 业务逻辑。本例中余下的代码修改都将在这个函数中进行：
+
+#+BEGIN_SRC rust 
+  fn generate_workout(intensity: u32, random_number: u32) {
+      if intensity < 25 {
+	  println!(
+	      "Today, do {} pushups!",
+	      simulated_expensive_calculation(intensity)
+	  );
+	  println!(
+	      "Next, do {} situps!",
+	      simulated_expensive_calculation(intensity)
+	  );
+      } else {
+	  if random_number == 3 {
+	      println!("Take a break today! Remember to stay hydrated!");
+	  } else {
+	      println!(
+		  "Today, run for {} minutes!",
+		  simulated_expensive_calculation(intensity)
+	      );
+	  }
+      }
+  }
+#+END_SRC
+
+generate_workout 函数的期望行为是首先检查用户需要低强度（由小于 25 的系数表示）锻炼还是高强度（25 或以上）锻炼：
++ 低强度锻炼计划会根据由 simulated_expensive_calculation 函数所模拟的复杂算法建议一定数量的俯卧撑和仰卧起坐
++ 如果用户需要高强度锻炼，这里有一些额外的逻辑：
+  + 如果 app 生成的随机数刚好是 3，app 相反会建议用户稍做休息并补充水分
+  + 如果不是，则用户会从复杂算法中得到数分钟跑步的高强度锻炼计划
+
+这里有多处调用了慢计算函数 simulated_expensive_calculation ：
++ 第一个 if 块调用了 simulated_expensive_calculation 两次，else 中的 if 没有调用它
++ 而第二个 else 中的代码调用了它一次
+
+#+BEGIN_EXAMPLE
+  现在这份代码能够应对需求了，但数据科学部门的同学告知将来会对调用 simulated_expensive_calculation 的方式做出一些改变
+
+  为了在要做这些改动的时候简化更新步骤，将重构代码来让它只调用 simulated_expensive_calculation 一次
+
+  同时还希望去掉目前多余的连续两次函数调用，并不希望在计算过程中增加任何其他此函数的调用
+
+  也就是说，不希望在完全无需其结果的情况调用函数，不过仍然希望只调用函数一次
+#+END_EXAMPLE
+*** 使用函数重构
+有多种方法可以重构此程序。首先尝试的是将重复的 _simulated_expensive_calculation 函数调用_ *提取* 到一个 _变量_ 中： 
+
+#+BEGIN_SRC rust 
+  fn generate_workout(intensity: u32, random_number: u32) {
+      let expensive_result =
+	  simulated_expensive_calculation(intensity);
+
+      if intensity < 25 {
+	  println!(
+	      "Today, do {} pushups!",
+	      expensive_result
+	  );
+	  println!(
+	      "Next, do {} situps!",
+	      expensive_result
+	  );
+      } else {
+	  if random_number == 3 {
+	      println!("Take a break today! Remember to stay hydrated!");
+	  } else {
+	      println!(
+		  "Today, run for {} minutes!",
+		  expensive_result
+	      );
+	  }
+      }
+  }
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  这个修改统一了 simulated_expensive_calculation 调用并解决了第一个 if 块中不必要的两次调用函数的问题
+
+  不幸的是，现在所有的情况下都需要调用函数并等待结果，包括那个完全不需要这一结果的内部 if 块
+#+END_EXAMPLE
+
+希望能够在程序的一个位置指定某些代码，并只在程序的某处 _实际需要结果_ 的时候 *执行* 这些 _代码_ 。这正是闭包的用武之地！
+*** 重构使用闭包储存代码
+不同于总是在 if 块之前调用 simulated_expensive_calculation 函数并储存其结果，可以定义一个闭包并将其储存在变量中，如下所示。实际上可以选择将整个 simulated_expensive_calculation 函数体移动到这里引入的闭包中：
+
+#+BEGIN_SRC rust 
+  let expensive_closure = |num| {
+      println!("calculating slowly...");
+      thread::sleep(Duration::from_secs(2));
+      num
+  };
+#+END_SRC
+
+闭包定义是 expensive_closure 赋值的 = 之后的部分：
++ 闭包的定义以一对竖线 _|_ 开始
++ 在竖线中指定闭包的 *参数* 
+#+BEGIN_EXAMPLE
+  之所以选择这个语法是因为它与 Smalltalk 和 Ruby 的闭包定义类似
+
+  这个闭包有一个参数 num；如果有多于一个参数，可以使用逗号分隔，比如 |param1, param2|
+#+END_EXAMPLE
++ 参数之后是存放 *闭包体* 的 _大括号_ ，如果闭包体只有一行则大括号是可以省略的
++ 闭包体的最后一行没有分号（正如函数体一样），所以闭包体最后一行的 _num_ 作为调用闭包时的 _返回值_  
++ 大括号之后闭包的结尾，需要用于 _let 语句的分号_ 
+
+#+BEGIN_EXAMPLE
+  注意：这个 let 语句意味着 expensive_closure 包含一个匿名函数的定义，而不是调用匿名函数的 返回值
+
+  回忆一下使用闭包的原因是需要在一个位置定义代码，储存代码，并在之后的位置实际调用它
+
+  所以这里期望调用的代码现在储存在 expensive_closure 变量中
+#+END_EXAMPLE
+
+定义了闭包之后，可以改变 if 块中的代码来调用闭包以执行代码并获取结果值。调用闭包类似于 _调用函数_ ；指定存放闭包定义的变量名并后跟包含期望使用的参数的括号，如下面所示： 
+
+#+BEGIN_SRC rust 
+  fn generate_workout(intensity: u32, random_number: u32) {
+      let expensive_closure = |num| {
+	  println!("calculating slowly...");
+	  thread::sleep(Duration::from_secs(2));
+	  num
+      };
+
+      if intensity < 25 {
+	  println!(
+	      "Today, do {} pushups!",
+	      expensive_closure(intensity)
+	  );
+	  println!(
+	      "Next, do {} situps!",
+	      expensive_closure(intensity)
+	  );
+      } else {
+	  if random_number == 3 {
+	      println!("Take a break today! Remember to stay hydrated!");
+	  } else {
+	      println!(
+		  "Today, run for {} minutes!",
+		  expensive_closure(intensity)
+	      );
+	  }
+      }
+  }
+#+END_SRC
+
+现在耗时的计算只在一个地方被调用，并只会在需要结果的时候执行改代码
+
+#+BEGIN_EXAMPLE
+  然而，这里又重新引入了上面已经解决的问题：仍然在第一个 if 块中调用了闭包两次，这调用了慢计算代码两次而使得用户需要多等待一倍的时间
+
+  可以通过在 if 块中创建一个本地变量存放闭包调用的结果来解决这个问题，不过闭包可以提供另外一种解决方案
+
+  稍后会讨论这个方案，不过目前首先讨论一下为何闭包定义中和所涉及的 trait 中没有类型注解
+#+END_EXAMPLE
+
+** 闭包类型推断和注解
+闭包不要求像 fn 函数那样在 _参数_ 和 _返回值_ 上 *注明* _类型_ 
+
+#+BEGIN_EXAMPLE
+  函数中需要类型注解是因为他们是暴露给用户的显式接口的一部分，严格的定义这些接口对于保证所有人都认同函数使用和返回值的类型来说是很重要的
+
+  但是闭包并不用于这样暴露在外的接口：他们储存在变量中并被使用，不用命名他们或暴露给库的用户调用
+
+  闭包通常很短并只与对应相对任意的场景较小的上下文中。在这些有限制的上下文中，编译器能可靠的推断参数和返回值的类型，类似于它是如何能够推断大部分变量的类型一样
+
+  强制在这些小的匿名函数中注明类型是很恼人的，并且与编译器已知的信息存在大量的重复
+#+END_EXAMPLE
+
+类似于变量，如果相比严格的必要性更希望增加明确性并变得更啰嗦，可以选择增加类型注解：
+
+#+BEGIN_SRC rust 
+  let expensive_closure = |num: u32| -> u32 {
+      println!("calculating slowly...");
+      thread::sleep(Duration::from_secs(2));
+      num
+  };
+#+END_SRC
+
+有了类型注解闭包的语法就更类似函数了。如下是一个对其参数加一的函数的定义与拥有相同行为闭包语法的纵向对比：
+
+#+BEGIN_SRC rust 
+  fn  add_one_v1   (x: u32) -> u32 { x + 1 }
+  let add_one_v2 = |x: u32| -> u32 { x + 1 };
+  let add_one_v3 = |x|             { x + 1 };
+  let add_one_v4 = |x|               x + 1  ;
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  这展示了闭包语法如何类似于函数语法，除了使用竖线而不是括号以及几个可选的语法之外
+
+  1. 第一行展示了一个函数定义
+  2. 第二行展示了一个完整标注的闭包定义
+  3. 第三行闭包定义中省略了类型注解
+  4. 第四行去掉了可选的大括号，因为闭包体只有一行
+
+  这些都是有效的闭包定义，并在调用时产生相同的行为
+
+  这里增加了一些空格来对齐相应部分
+#+END_EXAMPLE
+
+闭包定义会为每个参数和返回值推断一个具体类型。例如，下面展示了仅仅将参数作为返回值的简短的闭包定义
+
+#+BEGIN_SRC rust 
+  let example_closure = |x| x;
+
+  let s = example_closure(String::from("hello"));
+  let n = example_closure(5);
+#+END_SRC
+
+如果尝试调用闭包两次，第一次使用 String 类型作为参数而第二次使用 u32，则会得到一个错误：
+
+#+BEGIN_SRC sh 
+  error[E0308]: mismatched types
+   --> src/main.rs
+    |
+    | let n = example_closure(5);
+    |                         ^ expected struct `std::string::String`, found
+    integer
+    |
+    = note: expected type `std::string::String`
+	       found type `{integer}`
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  第一次使用 String 值调用 example_closure 时，编译器推断 x 和此闭包返回值的类型为 String
+
+  接着这些类型被锁定进闭包 example_closure 中，如果尝试对同一闭包使用不同类型则会得到类型错误
+#+END_EXAMPLE
+
+** 使用带有泛型和 Fn trait 的闭包
+
+** 闭包会捕获其环境
