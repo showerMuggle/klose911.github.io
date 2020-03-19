@@ -305,5 +305,308 @@ generate_workout 函数的期望行为是首先检查用户需要低强度（由
 #+END_EXAMPLE
 
 ** 使用带有泛型和 Fn trait 的闭包
+#+BEGIN_EXAMPLE
+  回到前面的健身计划生成 app ，使用了闭包后的代码仍然调用了多于需要的慢计算闭包
+
+  解决这个问题的一个方法是在全部代码中的每一个需要多个慢计算闭包结果的地方，可以将结果保存进变量以供复用，这样就可以使用变量而不是再次调用闭包
+
+  但是这样就会有很多重复的保存结果变量的地方
+#+END_EXAMPLE
+
+还有另一个可用的方案。可以创建一个 *存放* _闭包_ 和 *调用* 闭包 _结果_ 的 *结构体* 
+
+#+BEGIN_EXAMPLE
+  该结构体只会在需要结果时执行闭包，并会缓存结果值，这样余下的代码就不必再负责保存结果并可以复用该值
+
+  这种模式被称 memoization 或 lazy evaluation
+#+END_EXAMPLE
+
+为了让结构体存放闭包，需要 *指定* 闭包的 _类型_ ，因为 _结构体定义_ 需要知道其 _每一个字段的类型_
+#+BEGIN_EXAMPLE
+每一个闭包实例有其自己独有的匿名类型：也就是说，即便两个闭包有着相同的签名，他们的类型仍然可以被认为是不同
+#+END_EXAMPLE
+为了定义使用闭包的结构体、枚举或函数参数，需要使用 _泛型_ 和 _trait bound_ 
++ _Fn 系列 trait_ 由标准库提供
+#+BEGIN_EXAMPLE
+  所有的闭包都实现了 Fn、FnMut 或 FnOnce Trait中的一个，在 “闭包会捕获其环境” 部分会讨论这些 trait 的区别
+
+  在这个例子中可以使用 Fn trait
+#+END_EXAMPLE
+
++ 为了满足 Fn trait bound 增加了代表闭包所必须的 _参数_ 和 _返回值类型_ 的 *类型* 
+
+#+BEGIN_EXAMPLE
+  在这个例子中，闭包有一个 u32 的参数并返回一个 u32
+
+  这样所指定的 trait bound 就是 Fn(u32) -> u32
+#+END_EXAMPLE
+
+下面展示了存放了 _闭包_ 和一个 _Option 结果值_ 的  _Cacher 结构体_ 的定义：
+#+BEGIN_SRC rust 
+  struct Cacher<T>
+      where T: Fn(u32) -> u32
+  {
+      calculation: T,
+      value: Option<u32>,
+  }
+#+END_SRC
+
+
+结构体 Cacher：
++ 一个 _泛型 T_ 的字段 _calculation_ 
+  + T 的 trait bound 指定了 T 是一个使用 _Fn 的闭包_ 
+    + 任何希望储存到 Cacher 实例的 calculation 字段的闭包必须有一个 u32 参数（由 Fn 之后的括号的内容指定）
+    + 必须返回一个 u32（由 -> 之后的内容）
+#+BEGIN_EXAMPLE
+  注意：函数也都实现了这三个 Fn trait
+
+  如果不需要捕获环境中的值，则可以使用实现了 Fn trait 的函数而不是闭包
+#+END_EXAMPLE
++ 字段 _value_ 是 _Option<u32>_ 类型的：
+  + 在执行闭包之前，value 将是 _None_
+  + 如果使用 Cacher 的代码请求闭包的结果，这时会执行闭包并将结果 *储存* 在 value 字段的 _Some 成员_ 中
+    + 如果代码再次请求闭包的结果，这时不再执行闭包，而是会 *返回* 存放在 _Some 成员_ 中的 *结果* 
+
+实现Cacher的逻辑如下：
+
+#+BEGIN_SRC rust 
+  impl<T> Cacher<T>
+      where T: Fn(u32) -> u32
+  {
+      fn new(calculation: T) -> Cacher<T> {
+	  Cacher {
+	      calculation,
+	      value: None,
+	  }
+      }
+
+      fn value(&mut self, arg: u32) -> u32 {
+	  match self.value {
+	      Some(v) => v,
+	      None => {
+		  let v = (self.calculation)(arg);
+		  self.value = Some(v);
+		  v
+	      },
+	  }
+      }
+  }
+#+END_SRC
+
+1. Cacher 结构体的 _字段_ 是 *私有* 的，因为希望 Cacher 管理这些值而不是任由调用代码潜在的直接改变他们
+2. _Cacher::new_ 函数：
+   + 获取一个 _泛型参数 T_ ，它定义于 _impl 块上下文_ 中并与 Cacher 结构体有着相同的 trait bound
+   + 返回一个在Cacher实例，此时闭包还没有被执行
+     + _calculation 字段_ 中 *存放* 了 _指定闭包_
+     + _value 字段_ 中 存放了 _None_ 值
+3. 当调用代码需要闭包的执行结果时，不同于直接调用闭包，它会调用 _value_ 方法： *检查* _self.value_ 是否 *已经有* 了一个 _Some_ 的结果值；
+   + 如果有：返回 Some 中的值并不会再次执行闭包
+   + 如果 self.value 是 None：会调用 self.calculation 中储存的闭包，将结果保存到 self.value 以便将来使用，并同时返回结果值
+
+下面代码展示了如何在 generate_workout 函数中利用 Cacher 结构体：
+#+BEGIN_SRC rust 
+  fn generate_workout(intensity: u32, random_number: u32) {
+      let mut expensive_result = Cacher::new(|num| {
+	  println!("calculating slowly...");
+	  thread::sleep(Duration::from_secs(2));
+	  num
+      });
+
+      if intensity < 25 {
+	  println!(
+	      "Today, do {} pushups!",
+	      expensive_result.value(intensity)
+	  );
+	  println!(
+	      "Next, do {} situps!",
+	      expensive_result.value(intensity)
+	  );
+      } else {
+	  if random_number == 3 {
+	      println!("Take a break today! Remember to stay hydrated!");
+	  } else {
+	      println!(
+		  "Today, run for {} minutes!",
+		  expensive_result.value(intensity)
+	      );
+	  }
+      }
+  }
+#+END_SRC
+
+1. 不同于直接将闭包保存进一个变量，保存一个新的 Cacher 实例来存放闭包
+2. 在每一个需要结果的地方，调用 Cacher 实例的 value 方法
+3. 可以调用 value 方法任意多次，或者一次也不调用，而慢计算最多只会运行一次。
+
+#+BEGIN_EXAMPLE
+  改变 simulated_user_specified_value 和 simulated_random_number 变量中的值来验证在所有情况下在多个 if 和 else 块中，闭包打印的 calculating slowly... 只会在需要时出现并只会出现一次
+
+  Cacher 负责确保不会调用超过所需的慢计算所需的逻辑，这样 generate_workout 就可以专注业务逻辑了
+#+END_EXAMPLE
+
+*** Cacher的限制
+#+BEGIN_EXAMPLE
+  值缓存是一种更加广泛的实用行为，可能希望在代码中的其他闭包中也使用他们
+
+  然而，目前 Cacher 的实现存在两个小问题，这使得在不同上下文中复用变得很困难
+#+END_EXAMPLE
+
+第一个问题是 Cacher 实例假设对于 value 方法的任何 arg 参数值总是会返回相同的值。也就是说，这个 Cacher 的测试会失败：
+
+#+BEGIN_SRC rust 
+  #[test]
+  fn call_with_different_values() {
+      let mut c = Cacher::new(|a| a);
+
+      let v1 = c.value(1);
+      let v2 = c.value(2);
+
+      assert_eq!(v2, 2);
+  }
+#+END_SRC
+
+上面代码运行测试，它会在 assert_eq! 失败并显示如下信息：
+
+#+BEGIN_SRC sh 
+  thread 'call_with_different_values' panicked at 'assertion failed: `(left == right)`
+    left: `1`,
+   right: `2`', src/main.rs
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  这里的问题是第一次使用 1 调用 c.value，Cacher 实例将 Some(1) 保存进 self.value。在这之后，无论传递什么值调用 value，它总是会返回 1
+
+  可以修改 Cacher 存放一个哈希 map 而不是单独一个值。哈希 map 的 key 将是传递进来的 arg 值，而 value 则是对应 key 调用闭包的结果值
+
+  相比之前检查 self.value 直接是 Some 还是 None 值，现在 value 函数会在哈希 map 中寻找 arg：
+
+  如果找到的话就返回其对应的值，如果不存在，Cacher 会调用闭包并将结果值保存在哈希 map 对应 arg 值的位置
+#+END_EXAMPLE
+
+当前 Cacher 实现的第二个问题是它的应用被限制为只 *接受* 获取一个 _u32_ 值并 *返回* 一个 _u32_ 值的闭包
+
+#+BEGIN_EXAMPLE
+  比如说，可能需要能够缓存一个获取字符串 slice 并返回 usize 值的闭包的结果
+
+  这需要引入更多泛型参数来增加 Cacher 功能的灵活性
+#+END_EXAMPLE
 
 ** 闭包会捕获其环境
+#+BEGIN_EXAMPLE
+  在健身计划生成器的例子中，我们只将闭包作为内联匿名函数来使用
+#+END_EXAMPLE
+闭包还有另一个函数所没有的功能：他们可以 *捕获* 其 _环境_ 并访问其被 *定义的作用域* 的 _变量_ 。比如：有一个储存在 equal_to_x 变量中闭包的例子，它使用了闭包环境中的变量 x：
+
+#+BEGIN_SRC rust 
+  fn main() {
+      let x = 4;
+
+      let equal_to_x = |z| z == x;
+
+      let y = 4;
+
+      assert!(equal_to_x(y));
+  }
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  这里，即便 x 并不是 equal_to_x 的一个参数，equal_to_x 闭包也被允许使用变量 x，因为它与 equal_to_x 定义于相同的作用域
+#+END_EXAMPLE
+
+函数则不能做到同样的事，如果尝试如下例子，它并不能编译：
+
+#+BEGIN_SRC rust 
+  fn main() {
+      let x = 4;
+
+      fn equal_to_x(z: i32) -> bool { z == x }
+
+      let y = 4;
+
+      assert!(equal_to_x(y));
+  }
+#+END_SRC
+
+这会得到一个编译错误：
+#+BEGIN_SRC sh 
+  error[E0434]: can't capture dynamic environment in a fn item; use the || { ...
+  } closure form instead
+   --> src/main.rs
+    |
+  4 |     fn equal_to_x(z: i32) -> bool { z == x }
+#+END_SRC
+
+当闭包从环境中捕获一个值，闭包会在闭包体中储存这个值以供使用。这会使用内存并产生额外的开销
+
+*** 闭包的类型
+#+BEGIN_EXAMPLE
+  在更一般的场景中，当不需要闭包来捕获环境时，并不希望产生这些开销
+
+  因为函数从未允许捕获环境，定义和使用函数也就从不会有这些额外开销
+#+END_EXAMPLE
+
+闭包可以通过三种方式捕获其环境，他们直接对应函数的三种获取参数的方式： _获取所有权_ ， _可变借用_ 和 _不可变借用_ 。这三种捕获值的方式被编码为如下三个 Fn trait：
+1. _FnOnce_ : 消费从周围作用域捕获的变量
+  + _闭包周围的作用域_ 被称为其 *环境*
+  + 为了消费捕获到的变量，闭包必须 *获取其所有权* 并在 _定义_ 闭包时将其 *移动* 进闭包
+  + 名称的 Once 部分代表了闭包 *不能多次* 获取相同变量的所有权的，所以它只能被调用一次
+2. _FnMut_ : 获取 _可变的借用_ 值所以可以改变其环境
+3. _Fn_ : 从其环境获取 _不可变的借用_ 值
+
+当创建一个闭包时，Rust 根据其 _如何使用环境中变量_ 来 *推断* 希望 _如何引用环境_ 
++ 由于所有闭包都可以被调用至少一次，所以所有闭包都实现了 FnOnce
++ 那些并没有移动被捕获变量的所有权到闭包内的闭包也实现了 FnMut
++ 而不需要对被捕获的变量进行可变访问的闭包则也实现了 Fn
+
+#+BEGIN_EXAMPLE
+  在示例 13-12 中，equal_to_x 闭包不可变的借用了 x（所以 equal_to_x 具有 Fn trait），因为闭包体只需要读取 x 的值
+#+END_EXAMPLE
+
+如果希望 *强制* 闭包获取其使用的 *环境值的所有权* ，可以在参数列表前使用 _move_ 关键字
+
+#+BEGIN_EXAMPLE
+  这个技巧在将闭包传递给新线程以便将数据移动到新线程中时最为实用
+#+END_EXAMPLE
+
+下面在闭包定义中增加 move 关键字并使用 vector 代替整型
+#+BEGIN_SRC rust 
+  fn main() {
+      let x = vec![1, 2, 3];
+
+      let equal_to_x = move |z| z == x;
+
+      println!("can't use x here: {:?}", x);
+
+      let y = vec![1, 2, 3];
+
+      assert!(equal_to_x(y));
+  }
+#+END_SRC
+
+这个例子并不能编译，会产生以下错误：
+
+#+BEGIN_SRC sh 
+  error[E0382]: use of moved value: `x`
+   --> src/main.rs:6:40
+    |
+  4 |     let equal_to_x = move |z| z == x;
+    |                      -------- value moved (into closure) here
+  5 |
+  6 |     println!("can't use x here: {:?}", x);
+    |                                        ^ value used here after move
+    |
+    = note: move occurs because `x` has type `std::vec::Vec<i32>`, which does not
+    implement the `Copy` trait
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  x 被移动进了闭包，因为闭包使用 move 关键字定义
+
+  闭包获取了 x 的所有权以后， 接下来就不再允许在 println! 语句中使用 x 了
+
+  去掉 println! 即可修复问题
+#+END_EXAMPLE
+
+大部分需要指定一个 Fn 系列 trait bound 的时候，可以从 Fn 开始，而编译器会根据闭包体中的情况告诉你是否需要 FnMut 或 FnOnce
+
+* 迭代器
