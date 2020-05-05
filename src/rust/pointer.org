@@ -1,0 +1,238 @@
+#+TITLE: 智能指针
+#+HTML_HEAD: <link rel="stylesheet" type="text/css" href="css/main.css" />
+#+HTML_LINK_UP: cargo.html   
+#+HTML_LINK_HOME: rust.html
+#+OPTIONS: num:nil timestamp:nil ^:nil
+
+_指针_ 是一个包含 *内存地址* 的 *变量* 的通用概念。这个地址 _引用_ ，或 _指向_ 一些其他数据
+
+#+BEGIN_EXAMPLE
+  Rust 中最常见的指针是前面所介绍的“引用”。引用以 & 符号为标志并借用了他们所指向的值
+
+  除了引用数据没有任何其他特殊功能，它们也没有任何额外开销，所以应用的最多
+#+END_EXAMPLE
+
+_智能指针_ 是另一类数据结构，他们的表现类似指针，但是也拥有额外的 *元数据* 和 *功能* 
+
+#+BEGIN_EXAMPLE
+  智能指针的概念并不为 Rust 所独有；其起源于 C++ 并存在于其他语言中
+
+  Rust 标准库中不同的智能指针提供了多于引用的额外功能
+
+  本章将会探索的一个例子便是 引用计数智能指针类型，其允许数据有多个所有者。引用计数智能指针记录总共有多少个所有者，并当没有任何所有者时负责清理数据
+#+END_EXAMPLE
+
+在 Rust 中，普通引用和智能指针的一个额外的区别：
++ 引用是一类只借用数据的指针
++ 在大部分情况下，智能指针 *拥有* 他们指向的数据
+
+#+BEGIN_EXAMPLE
+  实际已经出现过一些智能指针，比如String 和 Vec<T>，虽然当时并不这么称呼它们
+
+  这些类型都属于智能指针因为它们拥有一些数据并允许你修改它们
+
+  它们也带有元数据（比如他们的容量）和额外的功能或保证（String 的数据总是有效的 UTF-8 编码）
+#+END_EXAMPLE
+智能指针通常使用 _结构体_ 实现。智能指针区别于常规结构体的显著特性在于其实现了 _Deref_ 和 _Drop_ trait:
++ Deref trait : 允许智能指针结构体实例表现的像 _引用_ 一样，这样就可以编写既用于引用、又用于智能指针的代码
++ Drop trait : 允许自定义当智能指针 _离开作用域_ 时运行的代码
+
+#+BEGIN_EXAMPLE
+  接下来会讨论这些 trait 以及为什么对于智能指针来说他们很重要
+#+END_EXAMPLE
+
+
+这章也会讲到的是来自标准库中最常用的一些: 
++ Box<T>，用于在堆上分配值
++ Rc<T>，一个引用计数类型，其数据可以有多个所有者
++ Ref<T> 和 RefMut<T>，通过 RefCell<T> 访问，一个在运行时而不是在编译时执行借用规则的类型
+#+BEGIN_EXAMPLE
+  考虑到智能指针是一个在 Rust 经常被使用的通用设计模式，本章并不会覆盖所有现存的智能指针
+
+  很多库都有自己的智能指针，而你也可以编写属于你自己的智能指针
+#+END_EXAMPLE
+
+
+另外会涉及 _内部可变性_ 模式，这时不可变类型暴露出改变其内部值的 API。同时也会讨论 _引用循环_ 会如何 *泄露内存* ，以及如何避免
+
+* Box <T>
+  最简单直接的智能指针是 box，其类型是 _Box<T>_ 。 box 允许将一个值放在 *堆上* 而不是栈上。留在栈上的则是 *指向堆数据的指针* 。除了数据被储存在堆上而不是栈上之外，box 没有性能损失。不过也没有很多额外的功能。它们多用于如下场景：
+  + 当有一个在 _编译时未知大小_ 的类型，而又想要在需要确切大小的上下文中使用这个类型值的时候
+  + 当有大量数据并希望在确保数据 _不被拷贝_ 的情况下 *转移所有权* 的时候
+  + 当希望拥有一个值并只关心它的类型是否实现了特定 trait 而不是其具体类型的时候
+
+  #+BEGIN_EXAMPLE
+    接下来 “box 允许创建递归类型” 部分展示第一种场景
+
+    在第二种情况中，转移大量数据的所有权可能会花费很长的时间，因为数据在栈上进行了拷贝。为了改善这种情况下的性能，可以通过 box 将这些数据储存在堆上。接着，只有少量的指针数据在栈上被拷贝
+
+    第三种情况被称为 trait 对象，以后会讲述
+  #+END_EXAMPLE
+
+** 使用 Box<T> 在堆上储存数据
+   下面展示了如何使用 box 在堆上储存一个 i32：
+
+   #+BEGIN_SRC rust 
+  fn main() {
+      let b = Box::new(5);
+      println!("b = {}", b);
+  }
+   #+END_SRC
+
+   这里定义了变量 b，其值是一个指向被分配在堆上的值 5 的 Box。这个程序会打印出 b = 5；
+   + 可以像数据是储存在栈上的那样访问 box 中的数据，正如任何拥有数据所有权的值那样
+   + 当像 b 这样的 box 在 main 的末尾离开作用域时，它将被释放。这个释放过程作用于 box本身（位于栈上）和它所指向的数据（位于堆上）
+
+   #+BEGIN_EXAMPLE
+     将一个单独的值存放在堆上并不是很有意义，所以像示例这样单独使用 box 并不常见
+
+     将像单个 i32 这样的值储存在栈上，也就是其默认存放的地方在大部分使用场景中更为合适
+   #+END_EXAMPLE
+
+** Box 允许创建递归类型
+   Rust 需要在编译时知道类型占用多少空间。一种无法在编译时知道大小的类型是 _递归类型_ ，其值的一部分可以是相同类型的另一个值。这种值的嵌套理论上可以无限的进行下去，所以 Rust 不知道递归类型需要多少空间。不过 box 有一个已知的大小，所以通过在循环类型定义中插入 box，就可以创建递归类型了
+
+
+   #+BEGIN_EXAMPLE
+     探索一下 cons list，一个函数式编程语言中的常见类型，来展示这个概念
+
+     除了递归之外，将要定义的 cons list 类型是很直白的，所以这个例子中的概念，在任何遇到更为复杂的涉及到递归类型的场景时都很实用
+   #+END_EXAMPLE
+
+*** cons list 
+    cons list 是一个来源于 Lisp 编程语言及其方言的数据结构。在 Lisp 中，cons 函数利用两个参数来构造一个新的列表，他们通常是一个单独的值和另一个列表：“将 x 与 y 连接” 通常意味着构建一个新的容器而将 x 的元素放在新容器的开头，其后则是容器 y 的元素
+    + cons list 的每一项都包含两个元素：当前项的值和下一项。其最后一项值包含一个叫做 Nil 的值且没有下一项
+    + cons list 通过递归调用 cons 函数产生。代表递归的终止条件的规范名称是 Nil，它宣布列表的终止
+      + 注意这不同于Rust的 “null” 或 “nil” 的概念，他们代表无效或缺失的值
+
+    #+BEGIN_EXAMPLE
+      注意虽然函数式编程语言经常使用 cons list，但是它并不是一个 Rust 中常见的类型，大部分在 Rust 中需要列表的时候，Vec<T> 是一个更好的选择
+
+      其他更为复杂的递归数据类型 确实 在 Rust 的很多场景中很有用，不过通过以 cons list 作为开始，可以探索如何使用 box 毫不费力的定义一个递归数据类型
+    #+END_EXAMPLE
+
+    下面包含一个 cons list 的枚举定义。注意这还不能编译因为这个类型没有已知的大小：
+
+    #+BEGIN_SRC rust 
+  enum List {
+      Cons(i32, List),
+      Nil,
+  }
+    #+END_SRC
+
+    #+BEGIN_EXAMPLE
+      注意：出于示例的需要选择实现一个只存放 i32 值的 cons list，也可以用泛型来定义一个可以存放任何类型值的 cons list 类型
+    #+END_EXAMPLE
+
+    使用这个 cons list 来储存列表 1, 2, 3 ：
+
+    #+BEGIN_SRC rust 
+  use crate::List::{Cons, Nil};
+
+  fn main() {
+      let list = Cons(1, Cons(2, Cons(3, Nil)));
+  }
+    #+END_SRC
+
+    #+BEGIN_EXAMPLE
+      1. 第一个 Cons 储存了 1 和另一个 List 值
+      2. 这个 List 是另一个包含 2 的 Cons 值和下一个 List 值
+      3. 接着又有另一个存放了 3 的 Cons 值
+      4. 最后一个值为 Nil 的 List，非递归成员代表了列表的结尾
+    #+END_EXAMPLE
+    如果尝试编译代码，会得到编译错误：
+
+    #+BEGIN_SRC sh 
+  error[E0072]: recursive type `List` has infinite size
+   --> src/main.rs:1:1
+    |
+  1 | enum List {
+    | ^^^^^^^^^ recursive type has infinite size
+  2 |     Cons(i32, List),
+    |               ----- recursive without indirection
+    |
+    = help: insert indirection (e.g., a `Box`, `Rc`, or `&`) at some point to
+    make `List` representable
+    #+END_SRC
+
+    这个错误表明这个类型 “有无限的大小”。其原因是 List 的一个成员被定义为是递归的：它直接存放了另一个相同类型的值。这意味着 Rust 无法计算为了存放 List 值到底需要多少空间。让我们一点一点来看：首先了解一下 Rust 如何决定需要多少空间来存放一个非递归类型
+
+** 计算非递归类型的大小
+   回忆一下讨论枚举定义时中定义的 Message 枚举：
+
+   #+BEGIN_SRC rust 
+  enum Message {
+      Quit,
+      Move { x: i32, y: i32 },
+      Write(String),
+      ChangeColor(i32, i32, i32),
+  }
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     当 Rust 需要知道要为 Message 值分配多少空间时，它可以检查每一个成员并发现
+     1. Message::Quit 并不需要任何空间
+     2. Message::Move 需要足够储存两个 i32 值的空间
+     3. 依此类推
+
+     因此Message 值所需的空间等于储存其最大成员的空间大小
+   #+END_EXAMPLE
+
+   与此相对当 Rust 编译器检查像前面中的 List 这样的递归类型时会发生什么呢。编译器尝试计算出储存一个 List 枚举需要多少内存，并开始检查 Cons 成员，那么 Cons 需要的空间等于 i32 的大小加上 List 的大小。为了计算 List 需要多少内存，它检查其成员，从 Cons 成员开始。Cons成员储存了一个 i32 值和一个List值，这样的计算将无限进行下去，如图所示：
+
+   #+ATTR_HTML: image :width 10% 
+   [[file:pic/trpl15-01.svg]] 
+
+
+** 使用 Box<T> 给递归类型一个已知的大小
+   Rust 无法计算出要为定义为递归的类型分配多少空间，所以编译器给出了报错。这个错误也包括了有用的建议：
+
+   #+BEGIN_SRC sh 
+  = help: insert indirection (e.g., a `Box`, `Rc`, or `&`) at some point to make `List` representable
+   #+END_SRC
+
+   在建议中， _indirection_ 意味着不同于直接储存一个值，而是间接的储存一个 _指向值的指针_ 。
+
+   #+BEGIN_EXAMPLE
+     因为 Box<T> 是一个指针，总是知道它需要多少空间：指针的大小并不会根据其指向的数据量而改变
+
+     这意味着可以将 Box 放入 Cons 成员中而不是直接存放另一个 List 值。Box 会指向另一个位于堆上的 List 值，而不是存放在 Cons 成员中
+
+     从概念上讲，仍然有一个通过在其中 “存放” 其他列表创建的列表，不过现在实现这个概念的方式更像是一个项挨着另一项，而不是一项包含另一项
+   #+END_EXAMPLE
+
+   修改前面示例，这是可以编译的：
+
+   #+BEGIN_SRC rust 
+  enum List {
+      Cons(i32, Box<List>),
+      Nil,
+  }
+
+  use crate::List::{Cons, Nil};
+
+  fn main() {
+      let list = Cons(1,
+	  Box::new(Cons(2,
+	      Box::new(Cons(3,
+		  Box::new(Nil))))));
+  }
+   #+END_SRC
+
+   Cons 成员将会需要一个 i32 的大小加上储存 box 指针数据的空间。Nil 成员不储存值，所以它比 Cons 成员需要更少的空间。现在我们知道了任何 List 值最多需要一个 i32 加上 box 指针数据的大小。通过使用 box ，打破了这无限递归的连锁，这样编译器就能够计算出储存 List 值需要的大小了。下面展示了现在 Cons 成员看起来像什么：
+
+   #+ATTR_HTML: image :width 10% 
+   [[file:pic/trpl15-02.svg]] 
+
+   Box<T> 类型是一个智能指针：
+   + 因为它实现了 Deref trait，它允许 Box<T> 值被当作引用对待
+   + 当 Box<T> 值离开作用域时，由于 Box<T> 类型 Drop trait 的实现，box 所指向的堆数据也会被清除
+
+   #+BEGIN_EXAMPLE
+     box 只提供了间接存储和堆分配；相比将会见到的其他智能指针，他们并没有任何其他特殊的功能
+
+     它们也没有这些特殊功能带来的性能损失，所以他们可以用于像 cons list 这样间接存储是唯一所需功能的场景
+   #+END_EXAMPLE
+
+* 通过 Deref trait 将智能指针当作常规引用处理
+ 
