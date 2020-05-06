@@ -250,7 +250,25 @@ for the JavaScript code in this tag.
 <li><a href="#org775ba7a">使用 Box&lt;T&gt; 给递归类型一个已知的大小</a></li>
 </ul>
 </li>
-<li><a href="#orgdf9cc1a">通过 Deref trait 将智能指针当作常规引用处理</a></li>
+<li><a href="#orgdf9cc1a">通过 Deref trait 将智能指针当作常规引用处理</a>
+<ul>
+<li><a href="#orgc4089b0">通过解引用运算符追踪指针的值</a></li>
+<li><a href="#orga6a6a64">像引用一样使用 Box&lt;T&gt;</a></li>
+<li><a href="#orgeb44461">自定义智能指针</a></li>
+<li><a href="#org8bb1e7f">通过实现 Deref trait 将某类型像引用一样处理</a></li>
+<li><a href="#org6bc526a">函数和方法的隐式解引用强制多态</a>
+<ul>
+<li><a href="#orgbbefff8">解引用强制多态如何与可变性交互</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#orgbacd323">使用 Drop Trait 运行清理代码</a>
+<ul>
+<li><a href="#orge83d5e6">通过 std::mem::drop 提早丢弃值</a></li>
+</ul>
+</li>
+<li><a href="#org146a9cc">Rc&lt;T&gt; 引用计数智能指针</a></li>
 </ul>
 </div>
 </div>
@@ -585,6 +603,464 @@ box 只提供了间接存储和堆分配；相比将会见到的其他智能指�
 
 <div id="outline-container-orgdf9cc1a" class="outline-2">
 <h2 id="orgdf9cc1a">通过 Deref trait 将智能指针当作常规引用处理</h2>
+<div class="outline-text-2" id="text-orgdf9cc1a">
+<p>
+实现 Deref trait 允许 <b>重载</b> <span class="underline">解引用运算符</span> *（与乘法运算符或通配符相区别）。通过这种方式实现 Deref trait 的智能指针可以被当作常规引用来对待，可以编写操作引用的代码并用于智能指针
+</p>
+</div>
+
+<div id="outline-container-orgc4089b0" class="outline-3">
+<h3 id="orgc4089b0">通过解引用运算符追踪指针的值</h3>
+<div class="outline-text-3" id="text-orgc4089b0">
+<p>
+常规引用是一个指针类型，一种理解指针的方式是将其看成指向储存在其他某处值的箭头。下面创建了一个 i32 值的引用，接着使用解引用运算符来跟踪所引用的数据：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">x</span> = 5;
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">y</span> = &amp;x;
+
+    <span style="color: #7fffd4;">assert_eq!</span>(5, x);
+    <span style="color: #7fffd4;">assert_eq!</span>(5, *y);
+}
+</pre>
+</div>
+
+<pre class="example">
+  变量 x 存放了一个 i32 值 5，y 等于 x 的一个引用
+
+  可以断言 x 等于 5。然而，如果希望对 y 的值做出断言，必须使用 *y 来追踪引用所指向的值（也就是 解引用）
+
+  一旦解引用了 y，就可以访问 y 所指向的整型值并可以与 5 做比较
+</pre>
+
+<p>
+相反如果尝试编写 assert_eq!(5, y);，则会得到如下编译错误：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">error[E0277]: can<span style="color: #ffa07a;">'t compare `{integer}` with `&amp;{integer}`</span>
+<span style="color: #ffa07a;"> --&gt; src/main.rs:6:5</span>
+<span style="color: #ffa07a;">  |</span>
+<span style="color: #ffa07a;">6 |     assert_eq!(5, y);</span>
+<span style="color: #ffa07a;">  |     ^^^^^^^^^^^^^^^^^ no implementation for `{integer} == &amp;{integer}`</span>
+<span style="color: #ffa07a;">  |</span>
+<span style="color: #ffa07a;">  = help: the trait `std::cmp::PartialEq&lt;&amp;{integer}&gt;` is not implemented for `{integer}`</span>
+</pre>
+</div>
+
+<p>
+不允许比较数字的引用与数字，因为它们是不同的类型。必须使用解引用运算符追踪引用所指向的值
+</p>
+</div>
+</div>
+
+<div id="outline-container-orga6a6a64" class="outline-3">
+<h3 id="orga6a6a64">像引用一样使用 Box&lt;T&gt;</h3>
+<div class="outline-text-3" id="text-orga6a6a64">
+<p>
+可以使用 Box&lt;T&gt; 代替引用来重写上面的代码，解引用运算符也一样能工作：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">x</span> = 5;
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">y</span> = <span style="color: #98fb98;">Box</span>::new(x);
+
+    <span style="color: #7fffd4;">assert_eq!</span>(5, x);
+    <span style="color: #7fffd4;">assert_eq!</span>(5, *y);
+}
+</pre>
+</div>
+
+<pre class="example">
+  唯一不同的地方就是将 y 设置为一个指向 x 值的 box 实例，而不是指向 x 值的引用
+
+  在最后的断言中，可以使用解引用运算符以 y 为引用时相同的方式追踪 box 的指针
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orgeb44461" class="outline-3">
+<h3 id="orgeb44461">自定义智能指针</h3>
+<div class="outline-text-3" id="text-orgeb44461">
+<pre class="example">
+为了体会默认情况下智能指针与引用的不同，让我们创建一个类似于标准库提供的 Box&lt;T&gt; 类型的智能指针。接着学习如何增加使用解引用运算符的功能
+</pre>
+<p>
+从根本上说，Box&lt;T&gt; 被定义为 <b>包含一个元素</b> 的 <span class="underline">元组结构体</span> ，所以下面以相同的方式定义了 MyBox&lt;T&gt; 类型。还定义了 new 函数来对应定义于 Box&lt;T&gt; 的 new 函数：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">MyBox</span>&lt;<span style="color: #98fb98;">T</span>&gt;(<span style="color: #98fb98;">T</span>);
+
+<span style="color: #00ffff;">impl</span>&lt;<span style="color: #98fb98;">T</span>&gt; <span style="color: #98fb98;">MyBox</span>&lt;<span style="color: #98fb98;">T</span>&gt; {
+    <span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">new</span>(<span style="color: #eedd82;">x</span>: <span style="color: #98fb98;">T</span>) -&gt; <span style="color: #98fb98;">MyBox</span>&lt;<span style="color: #98fb98;">T</span>&gt; {
+        <span style="color: #98fb98;">MyBox</span>(x)
+    }
+}
+</pre>
+</div>
+
+<pre class="example">
+这里定义了一个结构体 MyBox 并声明了一个泛型参数 T，因为希望其可以存放任何类型的值
+
+MyBox 是一个包含 T 类型元素的元组结构体
+
+MyBox::new 函数获取一个 T 类型的参数并返回一个存放传入值的 MyBox 实例
+</pre>
+
+<p>
+尝试使用自定义的 MyBox&lt;T&gt; 类型代替 Box&lt;T&gt;。下面的代码不能编译，因为 Rust 不知道如何解引用 MyBox：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">x</span> = 5;
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">y</span> = <span style="color: #98fb98;">MyBox</span>::new(x);
+
+    <span style="color: #7fffd4;">assert_eq!</span>(5, x);
+    <span style="color: #7fffd4;">assert_eq!</span>(5, *y);
+}
+</pre>
+</div>
+
+<p>
+得到的编译错误是：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">error[E0614]: type <span style="color: #fa8072;">`MyBox&lt;{integer}&gt;`</span> cannot be dereferenced
+  --&gt; src/main.rs:14:19
+   |
+14 |     assert_eq!(5, *y);
+   |                   ^^
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org8bb1e7f" class="outline-3">
+<h3 id="org8bb1e7f">通过实现 Deref trait 将某类型像引用一样处理</h3>
+<div class="outline-text-3" id="text-org8bb1e7f">
+<p>
+Deref trait，由标准库提供，要求实现名为 deref 的方法，其借用 self 并返回一个内部数据的引用。下面包含定义于 MyBox 之上的 Deref 实现：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::<span style="color: #7fffd4;">ops</span>::<span style="color: #98fb98;">Deref</span>;
+
+
+<span style="color: #00ffff;">impl</span>&lt;<span style="color: #98fb98;">T</span>&gt; <span style="color: #98fb98;">Deref</span> <span style="color: #00ffff;">for</span> <span style="color: #98fb98;">MyBox</span>&lt;<span style="color: #98fb98;">T</span>&gt; {
+    <span style="color: #00ffff;">type</span> <span style="color: #98fb98;">Target</span> = <span style="color: #98fb98;">T</span>;
+
+    <span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">deref</span>(&amp;<span style="color: #00ffff;">self</span>) -&gt; &amp;<span style="color: #98fb98;">T</span> {
+        &amp;<span style="color: #00ffff;">self</span>.0
+    }
+}
+</pre>
+</div>
+
+<p>
+type Target = T; 语法定义了用于此 trait 的 <span class="underline">关联</span> 类型
+</p>
+
+<pre class="example">
+关联类型是一个稍有不同的定义泛型参数的方式，现在还无需过多的担心它
+</pre>
+
+<p>
+deref 方法体中写入了 <span class="underline">&amp;self.0</span> ，这样 deref 返回了希望通过 * 运算符访问的值的引用
+</p>
+
+<pre class="example">
+没有 Deref trait 的话，编译器只会解引用 &amp; 引用类型
+
+deref 方法向编译器提供了获取任何实现了 Deref trait 的类型的值，并且调用这个类型的 deref 方法来获取一个它知道如何解引用的 &amp; 引用的能力
+</pre>
+
+
+<p>
+在示例中输入 *y 时，Rust 事实上在底层运行了如下代码：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust">*(y.deref())
+</pre>
+</div>
+
+<p>
+Rust 将 * 运算符替换为先调用 deref 方法再进行普通解引用的操作，如此便不用担心是否还需手动调用 deref 方法了。Rust 的这个特性可以写出行为一致的代码，无论是面对的是常规引用还是实现了 Deref 的类型
+</p>
+
+<pre class="example">
+  注意，每次在代码中使用 * 时， * 运算符都被替换成了先调用 deref 方法再接着使用 * 解引用的操作，但只会发生一次，不会对 * 操作符无限递归替换
+
+  解引用出上面 i32 类型的值就停止了，这个值与示例 15-9 中 assert_eq! 的 5 相匹配
+</pre>
+
+<p>
+deref 方法返回 <span class="underline">值的引用</span> ，以及 *(y.deref()) 括号外边的普通解引用仍为必须的原因在于所有权。如果 deref 方法直接返回值而不是值的引用，其值（的所有权）将被移出 self。在这里以及大部分使用解引用运算符的情况下并不希望获取 MyBox&lt;T&gt; 内部值的所有权
+</p>
+</div>
+</div>
+
+<div id="outline-container-org6bc526a" class="outline-3">
+<h3 id="org6bc526a">函数和方法的隐式解引用强制多态</h3>
+<div class="outline-text-3" id="text-org6bc526a">
+<p>
+<span class="underline">解引用强制多态</span> 是 Rust 在函数或方法传参上的一种便利。其将实现了 Deref 的类型的引用转换为原始类型通过 Deref 所能够转换的类型的引用。当这种特定类型的引用作为实参传递给和形参类型不同的函数或方法时，解引用强制多态将自动发生。这时会有一系列的 deref 方法被调用，把我们提供的类型转换成了参数所需的类型。
+</p>
+
+<pre class="example">
+  解引用强制多态的加入使得 Rust 程序员编写函数和方法调用时无需增加过多显式使用 &amp; 和 * 的引用和解引用
+
+  这个功能也使得可以编写更多同时作用于引用或智能指针的代码
+</pre>
+<p>
+作为展示解引用强制多态的实例，先添加一个有着字符串 slice 参数的函数定义：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">hello</span>(<span style="color: #eedd82;">name</span>: &amp;<span style="color: #98fb98;">str</span>) {
+    <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"Hello, </span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">!"</span>, name);
+}
+</pre>
+</div>
+
+<p>
+可以使用字符串 slice 作为参数调用 hello 函数，比如 hello("Rust");。解引用强制多态使得用 MyBox&lt;String&gt; 类型值的引用调用 hello 成为可能：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">m</span> = <span style="color: #98fb98;">MyBox</span>::new(<span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"Rust"</span>));
+    hello(&amp;m);
+}
+</pre>
+</div>
+
+<pre class="example">
+这里使用 &amp;m 调用 hello 函数，其为 MyBox&lt;String&gt; 值的引用
+
+因为 MyBox&lt;T&gt; 上实现了 Deref trait，Rust 可以通过 deref 调用将 &amp;MyBox&lt;String&gt; 变为 &amp;String
+
+标准库中提供了 String 上的 Deref 实现，其会返回字符串 slice，这可以在 Deref 的 API 文档中看到
+
+Rust 再次调用 deref 将 &amp;String 变为 &amp;str，这就符合 hello 函数的定义了
+</pre>
+
+<p>
+如果 Rust 没有实现解引用强制多态，为了使用 &amp;MyBox&lt;String&gt; 类型的值调用 hello，则不得不编写成：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">m</span> = <span style="color: #98fb98;">MyBox</span>::new(<span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"Rust"</span>));
+    hello(&amp;(*m)[..]);
+}
+</pre>
+</div>
+
+<pre class="example">
+(*m) 将 MyBox&lt;String&gt; 解引用为 String
+
+接着 &amp; 和 [..] 获取了整个 String 的字符串 slice 来匹配 hello 的签名
+
+没有解引用强制多态所有这些符号混在一起将更难以读写和理解，解引用强制多态使得 Rust 自动的处理这些转换
+</pre>
+
+<p>
+当所涉及到的类型定义了 Deref trait，Rust 会分析这些类型并使用任意多次 Deref::deref 调用以获得匹配参数的类型。这些解析都发生在编译时，所以利用解引用强制多态并没有运行时惩罚！
+</p>
+</div>
+
+<div id="outline-container-orgbbefff8" class="outline-4">
+<h4 id="orgbbefff8">解引用强制多态如何与可变性交互</h4>
+<div class="outline-text-4" id="text-orgbbefff8">
+<p>
+类似于如何使用 Deref trait 重载不可变引用的 * 运算符，Rust 提供了 DerefMut trait 用于重载可变引用的 * 运算符。Rust 在发现类型和 trait 实现满足三种情况时会进行解引用强制多态：
+</p>
+<ol class="org-ol">
+<li>当 T: Deref&lt;Target=U&gt; 时从 &amp;T 到 &amp;U</li>
+<li>当 T: DerefMut&lt;Target=U&gt; 时从 &amp;mut T 到 &amp;mut U</li>
+<li>当 T: Deref&lt;Target=U&gt; 时从 &amp;mut T 到 &amp;U</li>
+</ol>
+
+<pre class="example">
+  头两个情况除了可变性之外是相同的：
+
+  第一种情况表明如果有一个 &amp;T，而 T 实现了返回 U 类型的 Deref，则可以直接得到 &amp;U
+
+  第二种情况表明对于可变引用也有着相同的行为
+</pre>
+
+<p>
+第三个情况有些微妙：Rust 也会将 <span class="underline">可变</span> 引用强转为 <span class="underline">不可变</span> 引用。但是反之是 <b>不可能</b> 的：不可变引用永远也不能强转为可变引用
+</p>
+<pre class="example">
+  因为根据借用规则，如果有一个可变引用，其必须是这些数据的唯一引用（否则程序将无法编译）
+
+  将一个可变引用转换为不可变引用永远也不会打破借用规则，将不可变引用转换为可变引用则需要数据只能有一个不可变引用，而借用规则无法保证这一点
+
+  因此，Rust 无法假设将不可变引用转换为可变引用是可能的
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgbacd323" class="outline-2">
+<h2 id="orgbacd323">使用 Drop Trait 运行清理代码</h2>
+<div class="outline-text-2" id="text-orgbacd323">
+<p>
+对于智能指针模式来说第二个重要的 trait 是 Drop，其允许在 <span class="underline">值要离开作用域</span> 时执行一些代码。可以为任何类型提供 Drop trait 的实现，同时所指定的代码被用于释放类似于文件或网络连接的资源
+</p>
+
+<pre class="example">
+  在智能指针上下文中讨论 Drop 是因为其功能几乎总是用于实现智能指针。例如，Box&lt;T&gt; 自定义了 Drop 用来释放 box 所指向的堆空间
+
+  在其他一些语言中，不得不记住在每次使用完智能指针实例后调用清理内存或资源的代码。如果忘记的话，运行代码的系统可能会因为负荷过重而崩溃
+
+  在 Rust 中，可以指定每当值离开作用域时被执行的代码，编译器会自动插入这些代码。于是就不需要在程序中到处编写在实例结束时清理这些变量的代码，而且还不会泄露资源
+</pre>
+
+<p>
+指定在值离开作用域时应该执行的代码的方式是实现 Drop trait。Drop trait 要求实现一个叫做 <span class="underline">drop</span> 的方法，它获取一个 <span class="underline">self 的可变引用</span> 。为了能够看出 Rust 何时调用 drop，暂时使用 println! 语句实现 drop。下面展示了唯一定制功能就是当其实例离开作用域时，打印出 Dropping CustomSmartPointer! 的结构体 CustomSmartPointer。这会演示 Rust 何时运行 drop 函数：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">struct</span> <span style="color: #98fb98;">CustomSmartPointer</span> {
+    <span style="color: #eedd82;">data</span>: <span style="color: #98fb98;">String</span>,
+}
+
+<span style="color: #00ffff;">impl</span> <span style="color: #98fb98;">Drop</span> <span style="color: #00ffff;">for</span> <span style="color: #98fb98;">CustomSmartPointer</span> {
+    <span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">drop</span>(&amp;<span style="color: #00ffff;">mut</span> <span style="color: #00ffff;">self</span>) {
+        <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"Dropping CustomSmartPointer with data `</span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">`!"</span>, <span style="color: #00ffff;">self</span>.data);
+    }
+}
+
+<span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">c</span> = <span style="color: #98fb98;">CustomSmartPointer</span> { <span style="color: #eedd82;">data</span>: <span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"my stuff"</span>) };
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">d</span> = <span style="color: #98fb98;">CustomSmartPointer</span> { <span style="color: #eedd82;">data</span>: <span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"other stuff"</span>) };
+    <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"CustomSmartPointers created."</span>);
+}
+</pre>
+</div>
+
+<pre class="example">
+Drop trait 包含在 prelude 中，所以无需导入它
+</pre>
+
+<p>
+在 main 中，新建了两个 CustomSmartPointer 实例并打印出了 CustomSmartPointer created.。在 main 的结尾，CustomSmartPointer 的实例会离开作用域，而 Rust 会调用放置于 drop 方法中的代码，打印出最后的信息。当运行这个程序，会出现如下输出：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">CustomSmartPointers created.
+Dropping CustomSmartPointer with data <span style="color: #fa8072;">`other stuff`</span>!
+Dropping CustomSmartPointer with data <span style="color: #fa8072;">`my stuff`</span>!
+</pre>
+</div>
+
+<p>
+当实例离开作用域 Rust 会自动调用 drop，并调用指定的代码。变量以被 <b>创建时相反的顺序</b> 被丢弃，所以 d 在 c 之前被丢弃
+</p>
+
+<pre class="example">
+  这个例子刚好给了一个 drop 方法如何工作的可视化指导，不过通常需要指定类型所需执行的清理代码而不是打印信息
+
+  注意：不需要手动调用drop 
+</pre>
+</div>
+
+<div id="outline-container-orge83d5e6" class="outline-3">
+<h3 id="orge83d5e6">通过 std::mem::drop 提早丢弃值</h3>
+<div class="outline-text-3" id="text-orge83d5e6">
+<pre class="example">
+  不幸的是，并不能直截了当的禁用 drop 这个功能。通常也不需要禁用 drop ；整个 Drop trait 存在的意义在于其是自动处理的
+
+  然而，有时可能需要提早清理某个值。一个例子是当使用智能指针管理锁时；你可能希望强制运行 drop 方法来释放锁以便作用域中的其他代码可以获取锁
+</pre>
+
+<p>
+如果尝试调用 Drop trait 的 drop 方法：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">c</span> = <span style="color: #98fb98;">CustomSmartPointer</span> { <span style="color: #eedd82;">data</span>: <span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"some data"</span>) };
+    <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"CustomSmartPointer created."</span>);
+    c.drop();
+    <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"CustomSmartPointer dropped before the end of main."</span>);
+}
+</pre>
+</div>
+
+<p>
+如果尝试编译代码会得到如下错误：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">error[E0040]: explicit use of destructor method
+  --&gt; src/main.rs:14:7
+   |
+14 |     c.drop();
+   |       ^^^^ explicit destructor calls not allowed
+</pre>
+</div>
+
+<p>
+错误信息表明不允许显式调用 drop
+</p>
+
+<pre class="example">
+错误信息使用了术语 析构函数，这是一个清理实例的函数的通用编程概念，析构函数 对应创建实例的 构造函数。Rust 中的 drop 函数就是这么一个析构函数
+
+Rust 不允许显式调用 drop 因为 Rust 仍然会在 main 的结尾对值自动调用 drop，这会导致一个 double free 错误，因为 Rust 会尝试清理相同的值两次
+</pre>
+
+<p>
+如果仍然需要强制提早清理值，可以使用 <span class="underline">std::mem::drop</span> 函数。std::mem::drop 函数不同于 Drop trait 中的 drop 方法。可以通过传递 <span class="underline">希望提早强制丢弃的值</span> 作为参数。std::mem::drop 位于 prelude，所以可以修改一下 main 来调用 drop 函数：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">c</span> = <span style="color: #98fb98;">CustomSmartPointer</span> { <span style="color: #eedd82;">data</span>: <span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"some data"</span>) };
+    <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"CustomSmartPointer created."</span>);
+    drop(c);
+    <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"CustomSmartPointer dropped before the end of main."</span>);
+}
+</pre>
+</div>
+
+<p>
+这会打印出：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">CustomSmartPointer created.
+Dropping CustomSmartPointer with data <span style="color: #fa8072;">`some data`</span>!
+CustomSmartPointer dropped before the end of main.
+</pre>
+</div>
+
+<p>
+Dropping CustomSmartPointer with data `some data`! 出现在 CustomSmartPointer created. 和 CustomSmartPointer dropped before the end of main. 之间，表明了 drop 方法被调用了并在此丢弃了 c
+</p>
+
+<pre class="example">
+Drop trait 实现中指定的代码可以用于许多方面，来使得清理变得方便和安全：比如可以用其创建自己的内存分配器！
+
+通过 Drop trait 和 Rust 所有权系统，无需担心之后的代码清理，Rust 会自动考虑这些问题
+
+也无需担心意外的清理掉仍在使用的值，这会造成编译器错误：所有权系统确保引用总是有效的，也会确保 drop 只会在值不再被使用时被调用一次
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org146a9cc" class="outline-2">
+<h2 id="org146a9cc">Rc&lt;T&gt; 引用计数智能指针</h2>
 </div>
 </div>
 <div id="postamble" class="status">
