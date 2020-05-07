@@ -268,7 +268,13 @@ for the JavaScript code in this tag.
 <li><a href="#orge83d5e6">通过 std::mem::drop 提早丢弃值</a></li>
 </ul>
 </li>
-<li><a href="#org146a9cc">Rc&lt;T&gt; 引用计数智能指针</a></li>
+<li><a href="#org146a9cc">Rc&lt;T&gt; 引用计数智能指针</a>
+<ul>
+<li><a href="#org5102638">使用 Rc&lt;T&gt; 共享数据</a></li>
+<li><a href="#orgd95c4a3">克隆 Rc&lt;T&gt; 会增加引用计数</a></li>
+</ul>
+</li>
+<li><a href="#org6049f61">RefCell&lt;T&gt; 和内部可变性模式</a></li>
 </ul>
 </div>
 </div>
@@ -520,7 +526,7 @@ cons list 是一个来源于 Lisp 编程语言及其方言的数据结构。在 
 
 
 <div class="figure">
-<p><object type="image/svg+xml" data="pic/trpl15-01.svg" class="org-svg" width="10%">
+<p><object type="image/svg+xml" data="pic/trpl15-01.svg" class="org-svg" width="5%">
 Sorry, your browser does not support SVG.</object> 
 </p>
 </div>
@@ -579,7 +585,7 @@ Cons 成员将会需要一个 i32 的大小加上储存 box 指针数据的空�
 
 
 <div class="figure">
-<p><object type="image/svg+xml" data="pic/trpl15-02.svg" class="org-svg" width="10%">
+<p><object type="image/svg+xml" data="pic/trpl15-02.svg" class="org-svg" width="5%">
 Sorry, your browser does not support SVG.</object> 
 </p>
 </div>
@@ -1061,6 +1067,225 @@ Drop trait 实现中指定的代码可以用于许多方面，来使得清理变
 
 <div id="outline-container-org146a9cc" class="outline-2">
 <h2 id="org146a9cc">Rc&lt;T&gt; 引用计数智能指针</h2>
+<div class="outline-text-2" id="text-org146a9cc">
+<p>
+大部分情况下所有权是非常明确的：可以准确地知道哪个变量拥有某个值。然而，有些情况单个值可能会有多个所有者。例如，在图数据结构中，多个边可能指向相同的结点，而这个结点从概念上讲为所有指向它的边所拥有。结点直到没有任何边指向它之前都不应该被清理
+</p>
+
+<p>
+为了启用多所有权，Rust 有一个叫做 <span class="underline">Rc&lt;T&gt;</span> 的类型。其名称为 <span class="underline">引用计数</span> 的缩写。引用计数意味着记录一个值引用的数量来知晓这个值是否仍在被使用。如果某个值有零个引用，就代表没有任何有效引用并可以被清理
+</p>
+
+<pre class="example">
+  可以将其想象为客厅中的电视：
+
+  当一个人进来看电视时，他打开电视。其他人也可以进来看电视
+
+  当最后一个人离开房间时，他关掉电视因为它不再被使用了
+
+  如果某人在其他人还在看的时候就关掉了电视，正在看电视的人肯定会抓狂的！
+</pre>
+<p>
+Rc&lt;T&gt; 用于希望在堆上分配一些内存供程序的多个部分读取，而且无法在编译时确定程序的哪一部分会最后结束使用它的时候。如果确实知道哪部分是最后一个结束使用的话，就可以令其成为数据的所有者，正常的所有权规则就可以在编译时生效
+</p>
+
+<pre class="example">
+注意 Rc&lt;T&gt; 只能用于单线程场景；以后会涉及到如何在多线程程序中进行引用计数
+</pre>
+</div>
+
+<div id="outline-container-org5102638" class="outline-3">
+<h3 id="org5102638">使用 Rc&lt;T&gt; 共享数据</h3>
+<div class="outline-text-3" id="text-org5102638">
+<p>
+回到前面 Box&lt;T&gt; 定义 cons list 的例子。这一次，希望创建两个共享第三个列表所有权的列表，其概念将会看起来如图所示：
+</p>
+
+
+<div class="figure">
+<p><object type="image/svg+xml" data="pic/trpl15-03.svg" class="org-svg" width="5%">
+Sorry, your browser does not support SVG.</object> 
+</p>
+</div>
+
+
+<pre class="example">
+  列表 a 包含 5 之后是 10，之后是另两个列表：b 从 3 开始而 c 从 4 开始，b 和 c 会接上包含 5 和 10 的列表 a
+
+  换句话说，这两个列表会尝试共享第一个列表所包含的 5 和 10
+</pre>
+
+<p>
+尝试使用 Box&lt;T&gt; 定义的 List 实现：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">enum</span> <span style="color: #98fb98;">List</span> {
+    <span style="color: #98fb98;">Cons</span>(<span style="color: #98fb98;">i32</span>, <span style="color: #98fb98;">Box</span>&lt;<span style="color: #98fb98;">List</span>&gt;),
+    <span style="color: #98fb98;">Nil</span>,
+}
+
+<span style="color: #00ffff;">use</span> <span style="color: #00ffff;">crate</span>::<span style="color: #98fb98;">List</span>::{<span style="color: #98fb98;">Cons</span>, <span style="color: #98fb98;">Nil</span>};
+
+<span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">a</span> = <span style="color: #98fb98;">Cons</span>(5,
+        <span style="color: #98fb98;">Box</span>::new(<span style="color: #98fb98;">Cons</span>(10,
+            <span style="color: #98fb98;">Box</span>::new(<span style="color: #98fb98;">Nil</span>))));
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">b</span> = <span style="color: #98fb98;">Cons</span>(3, <span style="color: #98fb98;">Box</span>::new(a));
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">c</span> = <span style="color: #98fb98;">Cons</span>(4, <span style="color: #98fb98;">Box</span>::new(a));
+}
+</pre>
+</div>
+
+<p>
+编译会得出如下错误：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">error[E0382]: use of moved value: <span style="color: #fa8072;">`a`</span>
+  --&gt; src/main.rs:13:30
+   |
+12 |     <span style="color: #b0c4de;">let</span> b = Cons(3, Box::new(a));
+   |                              - value moved here
+13 |     <span style="color: #b0c4de;">let</span> c = Cons(4, Box::new(a));
+   |                              ^ value used here after move
+   |
+   = note: move occurs because <span style="color: #fa8072;">`a`</span> has type <span style="color: #fa8072;">`List`</span>, which does not implement the <span style="color: #fa8072;">`Copy`</span> trait
+</pre>
+</div>
+
+<p>
+Cons 成员拥有其储存的数据，所以当创建 b 列表时，a 被移动进了 b 这样 b 就拥有了 a。接着当再次尝使用 a 创建 c 时，这不被允许因为 a 的所有权已经被移动
+</p>
+
+<pre class="example">
+  可以改变 Cons 的定义来存放一个引用，不过接着必须指定生命周期参数
+
+  通过指定生命周期参数，表明列表中的每一个元素都至少与列表本身存在的一样久
+
+  例如，借用检查器不会允许 let a = Cons(10, &amp;Nil); 编译，因为临时值 Nil 会在 a 获取其引用之前就被丢弃了
+</pre>
+
+<p>
+也可以修改 List 的定义为使用 Rc&lt;T&gt; 代替 Box&lt;T&gt;
+</p>
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">enum</span> <span style="color: #98fb98;">List</span> {
+    <span style="color: #98fb98;">Cons</span>(<span style="color: #98fb98;">i32</span>, <span style="color: #98fb98;">Rc</span>&lt;<span style="color: #98fb98;">List</span>&gt;),
+    <span style="color: #98fb98;">Nil</span>,
+}
+
+<span style="color: #00ffff;">use</span> <span style="color: #00ffff;">crate</span>::<span style="color: #98fb98;">List</span>::{<span style="color: #98fb98;">Cons</span>, <span style="color: #98fb98;">Nil</span>};
+<span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::<span style="color: #7fffd4;">rc</span>::<span style="color: #98fb98;">Rc</span>;
+
+<span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">a</span> = <span style="color: #98fb98;">Rc</span>::new(<span style="color: #98fb98;">Cons</span>(5, <span style="color: #98fb98;">Rc</span>::new(<span style="color: #98fb98;">Cons</span>(10, <span style="color: #98fb98;">Rc</span>::new(<span style="color: #98fb98;">Nil</span>)))));
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">b</span> = <span style="color: #98fb98;">Cons</span>(3, <span style="color: #98fb98;">Rc</span>::clone(&amp;a));
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">c</span> = <span style="color: #98fb98;">Cons</span>(4, <span style="color: #98fb98;">Rc</span>::clone(&amp;a));
+}
+</pre>
+</div>
+
+<p>
+现在每一个 Cons 变量都包含一个值和一个指向 List 的 Rc: 
+</p>
+<ul class="org-ul">
+<li>当创建 b 时，不同于获取 a 的所有权，这里会克隆 a 所包含的 Rc，这会将引用计数从 1 增加到 2 并允许 a 和 b 共享 Rc 中数据的所有权</li>
+<li>创建 c 时也会克隆 a，这会将引用计数从 2 增加为 3</li>
+<li>每次调用 Rc::clone，Rc 中数据的引用计数都会增加，直到有零个引用之前其数据都不会被清理</li>
+</ul>
+
+<pre class="example">
+  需要使用 use 语句将 Rc&lt;T&gt; 引入作用域，因为它不在 prelude 中
+
+  在 main 中创建了存放 5 和 10 的列表并将其存放在 a 的新的 Rc&lt;List&gt; 中
+
+  接着当创建 b 和 c 时，调用 Rc::clone 函数并传递 a 中 Rc&lt;List&gt; 的引用作为参数
+</pre>
+
+<p>
+也可以调用 a.clone() 而不是 Rc::clone(&amp;a)，不过在这里 Rust 的习惯是使用 Rc::clone
+</p>
+
+<pre class="example">
+Rc::clone 的实现并不像大部分类型的 clone 实现那样对所有数据进行深拷贝
+
+Rc::clone 只会增加引用计数，这并不会花费多少时间，深拷贝可能会花费很长时间
+
+通过使用 Rc::clone 进行引用计数，可以明显的区别深拷贝类的克隆和增加引用计数类的克隆
+
+当查找代码中的性能问题时，只需考虑深拷贝类的克隆而无需考虑 Rc::clone 调用
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orgd95c4a3" class="outline-3">
+<h3 id="orgd95c4a3">克隆 Rc&lt;T&gt; 会增加引用计数</h3>
+<div class="outline-text-3" id="text-orgd95c4a3">
+<p>
+下面修改了 main 以便将列表 c 置于内部作用域中，这样就可以观察当 c 离开作用域时引用计数如何变化：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">a</span> = <span style="color: #98fb98;">Rc</span>::new(<span style="color: #98fb98;">Cons</span>(5, <span style="color: #98fb98;">Rc</span>::new(<span style="color: #98fb98;">Cons</span>(10, <span style="color: #98fb98;">Rc</span>::new(<span style="color: #98fb98;">Nil</span>)))));
+    <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"count after creating a = </span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">"</span>, <span style="color: #98fb98;">Rc</span>::strong_count(&amp;a));
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">b</span> = <span style="color: #98fb98;">Cons</span>(3, <span style="color: #98fb98;">Rc</span>::clone(&amp;a));
+    <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"count after creating b = </span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">"</span>, <span style="color: #98fb98;">Rc</span>::strong_count(&amp;a));
+    {
+        <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">c</span> = <span style="color: #98fb98;">Cons</span>(4, <span style="color: #98fb98;">Rc</span>::clone(&amp;a));
+        <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"count after creating c = </span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">"</span>, <span style="color: #98fb98;">Rc</span>::strong_count(&amp;a));
+    }
+    <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"count after c goes out of scope = </span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">"</span>, <span style="color: #98fb98;">Rc</span>::strong_count(&amp;a));
+}
+</pre>
+</div>
+
+<p>
+在程序中每个引用计数变化的点，会打印出引用计数，其值可以通过调用 <span class="underline">Rc::strong_count</span> 函数获得
+</p>
+
+<pre class="example">
+  这个函数叫做 strong_count 而不是 count 是因为 Rc&lt;T&gt; 也有 weak_count
+
+  在 “避免引用循环：将 Rc&lt;T&gt; 变为 Weak&lt;T&gt;” 部分会讲解 weak_count 的用途
+</pre>
+
+<p>
+这段代码会打印出：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">count after creating a = 1
+count after creating b = 2
+count after creating c = 3
+count after c goes out of scope = 2
+</pre>
+</div>
+
+<p>
+能够看到 a 中 Rc&lt;List&gt; 的初始引用计数为1，接着每次调用 clone，计数会增加1。当 c 离开作用域时，计数减1。不必像调用 Rc::clone 增加引用计数那样调用一个函数来减少计数；Drop trait 的实现当 Rc&lt;T&gt; 值离开作用域时自动减少引用计数
+</p>
+
+<pre class="example">
+  从这个例子所不能看到的是，在 main 的结尾当 b 然后是 a 离开作用域时，此处计数会是 0，同时 Rc 被完全清理
+
+  使用 Rc 允许一个值有多个所有者，引用计数则确保只要任何所有者依然存在其值也保持有效
+</pre>
+<p>
+通过 <span class="underline">不可变引用</span> ， Rc&lt;T&gt; 允许在程序的多个部分之间 <b>只读地共享数据</b> 
+</p>
+
+<pre class="example">
+  如果 Rc&lt;T&gt; 也允许多个可变引用，则会违反第四章讨论的借用规则之一：相同位置的多个可变借用可能造成数据竞争和不一致
+
+  不过可以修改数据是非常有用的！在下一部分，将讨论内部可变性模式和 RefCell&lt;T&gt; 类型，它可以与 Rc&lt;T&gt; 结合使用来处理不可变性的限制
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org6049f61" class="outline-2">
+<h2 id="org6049f61">RefCell&lt;T&gt; 和内部可变性模式</h2>
 </div>
 </div>
 <div id="postamble" class="status">
