@@ -4,3 +4,331 @@
 #+HTML_LINK_HOME: rust.html
 #+OPTIONS: num:nil timestamp:nil ^:nil
 
+安全且高效的处理并发编程是 Rust 的另一个主要目标：
++ 并发编程：代表程序的不同部分相互独立的执行
++ 并行编程：代表程序不同部分于同时执行
+
+#+BEGIN_EXAMPLE
+  这两个概念随着计算机越来越多的利用多处理器的优势时显得愈发重要
+
+  注意：出于简洁的考虑，将很多问题归类为 并发，而不是更准确的区分 并发和并行
+
+  如果这是一本专注于并发和/或并行的书，肯定会更加精确的。对于本章，当谈到 并发 时，请自行脑内替换为 并发和 并行
+#+END_EXAMPLE
+
+通过利用 _所有权_ 和 _类型检查_ ，在 Rust 中很多并发错误都是 *编译时* 错误，而非运行时错误。相比花费大量时间尝试重现运行时并发 bug 出现的特定情况，Rust 会拒绝编译不正确的代码并提供解释问题的错误信息。因此，可以在开发时修复代码，而不是在部署到生产环境后修复代码
+
+#+BEGIN_EXAMPLE
+  很多语言所提供的处理并发问题的解决方法都非常有特色
+
+  例如，Erlang 有着优雅的消息传递并发功能，但只有模糊不清的在线程间共享状态的方法
+
+  对于高级语言来说，只实现可能解决方案的子集是一个合理的策略，因为高级语言所许诺的价值来源于牺牲一些控制来换取抽象
+
+  然而对于底层语言则期望提供在任何给定的情况下有着最高的性能且对硬件有更少的抽象。因此，Rust 提供了多种工具，以符合实际情况和需求的方式来为问题建模
+#+END_EXAMPLE
+
+如下是接下来将要涉及到的内容：
++ 如何创建线程来同时运行多段代码
++ 消息传递并发，其中通道被用来在线程间传递消息
++ 共享状态并发，其中多个线程可以访问同一片数据
++ Sync 和 Send trait，将 Rust 的并发保证扩展到用户定义的以及标准库提供的类型中
+
+* 使用线程同时运行代码
+  在大部分现代操作系统中，执行中程序的代码在一个 _进程_ 中运行，_操作系统_ 则负责管理多个进程。在 _程序内部_ ，也可以拥有 *多个* _同时运行_ 的独立部分。这个运行这些独立部分的功能被称为 _线程_ 。将程序中的计算拆分进多个线程可以 *改善性能* ，因为程序可以同时进行多个任务，不过这也会 *增加复杂性* 。因为线程是同时运行的，所以无法预先保证不同线程中的代码的执行顺序。这会导致诸如此类的问题：
+  + 竞争状态，多个线程以不一致的顺序访问数据或资源
+  + 死锁，两个线程相互等待对方停止使用其所拥有的资源，这会阻止它们继续运行
+  + 只会发生在特定情况且难以稳定重现和修复的 bug
+
+  Rust 尝试缓和使用线程的负面影响。不过在多线程上下文中编程仍需格外小心，同时其所要求的代码结构也不同于运行于单线程的程序
+
+  #+BEGIN_EXAMPLE
+    编程语言有一些不同的方法来实现线程。很多操作系统提供了创建新线程的 API。这种由编程语言调用操作系统 API 创建线程的模型有时被称为 1:1，一个 OS 线程对应一个语言线程
+
+    很多编程语言提供了自己特殊的线程实现。编程语言提供的线程被称为 绿色线程，使用绿色线程的语言会在不同数量的 OS 线程的上下文中执行它们。为此，绿色线程模式被称为 M:N 模型：M 个绿色线程对应 N 个 OS 线程，这里 M 和 N 不必相同
+
+    每一个模型都有其优势和取舍，对于 Rust 来说最重要的取舍是运行时支持。在当前上下文中，运行时“代表二进制文件中包含的由语言自身提供的代码”
+
+    这些代码根据语言的不同可大可小，不过任何非汇编语言都会有一定数量的运行时代码。为此，通常人们说一个语言 “没有运行时”，一般意味着 “小运行时”
+
+    更小的运行时拥有更少的功能不过其优势在于更小的二进制输出，这使其易于在更多上下文中与其他语言相结合
+
+    虽然很多语言觉得增加运行时来换取更多功能没有什么问题，但是 Rust 需要做到几乎没有运行时，同时为了保持高性能必需能够调用 C 语言，这点也是不能妥协的
+
+    绿色线程的 M:N 模型需要更大的语言运行时来管理这些线程。因此，Rust 标准库只提供了 1:1 线程模型实现
+
+    由于 Rust 是较为底层的语言，如果愿意牺牲性能来换取的抽象，以获得对线程运行更精细的控制及更低的上下文切换成本，可以使用实现了 M:N 线程模型的 crate
+  #+END_EXAMPLE
+
+** 使用 spawn 创建新线程
+   为了创建一个新线程，需要调用 _thread::spawn_ 函数并传递一个 *闭包* ，并在其中包含希望在新线程运行的代码。下面的例子在主线程打印了一些文本而另一些文本则由新线程打印：
+
+   #+BEGIN_SRC rust 
+  use std::thread;
+  use std::time::Duration;
+
+  fn main() {
+      thread::spawn(|| {
+	  for i in 1..10 {
+	      println!("hi number {} from the spawned thread!", i);
+	      thread::sleep(Duration::from_millis(1));
+	  }
+      });
+
+      for i in 1..5 {
+	  println!("hi number {} from the main thread!", i);
+	  thread::sleep(Duration::from_millis(1));
+      }
+  }
+   #+END_SRC
+
+   这个程序的输出可能每次都略有不同，不过它大体上看起来像这样：
+
+   #+BEGIN_SRC sh 
+  hi number 1 from the main thread!
+  hi number 1 from the spawned thread!
+  hi number 2 from the main thread!
+  hi number 2 from the spawned thread!
+  hi number 3 from the main thread!
+  hi number 3 from the spawned thread!
+  hi number 4 from the main thread!
+  hi number 4 from the spawned thread!
+  hi number 5 from the spawned thread!
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     注意：这个函数编写的方式，当主线程结束时，新线程也会结束，而不管其是否执行完毕
+   #+END_EXAMPLE
+
+   _thread::sleep_ 调用强制线程 *停止* 执行一小段时间，这会允许其他不同的线程运行
+
+   #+BEGIN_EXAMPLE
+     这些线程可能会轮流运行，不过并不保证如此：这依赖操作系统如何调度线程
+
+     在这里，主线程首先打印，即便新创建线程的打印语句位于程序的开头，甚至即便告诉新建的线程打印直到 i 等于 9 ，它在主线程结束之前也只打印到了 5
+   #+END_EXAMPLE
+
+** 使用 join 等待线程结束
+   #+BEGIN_EXAMPLE
+     由于主线程结束，上面示例代码大部分时候不光会提早结束新建线程，甚至不能实际保证新建线程会被执行。其原因在于无法保证线程运行的顺序！
+
+   #+END_EXAMPLE
+   可以通过将 _thread::spawn_ 的 _返回值_ *储存* 在 _变量_ 中来修复新建线程部分没有执行或者完全没有执行的问题。thread::spawn 的返回值类型是 _JoinHandle_ 。JoinHandle 是一个 *拥有所有权* 的值，当对其调用 _join_ 方法时，它会 *等待* 其 _线程结束_ 。下面的例子里展示了如何使用JoinHandle 并调用 join 来确保新建线程在 main 退出前结束运行：
+
+   #+BEGIN_SRC rust 
+  use std::thread;
+  use std::time::Duration;
+
+  fn main() {
+      let handle = thread::spawn(|| {
+	  for i in 1..10 {
+	      println!("hi number {} from the spawned thread!", i);
+	      thread::sleep(Duration::from_millis(1));
+	  }
+      });
+
+      for i in 1..5 {
+	  println!("hi number {} from the main thread!", i);
+	  thread::sleep(Duration::from_millis(1));
+      }
+
+      handle.join().unwrap();
+  }
+   #+END_SRC
+
+   通过调用 handle 的 join 会阻塞当前线程直到 handle 所代表的线程结束。 _阻塞_ 线程意味着 *阻止* 该线程执行工作或退出。因为将 join 调用放在了主线程的 for 循环之后，运行后应该会产生类似这样的输出：
+
+   #+BEGIN_SRC sh
+  hi number 1 from the main thread!
+  hi number 2 from the main thread!
+  hi number 1 from the spawned thread!
+  hi number 3 from the main thread!
+  hi number 2 from the spawned thread!
+  hi number 4 from the main thread!
+  hi number 3 from the spawned thread!
+  hi number 4 from the spawned thread!
+  hi number 5 from the spawned thread!
+  hi number 6 from the spawned thread!
+  hi number 7 from the spawned thread!
+  hi number 8 from the spawned thread!
+  hi number 9 from the spawned thread!
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+   这两个线程仍然会交替执行，不过主线程会由于 handle.join() 调用会等待直到新建线程执行完毕
+   #+END_EXAMPLE
+
+   如果将 handle.join() 移动到 main 中 for 循环之前会发生什么：
+
+   #+BEGIN_SRC rust 
+  use std::thread;
+  use std::time::Duration;
+
+  fn main() {
+      let handle = thread::spawn(|| {
+	  for i in 1..10 {
+	      println!("hi number {} from the spawned thread!", i);
+	      thread::sleep(Duration::from_millis(1));
+	  }
+      });
+
+      handle.join().unwrap();
+
+      for i in 1..5 {
+	  println!("hi number {} from the main thread!", i);
+	  thread::sleep(Duration::from_millis(1));
+      }
+  }
+   #+END_SRC
+
+   主线程会等待直到新建线程执行完毕之后才开始执行 for 循环，所以输出将不会交替出现，如下所示：
+
+   #+BEGIN_SRC sh 
+  hi number 1 from the spawned thread!
+  hi number 2 from the spawned thread!
+  hi number 3 from the spawned thread!
+  hi number 4 from the spawned thread!
+  hi number 5 from the spawned thread!
+  hi number 6 from the spawned thread!
+  hi number 7 from the spawned thread!
+  hi number 8 from the spawned thread!
+  hi number 9 from the spawned thread!
+  hi number 1 from the main thread!
+  hi number 2 from the main thread!
+  hi number 3 from the main thread!
+  hi number 4 from the main thread!
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+   将 join 放置于何处这样一个细节会影响线程是否同时运行
+   #+END_EXAMPLE
+
+** 线程与 move 闭包
+
+   _move 闭包_ ，其经常与 thread::spawn 一起使用，因为它允许在一个线程中使用另一个线程的数据
+
+   #+BEGIN_EXAMPLE
+     在第十三章中，曾经讲到可以在参数列表前使用 move 关键字强制闭包获取其使用的环境值的所有权
+
+     这个技巧在创建新线程将值的所有权从一个线程移动到另一个线程时最为实用
+   #+END_EXAMPLE
+
+   下面展示了一个尝试在主线程中创建一个 vector 并用于新建线程的例子，如下所示：
+
+   #+BEGIN_SRC rust 
+  use std::thread;
+
+  fn main() {
+      let v = vec![1, 2, 3];
+
+      let handle = thread::spawn(|| {
+	  println!("Here's a vector: {:?}", v);
+      });
+
+      handle.join().unwrap();
+  }
+   #+END_SRC
+
+   闭包使用了 v，所以闭包会捕获 v 并使其成为闭包环境的一部分。因为 thread::spawn 在一个新线程中运行这个闭包，所以可以在新线程中访问 v。然而当编译这个例子时，会得到如下错误：
+
+   #+BEGIN_SRC sh 
+  error[E0373]: closure may outlive the current function, but it borrows `v`, which is owned by the current function
+   --> src/main.rs:6:32
+    |
+  6 |     let handle = thread::spawn(|| {
+    |                                ^^ may outlive borrowed value `v`
+  7 |         println!("Here's a vector: {:?}", v);
+    |                                           - `v` is borrowed here
+    |
+  help: to force the closure to take ownership of `v` (and any other referenced
+  variables), use the `move` keyword
+    |
+  6 |     let handle = thread::spawn(move || {
+    |                                ^^^^^^^
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     Rust 会 推断 如何捕获 v，因为 println! 只需要 v 的引用，闭包尝试借用 v
+
+     然而这有一个问题：Rust 不知道这个新建线程会执行多久，所以无法知晓 v 的引用是否一直有效
+   #+END_EXAMPLE
+
+   下面就展示了一个 v 的引用很可能不再有效的场景：
+
+   #+BEGIN_SRC rust 
+  use std::thread;
+
+  fn main() {
+      let v = vec![1, 2, 3];
+
+      let handle = thread::spawn(|| {
+	  println!("Here's a vector: {:?}", v);
+      });
+
+      drop(v); // oh no!
+
+      handle.join().unwrap();
+  }
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     假如这段代码能正常运行的话，则新建线程则可能会立刻被转移到后台并完全没有机会运行
+
+     新建线程内部有一个 v 的引用，不过主线程立刻就使用 drop 丢弃了 v
+
+     接着当新建线程开始执行，v 已不再有效，所以其引用也是无效的
+   #+END_EXAMPLE
+
+   为了修复前面的编译错误，可以听取错误信息的建议：
+
+   #+BEGIN_SRC sh 
+  help: to force the closure to take ownership of `v` (and any other referenced
+  variables), use the `move` keyword
+    |
+  6 |     let handle = thread::spawn(move || {
+    |                                ^^^^^^^
+   #+END_SRC
+
+   通过在闭包之前增加 _move_ 关键字， *强制* _闭包_ *获取* 其 _使用的值的所有权_ ，而不是任由 Rust 推断它应该借用值。这可以按照预期编译并运行：
+
+   #+BEGIN_SRC rust 
+  use std::thread;
+
+  fn main() {
+      let v = vec![1, 2, 3];
+
+      let handle = thread::spawn(move || {
+	  println!("Here's a vector: {:?}", v);
+      });
+
+      handle.join().unwrap();
+  }
+   #+END_SRC
+
+   如果为闭包增加 move，将会把 v 移动进闭包的环境中，如此将不能在主线程中对其调用 drop 了。会得到如下不同的编译错误：
+
+   #+BEGIN_SRC sh 
+  error[E0382]: use of moved value: `v`
+    --> src/main.rs:10:10
+     |
+  6  |     let handle = thread::spawn(move || {
+     |                                ------- value moved (into closure) here
+  ...
+  10 |     drop(v); // oh no!
+     |          ^ value used here after move
+     |
+     = note: move occurs because `v` has type `std::vec::Vec<i32>`, which does
+     not implement the `Copy` trait
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     这里Rust 的所有权规则又一次帮助了我们！
+
+     最开始的错误是因为 Rust 是保守的并只会为线程借用 v，这意味着主线程理论上可能使新建线程的引用无效
+
+     然而通过告诉 Rust 将 v 的所有权移动到新建线程，向 Rust 保证主线程不会再使用 v。当在主线程中使用 v 时就会违反所有权规则
+
+     move 关键字覆盖了 Rust 默认保守的借用：其也不允许违反所有权规则
+   #+END_EXAMPLE
+
+* 使用消息传递在线程间传送数据
