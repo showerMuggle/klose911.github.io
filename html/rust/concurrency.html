@@ -245,7 +245,14 @@ for the JavaScript code in this tag.
 <li><a href="#org6d9569a">线程与 move 闭包</a></li>
 </ul>
 </li>
-<li><a href="#orgab47168">使用消息传递在线程间传送数据</a></li>
+<li><a href="#orgab47168">使用消息传递在线程间传送数据</a>
+<ul>
+<li><a href="#org7ede0af">通道与所有权转移</a></li>
+<li><a href="#org652616b">发送多个值并观察接收者的等待</a></li>
+<li><a href="#orgca5f533">通过克隆发送者来创建多个生产者</a></li>
+</ul>
+</li>
+<li><a href="#org19b6349">共享状态并发</a></li>
 </ul>
 </div>
 </div>
@@ -649,6 +656,349 @@ move 关键字覆盖了 Rust 默认保守的借用：其也不允许违反所有
 
 <div id="outline-container-orgab47168" class="outline-2">
 <h2 id="orgab47168">使用消息传递在线程间传送数据</h2>
+<div class="outline-text-2" id="text-orgab47168">
+<pre class="example">
+  一个日益流行的确保安全并发的方式是消息传递，线程或 actor 通过发送包含数据的消息来相互沟通
+
+  这个思想来源于“Go 编程语言文档”中的口号：“不要共享内存来通讯；而是要通讯来共享内存”
+</pre>
+<p>
+Rust 中一个实现消息传递并发的主要工具是 <span class="underline">通道</span> ，Rust 标准库提供了其实现的编程概念。通道有两部分组：
+</p>
+<ul class="org-ul">
+<li>发送者：代码中的一部分调用发送者的方法以及希望发送的数据，</li>
+<li>接收者：代码中另一部分用来检查接受到的消息</li>
+<li>当发送者或接收者任一被丢弃时可以认为通道被 <span class="underline">关闭</span> 了</li>
+</ul>
+
+<pre class="example">
+  这里将开发一个程序，它会在一个线程生成值向通道发送，而在另一个线程会接收值并打印出来。接下来会通过通道在线程间发送简单值来演示这个功能
+
+  一旦熟悉了这项技术，就能使用通道来实现聊天系统，或利用很多线程进行分布式计算并将部分计算结果发送给一个线程进行聚合
+</pre>
+
+<p>
+首先，创建了一个通道但没有做任何事：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::<span style="color: #7fffd4;">sync</span>::mpsc;
+
+<span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
+    <span style="color: #00ffff;">let</span> (tx, rx) = <span style="color: #7fffd4;">mpsc</span>::channel();
+}
+</pre>
+</div>
+
+<pre class="example">
+注意这还不能编译，因为 Rust 不知道想要在通道中发送什么类型
+</pre>
+<p>
+这里使用 <span class="underline">mpsc::channel</span> 函数 <b>创建</b> 一个新的通道
+</p>
+
+<pre class="example">
+mpsc 是 多个生产者，单个消费者的缩写。简而言之，Rust 标准库实现通道的方式意味着一个通道可以有多个产生值的发送端，但只能有一个消费这些值的接收端
+
+想象一下多条小河小溪最终汇聚成大河：所有通过这些小河发出的东西最后都会来到大河的下游
+
+目前以单个生产者开始，但是当示例可以工作后会增加多个生产者
+</pre>
+
+<p>
+mpsc::channel 函数返回一个 <span class="underline">元组</span> ：第一个元素是 <span class="underline">发送端</span> ，而第二个元素是 <span class="underline">接收端</span> 
+</p>
+
+<pre class="example">
+  由于历史原因，tx 和 rx 通常作为 发送者和 接收者的缩写，所以用来绑定这两端变量的名字
+
+  这里使用了一个 let 语句和模式来解构了此元组；以后会讨论 let 语句中的模式和解构。这是一个方便提取 mpsc::channel 返回的元组中一部分的手段
+</pre>
+
+<p>
+将发送端移动到一个新建线程中并发送一个字符串，这样新建线程就可以和主线程通讯了：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::thread;
+<span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::<span style="color: #7fffd4;">sync</span>::mpsc;
+
+<span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
+    <span style="color: #00ffff;">let</span> (tx, rx) = <span style="color: #7fffd4;">mpsc</span>::channel();
+
+    <span style="color: #7fffd4;">thread</span>::spawn(<span style="color: #00ffff;">move</span> || {
+        <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">val</span> = <span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"hi"</span>);
+        tx.send(val).unwrap();
+    });
+}
+</pre>
+</div>
+
+<pre class="example">
+  这里再次使用 thread::spawn 来创建一个新线程并使用 move 将 tx 移动到闭包中这样新建线程就拥有 tx 了
+
+  因为新建线程需要拥有通道的发送端以便可以通过通道来发送消息
+</pre>
+<p>
+通道的发送端有一个 <span class="underline">send</span> 方法用来获取需要放入通道的值。send 方法返回一个 <span class="underline">Result&lt;T, E&gt;</span> 类型：如果接收端已经被丢弃了，将没有发送值的目标，所以发送操作会返回错误
+</p>
+
+<pre class="example">
+  在这个例子中，出错的时候调用 unwrap 产生 panic
+
+  不过对于一个真实程序，需要合理地处理它
+</pre>
+
+<p>
+现在主线程中从通道的接收端获取值：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::thread;
+<span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::<span style="color: #7fffd4;">sync</span>::mpsc;
+
+<span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
+    <span style="color: #00ffff;">let</span> (tx, rx) = <span style="color: #7fffd4;">mpsc</span>::channel();
+
+    <span style="color: #7fffd4;">thread</span>::spawn(<span style="color: #00ffff;">move</span> || {
+        <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">val</span> = <span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"hi"</span>);
+        tx.send(val).unwrap();
+    });
+
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">received</span> = rx.recv().unwrap();
+    <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"Got: </span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">"</span>, received);
+}
+</pre>
+</div>
+
+<p>
+通道的接收端有两个有用的方法 <span class="underline">recv</span>  和 <span class="underline">try_recv</span> 
+</p>
+<ul class="org-ul">
+<li>recv: <b>阻塞</b> 主线程执行直到 <b>从通道中接收一个值</b>  
+<ul class="org-ul">
+<li>一旦发送了一个值，recv 会在一个 Result&lt;T, E&gt; 中返回它</li>
+<li>当通道发送端关闭，recv 会返回一个错误表明不会再有新的值到来了</li>
+</ul></li>
+<li>try_recv: 不会阻塞，相反它立刻返回一个 Result&lt;T, E&gt;
+<ul class="org-ul">
+<li>Ok 值包含可用的信息</li>
+<li>Err 值代表此时没有任何消息</li>
+</ul></li>
+</ul>
+
+<pre class="example">
+  如果线程在等待消息过程中还有其他工作时使用 try_recv 很有用：可以编写一个循环来频繁调用 try_recv，在有可用消息时进行处理，其余时候则处理一会其他工作直到再次检查
+
+  出于简单的考虑，这个例子使用了 recv；主线程中除了等待消息之外没有任何其他工作，所以阻塞主线程是合适的
+</pre>
+
+<p>
+运行上面的示例后，将会看到主线程打印出这个值：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">Got: hi
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org7ede0af" class="outline-3">
+<h3 id="org7ede0af">通道与所有权转移</h3>
+<div class="outline-text-3" id="text-org7ede0af">
+<pre class="example">
+  所有权规则在消息传递中扮演了重要角色，其有助于编写安全的并发代码。防止并发编程中的错误是在 Rust 程序中考虑所有权的一大优势
+</pre>
+<p>
+现在做一个试验来看看通道与所有权如何一同协作以避免产生问题：尝试在新建线程中的通道中发送完 val 值 之后 再使用它：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::thread;
+<span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::<span style="color: #7fffd4;">sync</span>::mpsc;
+
+<span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
+    <span style="color: #00ffff;">let</span> (tx, rx) = <span style="color: #7fffd4;">mpsc</span>::channel();
+
+    <span style="color: #7fffd4;">thread</span>::spawn(<span style="color: #00ffff;">move</span> || {
+        <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">val</span> = <span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"hi"</span>);
+        tx.send(val).unwrap();
+        <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"val is </span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">"</span>, val);
+    });
+
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">received</span> = rx.recv().unwrap();
+    <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"Got: </span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">"</span>, received);
+}
+</pre>
+</div>
+
+<p>
+这里尝试在通过 tx.send 发送 val 到通道中之后将其打印出来。允许这么做是一个坏主意：一旦将值发送到另一个线程后，那个线程可能会在再次使用它之前就将其修改或者丢弃。其他线程对值可能的修改会由于不一致或不存在的数据而导致错误或意外的结果。然而，尝试编译代码时，Rust 会给出一个错误：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">error[E0382]: use of moved value: <span style="color: #fa8072;">`val`</span>
+  --&gt; src/main.rs:10:31
+   |
+9  |         tx.send(val).unwrap();
+   |                 --- value moved here
+10 |         println!(<span style="color: #ffa07a;">"val is {}"</span>, val);
+   |                               ^^^ value used here after move
+   |
+   = note: move occurs because <span style="color: #fa8072;">`val`</span> has type <span style="color: #fa8072;">`std::string::String`</span>, which does not implement the <span style="color: #fa8072;">`Copy`</span> trait
+</pre>
+</div>
+
+<p>
+这里的并发错误会造成一个编译时错误。send 函数获取其参数的所有权并移动这个值归接收者所有。这可以防止在发送后再次意外地使用这个值；所有权系统检查一切是否合乎规则
+</p>
+</div>
+</div>
+
+<div id="outline-container-org652616b" class="outline-3">
+<h3 id="org652616b">发送多个值并观察接收者的等待</h3>
+<div class="outline-text-3" id="text-org652616b">
+<pre class="example">
+  上面示例的代码可以编译和运行，不过它并没有明确的告诉我们两个独立的线程通过通道相互通讯
+</pre>
+<p>
+下面示例有一些改进来证明是并发执行的：新建线程现在会发送多个消息并在每个消息之间暂停一秒钟
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::thread;
+<span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::<span style="color: #7fffd4;">sync</span>::mpsc;
+<span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::<span style="color: #7fffd4;">time</span>::<span style="color: #98fb98;">Duration</span>;
+
+<span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
+    <span style="color: #00ffff;">let</span> (tx, rx) = <span style="color: #7fffd4;">mpsc</span>::channel();
+
+    <span style="color: #7fffd4;">thread</span>::spawn(<span style="color: #00ffff;">move</span> || {
+        <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">vals</span> = <span style="color: #7fffd4;">vec!</span>[
+            <span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"hi"</span>),
+            <span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"from"</span>),
+            <span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"the"</span>),
+            <span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"thread"</span>),
+        ];
+
+        <span style="color: #00ffff;">for</span> <span style="color: #eedd82;">val</span> <span style="color: #00ffff;">in</span> vals {
+            tx.send(val).unwrap();
+            <span style="color: #7fffd4;">thread</span>::sleep(<span style="color: #98fb98;">Duration</span>::from_secs(1));
+        }
+    });
+
+    <span style="color: #00ffff;">for</span> <span style="color: #eedd82;">received</span> <span style="color: #00ffff;">in</span> rx {
+        <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"Got: </span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">"</span>, received);
+    }
+}
+</pre>
+</div>
+
+<pre class="example">
+  在新建线程中有一个字符串 vector 希望发送到主线程。遍历他们，单独的发送每一个字符串并通过一个 Duration 值调用 thread::sleep 函数来暂停一秒
+
+  在主线程中，不再显式调用 recv 函数：而是将 rx 当作一个迭代器。对于每一个接收到的值，将其打印出来。当通道被关闭时，迭代器也将结束
+</pre>
+
+<p>
+当运行示例代码时，将看到如下输出，每一行都会暂停一秒：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">Got: hi
+Got: from
+Got: the
+Got: thread
+</pre>
+</div>
+
+<pre class="example">
+因为主线程中的 for 循环里并没有任何暂停或等待的代码，所以可以说主线程是在等待从新建线程中接收值
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orgca5f533" class="outline-3">
+<h3 id="orgca5f533">通过克隆发送者来创建多个生产者</h3>
+<div class="outline-text-3" id="text-orgca5f533">
+<pre class="example">
+之前提到了mpsc是 multiple producer, single consumer 的缩写
+</pre>
+<p>
+可以运用 mpsc 来来创建向 <span class="underline">同一接收者</span> <b>发送</b> 值的 <span class="underline">多个线程</span> 。这可以通过 <b>克隆</b> 通道的 <span class="underline">发送端</span> 来做到：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">--snip--</span>
+
+<span style="color: #00ffff;">let</span> (tx, rx) = <span style="color: #7fffd4;">mpsc</span>::channel();
+
+<span style="color: #00ffff;">let</span> <span style="color: #eedd82;">tx1</span> = <span style="color: #7fffd4;">mpsc</span>::<span style="color: #98fb98;">Sender</span>::clone(&amp;tx);
+<span style="color: #7fffd4;">thread</span>::spawn(<span style="color: #00ffff;">move</span> || {
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">vals</span> = <span style="color: #7fffd4;">vec!</span>[
+        <span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"hi"</span>),
+        <span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"from"</span>),
+        <span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"the"</span>),
+        <span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"thread"</span>),
+    ];
+
+    <span style="color: #00ffff;">for</span> <span style="color: #eedd82;">val</span> <span style="color: #00ffff;">in</span> vals {
+        tx1.send(val).unwrap();
+        <span style="color: #7fffd4;">thread</span>::sleep(<span style="color: #98fb98;">Duration</span>::from_secs(1));
+    }
+});
+
+<span style="color: #7fffd4;">thread</span>::spawn(<span style="color: #00ffff;">move</span> || {
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">vals</span> = <span style="color: #7fffd4;">vec!</span>[
+        <span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"more"</span>),
+        <span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"messages"</span>),
+        <span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"for"</span>),
+        <span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"you"</span>),
+    ];
+
+    <span style="color: #00ffff;">for</span> <span style="color: #eedd82;">val</span> <span style="color: #00ffff;">in</span> vals {
+        tx.send(val).unwrap();
+        <span style="color: #7fffd4;">thread</span>::sleep(<span style="color: #98fb98;">Duration</span>::from_secs(1));
+    }
+});
+
+<span style="color: #00ffff;">for</span> <span style="color: #eedd82;">received</span> <span style="color: #00ffff;">in</span> rx {
+    <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"Got: </span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">"</span>, received);
+}
+</pre>
+</div>
+
+<pre class="example">
+  这一次，在创建新线程之前，对通道的发送端调用了 clone 方法，这会给我们一个可以传递给第一个新建线程的发送端句柄
+
+  我们会将原始的通道发送端传递给第二个新建线程，这样就会有两个线程，每个线程将向通道的接收端发送不同的消息
+</pre>
+<p>
+如果运行这些代码，可能会看到这样的输出：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">Got: hi
+Got: more
+Got: from
+Got: messages
+Got: for
+Got: the
+Got: thread
+Got: you
+</pre>
+</div>
+
+<pre class="example">
+  虽然可能会看到这些值以不同的顺序出现；这依赖于你的系统。这也就是并发既有趣又困难的原因
+
+  如果通过 thread::sleep 做实验，在不同的线程中提供不同的值，就会发现他们的运行更加不确定，且每次都会产生不同的输出
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org19b6349" class="outline-2">
+<h2 id="org19b6349">共享状态并发</h2>
 </div>
 </div>
 <div id="postamble" class="status">
