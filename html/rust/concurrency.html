@@ -238,34 +238,41 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgf796376">使用线程同时运行代码</a>
+<li><a href="#orgaab6cac">使用线程同时运行代码</a>
 <ul>
-<li><a href="#orga121e66">使用 spawn 创建新线程</a></li>
-<li><a href="#orgbf2f472">使用 join 等待线程结束</a></li>
-<li><a href="#org6d9569a">线程与 move 闭包</a></li>
+<li><a href="#orgc97c89b">使用 spawn 创建新线程</a></li>
+<li><a href="#org5134317">使用 join 等待线程结束</a></li>
+<li><a href="#orgccb33dd">线程与 move 闭包</a></li>
 </ul>
 </li>
-<li><a href="#orgab47168">使用消息传递在线程间传送数据</a>
+<li><a href="#org7dd77f1">使用消息传递在线程间传送数据</a>
 <ul>
-<li><a href="#org7ede0af">通道与所有权转移</a></li>
-<li><a href="#org652616b">发送多个值并观察接收者的等待</a></li>
-<li><a href="#orgca5f533">通过克隆发送者来创建多个生产者</a></li>
+<li><a href="#orgd32d6d7">通道与所有权转移</a></li>
+<li><a href="#org5580e0a">发送多个值并观察接收者的等待</a></li>
+<li><a href="#orgc3e0450">通过克隆发送者来创建多个生产者</a></li>
 </ul>
 </li>
-<li><a href="#org19b6349">共享状态并发</a>
+<li><a href="#orgf7a0a67">共享状态并发</a>
 <ul>
-<li><a href="#org5619a54">互斥器</a>
+<li><a href="#orgcf57d46">互斥器</a>
 <ul>
-<li><a href="#orgea2a400">Mutex&lt;T&gt; 的API</a></li>
-<li><a href="#org04aac4c">在线程间共享 Mutex&lt;T&gt;</a></li>
-<li><a href="#orgc2c6015">多线程和多所有权</a></li>
-<li><a href="#orgde28a5d">原子引用计数 Arc&lt;T&gt;</a></li>
+<li><a href="#orge07637e">Mutex&lt;T&gt; 的API</a></li>
+<li><a href="#orga78edec">在线程间共享 Mutex&lt;T&gt;</a></li>
+<li><a href="#org2f694fe">多线程和多所有权</a></li>
+<li><a href="#org8811970">原子引用计数 Arc&lt;T&gt;</a></li>
 </ul>
 </li>
-<li><a href="#org669a666">RefCell&lt;T&gt;/Rc&lt;T&gt; 与 Mutex&lt;T&gt;/Arc&lt;T&gt; 的相似性</a></li>
+<li><a href="#org4e39ec9">RefCell&lt;T&gt;/Rc&lt;T&gt; 与 Mutex&lt;T&gt;/Arc&lt;T&gt; 的相似性</a></li>
 </ul>
 </li>
-<li><a href="#org7739951">使用 Sync 和 Send trait 的可扩展并发</a></li>
+<li><a href="#org2b559f4">使用 Sync 和 Send trait 的可扩展并发</a>
+<ul>
+<li><a href="#org8ec59b0">通过 Send 允许在线程间转移所有权</a></li>
+<li><a href="#orgf913d82">Sync 允许多线程访问</a></li>
+<li><a href="#org9698b1b">手动实现 Send 和 Sync 是不安全的</a></li>
+</ul>
+</li>
+<li><a href="#org72c5bf7">总结</a></li>
 </ul>
 </div>
 </div>
@@ -309,9 +316,9 @@ for the JavaScript code in this tag.
 <li>Sync 和 Send trait，将 Rust 的并发保证扩展到用户定义的以及标准库提供的类型中</li>
 </ul>
 
-<div id="outline-container-orgf796376" class="outline-2">
-<h2 id="orgf796376">使用线程同时运行代码</h2>
-<div class="outline-text-2" id="text-orgf796376">
+<div id="outline-container-orgaab6cac" class="outline-2">
+<h2 id="orgaab6cac">使用线程同时运行代码</h2>
+<div class="outline-text-2" id="text-orgaab6cac">
 <p>
 在大部分现代操作系统中，执行中程序的代码在一个 <span class="underline">进程</span> 中运行，_操作系统_ 则负责管理多个进程。在 <span class="underline">程序内部</span> ，也可以拥有 <b>多个</b> <span class="underline">同时运行</span> 的独立部分。这个运行这些独立部分的功能被称为 <span class="underline">线程</span> 。将程序中的计算拆分进多个线程可以 <b>改善性能</b> ，因为程序可以同时进行多个任务，不过这也会 <b>增加复杂性</b> 。因为线程是同时运行的，所以无法预先保证不同线程中的代码的执行顺序。这会导致诸如此类的问题：
 </p>
@@ -344,28 +351,28 @@ Rust 尝试缓和使用线程的负面影响。不过在多线程上下文中编
 </pre>
 </div>
 
-<div id="outline-container-orga121e66" class="outline-3">
-<h3 id="orga121e66">使用 spawn 创建新线程</h3>
-<div class="outline-text-3" id="text-orga121e66">
+<div id="outline-container-orgc97c89b" class="outline-3">
+<h3 id="orgc97c89b">使用 spawn 创建新线程</h3>
+<div class="outline-text-3" id="text-orgc97c89b">
 <p>
 为了创建一个新线程，需要调用 <span class="underline">thread::spawn</span> 函数并传递一个 <b>闭包</b> ，并在其中包含希望在新线程运行的代码。下面的例子在主线程打印了一些文本而另一些文本则由新线程打印：
 </p>
 
 <div class="org-src-container">
-<pre class="src src-rust"><span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::thread;
-<span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::<span style="color: #7fffd4;">time</span>::<span style="color: #98fb98;">Duration</span>;
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::thread;
+<span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::<span style="color: #ffd700;">time</span>::<span style="color: #98f5ff;">Duration</span>;
 
-<span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
-    <span style="color: #7fffd4;">thread</span>::spawn(|| {
-        <span style="color: #00ffff;">for</span> <span style="color: #eedd82;">i</span> <span style="color: #00ffff;">in</span> 1..10 {
-            <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"hi number </span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;"> from the spawned thread!"</span>, i);
-            <span style="color: #7fffd4;">thread</span>::sleep(<span style="color: #98fb98;">Duration</span>::from_millis(1));
+<span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+    <span style="color: #ffd700;">thread</span>::spawn(|| {
+        <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">i</span> <span style="color: #00bfff; font-weight: bold;">in</span> 1..10 {
+            <span style="color: #f08080;">println!</span>(<span style="color: #deb887;">"hi number </span><span style="color: #deb887; font-style: italic;">{}</span><span style="color: #deb887;"> from the spawned thread!"</span>, i);
+            <span style="color: #ffd700;">thread</span>::sleep(<span style="color: #98f5ff;">Duration</span>::from_millis(1));
         }
     });
 
-    <span style="color: #00ffff;">for</span> <span style="color: #eedd82;">i</span> <span style="color: #00ffff;">in</span> 1..5 {
-        <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"hi number </span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;"> from the main thread!"</span>, i);
-        <span style="color: #7fffd4;">thread</span>::sleep(<span style="color: #98fb98;">Duration</span>::from_millis(1));
+    <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">i</span> <span style="color: #00bfff; font-weight: bold;">in</span> 1..5 {
+        <span style="color: #f08080;">println!</span>(<span style="color: #deb887;">"hi number </span><span style="color: #deb887; font-style: italic;">{}</span><span style="color: #deb887;"> from the main thread!"</span>, i);
+        <span style="color: #ffd700;">thread</span>::sleep(<span style="color: #98f5ff;">Duration</span>::from_millis(1));
     }
 }
 </pre>
@@ -404,9 +411,9 @@ hi number 5 from the spawned thread!
 </div>
 </div>
 
-<div id="outline-container-orgbf2f472" class="outline-3">
-<h3 id="orgbf2f472">使用 join 等待线程结束</h3>
-<div class="outline-text-3" id="text-orgbf2f472">
+<div id="outline-container-org5134317" class="outline-3">
+<h3 id="org5134317">使用 join 等待线程结束</h3>
+<div class="outline-text-3" id="text-org5134317">
 <pre class="example">
      由于主线程结束，上面示例代码大部分时候不光会提早结束新建线程，甚至不能实际保证新建线程会被执行。其原因在于无法保证线程运行的顺序！
 
@@ -416,20 +423,20 @@ hi number 5 from the spawned thread!
 </p>
 
 <div class="org-src-container">
-<pre class="src src-rust"><span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::thread;
-<span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::<span style="color: #7fffd4;">time</span>::<span style="color: #98fb98;">Duration</span>;
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::thread;
+<span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::<span style="color: #ffd700;">time</span>::<span style="color: #98f5ff;">Duration</span>;
 
-<span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
-    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">handle</span> = <span style="color: #7fffd4;">thread</span>::spawn(|| {
-        <span style="color: #00ffff;">for</span> <span style="color: #eedd82;">i</span> <span style="color: #00ffff;">in</span> 1..10 {
-            <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"hi number </span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;"> from the spawned thread!"</span>, i);
-            <span style="color: #7fffd4;">thread</span>::sleep(<span style="color: #98fb98;">Duration</span>::from_millis(1));
+<span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">handle</span> = <span style="color: #ffd700;">thread</span>::spawn(|| {
+        <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">i</span> <span style="color: #00bfff; font-weight: bold;">in</span> 1..10 {
+            <span style="color: #f08080;">println!</span>(<span style="color: #deb887;">"hi number </span><span style="color: #deb887; font-style: italic;">{}</span><span style="color: #deb887;"> from the spawned thread!"</span>, i);
+            <span style="color: #ffd700;">thread</span>::sleep(<span style="color: #98f5ff;">Duration</span>::from_millis(1));
         }
     });
 
-    <span style="color: #00ffff;">for</span> <span style="color: #eedd82;">i</span> <span style="color: #00ffff;">in</span> 1..5 {
-        <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"hi number </span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;"> from the main thread!"</span>, i);
-        <span style="color: #7fffd4;">thread</span>::sleep(<span style="color: #98fb98;">Duration</span>::from_millis(1));
+    <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">i</span> <span style="color: #00bfff; font-weight: bold;">in</span> 1..5 {
+        <span style="color: #f08080;">println!</span>(<span style="color: #deb887;">"hi number </span><span style="color: #deb887; font-style: italic;">{}</span><span style="color: #deb887;"> from the main thread!"</span>, i);
+        <span style="color: #ffd700;">thread</span>::sleep(<span style="color: #98f5ff;">Duration</span>::from_millis(1));
     }
 
     handle.join().unwrap();
@@ -467,22 +474,22 @@ hi number 9 from the spawned thread!
 </p>
 
 <div class="org-src-container">
-<pre class="src src-rust"><span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::thread;
-<span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::<span style="color: #7fffd4;">time</span>::<span style="color: #98fb98;">Duration</span>;
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::thread;
+<span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::<span style="color: #ffd700;">time</span>::<span style="color: #98f5ff;">Duration</span>;
 
-<span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
-    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">handle</span> = <span style="color: #7fffd4;">thread</span>::spawn(|| {
-        <span style="color: #00ffff;">for</span> <span style="color: #eedd82;">i</span> <span style="color: #00ffff;">in</span> 1..10 {
-            <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"hi number </span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;"> from the spawned thread!"</span>, i);
-            <span style="color: #7fffd4;">thread</span>::sleep(<span style="color: #98fb98;">Duration</span>::from_millis(1));
+<span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">handle</span> = <span style="color: #ffd700;">thread</span>::spawn(|| {
+        <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">i</span> <span style="color: #00bfff; font-weight: bold;">in</span> 1..10 {
+            <span style="color: #f08080;">println!</span>(<span style="color: #deb887;">"hi number </span><span style="color: #deb887; font-style: italic;">{}</span><span style="color: #deb887;"> from the spawned thread!"</span>, i);
+            <span style="color: #ffd700;">thread</span>::sleep(<span style="color: #98f5ff;">Duration</span>::from_millis(1));
         }
     });
 
     handle.join().unwrap();
 
-    <span style="color: #00ffff;">for</span> <span style="color: #eedd82;">i</span> <span style="color: #00ffff;">in</span> 1..5 {
-        <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"hi number </span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;"> from the main thread!"</span>, i);
-        <span style="color: #7fffd4;">thread</span>::sleep(<span style="color: #98fb98;">Duration</span>::from_millis(1));
+    <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">i</span> <span style="color: #00bfff; font-weight: bold;">in</span> 1..5 {
+        <span style="color: #f08080;">println!</span>(<span style="color: #deb887;">"hi number </span><span style="color: #deb887; font-style: italic;">{}</span><span style="color: #deb887;"> from the main thread!"</span>, i);
+        <span style="color: #ffd700;">thread</span>::sleep(<span style="color: #98f5ff;">Duration</span>::from_millis(1));
     }
 }
 </pre>
@@ -515,9 +522,9 @@ hi number 4 from the main thread!
 </div>
 </div>
 
-<div id="outline-container-org6d9569a" class="outline-3">
-<h3 id="org6d9569a">线程与 move 闭包</h3>
-<div class="outline-text-3" id="text-org6d9569a">
+<div id="outline-container-orgccb33dd" class="outline-3">
+<h3 id="orgccb33dd">线程与 move 闭包</h3>
+<div class="outline-text-3" id="text-orgccb33dd">
 <p>
 <span class="underline">move 闭包</span> ，其经常与 thread::spawn 一起使用，因为它允许在一个线程中使用另一个线程的数据
 </p>
@@ -533,13 +540,13 @@ hi number 4 from the main thread!
 </p>
 
 <div class="org-src-container">
-<pre class="src src-rust"><span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::thread;
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::thread;
 
-<span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
-    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">v</span> = <span style="color: #7fffd4;">vec!</span>[1, 2, 3];
+<span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">v</span> = <span style="color: #ffd700;">vec!</span>[1, 2, 3];
 
-    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">handle</span> = <span style="color: #7fffd4;">thread</span>::spawn(|| {
-        <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"Here's a vector: </span><span style="color: #ffa07a; font-style: italic;">{:?}</span><span style="color: #ffa07a;">"</span>, v);
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">handle</span> = <span style="color: #ffd700;">thread</span>::spawn(|| {
+        <span style="color: #f08080;">println!</span>(<span style="color: #deb887;">"Here's a vector: </span><span style="color: #deb887; font-style: italic;">{:?}</span><span style="color: #deb887;">"</span>, v);
     });
 
     handle.join().unwrap();
@@ -552,18 +559,18 @@ hi number 4 from the main thread!
 </p>
 
 <div class="org-src-container">
-<pre class="src src-sh">error[E0373]: closure may outlive the current <span style="color: #00ffff;">function</span>, but it borrows <span style="color: #fa8072;">`v`</span>, which is owned by the current <span style="color: #00ffff;">function</span>
+<pre class="src src-sh">error[E0373]: closure may outlive the current <span style="color: #00bfff; font-weight: bold;">function</span>, but it borrows <span style="color: #fa8072;">`v`</span>, which is owned by the current <span style="color: #00bfff; font-weight: bold;">function</span>
  --&gt; src/main.rs:6:32
   |
-6 |     <span style="color: #b0c4de;">let</span> handle = thread::spawn(|| {
+6 |     let handle = thread::spawn(|| {
   |                                ^^ may outlive borrowed value <span style="color: #fa8072;">`v`</span>
-7 |         println!(<span style="color: #ffa07a;">"Here's a vector: {:?}"</span>, v);
+7 |         println!(<span style="color: #deb887;">"Here's a vector: {:?}"</span>, v);
   |                                           - <span style="color: #fa8072;">`v`</span> is borrowed here
   |
-<span style="color: #b0c4de;">help</span>: to force the closure to take ownership of <span style="color: #fa8072;">`v`</span> (and any other referenced
+help: to force the closure to take ownership of <span style="color: #fa8072;">`v`</span> (and any other referenced
 variables), use the <span style="color: #fa8072;">`move`</span> keyword
   |
-6 |     <span style="color: #b0c4de;">let</span> handle = thread::spawn(move || {
+6 |     let handle = thread::spawn(move || {
   |                                ^^^^^^^
 </pre>
 </div>
@@ -579,16 +586,16 @@ Rust 会 推断 如何捕获 v，因为 println! 只需要 v 的引用，闭包�
 </p>
 
 <div class="org-src-container">
-<pre class="src src-rust"><span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::thread;
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::thread;
 
-<span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
-    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">v</span> = <span style="color: #7fffd4;">vec!</span>[1, 2, 3];
+<span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">v</span> = <span style="color: #ffd700;">vec!</span>[1, 2, 3];
 
-    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">handle</span> = <span style="color: #7fffd4;">thread</span>::spawn(|| {
-        <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"Here's a vector: </span><span style="color: #ffa07a; font-style: italic;">{:?}</span><span style="color: #ffa07a;">"</span>, v);
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">handle</span> = <span style="color: #ffd700;">thread</span>::spawn(|| {
+        <span style="color: #f08080;">println!</span>(<span style="color: #deb887;">"Here's a vector: </span><span style="color: #deb887; font-style: italic;">{:?}</span><span style="color: #deb887;">"</span>, v);
     });
 
-    drop(v); <span style="color: #ff4500;">// </span><span style="color: #ff4500;">oh no!</span>
+    drop(v); <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">oh no!</span>
 
     handle.join().unwrap();
 }
@@ -608,10 +615,10 @@ Rust 会 推断 如何捕获 v，因为 println! 只需要 v 的引用，闭包�
 </p>
 
 <div class="org-src-container">
-<pre class="src src-sh"><span style="color: #b0c4de;">help</span>: to force the closure to take ownership of <span style="color: #fa8072;">`v`</span> (and any other referenced
+<pre class="src src-sh">help: to force the closure to take ownership of <span style="color: #fa8072;">`v`</span> (and any other referenced
 variables), use the <span style="color: #fa8072;">`move`</span> keyword
   |
-6 |     <span style="color: #b0c4de;">let</span> handle = thread::spawn(move || {
+6 |     let handle = thread::spawn(move || {
   |                                ^^^^^^^
 </pre>
 </div>
@@ -621,13 +628,13 @@ variables), use the <span style="color: #fa8072;">`move`</span> keyword
 </p>
 
 <div class="org-src-container">
-<pre class="src src-rust"><span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::thread;
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::thread;
 
-<span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
-    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">v</span> = <span style="color: #7fffd4;">vec!</span>[1, 2, 3];
+<span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">v</span> = <span style="color: #ffd700;">vec!</span>[1, 2, 3];
 
-    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">handle</span> = <span style="color: #7fffd4;">thread</span>::spawn(<span style="color: #00ffff;">move</span> || {
-        <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"Here's a vector: </span><span style="color: #ffa07a; font-style: italic;">{:?}</span><span style="color: #ffa07a;">"</span>, v);
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">handle</span> = <span style="color: #ffd700;">thread</span>::spawn(<span style="color: #00bfff; font-weight: bold;">move</span> || {
+        <span style="color: #f08080;">println!</span>(<span style="color: #deb887;">"Here's a vector: </span><span style="color: #deb887; font-style: italic;">{:?}</span><span style="color: #deb887;">"</span>, v);
     });
 
     handle.join().unwrap();
@@ -643,7 +650,7 @@ variables), use the <span style="color: #fa8072;">`move`</span> keyword
 <pre class="src src-sh">error[E0382]: use of moved value: <span style="color: #fa8072;">`v`</span>
   --&gt; src/main.rs:10:10
    |
-6  |     <span style="color: #b0c4de;">let</span> handle = thread::spawn(move || {
+6  |     let handle = thread::spawn(move || {
    |                                ------- value moved (into closure) here
 ...
 10 |     drop(v); // oh no!
@@ -667,13 +674,13 @@ move 关键字覆盖了 Rust 默认保守的借用：其也不允许违反所有
 </div>
 </div>
 
-<div id="outline-container-orgab47168" class="outline-2">
-<h2 id="orgab47168">使用消息传递在线程间传送数据</h2>
-<div class="outline-text-2" id="text-orgab47168">
+<div id="outline-container-org7dd77f1" class="outline-2">
+<h2 id="org7dd77f1">使用消息传递在线程间传送数据</h2>
+<div class="outline-text-2" id="text-org7dd77f1">
 <pre class="example">
-  一个日益流行的确保安全并发的方式是消息传递，线程或 actor 通过发送包含数据的消息来相互沟通
+    一个日益流行的确保安全并发的方式是消息传递，线程或 actor 通过发送包含数据的消息来相互沟通
 
-  这个思想来源于“Go 编程语言文档”中的口号：“不要共享内存来通讯；而是要通讯来共享内存”
+    这个思想来源于“Go 编程语言文档”中的口号：“不要共享内存来通讯；而是要通讯来共享内存”
 </pre>
 <p>
 Rust 中一个实现消息传递并发的主要工具是 <span class="underline">通道</span> ，Rust 标准库提供了其实现的编程概念。通道有两部分组：
@@ -685,9 +692,9 @@ Rust 中一个实现消息传递并发的主要工具是 <span class="underline"
 </ul>
 
 <pre class="example">
-  这里将开发一个程序，它会在一个线程生成值向通道发送，而在另一个线程会接收值并打印出来。接下来会通过通道在线程间发送简单值来演示这个功能
+    这里将开发一个程序，它会在一个线程生成值向通道发送，而在另一个线程会接收值并打印出来。接下来会通过通道在线程间发送简单值来演示这个功能
 
-  一旦熟悉了这项技术，就能使用通道来实现聊天系统，或利用很多线程进行分布式计算并将部分计算结果发送给一个线程进行聚合
+    一旦熟悉了这项技术，就能使用通道来实现聊天系统，或利用很多线程进行分布式计算并将部分计算结果发送给一个线程进行聚合
 </pre>
 
 <p>
@@ -695,16 +702,16 @@ Rust 中一个实现消息传递并发的主要工具是 <span class="underline"
 </p>
 
 <div class="org-src-container">
-<pre class="src src-rust"><span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::<span style="color: #7fffd4;">sync</span>::mpsc;
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::<span style="color: #ffd700;">sync</span>::mpsc;
 
-<span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
-    <span style="color: #00ffff;">let</span> (tx, rx) = <span style="color: #7fffd4;">mpsc</span>::channel();
+<span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+    <span style="color: #00bfff; font-weight: bold;">let</span> (tx, rx) = <span style="color: #ffd700;">mpsc</span>::channel();
 }
 </pre>
 </div>
 
 <pre class="example">
-注意这还不能编译，因为 Rust 不知道想要在通道中发送什么类型
+  注意这还不能编译，因为 Rust 不知道想要在通道中发送什么类型
 </pre>
 <p>
 这里使用 <span class="underline">mpsc::channel</span> 函数 <b>创建</b> 一个新的通道
@@ -723,9 +730,9 @@ mpsc::channel 函数返回一个 <span class="underline">元组</span> ：第一
 </p>
 
 <pre class="example">
-  由于历史原因，tx 和 rx 通常作为 发送者和 接收者的缩写，所以用来绑定这两端变量的名字
+    由于历史原因，tx 和 rx 通常作为 发送者和 接收者的缩写，所以用来绑定这两端变量的名字
 
-  这里使用了一个 let 语句和模式来解构了此元组；以后会讨论 let 语句中的模式和解构。这是一个方便提取 mpsc::channel 返回的元组中一部分的手段
+    这里使用了一个 let 语句和模式来解构了此元组；以后会讨论 let 语句中的模式和解构。这是一个方便提取 mpsc::channel 返回的元组中一部分的手段
 </pre>
 
 <p>
@@ -733,14 +740,14 @@ mpsc::channel 函数返回一个 <span class="underline">元组</span> ：第一
 </p>
 
 <div class="org-src-container">
-<pre class="src src-rust"><span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::thread;
-<span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::<span style="color: #7fffd4;">sync</span>::mpsc;
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::thread;
+<span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::<span style="color: #ffd700;">sync</span>::mpsc;
 
-<span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
-    <span style="color: #00ffff;">let</span> (tx, rx) = <span style="color: #7fffd4;">mpsc</span>::channel();
+<span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+    <span style="color: #00bfff; font-weight: bold;">let</span> (tx, rx) = <span style="color: #ffd700;">mpsc</span>::channel();
 
-    <span style="color: #7fffd4;">thread</span>::spawn(<span style="color: #00ffff;">move</span> || {
-        <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">val</span> = <span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"hi"</span>);
+    <span style="color: #ffd700;">thread</span>::spawn(<span style="color: #00bfff; font-weight: bold;">move</span> || {
+        <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">val</span> = <span style="color: #98f5ff;">String</span>::from(<span style="color: #deb887;">"hi"</span>);
         tx.send(val).unwrap();
     });
 }
@@ -748,18 +755,18 @@ mpsc::channel 函数返回一个 <span class="underline">元组</span> ：第一
 </div>
 
 <pre class="example">
-  这里再次使用 thread::spawn 来创建一个新线程并使用 move 将 tx 移动到闭包中这样新建线程就拥有 tx 了
+    这里再次使用 thread::spawn 来创建一个新线程并使用 move 将 tx 移动到闭包中这样新建线程就拥有 tx 了
 
-  因为新建线程需要拥有通道的发送端以便可以通过通道来发送消息
+    因为新建线程需要拥有通道的发送端以便可以通过通道来发送消息
 </pre>
 <p>
 通道的发送端有一个 <span class="underline">send</span> 方法用来获取需要放入通道的值。send 方法返回一个 <span class="underline">Result&lt;T, E&gt;</span> 类型：如果接收端已经被丢弃了，将没有发送值的目标，所以发送操作会返回错误
 </p>
 
 <pre class="example">
-  在这个例子中，出错的时候调用 unwrap 产生 panic
+    在这个例子中，出错的时候调用 unwrap 产生 panic
 
-  不过对于一个真实程序，需要合理地处理它
+    不过对于一个真实程序，需要合理地处理它
 </pre>
 
 <p>
@@ -767,19 +774,19 @@ mpsc::channel 函数返回一个 <span class="underline">元组</span> ：第一
 </p>
 
 <div class="org-src-container">
-<pre class="src src-rust"><span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::thread;
-<span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::<span style="color: #7fffd4;">sync</span>::mpsc;
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::thread;
+<span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::<span style="color: #ffd700;">sync</span>::mpsc;
 
-<span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
-    <span style="color: #00ffff;">let</span> (tx, rx) = <span style="color: #7fffd4;">mpsc</span>::channel();
+<span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+    <span style="color: #00bfff; font-weight: bold;">let</span> (tx, rx) = <span style="color: #ffd700;">mpsc</span>::channel();
 
-    <span style="color: #7fffd4;">thread</span>::spawn(<span style="color: #00ffff;">move</span> || {
-        <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">val</span> = <span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"hi"</span>);
+    <span style="color: #ffd700;">thread</span>::spawn(<span style="color: #00bfff; font-weight: bold;">move</span> || {
+        <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">val</span> = <span style="color: #98f5ff;">String</span>::from(<span style="color: #deb887;">"hi"</span>);
         tx.send(val).unwrap();
     });
 
-    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">received</span> = rx.recv().unwrap();
-    <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"Got: </span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">"</span>, received);
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">received</span> = rx.recv().unwrap();
+    <span style="color: #f08080;">println!</span>(<span style="color: #deb887;">"Got: </span><span style="color: #deb887; font-style: italic;">{}</span><span style="color: #deb887;">"</span>, received);
 }
 </pre>
 </div>
@@ -801,9 +808,9 @@ mpsc::channel 函数返回一个 <span class="underline">元组</span> ：第一
 </ul>
 
 <pre class="example">
-  如果线程在等待消息过程中还有其他工作时使用 try_recv 很有用：可以编写一个循环来频繁调用 try_recv，在有可用消息时进行处理，其余时候则处理一会其他工作直到再次检查
+    如果线程在等待消息过程中还有其他工作时使用 try_recv 很有用：可以编写一个循环来频繁调用 try_recv，在有可用消息时进行处理，其余时候则处理一会其他工作直到再次检查
 
-  出于简单的考虑，这个例子使用了 recv；主线程中除了等待消息之外没有任何其他工作，所以阻塞主线程是合适的
+    出于简单的考虑，这个例子使用了 recv；主线程中除了等待消息之外没有任何其他工作，所以阻塞主线程是合适的
 </pre>
 
 <p>
@@ -815,31 +822,31 @@ mpsc::channel 函数返回一个 <span class="underline">元组</span> ：第一
 </div>
 </div>
 
-<div id="outline-container-org7ede0af" class="outline-3">
-<h3 id="org7ede0af">通道与所有权转移</h3>
-<div class="outline-text-3" id="text-org7ede0af">
+<div id="outline-container-orgd32d6d7" class="outline-3">
+<h3 id="orgd32d6d7">通道与所有权转移</h3>
+<div class="outline-text-3" id="text-orgd32d6d7">
 <pre class="example">
-  所有权规则在消息传递中扮演了重要角色，其有助于编写安全的并发代码。防止并发编程中的错误是在 Rust 程序中考虑所有权的一大优势
+     所有权规则在消息传递中扮演了重要角色，其有助于编写安全的并发代码。防止并发编程中的错误是在 Rust 程序中考虑所有权的一大优势
 </pre>
 <p>
 现在做一个试验来看看通道与所有权如何一同协作以避免产生问题：尝试在新建线程中的通道中发送完 val 值 之后 再使用它：
 </p>
 
 <div class="org-src-container">
-<pre class="src src-rust"><span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::thread;
-<span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::<span style="color: #7fffd4;">sync</span>::mpsc;
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::thread;
+<span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::<span style="color: #ffd700;">sync</span>::mpsc;
 
-<span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
-    <span style="color: #00ffff;">let</span> (tx, rx) = <span style="color: #7fffd4;">mpsc</span>::channel();
+<span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+    <span style="color: #00bfff; font-weight: bold;">let</span> (tx, rx) = <span style="color: #ffd700;">mpsc</span>::channel();
 
-    <span style="color: #7fffd4;">thread</span>::spawn(<span style="color: #00ffff;">move</span> || {
-        <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">val</span> = <span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"hi"</span>);
+    <span style="color: #ffd700;">thread</span>::spawn(<span style="color: #00bfff; font-weight: bold;">move</span> || {
+        <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">val</span> = <span style="color: #98f5ff;">String</span>::from(<span style="color: #deb887;">"hi"</span>);
         tx.send(val).unwrap();
-        <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"val is </span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">"</span>, val);
+        <span style="color: #f08080;">println!</span>(<span style="color: #deb887;">"val is </span><span style="color: #deb887; font-style: italic;">{}</span><span style="color: #deb887;">"</span>, val);
     });
 
-    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">received</span> = rx.recv().unwrap();
-    <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"Got: </span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">"</span>, received);
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">received</span> = rx.recv().unwrap();
+    <span style="color: #f08080;">println!</span>(<span style="color: #deb887;">"Got: </span><span style="color: #deb887; font-style: italic;">{}</span><span style="color: #deb887;">"</span>, received);
 }
 </pre>
 </div>
@@ -854,7 +861,7 @@ mpsc::channel 函数返回一个 <span class="underline">元组</span> ：第一
    |
 9  |         tx.send(val).unwrap();
    |                 --- value moved here
-10 |         println!(<span style="color: #ffa07a;">"val is {}"</span>, val);
+10 |         println!(<span style="color: #deb887;">"val is {}"</span>, val);
    |                               ^^^ value used here after move
    |
    = note: move occurs because <span style="color: #fa8072;">`val`</span> has type <span style="color: #fa8072;">`std::string::String`</span>, which does not implement the <span style="color: #fa8072;">`Copy`</span> trait
@@ -867,49 +874,49 @@ mpsc::channel 函数返回一个 <span class="underline">元组</span> ：第一
 </div>
 </div>
 
-<div id="outline-container-org652616b" class="outline-3">
-<h3 id="org652616b">发送多个值并观察接收者的等待</h3>
-<div class="outline-text-3" id="text-org652616b">
+<div id="outline-container-org5580e0a" class="outline-3">
+<h3 id="org5580e0a">发送多个值并观察接收者的等待</h3>
+<div class="outline-text-3" id="text-org5580e0a">
 <pre class="example">
-  上面示例的代码可以编译和运行，不过它并没有明确的告诉我们两个独立的线程通过通道相互通讯
+     上面示例的代码可以编译和运行，不过它并没有明确的告诉我们两个独立的线程通过通道相互通讯
 </pre>
 <p>
 下面示例有一些改进来证明是并发执行的：新建线程现在会发送多个消息并在每个消息之间暂停一秒钟
 </p>
 
 <div class="org-src-container">
-<pre class="src src-rust"><span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::thread;
-<span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::<span style="color: #7fffd4;">sync</span>::mpsc;
-<span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::<span style="color: #7fffd4;">time</span>::<span style="color: #98fb98;">Duration</span>;
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::thread;
+<span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::<span style="color: #ffd700;">sync</span>::mpsc;
+<span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::<span style="color: #ffd700;">time</span>::<span style="color: #98f5ff;">Duration</span>;
 
-<span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
-    <span style="color: #00ffff;">let</span> (tx, rx) = <span style="color: #7fffd4;">mpsc</span>::channel();
+<span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+    <span style="color: #00bfff; font-weight: bold;">let</span> (tx, rx) = <span style="color: #ffd700;">mpsc</span>::channel();
 
-    <span style="color: #7fffd4;">thread</span>::spawn(<span style="color: #00ffff;">move</span> || {
-        <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">vals</span> = <span style="color: #7fffd4;">vec!</span>[
-            <span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"hi"</span>),
-            <span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"from"</span>),
-            <span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"the"</span>),
-            <span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"thread"</span>),
+    <span style="color: #ffd700;">thread</span>::spawn(<span style="color: #00bfff; font-weight: bold;">move</span> || {
+        <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">vals</span> = <span style="color: #ffd700;">vec!</span>[
+            <span style="color: #98f5ff;">String</span>::from(<span style="color: #deb887;">"hi"</span>),
+            <span style="color: #98f5ff;">String</span>::from(<span style="color: #deb887;">"from"</span>),
+            <span style="color: #98f5ff;">String</span>::from(<span style="color: #deb887;">"the"</span>),
+            <span style="color: #98f5ff;">String</span>::from(<span style="color: #deb887;">"thread"</span>),
         ];
 
-        <span style="color: #00ffff;">for</span> <span style="color: #eedd82;">val</span> <span style="color: #00ffff;">in</span> vals {
+        <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">val</span> <span style="color: #00bfff; font-weight: bold;">in</span> vals {
             tx.send(val).unwrap();
-            <span style="color: #7fffd4;">thread</span>::sleep(<span style="color: #98fb98;">Duration</span>::from_secs(1));
+            <span style="color: #ffd700;">thread</span>::sleep(<span style="color: #98f5ff;">Duration</span>::from_secs(1));
         }
     });
 
-    <span style="color: #00ffff;">for</span> <span style="color: #eedd82;">received</span> <span style="color: #00ffff;">in</span> rx {
-        <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"Got: </span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">"</span>, received);
+    <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">received</span> <span style="color: #00bfff; font-weight: bold;">in</span> rx {
+        <span style="color: #f08080;">println!</span>(<span style="color: #deb887;">"Got: </span><span style="color: #deb887; font-style: italic;">{}</span><span style="color: #deb887;">"</span>, received);
     }
 }
 </pre>
 </div>
 
 <pre class="example">
-  在新建线程中有一个字符串 vector 希望发送到主线程。遍历他们，单独的发送每一个字符串并通过一个 Duration 值调用 thread::sleep 函数来暂停一秒
+     在新建线程中有一个字符串 vector 希望发送到主线程。遍历他们，单独的发送每一个字符串并通过一个 Duration 值调用 thread::sleep 函数来暂停一秒
 
-  在主线程中，不再显式调用 recv 函数：而是将 rx 当作一个迭代器。对于每一个接收到的值，将其打印出来。当通道被关闭时，迭代器也将结束
+     在主线程中，不再显式调用 recv 函数：而是将 rx 当作一个迭代器。对于每一个接收到的值，将其打印出来。当通道被关闭时，迭代器也将结束
 </pre>
 
 <p>
@@ -925,65 +932,65 @@ Got: thread
 </div>
 
 <pre class="example">
-因为主线程中的 for 循环里并没有任何暂停或等待的代码，所以可以说主线程是在等待从新建线程中接收值
+   因为主线程中的 for 循环里并没有任何暂停或等待的代码，所以可以说主线程是在等待从新建线程中接收值
 </pre>
 </div>
 </div>
 
-<div id="outline-container-orgca5f533" class="outline-3">
-<h3 id="orgca5f533">通过克隆发送者来创建多个生产者</h3>
-<div class="outline-text-3" id="text-orgca5f533">
+<div id="outline-container-orgc3e0450" class="outline-3">
+<h3 id="orgc3e0450">通过克隆发送者来创建多个生产者</h3>
+<div class="outline-text-3" id="text-orgc3e0450">
 <pre class="example">
-之前提到了mpsc是 multiple producer, single consumer 的缩写
+   之前提到了mpsc是 multiple producer, single consumer 的缩写
 </pre>
 <p>
 可以运用 mpsc 来来创建向 <span class="underline">同一接收者</span> <b>发送</b> 值的 <span class="underline">多个线程</span> 。这可以通过 <b>克隆</b> 通道的 <span class="underline">发送端</span> 来做到：
 </p>
 
 <div class="org-src-container">
-<pre class="src src-rust"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">--snip--</span>
+<pre class="src src-rust"><span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
 
-<span style="color: #00ffff;">let</span> (tx, rx) = <span style="color: #7fffd4;">mpsc</span>::channel();
+<span style="color: #00bfff; font-weight: bold;">let</span> (tx, rx) = <span style="color: #ffd700;">mpsc</span>::channel();
 
-<span style="color: #00ffff;">let</span> <span style="color: #eedd82;">tx1</span> = <span style="color: #7fffd4;">mpsc</span>::<span style="color: #98fb98;">Sender</span>::clone(&amp;tx);
-<span style="color: #7fffd4;">thread</span>::spawn(<span style="color: #00ffff;">move</span> || {
-    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">vals</span> = <span style="color: #7fffd4;">vec!</span>[
-        <span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"hi"</span>),
-        <span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"from"</span>),
-        <span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"the"</span>),
-        <span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"thread"</span>),
+<span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">tx1</span> = <span style="color: #ffd700;">mpsc</span>::<span style="color: #98f5ff;">Sender</span>::clone(&amp;tx);
+<span style="color: #ffd700;">thread</span>::spawn(<span style="color: #00bfff; font-weight: bold;">move</span> || {
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">vals</span> = <span style="color: #ffd700;">vec!</span>[
+        <span style="color: #98f5ff;">String</span>::from(<span style="color: #deb887;">"hi"</span>),
+        <span style="color: #98f5ff;">String</span>::from(<span style="color: #deb887;">"from"</span>),
+        <span style="color: #98f5ff;">String</span>::from(<span style="color: #deb887;">"the"</span>),
+        <span style="color: #98f5ff;">String</span>::from(<span style="color: #deb887;">"thread"</span>),
     ];
 
-    <span style="color: #00ffff;">for</span> <span style="color: #eedd82;">val</span> <span style="color: #00ffff;">in</span> vals {
+    <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">val</span> <span style="color: #00bfff; font-weight: bold;">in</span> vals {
         tx1.send(val).unwrap();
-        <span style="color: #7fffd4;">thread</span>::sleep(<span style="color: #98fb98;">Duration</span>::from_secs(1));
+        <span style="color: #ffd700;">thread</span>::sleep(<span style="color: #98f5ff;">Duration</span>::from_secs(1));
     }
 });
 
-<span style="color: #7fffd4;">thread</span>::spawn(<span style="color: #00ffff;">move</span> || {
-    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">vals</span> = <span style="color: #7fffd4;">vec!</span>[
-        <span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"more"</span>),
-        <span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"messages"</span>),
-        <span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"for"</span>),
-        <span style="color: #98fb98;">String</span>::from(<span style="color: #ffa07a;">"you"</span>),
+<span style="color: #ffd700;">thread</span>::spawn(<span style="color: #00bfff; font-weight: bold;">move</span> || {
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">vals</span> = <span style="color: #ffd700;">vec!</span>[
+        <span style="color: #98f5ff;">String</span>::from(<span style="color: #deb887;">"more"</span>),
+        <span style="color: #98f5ff;">String</span>::from(<span style="color: #deb887;">"messages"</span>),
+        <span style="color: #98f5ff;">String</span>::from(<span style="color: #deb887;">"for"</span>),
+        <span style="color: #98f5ff;">String</span>::from(<span style="color: #deb887;">"you"</span>),
     ];
 
-    <span style="color: #00ffff;">for</span> <span style="color: #eedd82;">val</span> <span style="color: #00ffff;">in</span> vals {
+    <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">val</span> <span style="color: #00bfff; font-weight: bold;">in</span> vals {
         tx.send(val).unwrap();
-        <span style="color: #7fffd4;">thread</span>::sleep(<span style="color: #98fb98;">Duration</span>::from_secs(1));
+        <span style="color: #ffd700;">thread</span>::sleep(<span style="color: #98f5ff;">Duration</span>::from_secs(1));
     }
 });
 
-<span style="color: #00ffff;">for</span> <span style="color: #eedd82;">received</span> <span style="color: #00ffff;">in</span> rx {
-    <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"Got: </span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">"</span>, received);
+<span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">received</span> <span style="color: #00bfff; font-weight: bold;">in</span> rx {
+    <span style="color: #f08080;">println!</span>(<span style="color: #deb887;">"Got: </span><span style="color: #deb887; font-style: italic;">{}</span><span style="color: #deb887;">"</span>, received);
 }
 </pre>
 </div>
 
 <pre class="example">
-  这一次，在创建新线程之前，对通道的发送端调用了 clone 方法，这会给我们一个可以传递给第一个新建线程的发送端句柄
+     这一次，在创建新线程之前，对通道的发送端调用了 clone 方法，这会给我们一个可以传递给第一个新建线程的发送端句柄
 
-  我们会将原始的通道发送端传递给第二个新建线程，这样就会有两个线程，每个线程将向通道的接收端发送不同的消息
+     我们会将原始的通道发送端传递给第二个新建线程，这样就会有两个线程，每个线程将向通道的接收端发送不同的消息
 </pre>
 <p>
 如果运行这些代码，可能会看到这样的输出：
@@ -1002,19 +1009,19 @@ Got: you
 </div>
 
 <pre class="example">
-  虽然可能会看到这些值以不同的顺序出现；这依赖于你的系统。这也就是并发既有趣又困难的原因
+     虽然可能会看到这些值以不同的顺序出现；这依赖于你的系统。这也就是并发既有趣又困难的原因
 
-  如果通过 thread::sleep 做实验，在不同的线程中提供不同的值，就会发现他们的运行更加不确定，且每次都会产生不同的输出
+     如果通过 thread::sleep 做实验，在不同的线程中提供不同的值，就会发现他们的运行更加不确定，且每次都会产生不同的输出
 </pre>
 </div>
 </div>
 </div>
 
-<div id="outline-container-org19b6349" class="outline-2">
-<h2 id="org19b6349">共享状态并发</h2>
-<div class="outline-text-2" id="text-org19b6349">
+<div id="outline-container-orgf7a0a67" class="outline-2">
+<h2 id="orgf7a0a67">共享状态并发</h2>
+<div class="outline-text-2" id="text-orgf7a0a67">
 <pre class="example">
-在某种程度上，任何编程语言中的通道都类似于单所有权，因为一旦将一个值传送到通道中，将无法再使用这个值
+  在某种程度上，任何编程语言中的通道都类似于单所有权，因为一旦将一个值传送到通道中，将无法再使用这个值
 </pre>
 
 <p>
@@ -1030,9 +1037,9 @@ Rust 的类型系统和所有权规则极大的协助了正确地管理这些所
 </pre>
 </div>
 
-<div id="outline-container-org5619a54" class="outline-3">
-<h3 id="org5619a54">互斥器</h3>
-<div class="outline-text-3" id="text-org5619a54">
+<div id="outline-container-orgcf57d46" class="outline-3">
+<h3 id="orgcf57d46">互斥器</h3>
+<div class="outline-text-3" id="text-orgcf57d46">
 <p>
 <span class="underline">互斥器</span> 是 mutual exclusion 的缩写，也就是说，任意时刻，其只 <b>允许</b> <span class="underline">一个线程</span> <b>访问</b> <span class="underline">某些数据</span> 。为了访问互斥器中的数据，线程首先需要通过获取互斥器的 <span class="underline">锁</span> 来表明其希望访问数据。锁是一个作为互斥器一部分的数据结构，它记录谁有数据的排他访问权。因此，描述互斥器为通过锁系统 <span class="underline">保护</span> 其数据。互斥器以难以使用著称，因为你不得不记住：
 </p>
@@ -1042,35 +1049,35 @@ Rust 的类型系统和所有权规则极大的协助了正确地管理这些所
 </ul>
 
 <pre class="example">
-  作为一个现实中互斥器的例子，想象一下在某个会议的一次小组座谈会中，只有一个麦克风
+     作为一个现实中互斥器的例子，想象一下在某个会议的一次小组座谈会中，只有一个麦克风
 
-  如果一位成员要发言，他必须请求或表示希望使用麦克风。一旦得到了麦克风，他可以畅所欲言，然后将麦克风交给下一位希望讲话的成员
+     如果一位成员要发言，他必须请求或表示希望使用麦克风。一旦得到了麦克风，他可以畅所欲言，然后将麦克风交给下一位希望讲话的成员
 
-  如果一位成员结束发言后忘记将麦克风交还，其他人将无法发言。如果对共享麦克风的管理出现了问题，座谈会将无法如期进行！
+     如果一位成员结束发言后忘记将麦克风交还，其他人将无法发言。如果对共享麦克风的管理出现了问题，座谈会将无法如期进行！
 
-  正确的管理互斥器异常复杂，这也是许多人之所以热衷于通道的原因。然而，在 Rust 中，得益于类型系统和所有权，帮助不会在锁和解锁上出错
+     正确的管理互斥器异常复杂，这也是许多人之所以热衷于通道的原因。然而，在 Rust 中，得益于类型系统和所有权，帮助不会在锁和解锁上出错
 </pre>
 </div>
 
-<div id="outline-container-orgea2a400" class="outline-4">
-<h4 id="orgea2a400">Mutex&lt;T&gt; 的API</h4>
-<div class="outline-text-4" id="text-orgea2a400">
+<div id="outline-container-orge07637e" class="outline-4">
+<h4 id="orge07637e">Mutex&lt;T&gt; 的API</h4>
+<div class="outline-text-4" id="text-orge07637e">
 <p>
 作为展示如何使用互斥器的例子，从在单线程上下文使用互斥器开始：
 </p>
 
 <div class="org-src-container">
-<pre class="src src-rust"><span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::<span style="color: #7fffd4;">sync</span>::<span style="color: #98fb98;">Mutex</span>;
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::<span style="color: #ffd700;">sync</span>::<span style="color: #98f5ff;">Mutex</span>;
 
-<span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
-    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">m</span> = <span style="color: #98fb98;">Mutex</span>::new(5);
+<span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">m</span> = <span style="color: #98f5ff;">Mutex</span>::new(5);
 
     {
-        <span style="color: #00ffff;">let</span> <span style="color: #00ffff;">mut</span> <span style="color: #eedd82;">num</span> = m.lock().unwrap();
+        <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #00bfff; font-weight: bold;">mut</span> <span style="color: #4eee94;">num</span> = m.lock().unwrap();
         *num = 6;
     }
 
-    <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"m = </span><span style="color: #ffa07a; font-style: italic;">{:?}</span><span style="color: #ffa07a;">"</span>, m);
+    <span style="color: #f08080;">println!</span>(<span style="color: #deb887;">"m = </span><span style="color: #deb887; font-style: italic;">{:?}</span><span style="color: #deb887;">"</span>, m);
 }
 </pre>
 </div>
@@ -1085,15 +1092,15 @@ Rust 的类型系统和所有权规则极大的协助了正确地管理这些所
 <li>一旦获取了锁，就可以将 <span class="underline">返回值</span> 视为一个其内部数据的可变引用了</li>
 </ul>
 <pre class="example">
-  类型系统确保了在使用 m 中的值之前获取锁：Mutex&lt;i32&gt; 并不是一个 i32，所以必须获取锁才能使用这个 i32 值
+      类型系统确保了在使用 m 中的值之前获取锁：Mutex&lt;i32&gt; 并不是一个 i32，所以必须获取锁才能使用这个 i32 值
 
-  我们是不会忘记这么做的，因为反之类型系统不允许访问内部的 i32 值
+      我们是不会忘记这么做的，因为反之类型系统不允许访问内部的 i32 值
 
-  同时lock 调用返回 一个叫做 MutexGuard 的智能指针
+      同时lock 调用返回 一个叫做 MutexGuard 的智能指针
 
-  这个智能指针实现了 Deref 来指向其内部数据；其也提供了一个 Drop 实现当 MutexGuard 离开作用域时自动释放锁
+      这个智能指针实现了 Deref 来指向其内部数据；其也提供了一个 Drop 实现当 MutexGuard 离开作用域时自动释放锁
 
-  这发生于内部作用域的结尾。为此，不会冒忘记释放锁并阻塞互斥器为其它线程所用的风险，因为锁的释放是自动发生的
+      这发生于内部作用域的结尾。为此，不会冒忘记释放锁并阻塞互斥器为其它线程所用的风险，因为锁的释放是自动发生的
 </pre>
 
 <p>
@@ -1102,47 +1109,47 @@ Rust 的类型系统和所有权规则极大的协助了正确地管理这些所
 </div>
 </div>
 
-<div id="outline-container-org04aac4c" class="outline-4">
-<h4 id="org04aac4c">在线程间共享 Mutex&lt;T&gt;</h4>
-<div class="outline-text-4" id="text-org04aac4c">
+<div id="outline-container-orga78edec" class="outline-4">
+<h4 id="orga78edec">在线程间共享 Mutex&lt;T&gt;</h4>
+<div class="outline-text-4" id="text-orga78edec">
 <p>
 现在尝试使用 Mutex&lt;T&gt; 在多个线程间共享值。为此将启动十个线程，并在各个线程中对同一个计数器值加一，这样计数器将从 0 变为 10：
 </p>
 
 <div class="org-src-container">
-<pre class="src src-rust"><span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::<span style="color: #7fffd4;">sync</span>::<span style="color: #98fb98;">Mutex</span>;
-<span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::thread;
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::<span style="color: #ffd700;">sync</span>::<span style="color: #98f5ff;">Mutex</span>;
+<span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::thread;
 
-<span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
-    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">counter</span> = <span style="color: #98fb98;">Mutex</span>::new(0);
-    <span style="color: #00ffff;">let</span> <span style="color: #00ffff;">mut</span> <span style="color: #eedd82;">handles</span> = <span style="color: #7fffd4;">vec!</span>[];
+<span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">counter</span> = <span style="color: #98f5ff;">Mutex</span>::new(0);
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #00bfff; font-weight: bold;">mut</span> <span style="color: #4eee94;">handles</span> = <span style="color: #ffd700;">vec!</span>[];
 
-    <span style="color: #00ffff;">for</span> <span style="color: #eedd82;">_</span> <span style="color: #00ffff;">in</span> 0..10 {
-        <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">handle</span> = <span style="color: #7fffd4;">thread</span>::spawn(<span style="color: #00ffff;">move</span> || {
-            <span style="color: #00ffff;">let</span> <span style="color: #00ffff;">mut</span> <span style="color: #eedd82;">num</span> = counter.lock().unwrap();
+    <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">_</span> <span style="color: #00bfff; font-weight: bold;">in</span> 0..10 {
+        <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">handle</span> = <span style="color: #ffd700;">thread</span>::spawn(<span style="color: #00bfff; font-weight: bold;">move</span> || {
+            <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #00bfff; font-weight: bold;">mut</span> <span style="color: #4eee94;">num</span> = counter.lock().unwrap();
 
             *num += 1;
         });
         handles.push(handle);
     }
 
-    <span style="color: #00ffff;">for</span> <span style="color: #eedd82;">handle</span> <span style="color: #00ffff;">in</span> handles {
+    <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">handle</span> <span style="color: #00bfff; font-weight: bold;">in</span> handles {
         handle.join().unwrap();
     }
 
-    <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"Result: </span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">"</span>, *counter.lock().unwrap());
+    <span style="color: #f08080;">println!</span>(<span style="color: #deb887;">"Result: </span><span style="color: #deb887; font-style: italic;">{}</span><span style="color: #deb887;">"</span>, *counter.lock().unwrap());
 }
 </pre>
 </div>
 
 <pre class="example">
-  这里创建了一个 counter 变量来存放内含 i32 的 Mutex&lt;T&gt;
+      这里创建了一个 counter 变量来存放内含 i32 的 Mutex&lt;T&gt;
 
-  接下来遍历 range 创建了 10 个线程。使用了 thread::spawn 并对所有线程使用了相同的闭包：
-  他们每一个都将调用 lock 方法来获取 Mutex&lt;T&gt; 上的锁，接着将互斥器中的值加一
-  当一个线程结束执行，num 会离开闭包作用域并释放锁，这样另一个线程就可以获取它了
+      接下来遍历 range 创建了 10 个线程。使用了 thread::spawn 并对所有线程使用了相同的闭包：
+      他们每一个都将调用 lock 方法来获取 Mutex&lt;T&gt; 上的锁，接着将互斥器中的值加一
+      当一个线程结束执行，num 会离开闭包作用域并释放锁，这样另一个线程就可以获取它了
 
-  在主线程中，收集了所有的 join 句柄，调用它们的 join 方法来确保所有线程都会结束。这时，主线程会获取锁并打印出程序的结果
+      在主线程中，收集了所有的 join 句柄，调用它们的 join 方法来确保所有线程都会结束。这时，主线程会获取锁并打印出程序的结果
 </pre>
 
 <p>
@@ -1153,29 +1160,29 @@ Rust 的类型系统和所有权规则极大的协助了正确地管理这些所
 <pre class="src src-sh">error[E0382]: use of moved value: <span style="color: #fa8072;">`counter`</span>
   --&gt; src/main.rs:9:36
    |
-9  |         <span style="color: #b0c4de;">let</span> handle = thread::spawn(move || {
+9  |         let handle = thread::spawn(move || {
    |                                    ^^^^^^^ value moved into closure here,
-<span style="color: #00ffff;">in</span> previous iteration of loop
-10 |             <span style="color: #b0c4de;">let</span> mut num = counter.lock().unwrap();
-   |                           ------- use occurs due to use<span style="color: #00ffff;"> in</span> closure
+<span style="color: #00bfff; font-weight: bold;">in</span> previous iteration of loop
+10 |             let mut num = counter.lock().unwrap();
+   |                           ------- use occurs due to use<span style="color: #00bfff; font-weight: bold;"> in</span> closure
    |
    = note: move occurs because <span style="color: #fa8072;">`counter`</span> has type <span style="color: #fa8072;">`std::sync::Mutex&lt;i32&gt;`</span>, which does not implement the <span style="color: #fa8072;">`Copy`</span> trait
 </pre>
 </div>
 
 <pre class="example">
-  错误信息表明 counter 值在上一次循环中被移动了，所以 Rust 告诉我们不能将 counter 锁的所有权移动到多个线程中
+      错误信息表明 counter 值在上一次循环中被移动了，所以 Rust 告诉我们不能将 counter 锁的所有权移动到多个线程中
 
-  我们可以通过前面讨论过的“多所有权”技术来修复这个编译错误
+      我们可以通过前面讨论过的“多所有权”技术来修复这个编译错误
 </pre>
 </div>
 </div>
 
-<div id="outline-container-orgc2c6015" class="outline-4">
-<h4 id="orgc2c6015">多线程和多所有权</h4>
-<div class="outline-text-4" id="text-orgc2c6015">
+<div id="outline-container-org2f694fe" class="outline-4">
+<h4 id="org2f694fe">多线程和多所有权</h4>
+<div class="outline-text-4" id="text-org2f694fe">
 <pre class="example">
-  曾经通过使用智能指针 Rc&lt;T&gt; 来创建引用计数的值，以便拥有多所有者。在这也这么做看看会发生什么
+      曾经通过使用智能指针 Rc&lt;T&gt; 来创建引用计数的值，以便拥有多所有者。在这也这么做看看会发生什么
 </pre>
 
 <p>
@@ -1183,29 +1190,29 @@ Rust 的类型系统和所有权规则极大的协助了正确地管理这些所
 </p>
 
 <div class="org-src-container">
-<pre class="src src-rust"><span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::<span style="color: #7fffd4;">rc</span>::<span style="color: #98fb98;">Rc</span>;
-<span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::<span style="color: #7fffd4;">sync</span>::<span style="color: #98fb98;">Mutex</span>;
-<span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::thread;
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::<span style="color: #ffd700;">rc</span>::<span style="color: #98f5ff;">Rc</span>;
+<span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::<span style="color: #ffd700;">sync</span>::<span style="color: #98f5ff;">Mutex</span>;
+<span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::thread;
 
-<span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
-    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">counter</span> = <span style="color: #98fb98;">Rc</span>::new(<span style="color: #98fb98;">Mutex</span>::new(0));
-    <span style="color: #00ffff;">let</span> <span style="color: #00ffff;">mut</span> <span style="color: #eedd82;">handles</span> = <span style="color: #7fffd4;">vec!</span>[];
+<span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">counter</span> = <span style="color: #98f5ff;">Rc</span>::new(<span style="color: #98f5ff;">Mutex</span>::new(0));
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #00bfff; font-weight: bold;">mut</span> <span style="color: #4eee94;">handles</span> = <span style="color: #ffd700;">vec!</span>[];
 
-    <span style="color: #00ffff;">for</span> <span style="color: #eedd82;">_</span> <span style="color: #00ffff;">in</span> 0..10 {
-        <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">counter</span> = <span style="color: #98fb98;">Rc</span>::clone(&amp;counter);
-        <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">handle</span> = <span style="color: #7fffd4;">thread</span>::spawn(<span style="color: #00ffff;">move</span> || {
-            <span style="color: #00ffff;">let</span> <span style="color: #00ffff;">mut</span> <span style="color: #eedd82;">num</span> = counter.lock().unwrap();
+    <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">_</span> <span style="color: #00bfff; font-weight: bold;">in</span> 0..10 {
+        <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">counter</span> = <span style="color: #98f5ff;">Rc</span>::clone(&amp;counter);
+        <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">handle</span> = <span style="color: #ffd700;">thread</span>::spawn(<span style="color: #00bfff; font-weight: bold;">move</span> || {
+            <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #00bfff; font-weight: bold;">mut</span> <span style="color: #4eee94;">num</span> = counter.lock().unwrap();
 
             *num += 1;
         });
         handles.push(handle);
     }
 
-    <span style="color: #00ffff;">for</span> <span style="color: #eedd82;">handle</span> <span style="color: #00ffff;">in</span> handles {
+    <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">handle</span> <span style="color: #00bfff; font-weight: bold;">in</span> handles {
         handle.join().unwrap();
     }
 
-    <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"Result: </span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">"</span>, *counter.lock().unwrap());
+    <span style="color: #f08080;">println!</span>(<span style="color: #deb887;">"Result: </span><span style="color: #deb887; font-style: italic;">{}</span><span style="color: #deb887;">"</span>, *counter.lock().unwrap());
 }
 </pre>
 </div>
@@ -1217,7 +1224,7 @@ Rust 的类型系统和所有权规则极大的协助了正确地管理这些所
 <pre class="src src-sh">error[E0277]: <span style="color: #fa8072;">`std::rc::Rc&lt;std::sync::Mutex&lt;i32&gt;&gt;`</span> cannot be sent between threads safely
   --&gt; src/main.rs:11:22
    |
-11 |         <span style="color: #b0c4de;">let</span> handle = thread::spawn(move || {
+11 |         let handle = thread::spawn(move || {
    |                      ^^^^^^^^^^^^^ <span style="color: #fa8072;">`std::rc::Rc&lt;std::sync::Mutex&lt;i32&gt;&gt;`</span>
 cannot be sent between threads safely
    |
@@ -1231,9 +1238,9 @@ is not implemented for <span style="color: #fa8072;">`std::rc::Rc&lt;std::sync::
 </div>
 
 <pre class="example">
-  第一行错误表明 `std::rc::Rc&lt;std::sync::Mutex&lt;i32&gt;&gt;` cannot be sent between threads safely
+      第一行错误表明 `std::rc::Rc&lt;std::sync::Mutex&lt;i32&gt;&gt;` cannot be sent between threads safely
 
-  编译器也告诉了我们原因 the trait bound `Send` is not satisfied。下一部分会讲到 Send：这是确保所使用的类型可以用于并发环境的 trait 之一
+      编译器也告诉了我们原因 the trait bound `Send` is not satisfied。下一部分会讲到 Send：这是确保所使用的类型可以用于并发环境的 trait 之一
 </pre>
 
 <p>
@@ -1252,19 +1259,19 @@ Rc&lt;T&gt; 并没有使用任何并发原语，来确保改变计数的操作�
 </div>
 </div>
 
-<div id="outline-container-orgde28a5d" class="outline-4">
-<h4 id="orgde28a5d">原子引用计数 Arc&lt;T&gt;</h4>
-<div class="outline-text-4" id="text-orgde28a5d">
+<div id="outline-container-org8811970" class="outline-4">
+<h4 id="org8811970">原子引用计数 Arc&lt;T&gt;</h4>
+<div class="outline-text-4" id="text-org8811970">
 <p>
 所幸 <span class="underline">Arc&lt;T&gt;</span> 正是 这么一个类似 Rc&lt;T&gt; 并可以安全的用于并发环境的类型
 </p>
 
 <pre class="example">
-  字母 a 代表 原子性，所以这是一个原子引用计数类型。原子性是另一类这里还未涉及到的并发原语，其中的要点就是：原子性类型工作起来类似原始类型，不过可以安全的在线程间共享
+      字母 a 代表 原子性，所以这是一个原子引用计数类型。原子性是另一类这里还未涉及到的并发原语，其中的要点就是：原子性类型工作起来类似原始类型，不过可以安全的在线程间共享
 
-  为什么不是所有的原始类型都是原子性的？为什么不是所有标准库中的类型都默认使用 Arc&lt;T&gt; 实现？
+      为什么不是所有的原始类型都是原子性的？为什么不是所有标准库中的类型都默认使用 Arc&lt;T&gt; 实现？
 
-  原因在于线程安全带有性能惩罚，希望只在必要时才为此买单。如果只是在单线程中对值进行操作，原子性提供的保证并无必要，代码可以因此运行的更快。
+      原因在于线程安全带有性能惩罚，希望只在必要时才为此买单。如果只是在单线程中对值进行操作，原子性提供的保证并无必要，代码可以因此运行的更快。
 
 </pre>
 <p>
@@ -1272,28 +1279,28 @@ Rc&lt;T&gt; 并没有使用任何并发原语，来确保改变计数的操作�
 </p>
 
 <div class="org-src-container">
-<pre class="src src-rust"><span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::<span style="color: #7fffd4;">sync</span>::{<span style="color: #98fb98;">Mutex</span>, <span style="color: #98fb98;">Arc</span>};
-<span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::thread;
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::<span style="color: #ffd700;">sync</span>::{<span style="color: #98f5ff;">Mutex</span>, <span style="color: #98f5ff;">Arc</span>};
+<span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::thread;
 
-<span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
-    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">counter</span> = <span style="color: #98fb98;">Arc</span>::new(<span style="color: #98fb98;">Mutex</span>::new(0));
-    <span style="color: #00ffff;">let</span> <span style="color: #00ffff;">mut</span> <span style="color: #eedd82;">handles</span> = <span style="color: #7fffd4;">vec!</span>[];
+<span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">counter</span> = <span style="color: #98f5ff;">Arc</span>::new(<span style="color: #98f5ff;">Mutex</span>::new(0));
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #00bfff; font-weight: bold;">mut</span> <span style="color: #4eee94;">handles</span> = <span style="color: #ffd700;">vec!</span>[];
 
-    <span style="color: #00ffff;">for</span> <span style="color: #eedd82;">_</span> <span style="color: #00ffff;">in</span> 0..10 {
-        <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">counter</span> = <span style="color: #98fb98;">Arc</span>::clone(&amp;counter);
-        <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">handle</span> = <span style="color: #7fffd4;">thread</span>::spawn(<span style="color: #00ffff;">move</span> || {
-            <span style="color: #00ffff;">let</span> <span style="color: #00ffff;">mut</span> <span style="color: #eedd82;">num</span> = counter.lock().unwrap();
+    <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">_</span> <span style="color: #00bfff; font-weight: bold;">in</span> 0..10 {
+        <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">counter</span> = <span style="color: #98f5ff;">Arc</span>::clone(&amp;counter);
+        <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">handle</span> = <span style="color: #ffd700;">thread</span>::spawn(<span style="color: #00bfff; font-weight: bold;">move</span> || {
+            <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #00bfff; font-weight: bold;">mut</span> <span style="color: #4eee94;">num</span> = counter.lock().unwrap();
 
             *num += 1;
         });
         handles.push(handle);
     }
 
-    <span style="color: #00ffff;">for</span> <span style="color: #eedd82;">handle</span> <span style="color: #00ffff;">in</span> handles {
+    <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">handle</span> <span style="color: #00bfff; font-weight: bold;">in</span> handles {
         handle.join().unwrap();
     }
 
-    <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"Result: </span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">"</span>, *counter.lock().unwrap());
+    <span style="color: #f08080;">println!</span>(<span style="color: #deb887;">"Result: </span><span style="color: #deb887; font-style: italic;">{}</span><span style="color: #deb887;">"</span>, *counter.lock().unwrap());
 }
 </pre>
 </div>
@@ -1308,32 +1315,121 @@ Rc&lt;T&gt; 并没有使用任何并发原语，来确保改变计数的操作�
 </div>
 
 <pre class="example">
-  这个例子中构建的结构可以用于比增加计数更为复杂的操作
+      这个例子中构建的结构可以用于比增加计数更为复杂的操作
 
-  使用这个策略，可将计算分成独立的部分，分散到多个线程中，接着使用 Mutex&lt;T&gt; 使用各自的结算结果更新最终的结果
+      使用这个策略，可将计算分成独立的部分，分散到多个线程中，接着使用 Mutex&lt;T&gt; 使用各自的结算结果更新最终的结果
 </pre>
 </div>
 </div>
 </div>
 
-<div id="outline-container-org669a666" class="outline-3">
-<h3 id="org669a666">RefCell&lt;T&gt;/Rc&lt;T&gt; 与 Mutex&lt;T&gt;/Arc&lt;T&gt; 的相似性</h3>
-<div class="outline-text-3" id="text-org669a666">
+<div id="outline-container-org4e39ec9" class="outline-3">
+<h3 id="org4e39ec9">RefCell&lt;T&gt;/Rc&lt;T&gt; 与 Mutex&lt;T&gt;/Arc&lt;T&gt; 的相似性</h3>
+<div class="outline-text-3" id="text-org4e39ec9">
 <pre class="example">
-  因为 counter 是不可变的，不过可以获取其内部值的可变引用；这意味着 Mutex&lt;T&gt; 提供了内部可变性
+     因为 counter 是不可变的，不过可以获取其内部值的可变引用；这意味着 Mutex&lt;T&gt; 提供了内部可变性
 
-  就像 Cell 系列类型那样。正如前面使用 RefCell&lt;T&gt; 可以改变 Rc&lt;T&gt; 中的内容那样，同样的可以使用 Mutex&lt;T&gt; 来改变 Arc&lt;T&gt; 中的内容
+     就像 Cell 系列类型那样。正如前面使用 RefCell&lt;T&gt; 可以改变 Rc&lt;T&gt; 中的内容那样，同样的可以使用 Mutex&lt;T&gt; 来改变 Arc&lt;T&gt; 中的内容
 
-  另一个值得注意的细节是 Rust 不能避免使用 Mutex&lt;T&gt; 的全部逻辑错误
+     另一个值得注意的细节是 Rust 不能避免使用 Mutex&lt;T&gt; 的全部逻辑错误
 
-  就像使用 Rc&lt;T&gt; 就有造成引用循环的风险，这时两个 Rc&lt;T&gt; 值相互引用，造成内存泄露。同理 Mutex&lt;T&gt; 也有造成”死锁“的风险。这发生于当一个操作需要锁住两个资源而两个线程各持一个锁，这会造成它们永远相互等待
+     就像使用 Rc&lt;T&gt; 就有造成引用循环的风险，这时两个 Rc&lt;T&gt; 值相互引用，造成内存泄露。同理 Mutex&lt;T&gt; 也有造成”死锁“的风险。这发生于当一个操作需要锁住两个资源而两个线程各持一个锁，这会造成它们永远相互等待
 </pre>
 </div>
 </div>
 </div>
 
-<div id="outline-container-org7739951" class="outline-2">
-<h2 id="org7739951">使用 Sync 和 Send trait 的可扩展并发</h2>
+<div id="outline-container-org2b559f4" class="outline-2">
+<h2 id="org2b559f4">使用 Sync 和 Send trait 的可扩展并发</h2>
+<div class="outline-text-2" id="text-org2b559f4">
+<pre class="example">
+Rust 的并发模型中一个有趣的方面是：语言本身对并发知之甚少，之前讨论的几乎所有内容，都属于标准库，而不是语言本身的内容
+
+由于不需要语言提供并发相关的基础设施，并发方案不受标准库或语言所限：可以编写自己的或使用别人编写的并发功能
+</pre>
+<p>
+然而有两个并发概念是内嵌于语言中的： <span class="underline">std::marker</span> 中的 <span class="underline">Sync</span> 和 <span class="underline">Send</span> trait
+</p>
+</div>
+
+<div id="outline-container-org8ec59b0" class="outline-3">
+<h3 id="org8ec59b0">通过 Send 允许在线程间转移所有权</h3>
+<div class="outline-text-3" id="text-org8ec59b0">
+<p>
+<span class="underline">Send</span> 标记 trait 表明 <span class="underline">类型的所有权</span> 可以在 <span class="underline">线程间</span> <b>传递</b> 
+</p>
+<pre class="example">
+几乎所有的 Rust 类型都是Send 的，不过有一些例外，包括 Rc&lt;T&gt;：这是不能 Send 的。如果克隆了 Rc&lt;T&gt; 的值并尝试将克隆的所有权转移到另一个线程，这两个线程都可能同时更新引用计数，而Rc&lt;T&gt; 被实现为用于单线程场景，这时不需要为拥有线程安全的引用计数而付出性能代价
+
+Rust 类型系统和 trait bound 确保永远也不会意外的将不安全的 Rc&lt;T&gt; 在线程间发送，当尝试这么做的时候，会得到错误 the trait Send is not implemented for Rc&lt;Mutex&lt;i32&gt;&gt;。而使用标记为 Send 的 Arc&lt;T&gt; 时，就没有问题了
+</pre>
+<p>
+任何完全由 Send 的类型组成的类型也会自动被标记为 Send。几乎所有基本类型都是 Send 的
+</p>
+</div>
+</div>
+
+<div id="outline-container-orgf913d82" class="outline-3">
+<h3 id="orgf913d82">Sync 允许多线程访问</h3>
+<div class="outline-text-3" id="text-orgf913d82">
+<p>
+<span class="underline">Sync</span> 标记 trait 表明一个实现了 Sync 的类型可以 <b>安全的</b> 在 <span class="underline">多个线程</span> 中 <b>拥有</b> <span class="underline">其值的引用</span> ：
+</p>
+<ul class="org-ul">
+<li>对于任意类型 T，如果 &amp;T（T 的引用）是 Send 的话 T 就是 Sync 的，这意味着其引用就可以安全的发送到另一个线程</li>
+<li>类似于 Send 的情况，基本类型是 Sync 的，完全由 Sync 的类型组成的类型也是 Sync 的</li>
+</ul>
+
+<pre class="example">
+智能指针 Rc&lt;T&gt; 也不是 Sync 的，出于其不是 Send 相同的原因，RefCell&lt;T&gt;和 Cell&lt;T&gt; 系列类型不是 Sync 的，RefCell&lt;T&gt; 在运行时所进行的借用检查也不是线程安全的
+
+Mutex&lt;T&gt; 是 Sync 的，正如 “在线程间共享 Mutex&lt;T&gt;” 部分所讲的它可以被用来在多线程中共享访问
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org9698b1b" class="outline-3">
+<h3 id="org9698b1b">手动实现 Send 和 Sync 是不安全的</h3>
+<div class="outline-text-3" id="text-org9698b1b">
+<p>
+通常并不需要手动实现 Send 和 Sync trait，因为由 Send 和 Sync 的类型组成的类型，自动就是 Send 和 Sync 的。因为他们是标记 trait，甚至都不需要实现任何方法。他们只是用来加强并发相关的不可变性的
+</p>
+
+<pre class="example">
+     手动实现这些标记 trait 涉及到编写不安全的 Rust 代码，以后将会讲述具体的方法
+
+     当前重要的是，在创建新的由不是 Send 和 Sync 的部分构成的并发类型时需要多加小心，以确保维持其安全保证
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org72c5bf7" class="outline-2">
+<h2 id="org72c5bf7">总结</h2>
+<div class="outline-text-2" id="text-org72c5bf7">
+<ul class="org-ul">
+<li>Rust 提供了用于消息传递的通道，和像 Mutex&lt;T&gt; 和 Arc&lt;T&gt; 这样可以安全的用于并发上下文的智能指针</li>
+<li>类型系统和借用检查器会确保这些场景中的代码，不会出现数据竞争和无效的引用</li>
+</ul>
+
+<pre class="example">
+    一旦代码可以编译了，就可以坚信这些代码可以正确的运行于多线程环境，而不会出现其他语言中经常出现的那些难以追踪的 bug
+
+    并发编程不再是什么可怕的概念：无所畏惧地并发吧！
+</pre>
+
+<p>
+<a href="oop.html">Next：面向对象</a>
+</p>
+
+<p>
+<a href="pointer.html">Previous：智能指针</a>
+</p>
+
+<p>
+<a href="rust.html">Home: 目录</a>
+</p>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
