@@ -249,6 +249,7 @@ for the JavaScript code in this tag.
 </ul>
 </li>
 <li><a href="#orgfccdba4">模式是否会匹配失效</a></li>
+<li><a href="#org63c19c6">模式语法</a></li>
 </ul>
 </div>
 </div>
@@ -546,6 +547,117 @@ x 部分就是一个模式。类似于之前对 let 所做的，可以在函数�
 
 <div id="outline-container-orgfccdba4" class="outline-2">
 <h2 id="orgfccdba4">模式是否会匹配失效</h2>
+<div class="outline-text-2" id="text-orgfccdba4">
+<p>
+模式有两种形式：
+</p>
+<ul class="org-ul">
+<li>refutable：对某些可能的值进行匹配会失败的模式， <span class="underline">if let</span> 和 <span class="underline">while let</span> 表达式被限制为只能接受可反驳的模式，因为根据定义他们意在处理可能的失败：条件表达式的功能就是根据成功或失败执行不同的操作</li>
+</ul>
+
+<pre class="example">
+    一个这样的例子便是 if let Some(x) = a_value 表达式中的 Some(x)；如果变量 a_value 中的值是 None 而不是 Some，那么 Some(x) 模式不能匹配
+</pre>
+<ul class="org-ul">
+<li>irrefutable：能匹配任何传递的可能值的模式， <span class="underline">函数参数</span> 、 <span class="underline">let</span> 语句和 <span class="underline">for 循环</span> 只能接受不可反驳的模式，因为通过不匹配的值程序无法进行有意义的工作</li>
+</ul>
+<pre class="example">
+    一个例子就是 let x = 5; 语句中的 x，因为 x 可以匹配任何值所以不可能会失败
+</pre>
+
+<p>
+看看一个尝试在 Rust 要求不可反驳模式的地方使用可反驳模式以及相反情况的例子。下面有一个 let 语句，不过模式被指定为可反驳模式 Some(x)，当然这不能编译：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">let</span> <span style="color: #98fb98;">Some</span>(x) = some_option_value;
+</pre>
+</div>
+
+<p>
+如果 some_option_value 的值是 None，其不会成功匹配模式 Some(x)，表明这个模式是可反驳的。然而 let 语句只能接受不可反驳模式因为代码不能通过 None 值进行有效的操作。Rust 会在编译时抱怨在要求不可反驳模式的地方使用可反驳模式：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">error[E0005]: refutable pattern<span style="color: #00ffff;"> in</span> local binding: <span style="color: #fa8072;">`None`</span> not covered
+ --&gt;
+  |
+3 | <span style="color: #b0c4de;">let</span> Some(x) = some_option_value;
+  |     ^^^^^^^ pattern <span style="color: #fa8072;">`None`</span> not covered
+</pre>
+</div>
+
+<pre class="example">
+  因为没有覆盖（也不可能覆盖！）到模式 Some(x) 的每一个可能的值, 所以 Rust 会合理地抗议
+</pre>
+<p>
+为了修复在需要不可反驳模式的地方使用可反驳模式的情况，可以修改使用模式的代码：不同于使用 let，可以使用 if let。如此，如果模式不匹配，大括号中的代码将被忽略，其余代码保持有效：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">if</span> <span style="color: #00ffff;">let</span> <span style="color: #98fb98;">Some</span>(x) = some_option_value {
+    <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"</span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">"</span>, x);
+}
+</pre>
+</div>
+
+<p>
+如果为 if let 提供了一个总是会匹配的模式，编译器会给出一个警告：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">if</span> <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">x</span> = 5 {
+    <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"</span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">"</span>, x);
+};
+</pre>
+</div>
+
+<p>
+Rust 会抱怨将不可反驳模式用于 if let 是没有意义的：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">warning: irrefutable if-let pattern
+ --&gt; &lt;anon&gt;:2:5
+  |
+2 | /     if let x = 5 {
+3 | |     println!(<span style="color: #ffa07a;">"{}"</span>, x);
+4 | | };
+  | |_^
+  |
+  = note: <span style="color: #ff4500;">#</span><span style="color: #ff4500;">[warn(irrefutable_let_patterns)] on by default</span>
+</pre>
+</div>
+
+<p>
+基于此，match匹配分支必须使用可反驳模式，除了最后一个分支需要使用能匹配任何剩余值的不可反驳模式
+</p>
+
+<pre class="example">
+Rust允许在只有一个匹配分支的match中使用不可反驳模式，不过这么做不是特别有用，并可以被更简单的 let 语句替代
+
+通常无需担心可反驳和不可反驳模式的区别，不过确实需要熟悉可反驳性的概念，这样当在错误信息中看到时就知道如何应对
+
+遇到这些情况，根据代码行为的意图，需要修改模式或者使用模式的结构
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org63c19c6" class="outline-2">
+<h2 id="org63c19c6">模式语法</h2>
+<div class="outline-text-2" id="text-org63c19c6">
+<p>
+<a href="advanced.html">Next：高阶内容</a>
+</p>
+
+<p>
+<a href="oop.html">Previous：面向对象</a>
+</p>
+
+<p>
+<a href="rust.html">Home: 目录</a>
+</p>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
