@@ -1102,4 +1102,133 @@ A baby dog is called a puppy
 
 * 高级函数和闭包
 
+** 函数指针
+   #+BEGIN_EXAMPLE
+     前面已经讨论过了如何向函数传递闭包，也可以向函数传递常规函数
+
+     这在希望传递已经定义的函数而不是重新定义闭包作为参数是很有用
+   #+END_EXAMPLE
+   通过函数指针允许使用函数作为另一个函数的参数。函数的类型是 fn 被称为 *函数指针* 。指定参数为函数指针的语法类似于闭包，如下所示：
+
+   #+BEGIN_SRC rust 
+  fn add_one(x: i32) -> i32 {
+      x + 1
+  }
+
+  fn do_twice(f: fn(i32) -> i32, arg: i32) -> i32 {
+      f(arg) + f(arg)
+  }
+
+  fn main() {
+      let answer = do_twice(add_one, 5);
+
+      println!("The answer is: {}", answer);
+  }
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     这会打印出 The answer is: 12
+
+     do_twice 中的 f 被指定为一个接受一个 i32 参数并返回 i32 的 fn。接着就可以在 do_twice 函数体中调用 f。在 main 中，可以将函数名 add_one 作为第一个参数传递给 do_twice
+
+     注意： 不要把 fn 和 Fn 闭包 trait 相混淆！ 不同于闭包，fn 是一个类型而不是一个 trait，所以直接指定 fn 作为参数而不是声明一个带有 Fn 作为 trait bound 的泛型参数
+
+   #+END_EXAMPLE
+   函数指针 *实现* 了所有三个闭包 trait（ _Fn_ 、 _FnMut_ 和 _FnOnce_ ），所以总是可以在调用期望闭包的函数时传递函数指针作为参数。倾向于编写使用泛型和闭包 trait 的函数，这样它就能接受函数或闭包作为参数
+
+
+   #+BEGIN_EXAMPLE
+     一个只期望接受 fn 而不接受闭包的情况的例子是与不存在闭包的外部代码交互时：
+
+     C 语言的函数可以接受函数作为参数，但 C 语言没有闭包
+   #+END_EXAMPLE
+   作为一个既可以使用内联定义的闭包又可以使用命名函数的例子，看看一个 map 的应用。使用 map 函数将一个数字 vector 转换为一个字符串 vector，就可以使用闭包，比如这样：
+
+   #+BEGIN_SRC rust 
+  let list_of_numbers = vec![1, 2, 3];
+  let list_of_strings: Vec<String> = list_of_numbers
+      .iter()
+      .map(|i| i.to_string())
+      .collect();
+   #+END_SRC
+   或者可以将函数作为 map 的参数来代替闭包，像是这样：
+   #+BEGIN_SRC rust 
+  let list_of_numbers = vec![1, 2, 3];
+  let list_of_strings: Vec<String> = list_of_numbers
+      .iter()
+      .map(ToString::to_string)
+      .collect();
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     注意：这里必须使用 “高级 trait” 部分讲到的完全限定语法，因为存在多个叫做 to_string 的函数
+
+     这里使用了定义于 ToString trait 的 to_string 函数，标准库为所有实现了 Display 的类型实现了这个 trait
+   #+END_EXAMPLE
+
+   另一个实用的模式暴露了 _元组结构体_ 和元组结构体 _枚举成员_ 的 *实现细节* ：
+   + 这些项使用 _()_ 作为初始化语法，这看起来就像 *函数调用* ，同时它们确实被实现为返回由参数构造的实例的函数
+   + 它们也被称为 _实现了闭包 trait_ 的 *函数指针* ，并可以采用类似如下的方式调用：
+
+   #+BEGIN_SRC rust 
+  enum Status {
+      Value(u32),
+      Stop,
+  }
+
+  let list_of_statuses: Vec<Status> =
+      (0u32..20)
+      .map(Status::Value)
+      .collect();
+   #+END_SRC
+   这里创建了 Status::Value 实例，它通过 map 把0~20范围的每一个 u32 值调用 Status::Value 的初始化函数
+
+   #+BEGIN_EXAMPLE
+     一些人倾向于函数风格，一些人喜欢闭包
+
+     这两种形式最终都会产生同样的代码，所以请使用对你来说更明白的形式吧
+   #+END_EXAMPLE
+
+** 返回闭包
+   #+BEGIN_EXAMPLE
+     闭包表现为 trait，这意味着不能直接返回闭包
+
+     对于大部分需要返回 trait 的情况，可以使用实现了期望返回的 trait 的具体类型来替代函数的返回值
+   #+END_EXAMPLE
+   但是不能直接返回闭包，因为他们没有一个可返回的具体类型。也就是说不允许使用函数指针 fn 作为返回值类型，例如下面这段代码尝试直接返回闭包，它并不能编译：　
+
+   #+BEGIN_SRC rust 
+  fn returns_closure() -> Fn(i32) -> i32 {
+      |x| x + 1
+  }
+   #+END_SRC
+
+   编译器给出的错误是：
+
+   #+BEGIN_SRC sh 
+  error[E0277]: the trait bound `std::ops::Fn(i32) -> i32 + 'static:
+  std::marker::Sized` is not satisfied
+   -->
+    |
+  1 | fn returns_closure() -> Fn(i32) -> i32 {
+    |                         ^^^^^^^^^^^^^^ `std::ops::Fn(i32) -> i32 + 'static`
+    does not have a constant size known at compile-time
+    |
+    = help: the trait `std::marker::Sized` is not implemented for
+    `std::ops::Fn(i32) -> i32 + 'static`
+    = note: the return type of a function must have a statically known size
+   #+END_SRC
+
+   错误又一次指向了 Sized trait！Rust 并不知道需要多少空间来储存闭包。在上一部分见过这种情况的解决办法，可以使用 trait 对象：
+
+   #+BEGIN_SRC rust 
+     fn returns_closure() -> Box<dyn Fn(i32) -> i32> {
+	 Box::new(|x| x + 1)
+     }
+
+     fn main() {
+	 println!("call return closure: {}", returns_closure()(5));
+     }
+   #+END_SRC
+
 * 宏
