@@ -598,9 +598,9 @@ HTTP/1.1 200 OK\r\n\r\n
 </ul>
 
 <pre class="example">
-  因为 write 操作可能会失败，所以像之前那样对任何错误结果使用 unwrap
+     因为 write 操作可能会失败，所以像之前那样对任何错误结果使用 unwrap
 
-  同理，在真实世界的应用中这里需要添加错误处理
+     同理，在真实世界的应用中这里需要添加错误处理
 </pre>
 <ul class="org-ul">
 <li><span class="underline">flush</span> 会 <b>等待</b> 并 <b>阻塞</b> 程序执行直到 <span class="underline">所有字节</span> 都被 <span class="underline">写入连接中</span> 
@@ -608,11 +608,11 @@ HTTP/1.1 200 OK\r\n\r\n
 </ul>
 
 <pre class="example">
-  有了这些修改，运行代码并进行请求！
+     有了这些修改，运行代码并进行请求！
 
-  不再向终端打印任何数据，所以不会再看到除了 Cargo 以外的任何输出
+     不再向终端打印任何数据，所以不会再看到除了 Cargo 以外的任何输出
 
-  不过当在浏览器中加载 127.0.0.1:7878 时，会得到一个空页面而不是错误！
+     不过当在浏览器中加载 127.0.0.1:7878 时，会得到一个空页面而不是错误！
 </pre>
 </div>
 
@@ -623,7 +623,7 @@ HTTP/1.1 200 OK\r\n\r\n
 在项目根目录创建一个新文件，hello.html 
 </p>
 <pre class="example">
-注意：不是在 src 目录！
+    注意：不是在 src 目录！
 </pre>
 <p>
 在此可以放入任何你期望的 HTML，下面展示了一个可能的文本：
@@ -676,11 +676,11 @@ HTTP/1.1 200 OK\r\n\r\n
 </p>
 
 <pre class="example">
-  目前忽略了 buffer 中的请求数据并无条件的发送了 HTML 文件的内容
+      目前忽略了 buffer 中的请求数据并无条件的发送了 HTML 文件的内容
 
-  这意味着如果尝试在浏览器中请求 127.0.0.1:7878/something-else 也会得到同样的 HTML 响应
+      这意味着如果尝试在浏览器中请求 127.0.0.1:7878/something-else 也会得到同样的 HTML 响应
 
-  如此其作用是非常有限的，也不是大部分 server 所做的
+      如此其作用是非常有限的，也不是大部分 server 所做的
 </pre>
 </div>
 </div>
@@ -688,11 +688,142 @@ HTTP/1.1 200 OK\r\n\r\n
 
 <div id="outline-container-orgce9af41" class="outline-3">
 <h3 id="orgce9af41">验证请求并有选择的进行响应</h3>
+<div class="outline-text-3" id="text-orgce9af41">
+<p>
+增加在返回 HTML 文件前检查浏览器是否请求 /，并在其请求任何其他内容时返回错误的功能。新代码接收到的请求的内容与已知的 / 请求的一部分做比较，并增加了 if 和 else 块来区别处理请求：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">handle_connection</span>(<span style="color: #00ffff;">mut</span> <span style="color: #eedd82;">stream</span>: <span style="color: #98fb98;">TcpStream</span>) {
+    <span style="color: #00ffff;">let</span> <span style="color: #00ffff;">mut</span> <span style="color: #eedd82;">buffer</span> = [0; 512];
+    stream.read(&amp;<span style="color: #00ffff;">mut</span> buffer).unwrap();
+
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">get</span> = b<span style="color: #ffa07a;">"GET / HTTP/1.1\r\n"</span>;
+
+    <span style="color: #00ffff;">if</span> buffer.starts_with(get) {
+        <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">contents</span> = <span style="color: #7fffd4;">fs</span>::read_to_string(<span style="color: #ffa07a;">"hello.html"</span>).unwrap();
+
+        <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">response</span> = <span style="color: #b0c4de;">format!</span>(<span style="color: #ffa07a;">"HTTP/1.1 200 OK\r\n\r\n</span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">"</span>, contents);
+
+        stream.write(response.as_bytes()).unwrap();
+        stream.flush().unwrap();
+    } <span style="color: #00ffff;">else</span> {
+        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#20854;&#20182;&#35831;&#27714;</span>
+    }
+}
+</pre>
+</div>
+
+<ul class="org-ul">
+<li>首先，将与 / 请求相关的数据硬编码进变量 get
+<ul class="org-ul">
+<li>因为将原始字节读取进了缓冲区，所以在 get 的数据开头增加 <span class="underline">b""</span> 字节字符串语法将其转换为 <b>字节字符串</b></li>
+</ul></li>
+<li>检查 buffer 是否以 get 中的字节开头。如果是，这就是一个格式良好的 / 请求，也就是 if 块中期望处理的成功情况，并会返回 HTML 文件内容的代码</li>
+<li>如果 buffer 不 以 get 中的字节开头，就说明接收的是其他请求，之后会在 else 块中增加代码来响应所有其他请求</li>
+</ul>
+
+<pre class="example">
+     现在如果运行代码并请求 127.0.0.1:7878，就会得到 hello.html 中的 HTML
+
+     如果进行任何其他请求，比如 127.0.0.1:7878/something-else，则会得到像前面运行那样的连接错误
+</pre>
+<p>
+现在向else 块增加代码来返回一个带有 404 状态码的响应，这代表了所请求的内容没有找到。接着也会返回一个 HTML 向浏览器终端用户表明此意：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">--snip--</span>
+
+} <span style="color: #00ffff;">else</span> {
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">status_line</span> = <span style="color: #ffa07a;">"HTTP/1.1 404 NOT FOUND\r\n\r\n"</span>;
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">contents</span> = <span style="color: #7fffd4;">fs</span>::read_to_string(<span style="color: #ffa07a;">"404.html"</span>).unwrap();
+
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">response</span> = <span style="color: #b0c4de;">format!</span>(<span style="color: #ffa07a;">"</span><span style="color: #ffa07a; font-style: italic;">{}{}</span><span style="color: #ffa07a;">"</span>, status_line, contents);
+
+    stream.write(response.as_bytes()).unwrap();
+    stream.flush().unwrap();
+} 
+</pre>
+</div>
+
+<p>
+这里，响应的状态行有状态码 404 和原因短语 NOT FOUND。仍然没有返回任何 header，而其 body 将是 404.html 文件中的 HTML。需要在 hello.html 同级目录创建 404.html 文件作为错误页面：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-html"><span style="color: #ffa07a;">&lt;!DOCTYPE html&gt;</span>
+&lt;<span style="color: #87cefa;">html</span> <span style="color: #eedd82;">lang</span>=<span style="color: #ffa07a;">"en"</span>&gt;
+  &lt;<span style="color: #87cefa;">head</span>&gt;
+    &lt;<span style="color: #87cefa;">meta</span> <span style="color: #eedd82;">charset</span>=<span style="color: #ffa07a;">"utf-8"</span>&gt;
+    &lt;<span style="color: #87cefa;">title</span>&gt;<span style="font-weight: bold; text-decoration: underline;">Hello!</span>&lt;/<span style="color: #87cefa;">title</span>&gt;
+  &lt;/<span style="color: #87cefa;">head</span>&gt;
+  &lt;<span style="color: #87cefa;">body</span>&gt;
+    &lt;<span style="color: #87cefa;">h1</span>&gt;<span style="font-weight: bold; text-decoration: underline;">Oops!</span>&lt;/<span style="color: #87cefa;">h1</span>&gt;
+    &lt;<span style="color: #87cefa;">p</span>&gt;Sorry, I don't know what you're asking for.&lt;/<span style="color: #87cefa;">p</span>&gt;
+  &lt;/<span style="color: #87cefa;">body</span>&gt;
+&lt;/<span style="color: #87cefa;">html</span>&gt;
+</pre>
+</div>
+
+<pre class="example">
+     有了这些修改，再次运行 server。请求 127.0.0.1:7878 应该会返回 hello.html 的内容
+
+     而对于任何其他请求，比如 127.0.0.1:7878/foo，应该会返回 404.html 中的错误 HTML！
+</pre>
+</div>
 </div>
 <div id="outline-container-org944eaa7" class="outline-3">
 <h3 id="org944eaa7">少量代码重构</h3>
+<div class="outline-text-3" id="text-org944eaa7">
+<pre class="example">
+     目前 if 和 else 块中的代码有很多的重复：他们都读取文件并将其内容写入流。唯一的区别是状态行和文件名
+
+     为了使代码更为简明，将这些区别分别提取到一行 if 和 else 中，对状态行和文件名变量赋值；然后在读取文件和写入响应的代码中无条件的使用这些变量
+</pre>
+<p>
+重构后取代了大段 if 和 else 块代码后的结果如下所示：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">--snip--</span>
+
+<span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">handle_connection</span>(<span style="color: #00ffff;">mut</span> <span style="color: #eedd82;">stream</span>: <span style="color: #98fb98;">TcpStream</span>) {
+    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">--snip--</span>
+
+    <span style="color: #00ffff;">let</span> (status_line, filename) = <span style="color: #00ffff;">if</span> buffer.starts_with(get) {
+        (<span style="color: #ffa07a;">"HTTP/1.1 200 OK\r\n\r\n"</span>, <span style="color: #ffa07a;">"hello.html"</span>)
+    } <span style="color: #00ffff;">else</span> {
+        (<span style="color: #ffa07a;">"HTTP/1.1 404 NOT FOUND\r\n\r\n"</span>, <span style="color: #ffa07a;">"404.html"</span>)
+    };
+
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">contents</span> = <span style="color: #7fffd4;">fs</span>::read_to_string(filename).unwrap();
+
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">response</span> = <span style="color: #b0c4de;">format!</span>(<span style="color: #ffa07a;">"</span><span style="color: #ffa07a; font-style: italic;">{}{}</span><span style="color: #ffa07a;">"</span>, status_line, contents);
+
+    stream.write(response.as_bytes()).unwrap();
+    stream.flush().unwrap();
+}
+</pre>
+</div>
+
+<ul class="org-ul">
+<li>现在 if 和 else 块所做的唯一的事就是在一个元组中返回合适的状态行和文件名的值；接着使用模式的 let 语句通过解构元组的两部分为 filename 和 header 赋值</li>
+<li>之前读取文件和写入响应的冗余代码现在位于 if 和 else 块之外，并会使用变量 status_line 和 filename。这样更易于观察这两种情况真正有何不同，还意味着如果需要改变如何读取文件或写入响应时只需要更新一处的代码</li>
+</ul>
+
+<pre class="example">
+     已经有了一个 40 行左右 Rust 代码的小而简单的 server，它对一个请求返回页面内容而对所有其他请求返回 404 响应
+
+     目前 server 运行于单线程中，它一次只能处理一个请求
+
+     接下来会模拟一些请求来看看这如何会成为一个问题，并进行修复以便 server 可以一次处理多个请求
+</pre>
 </div>
 </div>
+</div>
+
+
 <div id="outline-container-orgee7afaf" class="outline-2">
 <h2 id="orgee7afaf">多线程 web server</h2>
 </div>
