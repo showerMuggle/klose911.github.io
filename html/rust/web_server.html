@@ -544,11 +544,148 @@ CRLF序列也可以写成\r\n，其中\r是回车符，\n是换行符。CRLF序�
 <div id="outline-container-org1e707d8" class="outline-3">
 <h3 id="org1e707d8">编写响应</h3>
 <div class="outline-text-3" id="text-org1e707d8">
+<p>
+现在将实现在客户端请求的响应中发送数据的功能。响应格式如下：
+</p>
+
+<pre class="example">
+HTTP-Version Status-Code Reason-Phrase CRLF
+headers CRLF
+message-body
+</pre>
+
+<ul class="org-ul">
+<li>第一行叫做 <span class="underline">状态行</span> ：
+<ul class="org-ul">
+<li>响应的 <span class="underline">HTTP 版本</span></li>
+<li>一个 <span class="underline">数字状态码</span> 用以总结请求的结果</li>
+<li>一个 <span class="underline">描述之前状态码的文本原因</span></li>
+<li>短语 <span class="underline">CRLF</span> 序列</li>
+</ul></li>
+<li>任意 <span class="underline">header</span> ，另一个 CRLF 序列</li>
+<li>响应的 <span class="underline">body</span></li>
+</ul>
+
+<p>
+下面是一个使用 HTTP 1.1 版本的响应例子，其状态码为 200，原因短语为 OK，没有 header，也没有 body：
+</p>
+
+<pre class="example">
+HTTP/1.1 200 OK\r\n\r\n
+</pre>
+
+<p>
+将这些文本写入流作为成功请求的响应！在 handle_connection 函数中，去掉打印请求数据的 println!，并替换：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">handle_connection</span>(<span style="color: #00ffff;">mut</span> <span style="color: #eedd82;">stream</span>: <span style="color: #98fb98;">TcpStream</span>) {
+    <span style="color: #00ffff;">let</span> <span style="color: #00ffff;">mut</span> <span style="color: #eedd82;">buffer</span> = [0; 512];
+
+    stream.read(&amp;<span style="color: #00ffff;">mut</span> buffer).unwrap();
+
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">response</span> = <span style="color: #ffa07a;">"HTTP/1.1 200 OK\r\n\r\n"</span>;
+
+    stream.write(response.as_bytes()).unwrap();
+    stream.flush().unwrap();
+}
+</pre>
 </div>
+
+<ul class="org-ul">
+<li>新代码中的第一行定义了变量 <span class="underline">response</span> 来 <b>存放</b> 将要 <span class="underline">返回的成功响应的数据</span></li>
+<li>在 response 上调用 <span class="underline">as_bytes</span> ，因为 stream 的 <span class="underline">write</span> 方法获取一个 &amp;[u8] 并直接将这些 <span class="underline">字节</span> <b>发送</b> 给 <span class="underline">连接</span></li>
+</ul>
+
+<pre class="example">
+  因为 write 操作可能会失败，所以像之前那样对任何错误结果使用 unwrap
+
+  同理，在真实世界的应用中这里需要添加错误处理
+</pre>
+<ul class="org-ul">
+<li><span class="underline">flush</span> 会 <b>等待</b> 并 <b>阻塞</b> 程序执行直到 <span class="underline">所有字节</span> 都被 <span class="underline">写入连接中</span> 
++TcpStream 包含一个内部缓冲区来最小化对底层操作系统的调用</li>
+</ul>
+
+<pre class="example">
+  有了这些修改，运行代码并进行请求！
+
+  不再向终端打印任何数据，所以不会再看到除了 Cargo 以外的任何输出
+
+  不过当在浏览器中加载 127.0.0.1:7878 时，会得到一个空页面而不是错误！
+</pre>
+</div>
+
 <div id="outline-container-org91b9b60" class="outline-4">
 <h4 id="org91b9b60">返回真正的 HTML</h4>
+<div class="outline-text-4" id="text-org91b9b60">
+<p>
+在项目根目录创建一个新文件，hello.html 
+</p>
+<pre class="example">
+注意：不是在 src 目录！
+</pre>
+<p>
+在此可以放入任何你期望的 HTML，下面展示了一个可能的文本：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-html"><span style="color: #ffa07a;">&lt;!DOCTYPE html&gt;</span>
+&lt;<span style="color: #87cefa;">html</span> <span style="color: #eedd82;">lang</span>=<span style="color: #ffa07a;">"en"</span>&gt;
+  &lt;<span style="color: #87cefa;">head</span>&gt;
+    &lt;<span style="color: #87cefa;">meta</span> <span style="color: #eedd82;">charset</span>=<span style="color: #ffa07a;">"utf-8"</span>&gt;
+    &lt;<span style="color: #87cefa;">title</span>&gt;<span style="font-weight: bold; text-decoration: underline;">Hello!</span>&lt;/<span style="color: #87cefa;">title</span>&gt;
+  &lt;/<span style="color: #87cefa;">head</span>&gt;
+  &lt;<span style="color: #87cefa;">body</span>&gt;
+    &lt;<span style="color: #87cefa;">h1</span>&gt;<span style="font-weight: bold; text-decoration: underline;">Hello!</span>&lt;/<span style="color: #87cefa;">h1</span>&gt;
+    &lt;<span style="color: #87cefa;">p</span>&gt;Hi from Rust&lt;/<span style="color: #87cefa;">p</span>&gt;
+  &lt;/<span style="color: #87cefa;">body</span>&gt;
+&lt;/<span style="color: #87cefa;">html</span>&gt;
+</pre>
+</div>
+
+<p>
+这是一个极小化的 HTML5 文档，它有一个标题和一小段文本。为了在 server 接受请求时返回它，修改 handle_connection 来读取 HTML 文件，将其加入到响应的 body 中，并发送：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::fs;
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">--snip--</span>
+
+<span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">handle_connection</span>(<span style="color: #00ffff;">mut</span> <span style="color: #eedd82;">stream</span>: <span style="color: #98fb98;">TcpStream</span>) {
+    <span style="color: #00ffff;">let</span> <span style="color: #00ffff;">mut</span> <span style="color: #eedd82;">buffer</span> = [0; 512];
+    stream.read(&amp;<span style="color: #00ffff;">mut</span> buffer).unwrap();
+
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">contents</span> = <span style="color: #7fffd4;">fs</span>::read_to_string(<span style="color: #ffa07a;">"hello.html"</span>).unwrap();
+
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">response</span> = <span style="color: #b0c4de;">format!</span>(<span style="color: #ffa07a;">"HTTP/1.1 200 OK\r\n\r\n</span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">"</span>, contents);
+
+    stream.write(response.as_bytes()).unwrap();
+    stream.flush().unwrap();
+}
+</pre>
+</div>
+
+<ul class="org-ul">
+<li>在开头增加了一行来将标准库中的 File 引入作用域：打开和读取文件的代码应该看起来很熟悉</li>
+<li>使用 format! 将文件内容加入到将要写入流的成功响应的 body 中</li>
+</ul>
+
+<p>
+使用 cargo run 运行程序，重新测试后，应该会看到渲染出来的 HTML 文件！
+</p>
+
+<pre class="example">
+  目前忽略了 buffer 中的请求数据并无条件的发送了 HTML 文件的内容
+
+  这意味着如果尝试在浏览器中请求 127.0.0.1:7878/something-else 也会得到同样的 HTML 响应
+
+  如此其作用是非常有限的，也不是大部分 server 所做的
+</pre>
 </div>
 </div>
+</div>
+
 <div id="outline-container-orgce9af41" class="outline-3">
 <h3 id="orgce9af41">验证请求并有选择的进行响应</h3>
 </div>
