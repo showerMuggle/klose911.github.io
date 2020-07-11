@@ -238,30 +238,45 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgce7d11e">构建单线程 web server</a>
+<li><a href="#orgad373e2">构建单线程 web server</a>
 <ul>
-<li><a href="#org201abe8">监听 TCP 连接</a></li>
-<li><a href="#org483b293">读取请求</a>
+<li><a href="#orgbb15e8f">监听 TCP 连接</a></li>
+<li><a href="#orgc2b9523">读取请求</a>
 <ul>
-<li><a href="#org4ba394a">仔细观察 HTTP 请求</a></li>
+<li><a href="#org37f8e21">仔细观察 HTTP 请求</a></li>
 </ul>
 </li>
-<li><a href="#org1e707d8">编写响应</a>
+<li><a href="#orgc4f45f3">编写响应</a>
 <ul>
-<li><a href="#org91b9b60">返回真正的 HTML</a></li>
+<li><a href="#org99a5062">返回真正的 HTML</a></li>
 </ul>
 </li>
-<li><a href="#orgce9af41">验证请求并有选择的进行响应</a></li>
-<li><a href="#org944eaa7">少量代码重构</a></li>
+<li><a href="#orga79eeee">验证请求并有选择的进行响应</a></li>
+<li><a href="#org57e0ef9">少量代码重构</a></li>
 </ul>
 </li>
-<li><a href="#orgee7afaf">多线程 web server</a>
+<li><a href="#orge6dbd78">多线程 web server</a>
 <ul>
-<li><a href="#orga8d8330">在当前 server 实现中模拟慢请求</a></li>
-<li><a href="#org2ff70f0">使用线程池改善吞吐量</a></li>
+<li><a href="#org2bc5dd1">在当前 server 实现中模拟慢请求</a></li>
+<li><a href="#org375b5ca">使用线程池改善吞吐量</a>
+<ul>
+<li><a href="#org3392293">为每一个请求分配线程的代码结构</a></li>
+<li><a href="#orgf826ac6">为有限数量的线程创建一个类似的接口</a></li>
+<li><a href="#org0ca44a9">构建 ThreadPool 结构体</a></li>
+<li><a href="#org838d9aa">在 new 中验证池中线程数量</a></li>
+<li><a href="#org9384025">分配空间以储存线程</a></li>
+<li><a href="#orge7f4b8e">Worker 结构体：负责从 ThreadPool 中将代码传递给线程</a></li>
+<li><a href="#orged81a00">使用通道向线程发送请求</a></li>
+<li><a href="#orgf40133c">实现 execute 方法</a>
+<ul>
+<li><a href="#orgfd7cf67">while let 陷阱</a></li>
 </ul>
 </li>
-<li><a href="#orgd2210c2">优雅停机</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#org27f875c">优雅停机</a></li>
 </ul>
 </div>
 </div>
@@ -295,9 +310,9 @@ crates.io 上有很多可用于生产环境的 crate，它们提供了比我们�
 
 这里也展示了选择处理什么层次的抽象，并能够选择比其他语言可能或可用的层次更低的层次
 </pre>
-<div id="outline-container-orgce7d11e" class="outline-2">
-<h2 id="orgce7d11e">构建单线程 web server</h2>
-<div class="outline-text-2" id="text-orgce7d11e">
+<div id="outline-container-orgad373e2" class="outline-2">
+<h2 id="orgad373e2">构建单线程 web server</h2>
+<div class="outline-text-2" id="text-orgad373e2">
 <p>
 首先创建一个可运行的单线程 web server，不过在开始之前，将快速了解一下构建 web server 所涉及到的协议
 </p>
@@ -312,9 +327,9 @@ HTTP 构建于 TCP 之上，它定义了请求和响应的内容
 技术上讲可将 HTTP 用于其他协议之上，不过对于绝大部分情况，HTTP 通过 TCP 传输。将要做的就是处理 TCP 和 HTTP 请求与响应的原始字节数据
 </pre>
 </div>
-<div id="outline-container-org201abe8" class="outline-3">
-<h3 id="org201abe8">监听 TCP 连接</h3>
-<div class="outline-text-3" id="text-org201abe8">
+<div id="outline-container-orgbb15e8f" class="outline-3">
+<h3 id="orgbb15e8f">监听 TCP 连接</h3>
+<div class="outline-text-3" id="text-orgbb15e8f">
 <p>
 我们的 web server 所需做的第一件事便是能够监听 TCP 连接。标准库提供了 <span class="underline">std::net</span> 模块处理这些功能。一如既往新建一个项目：
 </p>
@@ -331,15 +346,15 @@ $ cd hello
 </p>
 
 <div class="org-src-container">
-<pre class="src src-rust"><span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::<span style="color: #7fffd4;">net</span>::<span style="color: #98fb98;">TcpListener</span>;
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::<span style="color: #ffd700;">net</span>::<span style="color: #98f5ff;">TcpListener</span>;
 
-<span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
-    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">listener</span> = <span style="color: #98fb98;">TcpListener</span>::bind(<span style="color: #ffa07a;">"127.0.0.1:7878"</span>).unwrap();
+<span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">listener</span> = <span style="color: #98f5ff;">TcpListener</span>::bind(<span style="color: #deb887;">"127.0.0.1:7878"</span>).unwrap();
 
-    <span style="color: #00ffff;">for</span> <span style="color: #eedd82;">stream</span> <span style="color: #00ffff;">in</span> listener.incoming() {
-        <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">stream</span> = stream.unwrap();
+    <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">stream</span> <span style="color: #00bfff; font-weight: bold;">in</span> listener.incoming() {
+        <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">stream</span> = stream.unwrap();
 
-        <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"Connection established!"</span>);
+        <span style="color: #f08080;">println!</span>(<span style="color: #deb887;">"Connection established!"</span>);
     }
 }
 </pre>
@@ -412,34 +427,34 @@ Connection established!
 </pre>
 </div>
 </div>
-<div id="outline-container-org483b293" class="outline-3">
-<h3 id="org483b293">读取请求</h3>
-<div class="outline-text-3" id="text-org483b293">
+<div id="outline-container-orgc2b9523" class="outline-3">
+<h3 id="orgc2b9523">读取请求</h3>
+<div class="outline-text-3" id="text-orgc2b9523">
 <p>
 为了分离获取连接和接下来对连接的操作的相关内容，将开始一个新函数来处理连接。在这个新的 <span class="underline">handle_connection</span> 函数中，从 TCP 流中读取数据并打印出来以便观察浏览器发送过来的数据：
 </p>
 
 <div class="org-src-container">
-<pre class="src src-rust"><span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::<span style="color: #7fffd4;">io</span>::<span style="color: #7fffd4;">prelude</span>::*;
-<span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::<span style="color: #7fffd4;">net</span>::<span style="color: #98fb98;">TcpStream</span>;
-<span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::<span style="color: #7fffd4;">net</span>::<span style="color: #98fb98;">TcpListener</span>;
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::<span style="color: #ffd700;">io</span>::<span style="color: #ffd700;">prelude</span>::*;
+<span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::<span style="color: #ffd700;">net</span>::<span style="color: #98f5ff;">TcpStream</span>;
+<span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::<span style="color: #ffd700;">net</span>::<span style="color: #98f5ff;">TcpListener</span>;
 
-<span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">main</span>() {
-    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">listener</span> = <span style="color: #98fb98;">TcpListener</span>::bind(<span style="color: #ffa07a;">"127.0.0.1:7878"</span>).unwrap();
+<span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">listener</span> = <span style="color: #98f5ff;">TcpListener</span>::bind(<span style="color: #deb887;">"127.0.0.1:7878"</span>).unwrap();
 
-    <span style="color: #00ffff;">for</span> <span style="color: #eedd82;">stream</span> <span style="color: #00ffff;">in</span> listener.incoming() {
-        <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">stream</span> = stream.unwrap();
+    <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">stream</span> <span style="color: #00bfff; font-weight: bold;">in</span> listener.incoming() {
+        <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">stream</span> = stream.unwrap();
 
         handle_connection(stream);
     }
 }
 
-<span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">handle_connection</span>(<span style="color: #00ffff;">mut</span> <span style="color: #eedd82;">stream</span>: <span style="color: #98fb98;">TcpStream</span>) {
-    <span style="color: #00ffff;">let</span> <span style="color: #00ffff;">mut</span> <span style="color: #eedd82;">buffer</span> = [0; 512];
+<span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">handle_connection</span>(<span style="color: #00bfff; font-weight: bold;">mut</span> <span style="color: #4eee94;">stream</span>: <span style="color: #98f5ff;">TcpStream</span>) {
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #00bfff; font-weight: bold;">mut</span> <span style="color: #4eee94;">buffer</span> = [0; 512];
 
-    stream.read(&amp;<span style="color: #00ffff;">mut</span> buffer).unwrap();
+    stream.read(&amp;<span style="color: #00bfff; font-weight: bold;">mut</span> buffer).unwrap();
 
-    <span style="color: #b0c4de;">println!</span>(<span style="color: #ffa07a;">"Request: </span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">"</span>, <span style="color: #98fb98;">String</span>::from_utf8_lossy(&amp;buffer[..]));
+    <span style="color: #f08080;">println!</span>(<span style="color: #deb887;">"Request: </span><span style="color: #deb887; font-style: italic;">{}</span><span style="color: #deb887;">"</span>, <span style="color: #98f5ff;">String</span>::from_utf8_lossy(&amp;buffer[..]));
 }
 </pre>
 </div>
@@ -483,14 +498,14 @@ Connection established!
 <div class="org-src-container">
 <pre class="src src-sh">$ cargo run
    Compiling hello v0.1.0 (file:///projects/hello)
-    Finished dev [unoptimized + debuginfo] target(s) <span style="color: #00ffff;">in</span> 0.42 secs
+    Finished dev [unoptimized + debuginfo] target(s) <span style="color: #00bfff; font-weight: bold;">in</span> 0.42 secs
      Running <span style="color: #fa8072;">`target/debug/hello`</span>
 Request: GET / HTTP/1.1
 Host: 127.0.0.1:7878
 User-Agent: Mozilla/5.0 (Windows NT 10.0; WOW64; rv:52.0) Gecko/20100101
 Firefox/52.0
-Accept: text/html,application/xhtml+xml,application/xml;<span style="color: #eedd82;">q</span>=0.9,*/*;<span style="color: #eedd82;">q</span>=0.8
-Accept-Language: en-US,en;<span style="color: #eedd82;">q</span>=0.5
+Accept: text/html,application/xhtml+xml,application/xml;<span style="color: #4eee94;">q</span>=0.9,*/*;<span style="color: #4eee94;">q</span>=0.8
+Accept-Language: en-US,en;<span style="color: #4eee94;">q</span>=0.5
 Accept-Encoding: gzip, deflate
 Connection: keep-alive
 Upgrade-Insecure-Requests: 1
@@ -506,9 +521,9 @@ Upgrade-Insecure-Requests: 1
      如果重复的连接都是请求 /，就知道了浏览器尝试重复获取 / 因为它没有从程序得到响应
 </pre>
 </div>
-<div id="outline-container-org4ba394a" class="outline-4">
-<h4 id="org4ba394a">仔细观察 HTTP 请求</h4>
-<div class="outline-text-4" id="text-org4ba394a">
+<div id="outline-container-org37f8e21" class="outline-4">
+<h4 id="org37f8e21">仔细观察 HTTP 请求</h4>
+<div class="outline-text-4" id="text-org37f8e21">
 <p>
 HTTP 是一个基于文本的协议，同时一个请求有如下格式：
 </p>
@@ -546,9 +561,9 @@ CRLF序列也可以写成\r\n，其中\r是回车符，\n是换行符。CRLF序�
 </div>
 </div>
 
-<div id="outline-container-org1e707d8" class="outline-3">
-<h3 id="org1e707d8">编写响应</h3>
-<div class="outline-text-3" id="text-org1e707d8">
+<div id="outline-container-orgc4f45f3" class="outline-3">
+<h3 id="orgc4f45f3">编写响应</h3>
+<div class="outline-text-3" id="text-orgc4f45f3">
 <p>
 现在将实现在客户端请求的响应中发送数据的功能。响应格式如下：
 </p>
@@ -584,12 +599,12 @@ HTTP/1.1 200 OK\r\n\r\n
 </p>
 
 <div class="org-src-container">
-<pre class="src src-rust"><span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">handle_connection</span>(<span style="color: #00ffff;">mut</span> <span style="color: #eedd82;">stream</span>: <span style="color: #98fb98;">TcpStream</span>) {
-    <span style="color: #00ffff;">let</span> <span style="color: #00ffff;">mut</span> <span style="color: #eedd82;">buffer</span> = [0; 512];
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">handle_connection</span>(<span style="color: #00bfff; font-weight: bold;">mut</span> <span style="color: #4eee94;">stream</span>: <span style="color: #98f5ff;">TcpStream</span>) {
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #00bfff; font-weight: bold;">mut</span> <span style="color: #4eee94;">buffer</span> = [0; 512];
 
-    stream.read(&amp;<span style="color: #00ffff;">mut</span> buffer).unwrap();
+    stream.read(&amp;<span style="color: #00bfff; font-weight: bold;">mut</span> buffer).unwrap();
 
-    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">response</span> = <span style="color: #ffa07a;">"HTTP/1.1 200 OK\r\n\r\n"</span>;
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">response</span> = <span style="color: #deb887;">"HTTP/1.1 200 OK\r\n\r\n"</span>;
 
     stream.write(response.as_bytes()).unwrap();
     stream.flush().unwrap();
@@ -621,9 +636,9 @@ HTTP/1.1 200 OK\r\n\r\n
 </pre>
 </div>
 
-<div id="outline-container-org91b9b60" class="outline-4">
-<h4 id="org91b9b60">返回真正的 HTML</h4>
-<div class="outline-text-4" id="text-org91b9b60">
+<div id="outline-container-org99a5062" class="outline-4">
+<h4 id="org99a5062">返回真正的 HTML</h4>
+<div class="outline-text-4" id="text-org99a5062">
 <p>
 在项目根目录创建一个新文件，hello.html 
 </p>
@@ -635,17 +650,17 @@ HTTP/1.1 200 OK\r\n\r\n
 </p>
 
 <div class="org-src-container">
-<pre class="src src-html"><span style="color: #ffa07a;">&lt;!DOCTYPE html&gt;</span>
-&lt;<span style="color: #87cefa;">html</span> <span style="color: #eedd82;">lang</span>=<span style="color: #ffa07a;">"en"</span>&gt;
-  &lt;<span style="color: #87cefa;">head</span>&gt;
-    &lt;<span style="color: #87cefa;">meta</span> <span style="color: #eedd82;">charset</span>=<span style="color: #ffa07a;">"utf-8"</span>&gt;
-    &lt;<span style="color: #87cefa;">title</span>&gt;<span style="font-weight: bold; text-decoration: underline;">Hello!</span>&lt;/<span style="color: #87cefa;">title</span>&gt;
-  &lt;/<span style="color: #87cefa;">head</span>&gt;
-  &lt;<span style="color: #87cefa;">body</span>&gt;
-    &lt;<span style="color: #87cefa;">h1</span>&gt;<span style="font-weight: bold; text-decoration: underline;">Hello!</span>&lt;/<span style="color: #87cefa;">h1</span>&gt;
-    &lt;<span style="color: #87cefa;">p</span>&gt;Hi from Rust&lt;/<span style="color: #87cefa;">p</span>&gt;
-  &lt;/<span style="color: #87cefa;">body</span>&gt;
-&lt;/<span style="color: #87cefa;">html</span>&gt;
+<pre class="src src-html"><span style="color: #deb887;">&lt;!DOCTYPE html&gt;</span>
+&lt;<span style="color: #daa520; font-weight: bold;">html</span> <span style="color: #4eee94;">lang</span>=<span style="color: #deb887;">"en"</span>&gt;
+  &lt;<span style="color: #daa520; font-weight: bold;">head</span>&gt;
+    &lt;<span style="color: #daa520; font-weight: bold;">meta</span> <span style="color: #4eee94;">charset</span>=<span style="color: #deb887;">"utf-8"</span>&gt;
+    &lt;<span style="color: #daa520; font-weight: bold;">title</span>&gt;<span style="font-weight: bold; text-decoration: underline;">Hello!</span>&lt;/<span style="color: #daa520; font-weight: bold;">title</span>&gt;
+  &lt;/<span style="color: #daa520; font-weight: bold;">head</span>&gt;
+  &lt;<span style="color: #daa520; font-weight: bold;">body</span>&gt;
+    &lt;<span style="color: #daa520; font-weight: bold;">h1</span>&gt;<span style="font-weight: bold; text-decoration: underline;">Hello!</span>&lt;/<span style="color: #daa520; font-weight: bold;">h1</span>&gt;
+    &lt;<span style="color: #daa520; font-weight: bold;">p</span>&gt;Hi from Rust&lt;/<span style="color: #daa520; font-weight: bold;">p</span>&gt;
+  &lt;/<span style="color: #daa520; font-weight: bold;">body</span>&gt;
+&lt;/<span style="color: #daa520; font-weight: bold;">html</span>&gt;
 </pre>
 </div>
 
@@ -654,16 +669,16 @@ HTTP/1.1 200 OK\r\n\r\n
 </p>
 
 <div class="org-src-container">
-<pre class="src src-rust"><span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::fs;
-<span style="color: #ff4500;">// </span><span style="color: #ff4500;">--snip--</span>
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::fs;
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
 
-<span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">handle_connection</span>(<span style="color: #00ffff;">mut</span> <span style="color: #eedd82;">stream</span>: <span style="color: #98fb98;">TcpStream</span>) {
-    <span style="color: #00ffff;">let</span> <span style="color: #00ffff;">mut</span> <span style="color: #eedd82;">buffer</span> = [0; 512];
-    stream.read(&amp;<span style="color: #00ffff;">mut</span> buffer).unwrap();
+<span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">handle_connection</span>(<span style="color: #00bfff; font-weight: bold;">mut</span> <span style="color: #4eee94;">stream</span>: <span style="color: #98f5ff;">TcpStream</span>) {
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #00bfff; font-weight: bold;">mut</span> <span style="color: #4eee94;">buffer</span> = [0; 512];
+    stream.read(&amp;<span style="color: #00bfff; font-weight: bold;">mut</span> buffer).unwrap();
 
-    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">contents</span> = <span style="color: #7fffd4;">fs</span>::read_to_string(<span style="color: #ffa07a;">"hello.html"</span>).unwrap();
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">contents</span> = <span style="color: #ffd700;">fs</span>::read_to_string(<span style="color: #deb887;">"hello.html"</span>).unwrap();
 
-    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">response</span> = <span style="color: #b0c4de;">format!</span>(<span style="color: #ffa07a;">"HTTP/1.1 200 OK\r\n\r\n</span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">"</span>, contents);
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">response</span> = <span style="color: #f08080;">format!</span>(<span style="color: #deb887;">"HTTP/1.1 200 OK\r\n\r\n</span><span style="color: #deb887; font-style: italic;">{}</span><span style="color: #deb887;">"</span>, contents);
 
     stream.write(response.as_bytes()).unwrap();
     stream.flush().unwrap();
@@ -691,29 +706,29 @@ HTTP/1.1 200 OK\r\n\r\n
 </div>
 </div>
 
-<div id="outline-container-orgce9af41" class="outline-3">
-<h3 id="orgce9af41">验证请求并有选择的进行响应</h3>
-<div class="outline-text-3" id="text-orgce9af41">
+<div id="outline-container-orga79eeee" class="outline-3">
+<h3 id="orga79eeee">验证请求并有选择的进行响应</h3>
+<div class="outline-text-3" id="text-orga79eeee">
 <p>
 增加在返回 HTML 文件前检查浏览器是否请求 /，并在其请求任何其他内容时返回错误的功能。新代码接收到的请求的内容与已知的 / 请求的一部分做比较，并增加了 if 和 else 块来区别处理请求：
 </p>
 
 <div class="org-src-container">
-<pre class="src src-rust"><span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">handle_connection</span>(<span style="color: #00ffff;">mut</span> <span style="color: #eedd82;">stream</span>: <span style="color: #98fb98;">TcpStream</span>) {
-    <span style="color: #00ffff;">let</span> <span style="color: #00ffff;">mut</span> <span style="color: #eedd82;">buffer</span> = [0; 512];
-    stream.read(&amp;<span style="color: #00ffff;">mut</span> buffer).unwrap();
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">handle_connection</span>(<span style="color: #00bfff; font-weight: bold;">mut</span> <span style="color: #4eee94;">stream</span>: <span style="color: #98f5ff;">TcpStream</span>) {
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #00bfff; font-weight: bold;">mut</span> <span style="color: #4eee94;">buffer</span> = [0; 512];
+    stream.read(&amp;<span style="color: #00bfff; font-weight: bold;">mut</span> buffer).unwrap();
 
-    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">get</span> = b<span style="color: #ffa07a;">"GET / HTTP/1.1\r\n"</span>;
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">get</span> = b<span style="color: #deb887;">"GET / HTTP/1.1\r\n"</span>;
 
-    <span style="color: #00ffff;">if</span> buffer.starts_with(get) {
-        <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">contents</span> = <span style="color: #7fffd4;">fs</span>::read_to_string(<span style="color: #ffa07a;">"hello.html"</span>).unwrap();
+    <span style="color: #00bfff; font-weight: bold;">if</span> buffer.starts_with(get) {
+        <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">contents</span> = <span style="color: #ffd700;">fs</span>::read_to_string(<span style="color: #deb887;">"hello.html"</span>).unwrap();
 
-        <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">response</span> = <span style="color: #b0c4de;">format!</span>(<span style="color: #ffa07a;">"HTTP/1.1 200 OK\r\n\r\n</span><span style="color: #ffa07a; font-style: italic;">{}</span><span style="color: #ffa07a;">"</span>, contents);
+        <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">response</span> = <span style="color: #f08080;">format!</span>(<span style="color: #deb887;">"HTTP/1.1 200 OK\r\n\r\n</span><span style="color: #deb887; font-style: italic;">{}</span><span style="color: #deb887;">"</span>, contents);
 
         stream.write(response.as_bytes()).unwrap();
         stream.flush().unwrap();
-    } <span style="color: #00ffff;">else</span> {
-        <span style="color: #ff4500;">// </span><span style="color: #ff4500;">&#20854;&#20182;&#35831;&#27714;</span>
+    } <span style="color: #00bfff; font-weight: bold;">else</span> {
+        <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20854;&#20182;&#35831;&#27714;</span>
     }
 }
 </pre>
@@ -738,13 +753,13 @@ HTTP/1.1 200 OK\r\n\r\n
 </p>
 
 <div class="org-src-container">
-<pre class="src src-rust"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">--snip--</span>
+<pre class="src src-rust"><span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
 
-} <span style="color: #00ffff;">else</span> {
-    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">status_line</span> = <span style="color: #ffa07a;">"HTTP/1.1 404 NOT FOUND\r\n\r\n"</span>;
-    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">contents</span> = <span style="color: #7fffd4;">fs</span>::read_to_string(<span style="color: #ffa07a;">"404.html"</span>).unwrap();
+} <span style="color: #00bfff; font-weight: bold;">else</span> {
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">status_line</span> = <span style="color: #deb887;">"HTTP/1.1 404 NOT FOUND\r\n\r\n"</span>;
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">contents</span> = <span style="color: #ffd700;">fs</span>::read_to_string(<span style="color: #deb887;">"404.html"</span>).unwrap();
 
-    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">response</span> = <span style="color: #b0c4de;">format!</span>(<span style="color: #ffa07a;">"</span><span style="color: #ffa07a; font-style: italic;">{}{}</span><span style="color: #ffa07a;">"</span>, status_line, contents);
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">response</span> = <span style="color: #f08080;">format!</span>(<span style="color: #deb887;">"</span><span style="color: #deb887; font-style: italic;">{}{}</span><span style="color: #deb887;">"</span>, status_line, contents);
 
     stream.write(response.as_bytes()).unwrap();
     stream.flush().unwrap();
@@ -757,17 +772,17 @@ HTTP/1.1 200 OK\r\n\r\n
 </p>
 
 <div class="org-src-container">
-<pre class="src src-html"><span style="color: #ffa07a;">&lt;!DOCTYPE html&gt;</span>
-&lt;<span style="color: #87cefa;">html</span> <span style="color: #eedd82;">lang</span>=<span style="color: #ffa07a;">"en"</span>&gt;
-  &lt;<span style="color: #87cefa;">head</span>&gt;
-    &lt;<span style="color: #87cefa;">meta</span> <span style="color: #eedd82;">charset</span>=<span style="color: #ffa07a;">"utf-8"</span>&gt;
-    &lt;<span style="color: #87cefa;">title</span>&gt;<span style="font-weight: bold; text-decoration: underline;">Hello!</span>&lt;/<span style="color: #87cefa;">title</span>&gt;
-  &lt;/<span style="color: #87cefa;">head</span>&gt;
-  &lt;<span style="color: #87cefa;">body</span>&gt;
-    &lt;<span style="color: #87cefa;">h1</span>&gt;<span style="font-weight: bold; text-decoration: underline;">Oops!</span>&lt;/<span style="color: #87cefa;">h1</span>&gt;
-    &lt;<span style="color: #87cefa;">p</span>&gt;Sorry, I don't know what you're asking for.&lt;/<span style="color: #87cefa;">p</span>&gt;
-  &lt;/<span style="color: #87cefa;">body</span>&gt;
-&lt;/<span style="color: #87cefa;">html</span>&gt;
+<pre class="src src-html"><span style="color: #deb887;">&lt;!DOCTYPE html&gt;</span>
+&lt;<span style="color: #daa520; font-weight: bold;">html</span> <span style="color: #4eee94;">lang</span>=<span style="color: #deb887;">"en"</span>&gt;
+  &lt;<span style="color: #daa520; font-weight: bold;">head</span>&gt;
+    &lt;<span style="color: #daa520; font-weight: bold;">meta</span> <span style="color: #4eee94;">charset</span>=<span style="color: #deb887;">"utf-8"</span>&gt;
+    &lt;<span style="color: #daa520; font-weight: bold;">title</span>&gt;<span style="font-weight: bold; text-decoration: underline;">Hello!</span>&lt;/<span style="color: #daa520; font-weight: bold;">title</span>&gt;
+  &lt;/<span style="color: #daa520; font-weight: bold;">head</span>&gt;
+  &lt;<span style="color: #daa520; font-weight: bold;">body</span>&gt;
+    &lt;<span style="color: #daa520; font-weight: bold;">h1</span>&gt;<span style="font-weight: bold; text-decoration: underline;">Oops!</span>&lt;/<span style="color: #daa520; font-weight: bold;">h1</span>&gt;
+    &lt;<span style="color: #daa520; font-weight: bold;">p</span>&gt;Sorry, I don't know what you're asking for.&lt;/<span style="color: #daa520; font-weight: bold;">p</span>&gt;
+  &lt;/<span style="color: #daa520; font-weight: bold;">body</span>&gt;
+&lt;/<span style="color: #daa520; font-weight: bold;">html</span>&gt;
 </pre>
 </div>
 
@@ -778,9 +793,9 @@ HTTP/1.1 200 OK\r\n\r\n
 </pre>
 </div>
 </div>
-<div id="outline-container-org944eaa7" class="outline-3">
-<h3 id="org944eaa7">少量代码重构</h3>
-<div class="outline-text-3" id="text-org944eaa7">
+<div id="outline-container-org57e0ef9" class="outline-3">
+<h3 id="org57e0ef9">少量代码重构</h3>
+<div class="outline-text-3" id="text-org57e0ef9">
 <pre class="example">
      目前 if 和 else 块中的代码有很多的重复：他们都读取文件并将其内容写入流。唯一的区别是状态行和文件名
 
@@ -791,20 +806,20 @@ HTTP/1.1 200 OK\r\n\r\n
 </p>
 
 <div class="org-src-container">
-<pre class="src src-rust"><span style="color: #ff4500;">// </span><span style="color: #ff4500;">--snip--</span>
+<pre class="src src-rust"><span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
 
-<span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">handle_connection</span>(<span style="color: #00ffff;">mut</span> <span style="color: #eedd82;">stream</span>: <span style="color: #98fb98;">TcpStream</span>) {
-    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">--snip--</span>
+<span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">handle_connection</span>(<span style="color: #00bfff; font-weight: bold;">mut</span> <span style="color: #4eee94;">stream</span>: <span style="color: #98f5ff;">TcpStream</span>) {
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
 
-    <span style="color: #00ffff;">let</span> (status_line, filename) = <span style="color: #00ffff;">if</span> buffer.starts_with(get) {
-        (<span style="color: #ffa07a;">"HTTP/1.1 200 OK\r\n\r\n"</span>, <span style="color: #ffa07a;">"hello.html"</span>)
-    } <span style="color: #00ffff;">else</span> {
-        (<span style="color: #ffa07a;">"HTTP/1.1 404 NOT FOUND\r\n\r\n"</span>, <span style="color: #ffa07a;">"404.html"</span>)
+    <span style="color: #00bfff; font-weight: bold;">let</span> (status_line, filename) = <span style="color: #00bfff; font-weight: bold;">if</span> buffer.starts_with(get) {
+        (<span style="color: #deb887;">"HTTP/1.1 200 OK\r\n\r\n"</span>, <span style="color: #deb887;">"hello.html"</span>)
+    } <span style="color: #00bfff; font-weight: bold;">else</span> {
+        (<span style="color: #deb887;">"HTTP/1.1 404 NOT FOUND\r\n\r\n"</span>, <span style="color: #deb887;">"404.html"</span>)
     };
 
-    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">contents</span> = <span style="color: #7fffd4;">fs</span>::read_to_string(filename).unwrap();
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">contents</span> = <span style="color: #ffd700;">fs</span>::read_to_string(filename).unwrap();
 
-    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">response</span> = <span style="color: #b0c4de;">format!</span>(<span style="color: #ffa07a;">"</span><span style="color: #ffa07a; font-style: italic;">{}{}</span><span style="color: #ffa07a;">"</span>, status_line, contents);
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">response</span> = <span style="color: #f08080;">format!</span>(<span style="color: #deb887;">"</span><span style="color: #deb887; font-style: italic;">{}{}</span><span style="color: #deb887;">"</span>, status_line, contents);
 
     stream.write(response.as_bytes()).unwrap();
     stream.flush().unwrap();
@@ -829,9 +844,9 @@ HTTP/1.1 200 OK\r\n\r\n
 </div>
 
 
-<div id="outline-container-orgee7afaf" class="outline-2">
-<h2 id="orgee7afaf">多线程 web server</h2>
-<div class="outline-text-2" id="text-orgee7afaf">
+<div id="outline-container-orge6dbd78" class="outline-2">
+<h2 id="orge6dbd78">多线程 web server</h2>
+<div class="outline-text-2" id="text-orge6dbd78">
 <pre class="example">
   目前 server 会依次处理每一个请求，意味着它在完成第一个连接的处理之前不会处理第二个连接
 
@@ -844,34 +859,34 @@ HTTP/1.1 200 OK\r\n\r\n
 </p>
 </div>
 
-<div id="outline-container-orga8d8330" class="outline-3">
-<h3 id="orga8d8330">在当前 server 实现中模拟慢请求</h3>
-<div class="outline-text-3" id="text-orga8d8330">
+<div id="outline-container-org2bc5dd1" class="outline-3">
+<h3 id="org2bc5dd1">在当前 server 实现中模拟慢请求</h3>
+<div class="outline-text-3" id="text-org2bc5dd1">
 <p>
 下面通过模拟慢响应实现了 /sleep 请求处理，它会使 server 在响应之前休眠五秒：
 </p>
 
 <div class="org-src-container">
-<pre class="src src-rust"><span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::thread;
-<span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::<span style="color: #7fffd4;">time</span>::<span style="color: #98fb98;">Duration</span>;
-<span style="color: #ff4500;">// </span><span style="color: #ff4500;">--snip--</span>
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::thread;
+<span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::<span style="color: #ffd700;">time</span>::<span style="color: #98f5ff;">Duration</span>;
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
 
-<span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">handle_connection</span>(<span style="color: #00ffff;">mut</span> <span style="color: #eedd82;">stream</span>: <span style="color: #98fb98;">TcpStream</span>) {
-    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">--snip--</span>
+<span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">handle_connection</span>(<span style="color: #00bfff; font-weight: bold;">mut</span> <span style="color: #4eee94;">stream</span>: <span style="color: #98f5ff;">TcpStream</span>) {
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
 
-    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">get</span> = b<span style="color: #ffa07a;">"GET / HTTP/1.1\r\n"</span>;
-    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">sleep</span> = b<span style="color: #ffa07a;">"GET /sleep HTTP/1.1\r\n"</span>;
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">get</span> = b<span style="color: #deb887;">"GET / HTTP/1.1\r\n"</span>;
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">sleep</span> = b<span style="color: #deb887;">"GET /sleep HTTP/1.1\r\n"</span>;
 
-    <span style="color: #00ffff;">let</span> (status_line, filename) = <span style="color: #00ffff;">if</span> buffer.starts_with(get) {
-        (<span style="color: #ffa07a;">"HTTP/1.1 200 OK\r\n\r\n"</span>, <span style="color: #ffa07a;">"hello.html"</span>)
-    } <span style="color: #00ffff;">else</span> <span style="color: #00ffff;">if</span> buffer.starts_with(sleep) {
-        <span style="color: #7fffd4;">thread</span>::sleep(<span style="color: #98fb98;">Duration</span>::from_secs(5));
-        (<span style="color: #ffa07a;">"HTTP/1.1 200 OK\r\n\r\n"</span>, <span style="color: #ffa07a;">"hello.html"</span>)
-    } <span style="color: #00ffff;">else</span> {
-        (<span style="color: #ffa07a;">"HTTP/1.1 404 NOT FOUND\r\n\r\n"</span>, <span style="color: #ffa07a;">"404.html"</span>)
+    <span style="color: #00bfff; font-weight: bold;">let</span> (status_line, filename) = <span style="color: #00bfff; font-weight: bold;">if</span> buffer.starts_with(get) {
+        (<span style="color: #deb887;">"HTTP/1.1 200 OK\r\n\r\n"</span>, <span style="color: #deb887;">"hello.html"</span>)
+    } <span style="color: #00bfff; font-weight: bold;">else</span> <span style="color: #00bfff; font-weight: bold;">if</span> buffer.starts_with(sleep) {
+        <span style="color: #ffd700;">thread</span>::sleep(<span style="color: #98f5ff;">Duration</span>::from_secs(5));
+        (<span style="color: #deb887;">"HTTP/1.1 200 OK\r\n\r\n"</span>, <span style="color: #deb887;">"hello.html"</span>)
+    } <span style="color: #00bfff; font-weight: bold;">else</span> {
+        (<span style="color: #deb887;">"HTTP/1.1 404 NOT FOUND\r\n\r\n"</span>, <span style="color: #deb887;">"404.html"</span>)
     };
 
-    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">--snip--</span>
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
 }
 </pre>
 </div>
@@ -892,12 +907,958 @@ HTTP/1.1 200 OK\r\n\r\n
 </div>
 </div>
 
-<div id="outline-container-org2ff70f0" class="outline-3">
-<h3 id="org2ff70f0">使用线程池改善吞吐量</h3>
+<div id="outline-container-org375b5ca" class="outline-3">
+<h3 id="org375b5ca">使用线程池改善吞吐量</h3>
+<div class="outline-text-3" id="text-org375b5ca">
+<p>
+<span class="underline">线程池</span> 是一组 <span class="underline">预先分配</span> 的 <span class="underline">等待</span> 或 <span class="underline">准备</span> <b>处理任务</b> 的 <span class="underline">线程</span> ：
+</p>
+<ul class="org-ul">
+<li>当程序收到一个新任务，线程池中的一个线程会被分配任务，这个线程会离开并处理任务
+<ul class="org-ul">
+<li>其余的线程则可用于处理在第一个线程处理任务的同时处理其他接收到的任务</li>
+</ul></li>
+<li>当第一个线程处理完任务时，它会返回空闲线程池中等待处理新任务</li>
+<li>线程池允许我们并发处理连接，增加 server 的吞吐量</li>
+</ul>
+
+<pre class="example">
+  我们会将池中线程限制为较少的数量，以防拒绝服务 Dos 攻击
+
+  如果程序为每一个接收的请求都新建一个线程，某人向 server 发起千万级的请求时会耗尽服务器的资源并导致所有请求的处理都被终止
+</pre>
+
+<p>
+不同于分配无限的线程，线程池中将有 <b>固定数量</b> 的等待线程：
+</p>
+<ul class="org-ul">
+<li>当新进请求时，将请求发送到线程池中做处理</li>
+<li>线程池会维护一个接收请求的队列。每一个线程会从队列中取出一个请求，处理请求，接着向对队列索取另一个请求</li>
+<li>通过这种设计，则可以并发处理 N 个请求，其中 N 为线程数</li>
+<li>如果每一个线程都在响应慢请求，之后的请求仍然会阻塞队列，不过相比之前增加了能处理的慢请求的数量</li>
+</ul>
+
+<pre class="example">
+  这个设计仅仅是多种改善 web server 吞吐量的方法之一，其他可供探索的方法有 fork/join 模型和单线程异步 I/O 模型
+
+  如果你对这个主题感兴趣，则可以阅读更多关于其他解决方案的内容并尝试用 Rust 实现他们，对于一个像 Rust 这样的底层语言，所有这些方法都是可能的
+</pre>
+<p>
+在开始之前，先讨论一下线程池应用看起来怎样
+</p>
+
+<pre class="example">
+  当尝试设计代码时，首先编写客户端接口确实有助于指导代码设计。以期望的调用方式来构建 API 代码的结构，接着在这个结构之内实现功能，而不是先实现功能再设计公有 API
+
+  类似于前面使用的“测试驱动开发”。这里将要使用“编译器驱动开发”：将编写调用所期望的函数的代码，接着观察编译器错误告诉接下来需要修改什么使得代码可以工作
+</pre>
+</div>
+
+<div id="outline-container-org3392293" class="outline-4">
+<h4 id="org3392293">为每一个请求分配线程的代码结构</h4>
+<div class="outline-text-4" id="text-org3392293">
+<p>
+首先，探索一下为每一个连接都创建一个线程的代码看起来如何
+</p>
+
+<pre class="example">
+这并不是最终方案，因为正如之前讲到的它会潜在的分配无限的线程，不过这是一个开始
+</pre>
+
+<p>
+下面展示了 main 的改变，它在 for 循环中为每一个流分配了一个新线程进行处理：
+</p>
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">listener</span> = <span style="color: #98f5ff;">TcpListener</span>::bind(<span style="color: #deb887;">"127.0.0.1:7878"</span>).unwrap();
+
+    <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">stream</span> <span style="color: #00bfff; font-weight: bold;">in</span> listener.incoming() {
+        <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">stream</span> = stream.unwrap();
+
+        <span style="color: #ffd700;">thread</span>::spawn(|| {
+            handle_connection(stream);
+        });
+    }
+}
+</pre>
+</div>
+
+<pre class="example">
+  正如前面讲到的，thread::spawn 会创建一个新线程并在其中运行闭包中的代码
+
+  如果运行这段代码并在在浏览器中加载 /sleep，接着在另两个浏览器标签页中加载 /，确实会发现 / 请求不必等待 /sleep 结束
+
+  不过正如之前提到的，这最终会使系统崩溃因为无限制的创建新线程
+</pre>
 </div>
 </div>
-<div id="outline-container-orgd2210c2" class="outline-2">
-<h2 id="orgd2210c2">优雅停机</h2>
+
+<div id="outline-container-orgf826ac6" class="outline-4">
+<h4 id="orgf826ac6">为有限数量的线程创建一个类似的接口</h4>
+<div class="outline-text-4" id="text-orgf826ac6">
+<p>
+现在期望线程池以类似且熟悉的方式工作，以便从线程切换到线程池并不会对使用该 API 的代码做出较大的修改。下面展示了希望用来替换 thread::spawn 的 ThreadPool 结构体的假想接口：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">listener</span> = <span style="color: #98f5ff;">TcpListener</span>::bind(<span style="color: #deb887;">"127.0.0.1:7878"</span>).unwrap();
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">pool</span> = <span style="color: #98f5ff;">ThreadPool</span>::new(4);
+
+    <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">stream</span> <span style="color: #00bfff; font-weight: bold;">in</span> listener.incoming() {
+        <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">stream</span> = stream.unwrap();
+
+        pool.execute(|| {
+            handle_connection(stream);
+        });
+    }
+}
+</pre>
+</div>
+<ul class="org-ul">
+<li>使用 <span class="underline">ThreadPool::new</span> 来 <b>创建</b> 一个 <span class="underline">新的线程池</span> ，它有一个可配置的线程数的参数，在这里是4</li>
+<li>在 for 循环中， <span class="underline">pool.execute</span> 有着类似 thread::spawn 的接口，它获取一个线程池运行于每一个流的闭包
+<ul class="org-ul">
+<li>pool.execute 需要实现为获取闭包并传递给池中的线程运行</li>
+</ul></li>
+</ul>
+
+<pre class="example">
+这段代码还不能编译，不过通过尝试编译器会指导我们如何修复它
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org0ca44a9" class="outline-4">
+<h4 id="org0ca44a9">构建 ThreadPool 结构体</h4>
+<div class="outline-text-4" id="text-org0ca44a9">
+<p>
+利用来自 cargo check 的编译器错误来驱动开发。下面是得到的第一个错误：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ cargo check
+   Compiling hello v0.1.0 (file:///projects/hello)
+error[E0433]: failed to resolve. Use of undeclared type or module <span style="color: #fa8072;">`ThreadPool`</span>
+  --&gt; src\main.rs:10:16
+   |
+10 |     <span style="color: #f08080;">let</span> pool = ThreadPool::new(4);
+   |                ^^^^^^^^^^^^^^^ Use of undeclared type or module
+   <span style="color: #fa8072;">`ThreadPool`</span>
+
+error: aborting due to previous error
+</pre>
+</div>
+
+<pre class="example">
+好的，这告诉我们需要一个 ThreadPool 类型或模块，所以将构建一个
+</pre>
+<p>
+ThreadPool 的实现会与 web server 的特定工作相独立，所以从 hello crate 切换到存放 ThreadPool 实现的新库 crate
+</p>
+<pre class="example">
+这也意味着可以在任何工作中使用这个单独的线程池库，而不仅仅是处理网络请求
+</pre>
+<p>
+创建 src/lib.rs 文件，它包含了目前可用的最简单的 ThreadPool 定义：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">pub</span> <span style="color: #00bfff; font-weight: bold;">struct</span> <span style="color: #98f5ff;">ThreadPool</span>;
+</pre>
+</div>
+
+<p>
+接着创建一个新目录 <span class="underline">src/bin</span> ，并将二进制 crate 根文件从 <span class="underline">src/main.rs</span> 移动到 <span class="underline">src/bin/main.rs</span> 
+</p>
+<pre class="example">
+  这使得库 crate 成为 hello 目录的主要 crate
+
+  不过仍然可以使用 cargo run 运行 src/bin/main.rs 二进制文件
+</pre>
+
+<p>
+移动了 main.rs 文件之后，修改 src/bin/main.rs 文件开头加入如下代码来引入库 crate 并将 ThreadPool 引入作用域：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">hello</span>::<span style="color: #98f5ff;">ThreadPool</span>;
+</pre>
+</div>
+
+<p>
+这仍然不能工作，再次尝试运行来得到下一个需要解决的错误：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">$ cargo check
+   Compiling hello v0.1.0 (file:///projects/hello)
+error[E0599]: no <span style="color: #00bfff; font-weight: bold;">function</span> <span style="color: #daa520; font-weight: bold;">or</span> associated item named <span style="color: #fa8072;">`new`</span> found for type
+<span style="color: #fa8072;">`hello::ThreadPool`</span> <span style="color: #00bfff; font-weight: bold;">in</span> the current scope
+ --&gt; src/bin/main.rs:13:16
+   |
+13 |     <span style="color: #f08080;">let</span> pool = ThreadPool::new(4);
+   |                ^^^^^^^^^^^^^^^ <span style="color: #00bfff; font-weight: bold;">function</span> <span style="color: #daa520; font-weight: bold;">or</span> associated item not found<span style="color: #00bfff; font-weight: bold;"> in</span>
+   <span style="color: #fa8072;">`hello::ThreadPool`</span>
+</pre>
+</div>
+
+<pre class="example">
+这告诉我们下一步是为 ThreadPool 创建一个叫做 new 的关联函数
+</pre>
+<p>
+我们知道 new 需要有一个参数可以接受 4，而且 new 应该返回 ThreadPool 实例。实现拥有此特征的最小化 new 函数：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">pub</span> <span style="color: #00bfff; font-weight: bold;">struct</span> <span style="color: #98f5ff;">ThreadPool</span>;
+
+<span style="color: #00bfff; font-weight: bold;">impl</span> <span style="color: #98f5ff;">ThreadPool</span> {
+    <span style="color: #00bfff; font-weight: bold;">pub</span> <span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">new</span>(<span style="color: #4eee94;">size</span>: <span style="color: #98f5ff;">usize</span>) -&gt; <span style="color: #98f5ff;">ThreadPool</span> {
+        <span style="color: #98f5ff;">ThreadPool</span>
+    }
+}
+</pre>
+</div>
+
+<pre class="example">
+  这里选择 usize 作为 size 参数的类型，因为负的线程数没有意义
+</pre>
+
+<p>
+再次编译检查这段代码：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ cargo check
+   Compiling hello v0.1.0 (file:///projects/hello)
+warning: unused variable: <span style="color: #fa8072;">`size`</span>
+ --&gt; src/lib.rs:4:16
+  |
+4 |     pub fn new(size: usize) -&gt; ThreadPool {
+  |                ^^^^
+  |
+  = note: <span style="color: #5f9ea0; font-style: italic;">#</span><span style="color: #5f9ea0; font-style: italic;">[warn(unused_variables)] on by default</span>
+  = note: to avoid this warning, consider using <span style="color: #fa8072;">`_size`</span> instead
+
+error[E0599]: no method named <span style="color: #fa8072;">`execute`</span> found for type <span style="color: #fa8072;">`hello::ThreadPool`</span> <span style="color: #00bfff; font-weight: bold;">in</span> the current scope
+  --&gt; src/bin/main.rs:18:14
+   |
+18 |         pool.execute(|| {
+   |              ^^^^^^^
+</pre>
+</div>
+
+<pre class="example">
+  现在有了一个警告和一个错误，暂时先忽略警告，发生错误是因为并没有 ThreadPool 上的 execute 方法
+
+  这个方法应该有与 thread::spawn 类似的接口，同时将实现 execute 函数来获取传递的闭包并将其传递给池中的空闲线程执行
+
+  回忆前面关于 “使用带有泛型和 Fn trait 的闭包” 部分，闭包作为参数时可以使用三个不同的 trait：Fn、FnMut 和 FnOnce，我们需要决定这里应该使用哪种闭包。
+</pre>
+
+<p>
+最终需要实现的类似于标准库的 thread::spawn，所以先来观察 thread::spawn 的签名在其参数中使用了何种 bound。查看文档会发现：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">pub</span> <span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">spawn</span>&lt;<span style="color: #98f5ff;">F</span>, <span style="color: #98f5ff;">T</span>&gt;(<span style="color: #4eee94;">f</span>: <span style="color: #98f5ff;">F</span>) -&gt; <span style="color: #98f5ff;">JoinHandl</span>`e&lt;<span style="color: #98f5ff;">T</span>&gt;
+    <span style="color: #00bfff; font-weight: bold;">where</span>
+        <span style="color: #4eee94;">F</span>: <span style="color: #98f5ff;">FnOnce</span>() -&gt; <span style="color: #98f5ff;">T</span> + <span style="color: #98f5ff;">Send</span> + '<span style="color: #00bfff; font-weight: bold;">static</span>,
+        <span style="color: #4eee94;">T</span>: <span style="color: #98f5ff;">Send</span> + '<span style="color: #00bfff; font-weight: bold;">static</span>
+</pre>
+</div>
+
+<pre class="example">
+F 是这里我们关心的参数；T 与返回值有关所以并不关心
+
+考虑到 spawn 使用 FnOnce 作为 F 的 trait bound，这可能也是我们需要的，因为最终会将传递给 execute 的参数传给 spawn。因为处理请求的线程只会执行闭包一次，这也进一步确认了 FnOnce 是我们需要的 trait，这里符合 FnOnce 中 Once 的意思
+
+F 还有 trait bound Send 和生命周期绑定 'static，这对我们的情况也是有意义的：需要 Send 来将闭包从一个线程转移到另一个线程，而 'static 是因为并不知道线程会执行多久
+
+</pre>
+
+<p>
+现在可以定义一个使用带有这些 bound 的泛型参数 F 的 ThreadPool 的 execute 方法：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">impl</span> <span style="color: #98f5ff;">ThreadPool</span> {
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
+
+    <span style="color: #00bfff; font-weight: bold;">pub</span> <span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">execute</span>&lt;<span style="color: #98f5ff;">F</span>&gt;(&amp;<span style="color: #00bfff; font-weight: bold;">self</span>, <span style="color: #4eee94;">f</span>: <span style="color: #98f5ff;">F</span>)
+        <span style="color: #00bfff; font-weight: bold;">where</span>
+            <span style="color: #4eee94;">F</span>: <span style="color: #98f5ff;">FnOnce</span>() + <span style="color: #98f5ff;">Send</span> + '<span style="color: #00bfff; font-weight: bold;">static</span>
+    {
+
+    }
+}
+</pre>
+</div>
+
+<pre class="example">
+FnOnce trait 仍然需要之后的 ()，因为这里的 FnOnce 代表一个没有参数也没有返回值的闭包
+
+正如函数的定义，返回值类型可以从签名中省略，不过即便没有参数也需要括号
+
+这里再一次增加了 execute 方法的最小化实现：它没有做任何工作，只是尝试让代码能够编译
+</pre>
+<p>
+再次进行检查：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ cargo check
+   Compiling hello v0.1.0 (file:///projects/hello)
+warning: unused variable: <span style="color: #fa8072;">`size`</span>
+ --&gt; src/lib.rs:4:16
+  |
+4 |     pub fn new(size: usize) -&gt; ThreadPool {
+  |                ^^^^
+  |
+  = note: <span style="color: #5f9ea0; font-style: italic;">#</span><span style="color: #5f9ea0; font-style: italic;">[warn(unused_variables)] on by default</span>
+  = note: to avoid this warning, consider using <span style="color: #fa8072;">`_size`</span> instead
+
+warning: unused variable: <span style="color: #fa8072;">`f`</span>
+ --&gt; src/lib.rs:8:30
+  |
+8 |     pub fn execute&lt;F&gt;(&amp;self, f: F)
+  |                              ^
+  |
+  = note: to avoid this warning, consider using <span style="color: #fa8072;">`_f`</span> instead
+
+</pre>
+</div>
+
+<p>
+现在就只有警告了，这意味着能够编译了！
+</p>
+
+<pre class="example">
+  注意：如果尝试 cargo run 运行程序并在浏览器中发起请求，仍会在浏览器中出现在本章开始时“连接重置”的错误，因为这个库实际上还没有调用传递给 execute 的闭包！
+
+  一个你可能听说过的关于像 Haskell 和 Rust 这样有严格编译器的语言的说法是 “如果代码能够编译，它就能工作”
+
+  这是一个提醒大家的好时机，实际上这并不是普适的。我们的项目可以编译，不过它完全没有做任何工作！
+
+  如果构建一个真实且功能完整的项目，则需花费大量的时间来开始编写单元测试来检查代码能否编译“并且”拥有期望的行为
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org838d9aa" class="outline-4">
+<h4 id="org838d9aa">在 new 中验证池中线程数量</h4>
+<div class="outline-text-4" id="text-org838d9aa">
+<pre class="example">
+  这里仍然存在警告是因为其并没有对 new 和 execute 的参数做任何操作。现在用期望的行为来实现这些函数
+
+  以考虑 new 作为开始。之前选择使用无符号类型作为 size 参数的类型，因为线程数为负的线程池没有意义。然而，线程数为零的线程池同样没有意义，不过零是一个完全有效的 u32 值
+</pre>
+
+<p>
+增加在返回 ThreadPool 实例之前检查 size 是否大于零的代码，并使用 assert! 宏在得到零时 panic：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">impl</span> <span style="color: #98f5ff;">ThreadPool</span> {
+    <span style="color: #ffebcd;">/// &#21019;&#24314;&#32447;&#31243;&#27744;&#12290;</span>
+    <span style="color: #ffebcd;">///</span>
+    <span style="color: #ffebcd;">/// &#32447;&#31243;&#27744;&#20013;&#32447;&#31243;&#30340;&#25968;&#37327;&#12290;</span>
+    <span style="color: #ffebcd;">///</span>
+    <span style="color: #ffebcd;">/// # Panics</span>
+    <span style="color: #ffebcd;">///</span>
+    <span style="color: #ffebcd;">/// `new` &#20989;&#25968;&#22312; size &#20026; 0 &#26102;&#20250; panic&#12290;</span>
+    <span style="color: #00bfff; font-weight: bold;">pub</span> <span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">new</span>(<span style="color: #4eee94;">size</span>: <span style="color: #98f5ff;">usize</span>) -&gt; <span style="color: #98f5ff;">ThreadPool</span> {
+        <span style="color: #ffd700;">assert!</span>(size &gt; 0);
+
+        <span style="color: #98f5ff;">ThreadPool</span>
+    }
+
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
+}
+</pre>
+</div>
+
+<pre class="example">
+  这里用文档注释为 ThreadPool 增加了一些文档
+
+  注意：这里遵循了良好的文档实践并增加了一个部分来提示函数会 panic 的情况
+
+  正如以前所讨论过的：尝试运行 cargo doc --open 并点击 ThreadPool 结构体来查看生成的 new 的文档看起来如何！
+</pre>
+
+<p>
+相比像这里使用 assert! 宏，也可以让 new 像之前 I/O 项目中 Config::new 那样返回一个 Result：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">pub</span> <span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">new</span>(<span style="color: #4eee94;">size</span>: <span style="color: #98f5ff;">usize</span>) -&gt; <span style="color: #98f5ff;">Result</span>&lt;<span style="color: #98f5ff;">ThreadPool</span>, <span style="color: #98f5ff;">PoolCreationError</span>&gt; {
+</pre>
+</div>
+
+<pre class="example">
+  在这里选择创建一个没有任何线程的线程池，被认为是不可恢复的错误
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org9384025" class="outline-4">
+<h4 id="org9384025">分配空间以储存线程</h4>
+<div class="outline-text-4" id="text-org9384025">
+<p>
+现在有了一个有效的线程池线程数，就可以实际创建这些线程并在返回之前将他们储存在 ThreadPool 结构体中。不过如何 “储存” 一个线程？再看看 thread::spawn 的签名：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">pub</span> <span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">spawn</span>&lt;<span style="color: #98f5ff;">F</span>, <span style="color: #98f5ff;">T</span>&gt;(<span style="color: #4eee94;">f</span>: <span style="color: #98f5ff;">F</span>) -&gt; <span style="color: #98f5ff;">JoinHandle</span>&lt;<span style="color: #98f5ff;">T</span>&gt;
+    <span style="color: #00bfff; font-weight: bold;">where</span>
+        <span style="color: #4eee94;">F</span>: <span style="color: #98f5ff;">FnOnce</span>() -&gt; <span style="color: #98f5ff;">T</span> + <span style="color: #98f5ff;">Send</span> + '<span style="color: #00bfff; font-weight: bold;">static</span>,
+        <span style="color: #4eee94;">T</span>: <span style="color: #98f5ff;">Send</span> + '<span style="color: #00bfff; font-weight: bold;">static</span>
+</pre>
+</div>
+
+<pre class="example">
+spawn 返回 JoinHandle&lt;T&gt;，其中 T 是闭包返回的类型，尝试使用 JoinHandle 来看看会发生什么
+
+在我们的情况中，传递给线程池的闭包会处理连接并不返回任何值，所以 T 将会是单元类型 ()
+</pre>
+
+<p>
+现在改变了 ThreadPool 的定义来存放一个 thread::JoinHandle&lt;()&gt; 的 vector 实例，使用 size 容量来初始化，并设置一个 for 循环了来运行创建线程的代码，并返回包含这些线程的 ThreadPool 实例：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::thread;
+
+<span style="color: #00bfff; font-weight: bold;">pub</span> <span style="color: #00bfff; font-weight: bold;">struct</span> <span style="color: #98f5ff;">ThreadPool</span> {
+    <span style="color: #4eee94;">threads</span>: <span style="color: #98f5ff;">Vec</span>&lt;<span style="color: #ffd700;">thread</span>::<span style="color: #98f5ff;">JoinHandle</span>&lt;()&gt;&gt;,
+}
+
+<span style="color: #00bfff; font-weight: bold;">impl</span> <span style="color: #98f5ff;">ThreadPool</span> {
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
+    <span style="color: #00bfff; font-weight: bold;">pub</span> <span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">new</span>(<span style="color: #4eee94;">size</span>: <span style="color: #98f5ff;">usize</span>) -&gt; <span style="color: #98f5ff;">ThreadPool</span> {
+        <span style="color: #ffd700;">assert!</span>(size &gt; 0);
+
+        <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #00bfff; font-weight: bold;">mut</span> <span style="color: #4eee94;">threads</span> = <span style="color: #98f5ff;">Vec</span>::with_capacity(size);
+
+        <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">_</span> <span style="color: #00bfff; font-weight: bold;">in</span> 0..size {
+            <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">create some threads and store them in the vector</span>
+        }
+
+        <span style="color: #98f5ff;">ThreadPool</span> {
+            threads
+        }
+    }
+
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
+}
+</pre>
+</div>
+
+<ul class="org-ul">
+<li>将 std::thread 引入库 crate 的作用域，因为使用了 thread::JoinHandle 作为 ThreadPool 中 vector 元素的类型</li>
+<li>在得到了有效的数量之后，ThreadPool 新建一个存放 size 个元素的 vector</li>
+</ul>
+
+<pre class="example">
+  这里使用 with_capacity，它与 Vec::new 做了同样的工作，不过有一个重要的区别：它为 vector 预先分配空间
+
+  已经知道了 vector 中需要 size 个元素，预先进行分配比仅仅 Vec::new 要稍微有效率一些，因为 Vec::new 随着插入元素而重新改变大小
+</pre>
+
+<p>
+如果再次运行 cargo check，会看到一些警告，不过应该可以编译成功
+</p>
+</div>
+</div>
+
+<div id="outline-container-orge7f4b8e" class="outline-4">
+<h4 id="orge7f4b8e">Worker 结构体：负责从 ThreadPool 中将代码传递给线程</h4>
+<div class="outline-text-4" id="text-orge7f4b8e">
+<pre class="example">
+  前面 for 循环中留下了一个关于创建线程的注释。如何实际创建线程呢？这是一个难题
+
+  标准库提供的创建线程的方法，thread::spawn，它期望获取一些一旦创建线程就应该执行的代码。然而，我们希望开始线程并使其等待稍后传递的代码
+
+  标准库的线程实现并没有包含这么做的方法：我们必须自己实现
+</pre>
+
+<p>
+将要实现的行为是创建线程并稍后发送代码，这会在 ThreadPool 和线程间引入一个新数据类型来管理这种新行为。这个数据结构称为 <span class="underline">Worker</span> 
+</p>
+
+<pre class="example">
+  这是一个池实现中的常见概念
+
+  想象一下在餐馆厨房工作的员工：员工等待来自客户的订单，他们负责接受这些订单并完成它们
+</pre>
+<p>
+不同于在线程池中储存一个 JoinHandle&lt;()&gt; 实例的 vector，会储存 <span class="underline">Worker 结构体</span> 的实例：
+</p>
+<ul class="org-ul">
+<li>每一个 Worker 会储存一个单独的 JoinHandle&lt;()&gt; 实例</li>
+<li>接着会在 Worker 上实现一个方法，它会获取需要允许代码的闭包并将其发送给已经运行的线程执行</li>
+<li>还会赋予每一个 worker id，这样就可以在日志和调试中区别线程池中的不同 worker</li>
+</ul>
+
+<p>
+首先，做出如此创建 ThreadPool 时所需的修改。在通过如下方式设置完 Worker 之后，会实现向线程发送闭包的代码：
+</p>
+<ol class="org-ol">
+<li><b>定义</b> <span class="underline">Worker 结构体</span> ：存放 <span class="underline">id</span> 和 <span class="underline">JoinHandle&lt;()&gt;</span></li>
+<li><b>修改</b> ThreadPool： 存放一个 <span class="underline">Worker 实例</span> 的 <span class="underline">vector</span></li>
+<li><b>定义</b> <span class="underline">Worker::new</span> 函数： <b>获取</b> 一个 <span class="underline">id 数字</span> 并 <b>返回</b> 一个带有 <span class="underline">id</span> 和用 <span class="underline">空闭包</span> 分配的线程的 <b>Worker 实例</b></li>
+<li>在 <span class="underline">ThreadPool::new</span> 中：使用 for 循环计数生成 id，使用这个 id 新建 Worker，并储存进 vector 中</li>
+</ol>
+
+
+<p>
+示例代码如下：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust">
+<span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::thread;
+
+<span style="color: #00bfff; font-weight: bold;">pub</span> <span style="color: #00bfff; font-weight: bold;">struct</span> <span style="color: #98f5ff;">ThreadPool</span> {
+    <span style="color: #4eee94;">workers</span>: <span style="color: #98f5ff;">Vec</span>&lt;<span style="color: #98f5ff;">Worker</span>&gt;,
+}
+
+<span style="color: #00bfff; font-weight: bold;">impl</span> <span style="color: #98f5ff;">ThreadPool</span> {
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
+    <span style="color: #00bfff; font-weight: bold;">pub</span> <span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">new</span>(<span style="color: #4eee94;">size</span>: <span style="color: #98f5ff;">usize</span>) -&gt; <span style="color: #98f5ff;">ThreadPool</span> {
+        <span style="color: #ffd700;">assert!</span>(size &gt; 0);
+
+        <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #00bfff; font-weight: bold;">mut</span> <span style="color: #4eee94;">workers</span> = <span style="color: #98f5ff;">Vec</span>::with_capacity(size);
+
+        <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">id</span> <span style="color: #00bfff; font-weight: bold;">in</span> 0..size {
+            workers.push(<span style="color: #98f5ff;">Worker</span>::new(id));
+        }
+
+        <span style="color: #98f5ff;">ThreadPool</span> {
+            workers
+        }
+    }
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
+}
+
+<span style="color: #00bfff; font-weight: bold;">struct</span> <span style="color: #98f5ff;">Worker</span> {
+    <span style="color: #4eee94;">id</span>: <span style="color: #98f5ff;">usize</span>,
+    <span style="color: #4eee94;">thread</span>: <span style="color: #ffd700;">thread</span>::<span style="color: #98f5ff;">JoinHandle</span>&lt;()&gt;,
+}
+
+<span style="color: #00bfff; font-weight: bold;">impl</span> <span style="color: #98f5ff;">Worker</span> {
+    <span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">new</span>(<span style="color: #4eee94;">id</span>: <span style="color: #98f5ff;">usize</span>) -&gt; <span style="color: #98f5ff;">Worker</span> {
+        <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">thread</span> = <span style="color: #ffd700;">thread</span>::spawn(|| {});
+
+        <span style="color: #98f5ff;">Worker</span> {
+            id,
+            thread,
+        }
+    }
+}
+</pre>
+</div>
+
+<ul class="org-ul">
+<li>这里将 ThreadPool 中字段名从 threads 改为 workers，因为它现在储存 Worker 而不是 JoinHandle&lt;()&gt;</li>
+<li>使用 for 循环中的计数作为 Worker::new 的参数，并将每一个新建的 Worker 储存在叫做 workers 的 vector 中</li>
+<li>Worker 结构体和其 new 函数是私有的，因为外部代码（比如 src/bin/main.rs 中的 server）并不需要知道关于 ThreadPool 中使用 Worker 结构体的实现细节</li>
+<li>Worker::new 函数使用 id 参数并储存了使用一个 <span class="underline">空闭包</span> 创建的 JoinHandle&lt;()&gt;。</li>
+</ul>
+
+<pre class="example">
+  这段代码能够编译并用指定给 ThreadPool::new 的参数创建储存了一系列的 Worker 实例，不过 仍然 没有处理 execute 中得到的闭包
+</pre>
+</div>
+</div>
+<div id="outline-container-orged81a00" class="outline-4">
+<h4 id="orged81a00">使用通道向线程发送请求</h4>
+<div class="outline-text-4" id="text-orged81a00">
+<pre class="example">
+  下一个需要解决的问题是传递给 thread::spawn 的闭包完全没有做任何工作
+
+  目前，在 execute 方法中获得期望执行的闭包，不过在创建 ThreadPool 的过程中创建每一个 Worker 时需要向 thread::spawn 传递一个闭包
+
+  我们希望刚创建的 Worker 结构体能够从 ThreadPool 的队列中获取需要执行的代码，并发送到线程中执行他们
+</pre>
+
+
+<p>
+已经学习了 <span class="underline">通道</span> ：一个沟通两个线程的简单手段。这里通道将充当任务队列的作用，execute 将通过 ThreadPool 向其中线程正在寻找工作的 Worker 实例发送任务。如下是这个计划：
+</p>
+<ol class="org-ol">
+<li><span class="underline">ThreadPool</span> 会 <b>创建</b> 一个 <span class="underline">通道</span> 并充当 <b>发送端</b></li>
+<li>每个 <span class="underline">Worker</span> 将会充当 <span class="underline">通道</span> 的 <b>接收端</b></li>
+<li>新建一个 <span class="underline">Job 结构体</span> 来 <b>存放</b> 用于向 <span class="underline">通道</span> 中 <b>发送的闭包</b></li>
+<li><span class="underline">execute</span> 方法会在 <span class="underline">通道发送端</span> <b>发出</b> <span class="underline">期望执行的任务</span></li>
+<li>在线程中， <span class="underline">Worker</span> 会 <b>遍历</b> <span class="underline">通道的接收端</span> 并 <b>执行</b> 任何 <span class="underline">接收到的任务</span></li>
+</ol>
+
+<p>
+在 ThreadPool::new 中创建通道并让 ThreadPool 实例充当发送端开始，而Job 是将在通道中发出的类型，目前它是一个没有任何内容的结构体：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
+<span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::<span style="color: #ffd700;">sync</span>::mpsc;
+
+<span style="color: #00bfff; font-weight: bold;">pub</span> <span style="color: #00bfff; font-weight: bold;">struct</span> <span style="color: #98f5ff;">ThreadPool</span> {
+    <span style="color: #4eee94;">workers</span>: <span style="color: #98f5ff;">Vec</span>&lt;<span style="color: #98f5ff;">Worker</span>&gt;,
+    <span style="color: #4eee94;">sender</span>: <span style="color: #ffd700;">mpsc</span>::<span style="color: #98f5ff;">Sender</span>&lt;<span style="color: #98f5ff;">Job</span>&gt;,
+}
+
+<span style="color: #00bfff; font-weight: bold;">struct</span> <span style="color: #98f5ff;">Job</span>;
+
+<span style="color: #00bfff; font-weight: bold;">impl</span> <span style="color: #98f5ff;">ThreadPool</span> {
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
+    <span style="color: #00bfff; font-weight: bold;">pub</span> <span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">new</span>(<span style="color: #4eee94;">size</span>: <span style="color: #98f5ff;">usize</span>) -&gt; <span style="color: #98f5ff;">ThreadPool</span> {
+        <span style="color: #ffd700;">assert!</span>(size &gt; 0);
+
+        <span style="color: #00bfff; font-weight: bold;">let</span> (sender, receiver) = <span style="color: #ffd700;">mpsc</span>::channel();
+
+        <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #00bfff; font-weight: bold;">mut</span> <span style="color: #4eee94;">workers</span> = <span style="color: #98f5ff;">Vec</span>::with_capacity(size);
+
+        <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">id</span> <span style="color: #00bfff; font-weight: bold;">in</span> 0..size {
+            workers.push(<span style="color: #98f5ff;">Worker</span>::new(id));
+        }
+
+        <span style="color: #98f5ff;">ThreadPool</span> {
+            workers,
+            sender,
+        }
+    }
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
+}
+</pre>
+</div>
+
+<pre class="example">
+  在 ThreadPool::new 中，新建了一个通道，并接着让线程池在接收端等待
+
+  这段代码能够编译，不过仍有警告
+</pre>
+
+<p>
+尝试在线程池 <span class="underline">创建</span> 每个 <span class="underline">worker</span> 时将 <span class="underline">通道的接收端</span> <b>传递</b> 给他们，所以将在闭包中引用 <span class="underline">receiver</span> 参数：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust">
+<span style="color: #00bfff; font-weight: bold;">impl</span> <span style="color: #98f5ff;">ThreadPool</span> {
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
+    <span style="color: #00bfff; font-weight: bold;">pub</span> <span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">new</span>(<span style="color: #4eee94;">size</span>: <span style="color: #98f5ff;">usize</span>) -&gt; <span style="color: #98f5ff;">ThreadPool</span> {
+        <span style="color: #ffd700;">assert!</span>(size &gt; 0);
+
+        <span style="color: #00bfff; font-weight: bold;">let</span> (sender, receiver) = <span style="color: #ffd700;">mpsc</span>::channel();
+
+        <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #00bfff; font-weight: bold;">mut</span> <span style="color: #4eee94;">workers</span> = <span style="color: #98f5ff;">Vec</span>::with_capacity(size);
+
+        <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">id</span> <span style="color: #00bfff; font-weight: bold;">in</span> 0..size {
+            workers.push(<span style="color: #98f5ff;">Worker</span>::new(id, receiver));
+        }
+
+        <span style="color: #98f5ff;">ThreadPool</span> {
+            workers,
+            sender,
+        }
+    }
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
+}
+
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
+
+<span style="color: #00bfff; font-weight: bold;">impl</span> <span style="color: #98f5ff;">Worker</span> {
+    <span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">new</span>(<span style="color: #4eee94;">id</span>: <span style="color: #98f5ff;">usize</span>, <span style="color: #4eee94;">receiver</span>: <span style="color: #ffd700;">mpsc</span>::<span style="color: #98f5ff;">Receiver</span>&lt;<span style="color: #98f5ff;">Job</span>&gt;) -&gt; <span style="color: #98f5ff;">Worker</span> {
+        <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">thread</span> = <span style="color: #ffd700;">thread</span>::spawn(|| {
+            receiver;
+        });
+
+        <span style="color: #98f5ff;">Worker</span> {
+            id,
+            thread,
+        }
+    }
+}
+</pre>
+</div>
+
+<pre class="example">
+这是一些小而直观的修改：将通道的接收端传递进了 Worker::new，并接着在闭包中使用它
+</pre>
+<p>
+如果尝试 check 代码，会得到这个错误：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ cargo check
+   Compiling hello v0.1.0 (file:///projects/hello)
+error[E0382]: use of moved value: <span style="color: #fa8072;">`receiver`</span>
+  --&gt; src/lib.rs:27:42
+   |
+27 |             workers.push(Worker::new(id, receiver));
+   |                                          ^^^^^^^^ value moved here<span style="color: #00bfff; font-weight: bold;"> in</span>
+   previous iteration of loop
+   |
+   = note: move occurs because <span style="color: #fa8072;">`receiver`</span> has type
+   <span style="color: #fa8072;">`std::sync::mpsc::Receiver&lt;Job&gt;`</span>, which does not implement the <span style="color: #fa8072;">`Copy`</span> trait
+</pre>
+</div>
+
+<pre class="example">
+这段代码尝试将 receiver 传递给多个 Worker 实例。这是不行的
+
+Rust 所提供的通道实现是”多生产者，单消费者“的。这意味着不能简单的克隆通道的消费端来解决问题
+
+即便可以，那也不是希望使用的技术：我们希望通过在所有的 worker 中共享单一 receiver，在线程间分发任务
+
+另外，从通道队列中取出任务涉及到修改 receiver，所以这些线程需要一个能安全的共享和修改 receiver 的方式，否则可能导致竞争状态
+</pre>
+
+<p>
+回忆一下曾经讨论的 <b>线程安全</b> <span class="underline">智能指针</span> ，为了在多个线程间共享所有权并允许线程修改其值，需要使用 <span class="underline">Arc&lt;Mutex&lt;T&gt;&gt;</span> ：
+</p>
+<ul class="org-ul">
+<li>Arc 使得多个 worker 拥有接收端</li>
+<li>Mutex 则确保一次只有一个 worker 能从接收端得到任务</li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::<span style="color: #ffd700;">sync</span>::<span style="color: #98f5ff;">Arc</span>;
+<span style="color: #00bfff; font-weight: bold;">use</span> <span style="color: #ffd700;">std</span>::<span style="color: #ffd700;">sync</span>::<span style="color: #98f5ff;">Mutex</span>;
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
+
+<span style="color: #00bfff; font-weight: bold;">impl</span> <span style="color: #98f5ff;">ThreadPool</span> {
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
+    <span style="color: #00bfff; font-weight: bold;">pub</span> <span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">new</span>(<span style="color: #4eee94;">size</span>: <span style="color: #98f5ff;">usize</span>) -&gt; <span style="color: #98f5ff;">ThreadPool</span> {
+        <span style="color: #ffd700;">assert!</span>(size &gt; 0);
+
+        <span style="color: #00bfff; font-weight: bold;">let</span> (sender, receiver) = <span style="color: #ffd700;">mpsc</span>::channel();
+
+        <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">receiver</span> = <span style="color: #98f5ff;">Arc</span>::new(<span style="color: #98f5ff;">Mutex</span>::new(receiver));
+
+        <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #00bfff; font-weight: bold;">mut</span> <span style="color: #4eee94;">workers</span> = <span style="color: #98f5ff;">Vec</span>::with_capacity(size);
+
+        <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">id</span> <span style="color: #00bfff; font-weight: bold;">in</span> 0..size {
+            workers.push(<span style="color: #98f5ff;">Worker</span>::new(id, <span style="color: #98f5ff;">Arc</span>::clone(&amp;receiver)));
+        }
+
+        <span style="color: #98f5ff;">ThreadPool</span> {
+            workers,
+            sender,
+        }
+    }
+
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
+}
+
+<span style="color: #00bfff; font-weight: bold;">impl</span> <span style="color: #98f5ff;">Worker</span> {
+    <span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">new</span>(<span style="color: #4eee94;">id</span>: <span style="color: #98f5ff;">usize</span>, <span style="color: #4eee94;">receiver</span>: <span style="color: #98f5ff;">Arc</span>&lt;<span style="color: #98f5ff;">Mutex</span>&lt;<span style="color: #ffd700;">mpsc</span>::<span style="color: #98f5ff;">Receiver</span>&lt;<span style="color: #98f5ff;">Job</span>&gt;&gt;&gt;) -&gt; <span style="color: #98f5ff;">Worker</span> {
+        <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
+    }
+}
+</pre>
+</div>
+
+<pre class="example">
+  在 ThreadPool::new 中，将通道的接收端放入一个 Arc 和一个 Mutex 中
+
+  对于每一个新 worker，克隆 Arc 来增加引用计数，如此这些 worker 就可以共享接收端的所有权了
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orgf40133c" class="outline-4">
+<h4 id="orgf40133c">实现 execute 方法</h4>
+<div class="outline-text-4" id="text-orgf40133c">
+<p>
+最后 <b>实现</b> <span class="underline">ThreadPool</span> 上的 <span class="underline">execute</span> 方法。同时也要修改 Job 结构体：它将不再是结构体，Job 将是一个有着 <span class="underline">execute</span> <b>接收</b> 到的 <span class="underline">闭包类型的 trait 对象</span> 的类型别名。类型别名允许将长的类型变短：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
+
+<span style="color: #00bfff; font-weight: bold;">type</span> <span style="color: #98f5ff;">Job</span> = <span style="color: #98f5ff;">Box</span>&lt;<span style="color: #00bfff; font-weight: bold;">dyn</span> <span style="color: #98f5ff;">FnOnce</span>() + <span style="color: #98f5ff;">Send</span> + '<span style="color: #00bfff; font-weight: bold;">static</span>&gt;;
+
+<span style="color: #00bfff; font-weight: bold;">impl</span> <span style="color: #98f5ff;">ThreadPool</span> {
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
+
+    <span style="color: #00bfff; font-weight: bold;">pub</span> <span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">execute</span>&lt;<span style="color: #98f5ff;">F</span>&gt;(&amp;<span style="color: #00bfff; font-weight: bold;">self</span>, <span style="color: #4eee94;">f</span>: <span style="color: #98f5ff;">F</span>)
+        <span style="color: #00bfff; font-weight: bold;">where</span>
+            <span style="color: #4eee94;">F</span>: <span style="color: #98f5ff;">FnOnce</span>() + <span style="color: #98f5ff;">Send</span> + '<span style="color: #00bfff; font-weight: bold;">static</span>
+    {
+        <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">job</span> = <span style="color: #98f5ff;">Box</span>::new(f);
+
+        <span style="color: #00bfff; font-weight: bold;">self</span>.sender.send(job).unwrap();
+    }
+}
+</pre>
+</div>
+
+<p>
+在使用 execute 得到的闭包新建 Job 实例之后，将这些任务从通道的发送端发出
+</p>
+<pre class="example">
+  这里调用 send 上的 unwrap，因为发送可能会失败，这可能发生于例如停止了所有线程执行的情况，这意味着接收端停止接收新消息了。不过目前我们无法停止线程执行：只要线程池存在他们就会一直执行
+
+  使用 unwrap 是因为知道失败不可能发生，即便编译器不这么认为
+</pre>
+
+<p>
+不过到此事情还没有结束！在 worker 中，传递给 thread::spawn 的闭包仍然还只是 <b>引用</b> 了 <span class="underline">通道的接收端</span> 。相反需要闭包一直循环，向通道的接收端请求任务，并在得到任务时执行他们：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
+
+<span style="color: #00bfff; font-weight: bold;">impl</span> <span style="color: #98f5ff;">Worker</span> {
+    <span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">new</span>(<span style="color: #4eee94;">id</span>: <span style="color: #98f5ff;">usize</span>, <span style="color: #4eee94;">receiver</span>: <span style="color: #98f5ff;">Arc</span>&lt;<span style="color: #98f5ff;">Mutex</span>&lt;<span style="color: #ffd700;">mpsc</span>::<span style="color: #98f5ff;">Receiver</span>&lt;<span style="color: #98f5ff;">Job</span>&gt;&gt;&gt;) -&gt; <span style="color: #98f5ff;">Worker</span> {
+        <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">thread</span> = <span style="color: #ffd700;">thread</span>::spawn(<span style="color: #00bfff; font-weight: bold;">move</span> || {
+            <span style="color: #00bfff; font-weight: bold;">loop</span> {
+                <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">job</span> = receiver.lock().unwrap().recv().unwrap();
+
+                <span style="color: #f08080;">println!</span>(<span style="color: #deb887;">"Worker </span><span style="color: #deb887; font-style: italic;">{}</span><span style="color: #deb887;"> got a job; executing."</span>, id);
+
+                job();
+            }
+        });
+
+        <span style="color: #98f5ff;">Worker</span> {
+            id,
+            thread,
+        }
+    }
+}
+</pre>
+</div>
+
+<ul class="org-ul">
+<li>首先在 <span class="underline">receiver</span> 上调用了 <span class="underline">lock</span> 来获取 <b>互斥器</b></li>
+<li>unwrap 在出现任何错误时 panic</li>
+</ul>
+<pre class="example">
+  如果互斥器处于一种叫做”被污染“的状态时获取锁可能会失败，这可能发生于其他线程在持有锁时 panic 了且没有释放锁
+
+  在这种情况下，调用 unwrap 使其 panic 是正确的行为
+
+  请随意将 unwrap 改为包含有意义错误信息的 expect
+</pre>
+<ul class="org-ul">
+<li>如果锁定了互斥器，接着调用 <span class="underline">recv</span> 从 <span class="underline">通道</span> 中 <b>接收</b> <span class="underline">Job</span></li>
+<li>最后的 <span class="underline">unwrap</span> 也绕过了一些错误</li>
+</ul>
+<pre class="example">
+这可能发生于持有通道发送端的线程停止的情况，类似于如果接收端关闭时 send 方法如何返回 Err 一样
+</pre>
+
+<p>
+调用 <span class="underline">recv</span> 会 <b>阻塞</b> <span class="underline">当前线程</span> ，所以如果还没有任务，其会等待直到有可用的任务。 <span class="underline">Mutex&lt;T&gt;</span>  <b>确保</b> <span class="underline">一次只有一个 Worker</span> 线程 <b>尝试</b> <span class="underline">请求任务</span> 。现在可以尝试运行下程序：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ cargo run
+   Compiling hello v0.1.0 (file:///projects/hello)
+warning: field is never used: <span style="color: #fa8072;">`workers`</span>
+ --&gt; src/lib.rs:7:5
+  |
+7 |     workers: Vec&lt;Worker&gt;,
+  |     ^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: <span style="color: #5f9ea0; font-style: italic;">#</span><span style="color: #5f9ea0; font-style: italic;">[warn(dead_code)] on by default</span>
+
+warning: field is never used: <span style="color: #fa8072;">`id`</span>
+  --&gt; src/lib.rs:61:5
+   |
+61 |     id: usize,
+   |     ^^^^^^^^^
+   |
+   = note: <span style="color: #5f9ea0; font-style: italic;">#</span><span style="color: #5f9ea0; font-style: italic;">[warn(dead_code)] on by default</span>
+
+warning: field is never used: <span style="color: #fa8072;">`thread`</span>
+  --&gt; src/lib.rs:62:5
+   |
+62 |     thread: thread::JoinHandle&lt;()&gt;,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: <span style="color: #5f9ea0; font-style: italic;">#</span><span style="color: #5f9ea0; font-style: italic;">[warn(dead_code)] on by default</span>
+
+    Finished dev [unoptimized + debuginfo] target(s) <span style="color: #00bfff; font-weight: bold;">in</span> 0.99 secs
+     Running <span style="color: #fa8072;">`target/debug/hello`</span>
+Worker 0 got a job; executing.
+Worker 2 got a job; executing.
+Worker 1 got a job; executing.
+Worker 3 got a job; executing.
+Worker 0 got a job; executing.
+Worker 2 got a job; executing.
+Worker 1 got a job; executing.
+Worker 3 got a job; executing.
+Worker 0 got a job; executing.
+Worker 2 got a job; executing.
+</pre>
+</div>
+
+<p>
+成功了！现在有了一个可以异步执行连接的线程池！它绝不会创建超过四个线程，所以当 server 收到大量请求时系统也不会负担过重。如果请求 /sleep，server 也能够通过另外一个线程处理其他请求
+</p>
+
+<pre class="example">
+  注意如果同时在多个浏览器窗口打开 /sleep，它们可能会彼此间隔地加载 5 秒，因为一些浏览器处于缓存的原因会顺序执行相同请求的多个实例
+
+  这些限制并不是由于我们的 web server 造成的
+</pre>
+</div>
+
+<div id="outline-container-orgfd7cf67" class="outline-5">
+<h5 id="orgfd7cf67">while let 陷阱</h5>
+<div class="outline-text-5" id="text-orgfd7cf67">
+<p>
+在学习了的 while let 循环之后，可能会好奇为何不能如此编写 worker 线程：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
+
+<span style="color: #00bfff; font-weight: bold;">impl</span> <span style="color: #98f5ff;">Worker</span> {
+    <span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">new</span>(<span style="color: #4eee94;">id</span>: <span style="color: #98f5ff;">usize</span>, <span style="color: #4eee94;">receiver</span>: <span style="color: #98f5ff;">Arc</span>&lt;<span style="color: #98f5ff;">Mutex</span>&lt;<span style="color: #ffd700;">mpsc</span>::<span style="color: #98f5ff;">Receiver</span>&lt;<span style="color: #98f5ff;">Job</span>&gt;&gt;&gt;) -&gt; <span style="color: #98f5ff;">Worker</span> {
+        <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">thread</span> = <span style="color: #ffd700;">thread</span>::spawn(<span style="color: #00bfff; font-weight: bold;">move</span> || {
+            <span style="color: #00bfff; font-weight: bold;">while</span> <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #98f5ff;">Ok</span>(job) = receiver.lock().unwrap().recv() {
+                <span style="color: #f08080;">println!</span>(<span style="color: #deb887;">"Worker </span><span style="color: #deb887; font-style: italic;">{}</span><span style="color: #deb887;"> got a job; executing."</span>, id);
+
+                job();
+            }
+        });
+
+        <span style="color: #98f5ff;">Worker</span> {
+            id,
+            thread,
+        }
+    }
+}
+</pre>
+</div>
+
+<p>
+这段代码可以编译和运行，但是并不会产生所期望的线程行为：一个慢请求仍然会导致其他请求等待执行
+</p>
+
+<pre class="example">
+  其原因有些微妙：Mutex 结构体没有公有 unlock 方法，因为锁的所有权依赖 lock 方法返回的 LockResult&lt;MutexGuard&lt;T&gt;&gt; 中 MutexGuard&lt;T&gt; 的生命周期，这允许借用检查器在编译时确保绝不会在没有持有锁的情况下访问由 Mutex 守护的资源
+
+  不过如果没有认真的思考 MutexGuard&lt;T&gt; 的生命周期的话，也可能会导致比预期更久的持有锁
+
+  因为 while 表达式中的值在整个块一直处于作用域中，job() 调用的过程中其仍然持有锁，这意味着其他 worker 不能接收任务！！！
+</pre>
+
+<p>
+相反通过使用 <span class="underline">loop</span> 并在循环块之内而不是之外获取锁和任务，lock 方法返回的 MutexGuard 在 let job 语句结束之后立刻就被丢弃了。这确保了 <span class="underline">recv 调用过程</span> 中 <b>持有锁</b> ，而在 <span class="underline">job() 调用前</span> <b>锁就被释放</b> 了，这就 <b>允许</b> <span class="underline">并发处理多个请求</span> 了
+</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org27f875c" class="outline-2">
+<h2 id="org27f875c">优雅停机</h2>
 </div>
 </div>
 <div id="postamble" class="status">
