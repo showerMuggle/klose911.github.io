@@ -255,7 +255,12 @@ for the JavaScript code in this tag.
 <li><a href="#org944eaa7">少量代码重构</a></li>
 </ul>
 </li>
-<li><a href="#orgee7afaf">多线程 web server</a></li>
+<li><a href="#orgee7afaf">多线程 web server</a>
+<ul>
+<li><a href="#orga8d8330">在当前 server 实现中模拟慢请求</a></li>
+<li><a href="#org2ff70f0">使用线程池改善吞吐量</a></li>
+</ul>
+</li>
 <li><a href="#orgd2210c2">优雅停机</a></li>
 </ul>
 </div>
@@ -826,6 +831,70 @@ HTTP/1.1 200 OK\r\n\r\n
 
 <div id="outline-container-orgee7afaf" class="outline-2">
 <h2 id="orgee7afaf">多线程 web server</h2>
+<div class="outline-text-2" id="text-orgee7afaf">
+<pre class="example">
+  目前 server 会依次处理每一个请求，意味着它在完成第一个连接的处理之前不会处理第二个连接
+
+  如果 server 正接收越来越多的请求，这类串行操作会使性能越来越差
+
+  如果一个请求花费很长时间来处理，随后而来的请求则不得不等待这个长请求结束，即便这些新请求可以很快就处理完
+</pre>
+<p>
+需要修复这种情况，不过首先来实际尝试一下这个问题
+</p>
+</div>
+
+<div id="outline-container-orga8d8330" class="outline-3">
+<h3 id="orga8d8330">在当前 server 实现中模拟慢请求</h3>
+<div class="outline-text-3" id="text-orga8d8330">
+<p>
+下面通过模拟慢响应实现了 /sleep 请求处理，它会使 server 在响应之前休眠五秒：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::thread;
+<span style="color: #00ffff;">use</span> <span style="color: #7fffd4;">std</span>::<span style="color: #7fffd4;">time</span>::<span style="color: #98fb98;">Duration</span>;
+<span style="color: #ff4500;">// </span><span style="color: #ff4500;">--snip--</span>
+
+<span style="color: #00ffff;">fn</span> <span style="color: #87cefa;">handle_connection</span>(<span style="color: #00ffff;">mut</span> <span style="color: #eedd82;">stream</span>: <span style="color: #98fb98;">TcpStream</span>) {
+    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">--snip--</span>
+
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">get</span> = b<span style="color: #ffa07a;">"GET / HTTP/1.1\r\n"</span>;
+    <span style="color: #00ffff;">let</span> <span style="color: #eedd82;">sleep</span> = b<span style="color: #ffa07a;">"GET /sleep HTTP/1.1\r\n"</span>;
+
+    <span style="color: #00ffff;">let</span> (status_line, filename) = <span style="color: #00ffff;">if</span> buffer.starts_with(get) {
+        (<span style="color: #ffa07a;">"HTTP/1.1 200 OK\r\n\r\n"</span>, <span style="color: #ffa07a;">"hello.html"</span>)
+    } <span style="color: #00ffff;">else</span> <span style="color: #00ffff;">if</span> buffer.starts_with(sleep) {
+        <span style="color: #7fffd4;">thread</span>::sleep(<span style="color: #98fb98;">Duration</span>::from_secs(5));
+        (<span style="color: #ffa07a;">"HTTP/1.1 200 OK\r\n\r\n"</span>, <span style="color: #ffa07a;">"hello.html"</span>)
+    } <span style="color: #00ffff;">else</span> {
+        (<span style="color: #ffa07a;">"HTTP/1.1 404 NOT FOUND\r\n\r\n"</span>, <span style="color: #ffa07a;">"404.html"</span>)
+    };
+
+    <span style="color: #ff4500;">// </span><span style="color: #ff4500;">--snip--</span>
+}
+</pre>
+</div>
+
+<p>
+这段代码有些凌乱，不过对于模拟的目的来说已经足够。这里创建了第二个请求 sleep，会识别其数据。在 if 块之后增加了一个 else if 来检查 /sleep 请求，当接收到这个请求时，在渲染成功 HTML 页面之前会先休眠五秒
+</p>
+
+<pre class="example">
+现在就可以真切的看出我们的 server 有多么的原始：真实的库将会以更简洁的方式处理多请求识别问题！
+</pre>
+<p>
+使用 cargo run 启动 server，并接着打开两个浏览器窗口：一个请求 <a href="http://127.0.0.1:7878/">http://127.0.0.1:7878/</a> 而另一个请求 <a href="http://127.0.0.1:7878/sleep">http://127.0.0.1:7878/sleep</a> 。如果像之前一样多次请求 /，会发现响应的比较快速。不过如果请求 /sleep 之后在请求 /，就会看到 / 会等待直到 sleep 休眠完五秒之后才出现
+</p>
+<pre class="example">
+这里有多种办法来改变我们的 web server 使其避免所有请求都排在慢请求之后；将要实现的一个便是线程池
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org2ff70f0" class="outline-3">
+<h3 id="org2ff70f0">使用线程池改善吞吐量</h3>
+</div>
 </div>
 <div id="outline-container-orgd2210c2" class="outline-2">
 <h2 id="orgd2210c2">优雅停机</h2>
