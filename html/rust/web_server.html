@@ -276,7 +276,14 @@ for the JavaScript code in this tag.
 </li>
 </ul>
 </li>
-<li><a href="#org27f875c">优雅停机</a></li>
+<li><a href="#org27f875c">优雅停机</a>
+<ul>
+<li><a href="#org8d3c7f2">为 ThreadPool 实现 Drop Trait</a></li>
+<li><a href="#orgeffbb8b">向线程发送信号使其停止接收任务</a></li>
+<li><a href="#org66ec4e0">最后测试</a></li>
+</ul>
+</li>
+<li><a href="#org8d77012">总结</a></li>
 </ul>
 </div>
 </div>
@@ -848,11 +855,11 @@ HTTP/1.1 200 OK\r\n\r\n
 <h2 id="orge6dbd78">多线程 web server</h2>
 <div class="outline-text-2" id="text-orge6dbd78">
 <pre class="example">
-  目前 server 会依次处理每一个请求，意味着它在完成第一个连接的处理之前不会处理第二个连接
+    目前 server 会依次处理每一个请求，意味着它在完成第一个连接的处理之前不会处理第二个连接
 
-  如果 server 正接收越来越多的请求，这类串行操作会使性能越来越差
+    如果 server 正接收越来越多的请求，这类串行操作会使性能越来越差
 
-  如果一个请求花费很长时间来处理，随后而来的请求则不得不等待这个长请求结束，即便这些新请求可以很快就处理完
+    如果一个请求花费很长时间来处理，随后而来的请求则不得不等待这个长请求结束，即便这些新请求可以很快就处理完
 </pre>
 <p>
 需要修复这种情况，不过首先来实际尝试一下这个问题
@@ -896,13 +903,13 @@ HTTP/1.1 200 OK\r\n\r\n
 </p>
 
 <pre class="example">
-现在就可以真切的看出我们的 server 有多么的原始：真实的库将会以更简洁的方式处理多请求识别问题！
+   现在就可以真切的看出我们的 server 有多么的原始：真实的库将会以更简洁的方式处理多请求识别问题！
 </pre>
 <p>
 使用 cargo run 启动 server，并接着打开两个浏览器窗口：一个请求 <a href="http://127.0.0.1:7878/">http://127.0.0.1:7878/</a> 而另一个请求 <a href="http://127.0.0.1:7878/sleep">http://127.0.0.1:7878/sleep</a> 。如果像之前一样多次请求 /，会发现响应的比较快速。不过如果请求 /sleep 之后在请求 /，就会看到 / 会等待直到 sleep 休眠完五秒之后才出现
 </p>
 <pre class="example">
-这里有多种办法来改变我们的 web server 使其避免所有请求都排在慢请求之后；将要实现的一个便是线程池
+   这里有多种办法来改变我们的 web server 使其避免所有请求都排在慢请求之后；将要实现的一个便是线程池
 </pre>
 </div>
 </div>
@@ -923,9 +930,9 @@ HTTP/1.1 200 OK\r\n\r\n
 </ul>
 
 <pre class="example">
-  我们会将池中线程限制为较少的数量，以防拒绝服务 Dos 攻击
+     我们会将池中线程限制为较少的数量，以防拒绝服务 Dos 攻击
 
-  如果程序为每一个接收的请求都新建一个线程，某人向 server 发起千万级的请求时会耗尽服务器的资源并导致所有请求的处理都被终止
+     如果程序为每一个接收的请求都新建一个线程，某人向 server 发起千万级的请求时会耗尽服务器的资源并导致所有请求的处理都被终止
 </pre>
 
 <p>
@@ -939,18 +946,18 @@ HTTP/1.1 200 OK\r\n\r\n
 </ul>
 
 <pre class="example">
-  这个设计仅仅是多种改善 web server 吞吐量的方法之一，其他可供探索的方法有 fork/join 模型和单线程异步 I/O 模型
+     这个设计仅仅是多种改善 web server 吞吐量的方法之一，其他可供探索的方法有 fork/join 模型和单线程异步 I/O 模型
 
-  如果你对这个主题感兴趣，则可以阅读更多关于其他解决方案的内容并尝试用 Rust 实现他们，对于一个像 Rust 这样的底层语言，所有这些方法都是可能的
+     如果你对这个主题感兴趣，则可以阅读更多关于其他解决方案的内容并尝试用 Rust 实现他们，对于一个像 Rust 这样的底层语言，所有这些方法都是可能的
 </pre>
 <p>
 在开始之前，先讨论一下线程池应用看起来怎样
 </p>
 
 <pre class="example">
-  当尝试设计代码时，首先编写客户端接口确实有助于指导代码设计。以期望的调用方式来构建 API 代码的结构，接着在这个结构之内实现功能，而不是先实现功能再设计公有 API
+     当尝试设计代码时，首先编写客户端接口确实有助于指导代码设计。以期望的调用方式来构建 API 代码的结构，接着在这个结构之内实现功能，而不是先实现功能再设计公有 API
 
-  类似于前面使用的“测试驱动开发”。这里将要使用“编译器驱动开发”：将编写调用所期望的函数的代码，接着观察编译器错误告诉接下来需要修改什么使得代码可以工作
+     类似于前面使用的“测试驱动开发”。这里将要使用“编译器驱动开发”：将编写调用所期望的函数的代码，接着观察编译器错误告诉接下来需要修改什么使得代码可以工作
 </pre>
 </div>
 
@@ -962,7 +969,7 @@ HTTP/1.1 200 OK\r\n\r\n
 </p>
 
 <pre class="example">
-这并不是最终方案，因为正如之前讲到的它会潜在的分配无限的线程，不过这是一个开始
+    这并不是最终方案，因为正如之前讲到的它会潜在的分配无限的线程，不过这是一个开始
 </pre>
 
 <p>
@@ -984,11 +991,11 @@ HTTP/1.1 200 OK\r\n\r\n
 </div>
 
 <pre class="example">
-  正如前面讲到的，thread::spawn 会创建一个新线程并在其中运行闭包中的代码
+      正如前面讲到的，thread::spawn 会创建一个新线程并在其中运行闭包中的代码
 
-  如果运行这段代码并在在浏览器中加载 /sleep，接着在另两个浏览器标签页中加载 /，确实会发现 / 请求不必等待 /sleep 结束
+      如果运行这段代码并在在浏览器中加载 /sleep，接着在另两个浏览器标签页中加载 /，确实会发现 / 请求不必等待 /sleep 结束
 
-  不过正如之前提到的，这最终会使系统崩溃因为无限制的创建新线程
+      不过正如之前提到的，这最终会使系统崩溃因为无限制的创建新线程
 </pre>
 </div>
 </div>
@@ -1024,7 +1031,7 @@ HTTP/1.1 200 OK\r\n\r\n
 </ul>
 
 <pre class="example">
-这段代码还不能编译，不过通过尝试编译器会指导我们如何修复它
+    这段代码还不能编译，不过通过尝试编译器会指导我们如何修复它
 </pre>
 </div>
 </div>
@@ -1051,13 +1058,13 @@ error: aborting due to previous error
 </div>
 
 <pre class="example">
-好的，这告诉我们需要一个 ThreadPool 类型或模块，所以将构建一个
+    好的，这告诉我们需要一个 ThreadPool 类型或模块，所以将构建一个
 </pre>
 <p>
 ThreadPool 的实现会与 web server 的特定工作相独立，所以从 hello crate 切换到存放 ThreadPool 实现的新库 crate
 </p>
 <pre class="example">
-这也意味着可以在任何工作中使用这个单独的线程池库，而不仅仅是处理网络请求
+    这也意味着可以在任何工作中使用这个单独的线程池库，而不仅仅是处理网络请求
 </pre>
 <p>
 创建 src/lib.rs 文件，它包含了目前可用的最简单的 ThreadPool 定义：
@@ -1072,9 +1079,9 @@ ThreadPool 的实现会与 web server 的特定工作相独立，所以从 hello
 接着创建一个新目录 <span class="underline">src/bin</span> ，并将二进制 crate 根文件从 <span class="underline">src/main.rs</span> 移动到 <span class="underline">src/bin/main.rs</span> 
 </p>
 <pre class="example">
-  这使得库 crate 成为 hello 目录的主要 crate
+      这使得库 crate 成为 hello 目录的主要 crate
 
-  不过仍然可以使用 cargo run 运行 src/bin/main.rs 二进制文件
+      不过仍然可以使用 cargo run 运行 src/bin/main.rs 二进制文件
 </pre>
 
 <p>
@@ -1103,7 +1110,7 @@ error[E0599]: no <span style="color: #00bfff; font-weight: bold;">function</span
 </div>
 
 <pre class="example">
-这告诉我们下一步是为 ThreadPool 创建一个叫做 new 的关联函数
+    这告诉我们下一步是为 ThreadPool 创建一个叫做 new 的关联函数
 </pre>
 <p>
 我们知道 new 需要有一个参数可以接受 4，而且 new 应该返回 ThreadPool 实例。实现拥有此特征的最小化 new 函数：
@@ -1121,7 +1128,7 @@ error[E0599]: no <span style="color: #00bfff; font-weight: bold;">function</span
 </div>
 
 <pre class="example">
-  这里选择 usize 作为 size 参数的类型，因为负的线程数没有意义
+      这里选择 usize 作为 size 参数的类型，因为负的线程数没有意义
 </pre>
 
 <p>
@@ -1149,11 +1156,11 @@ error[E0599]: no method named <span style="color: #fa8072;">`execute`</span> fou
 </div>
 
 <pre class="example">
-  现在有了一个警告和一个错误，暂时先忽略警告，发生错误是因为并没有 ThreadPool 上的 execute 方法
+      现在有了一个警告和一个错误，暂时先忽略警告，发生错误是因为并没有 ThreadPool 上的 execute 方法
 
-  这个方法应该有与 thread::spawn 类似的接口，同时将实现 execute 函数来获取传递的闭包并将其传递给池中的空闲线程执行
+      这个方法应该有与 thread::spawn 类似的接口，同时将实现 execute 函数来获取传递的闭包并将其传递给池中的空闲线程执行
 
-  回忆前面关于 “使用带有泛型和 Fn trait 的闭包” 部分，闭包作为参数时可以使用三个不同的 trait：Fn、FnMut 和 FnOnce，我们需要决定这里应该使用哪种闭包。
+      回忆前面关于 “使用带有泛型和 Fn trait 的闭包” 部分，闭包作为参数时可以使用三个不同的 trait：Fn、FnMut 和 FnOnce，我们需要决定这里应该使用哪种闭包。
 </pre>
 
 <p>
@@ -1234,13 +1241,13 @@ warning: unused variable: <span style="color: #fa8072;">`f`</span>
 </p>
 
 <pre class="example">
-  注意：如果尝试 cargo run 运行程序并在浏览器中发起请求，仍会在浏览器中出现在本章开始时“连接重置”的错误，因为这个库实际上还没有调用传递给 execute 的闭包！
+      注意：如果尝试 cargo run 运行程序并在浏览器中发起请求，仍会在浏览器中出现在本章开始时“连接重置”的错误，因为这个库实际上还没有调用传递给 execute 的闭包！
 
-  一个你可能听说过的关于像 Haskell 和 Rust 这样有严格编译器的语言的说法是 “如果代码能够编译，它就能工作”
+      一个你可能听说过的关于像 Haskell 和 Rust 这样有严格编译器的语言的说法是 “如果代码能够编译，它就能工作”
 
-  这是一个提醒大家的好时机，实际上这并不是普适的。我们的项目可以编译，不过它完全没有做任何工作！
+      这是一个提醒大家的好时机，实际上这并不是普适的。我们的项目可以编译，不过它完全没有做任何工作！
 
-  如果构建一个真实且功能完整的项目，则需花费大量的时间来开始编写单元测试来检查代码能否编译“并且”拥有期望的行为
+      如果构建一个真实且功能完整的项目，则需花费大量的时间来开始编写单元测试来检查代码能否编译“并且”拥有期望的行为
 </pre>
 </div>
 </div>
@@ -1249,9 +1256,9 @@ warning: unused variable: <span style="color: #fa8072;">`f`</span>
 <h4 id="org838d9aa">在 new 中验证池中线程数量</h4>
 <div class="outline-text-4" id="text-org838d9aa">
 <pre class="example">
-  这里仍然存在警告是因为其并没有对 new 和 execute 的参数做任何操作。现在用期望的行为来实现这些函数
+      这里仍然存在警告是因为其并没有对 new 和 execute 的参数做任何操作。现在用期望的行为来实现这些函数
 
-  以考虑 new 作为开始。之前选择使用无符号类型作为 size 参数的类型，因为线程数为负的线程池没有意义。然而，线程数为零的线程池同样没有意义，不过零是一个完全有效的 u32 值
+      以考虑 new 作为开始。之前选择使用无符号类型作为 size 参数的类型，因为线程数为负的线程池没有意义。然而，线程数为零的线程池同样没有意义，不过零是一个完全有效的 u32 值
 </pre>
 
 <p>
@@ -1279,11 +1286,11 @@ warning: unused variable: <span style="color: #fa8072;">`f`</span>
 </div>
 
 <pre class="example">
-  这里用文档注释为 ThreadPool 增加了一些文档
+      这里用文档注释为 ThreadPool 增加了一些文档
 
-  注意：这里遵循了良好的文档实践并增加了一个部分来提示函数会 panic 的情况
+      注意：这里遵循了良好的文档实践并增加了一个部分来提示函数会 panic 的情况
 
-  正如以前所讨论过的：尝试运行 cargo doc --open 并点击 ThreadPool 结构体来查看生成的 new 的文档看起来如何！
+      正如以前所讨论过的：尝试运行 cargo doc --open 并点击 ThreadPool 结构体来查看生成的 new 的文档看起来如何！
 </pre>
 
 <p>
@@ -1296,7 +1303,7 @@ warning: unused variable: <span style="color: #fa8072;">`f`</span>
 </div>
 
 <pre class="example">
-  在这里选择创建一个没有任何线程的线程池，被认为是不可恢复的错误
+      在这里选择创建一个没有任何线程的线程池，被认为是不可恢复的错误
 </pre>
 </div>
 </div>
@@ -1360,9 +1367,9 @@ spawn 返回 JoinHandle&lt;T&gt;，其中 T 是闭包返回的类型，尝试使
 </ul>
 
 <pre class="example">
-  这里使用 with_capacity，它与 Vec::new 做了同样的工作，不过有一个重要的区别：它为 vector 预先分配空间
+      这里使用 with_capacity，它与 Vec::new 做了同样的工作，不过有一个重要的区别：它为 vector 预先分配空间
 
-  已经知道了 vector 中需要 size 个元素，预先进行分配比仅仅 Vec::new 要稍微有效率一些，因为 Vec::new 随着插入元素而重新改变大小
+      已经知道了 vector 中需要 size 个元素，预先进行分配比仅仅 Vec::new 要稍微有效率一些，因为 Vec::new 随着插入元素而重新改变大小
 </pre>
 
 <p>
@@ -1375,11 +1382,11 @@ spawn 返回 JoinHandle&lt;T&gt;，其中 T 是闭包返回的类型，尝试使
 <h4 id="orge7f4b8e">Worker 结构体：负责从 ThreadPool 中将代码传递给线程</h4>
 <div class="outline-text-4" id="text-orge7f4b8e">
 <pre class="example">
-  前面 for 循环中留下了一个关于创建线程的注释。如何实际创建线程呢？这是一个难题
+      前面 for 循环中留下了一个关于创建线程的注释。如何实际创建线程呢？这是一个难题
 
-  标准库提供的创建线程的方法，thread::spawn，它期望获取一些一旦创建线程就应该执行的代码。然而，我们希望开始线程并使其等待稍后传递的代码
+      标准库提供的创建线程的方法，thread::spawn，它期望获取一些一旦创建线程就应该执行的代码。然而，我们希望开始线程并使其等待稍后传递的代码
 
-  标准库的线程实现并没有包含这么做的方法：我们必须自己实现
+      标准库的线程实现并没有包含这么做的方法：我们必须自己实现
 </pre>
 
 <p>
@@ -1387,9 +1394,9 @@ spawn 返回 JoinHandle&lt;T&gt;，其中 T 是闭包返回的类型，尝试使
 </p>
 
 <pre class="example">
-  这是一个池实现中的常见概念
+      这是一个池实现中的常见概念
 
-  想象一下在餐馆厨房工作的员工：员工等待来自客户的订单，他们负责接受这些订单并完成它们
+      想象一下在餐馆厨房工作的员工：员工等待来自客户的订单，他们负责接受这些订单并完成它们
 </pre>
 <p>
 不同于在线程池中储存一个 JoinHandle&lt;()&gt; 实例的 vector，会储存 <span class="underline">Worker 结构体</span> 的实例：
@@ -1467,7 +1474,7 @@ spawn 返回 JoinHandle&lt;T&gt;，其中 T 是闭包返回的类型，尝试使
 </ul>
 
 <pre class="example">
-  这段代码能够编译并用指定给 ThreadPool::new 的参数创建储存了一系列的 Worker 实例，不过 仍然 没有处理 execute 中得到的闭包
+      这段代码能够编译并用指定给 ThreadPool::new 的参数创建储存了一系列的 Worker 实例，不过 仍然 没有处理 execute 中得到的闭包
 </pre>
 </div>
 </div>
@@ -1475,11 +1482,11 @@ spawn 返回 JoinHandle&lt;T&gt;，其中 T 是闭包返回的类型，尝试使
 <h4 id="orged81a00">使用通道向线程发送请求</h4>
 <div class="outline-text-4" id="text-orged81a00">
 <pre class="example">
-  下一个需要解决的问题是传递给 thread::spawn 的闭包完全没有做任何工作
+      下一个需要解决的问题是传递给 thread::spawn 的闭包完全没有做任何工作
 
-  目前，在 execute 方法中获得期望执行的闭包，不过在创建 ThreadPool 的过程中创建每一个 Worker 时需要向 thread::spawn 传递一个闭包
+      目前，在 execute 方法中获得期望执行的闭包，不过在创建 ThreadPool 的过程中创建每一个 Worker 时需要向 thread::spawn 传递一个闭包
 
-  我们希望刚创建的 Worker 结构体能够从 ThreadPool 的队列中获取需要执行的代码，并发送到线程中执行他们
+      我们希望刚创建的 Worker 结构体能够从 ThreadPool 的队列中获取需要执行的代码，并发送到线程中执行他们
 </pre>
 
 
@@ -1533,9 +1540,9 @@ spawn 返回 JoinHandle&lt;T&gt;，其中 T 是闭包返回的类型，尝试使
 </div>
 
 <pre class="example">
-  在 ThreadPool::new 中，新建了一个通道，并接着让线程池在接收端等待
+      在 ThreadPool::new 中，新建了一个通道，并接着让线程池在接收端等待
 
-  这段代码能够编译，不过仍有警告
+      这段代码能够编译，不过仍有警告
 </pre>
 
 <p>
@@ -1583,7 +1590,7 @@ spawn 返回 JoinHandle&lt;T&gt;，其中 T 是闭包返回的类型，尝试使
 </div>
 
 <pre class="example">
-这是一些小而直观的修改：将通道的接收端传递进了 Worker::new，并接着在闭包中使用它
+    这是一些小而直观的修改：将通道的接收端传递进了 Worker::new，并接着在闭包中使用它
 </pre>
 <p>
 如果尝试 check 代码，会得到这个错误：
@@ -1660,9 +1667,9 @@ Rust 所提供的通道实现是”多生产者，单消费者“的。这意味
 </div>
 
 <pre class="example">
-  在 ThreadPool::new 中，将通道的接收端放入一个 Arc 和一个 Mutex 中
+      在 ThreadPool::new 中，将通道的接收端放入一个 Arc 和一个 Mutex 中
 
-  对于每一个新 worker，克隆 Arc 来增加引用计数，如此这些 worker 就可以共享接收端的所有权了
+      对于每一个新 worker，克隆 Arc 来增加引用计数，如此这些 worker 就可以共享接收端的所有权了
 </pre>
 </div>
 </div>
@@ -1698,9 +1705,9 @@ Rust 所提供的通道实现是”多生产者，单消费者“的。这意味
 在使用 execute 得到的闭包新建 Job 实例之后，将这些任务从通道的发送端发出
 </p>
 <pre class="example">
-  这里调用 send 上的 unwrap，因为发送可能会失败，这可能发生于例如停止了所有线程执行的情况，这意味着接收端停止接收新消息了。不过目前我们无法停止线程执行：只要线程池存在他们就会一直执行
+      这里调用 send 上的 unwrap，因为发送可能会失败，这可能发生于例如停止了所有线程执行的情况，这意味着接收端停止接收新消息了。不过目前我们无法停止线程执行：只要线程池存在他们就会一直执行
 
-  使用 unwrap 是因为知道失败不可能发生，即便编译器不这么认为
+      使用 unwrap 是因为知道失败不可能发生，即便编译器不这么认为
 </pre>
 
 <p>
@@ -1736,18 +1743,18 @@ Rust 所提供的通道实现是”多生产者，单消费者“的。这意味
 <li>unwrap 在出现任何错误时 panic</li>
 </ul>
 <pre class="example">
-  如果互斥器处于一种叫做”被污染“的状态时获取锁可能会失败，这可能发生于其他线程在持有锁时 panic 了且没有释放锁
+      如果互斥器处于一种叫做”被污染“的状态时获取锁可能会失败，这可能发生于其他线程在持有锁时 panic 了且没有释放锁
 
-  在这种情况下，调用 unwrap 使其 panic 是正确的行为
+      在这种情况下，调用 unwrap 使其 panic 是正确的行为
 
-  请随意将 unwrap 改为包含有意义错误信息的 expect
+      请随意将 unwrap 改为包含有意义错误信息的 expect
 </pre>
 <ul class="org-ul">
 <li>如果锁定了互斥器，接着调用 <span class="underline">recv</span> 从 <span class="underline">通道</span> 中 <b>接收</b> <span class="underline">Job</span></li>
 <li>最后的 <span class="underline">unwrap</span> 也绕过了一些错误</li>
 </ul>
 <pre class="example">
-这可能发生于持有通道发送端的线程停止的情况，类似于如果接收端关闭时 send 方法如何返回 Err 一样
+    这可能发生于持有通道发送端的线程停止的情况，类似于如果接收端关闭时 send 方法如何返回 Err 一样
 </pre>
 
 <p>
@@ -1801,9 +1808,9 @@ Worker 2 got a job; executing.
 </p>
 
 <pre class="example">
-  注意如果同时在多个浏览器窗口打开 /sleep，它们可能会彼此间隔地加载 5 秒，因为一些浏览器处于缓存的原因会顺序执行相同请求的多个实例
+      注意如果同时在多个浏览器窗口打开 /sleep，它们可能会彼此间隔地加载 5 秒，因为一些浏览器处于缓存的原因会顺序执行相同请求的多个实例
 
-  这些限制并不是由于我们的 web server 造成的
+      这些限制并不是由于我们的 web server 造成的
 </pre>
 </div>
 
@@ -1841,11 +1848,11 @@ Worker 2 got a job; executing.
 </p>
 
 <pre class="example">
-  其原因有些微妙：Mutex 结构体没有公有 unlock 方法，因为锁的所有权依赖 lock 方法返回的 LockResult&lt;MutexGuard&lt;T&gt;&gt; 中 MutexGuard&lt;T&gt; 的生命周期，这允许借用检查器在编译时确保绝不会在没有持有锁的情况下访问由 Mutex 守护的资源
+       其原因有些微妙：Mutex 结构体没有公有 unlock 方法，因为锁的所有权依赖 lock 方法返回的 LockResult&lt;MutexGuard&lt;T&gt;&gt; 中 MutexGuard&lt;T&gt; 的生命周期，这允许借用检查器在编译时确保绝不会在没有持有锁的情况下访问由 Mutex 守护的资源
 
-  不过如果没有认真的思考 MutexGuard&lt;T&gt; 的生命周期的话，也可能会导致比预期更久的持有锁
+       不过如果没有认真的思考 MutexGuard&lt;T&gt; 的生命周期的话，也可能会导致比预期更久的持有锁
 
-  因为 while 表达式中的值在整个块一直处于作用域中，job() 调用的过程中其仍然持有锁，这意味着其他 worker 不能接收任务！！！
+       因为 while 表达式中的值在整个块一直处于作用域中，job() 调用的过程中其仍然持有锁，这意味着其他 worker 不能接收任务！！！
 </pre>
 
 <p>
@@ -1857,8 +1864,421 @@ Worker 2 got a job; executing.
 </div>
 </div>
 
+
 <div id="outline-container-org27f875c" class="outline-2">
 <h2 id="org27f875c">优雅停机</h2>
+<div class="outline-text-2" id="text-org27f875c">
+<pre class="example">
+    上面的代码如期通过使用线程池异步的响应请求，但有一些警告说 workers、id 和 thread 字段没有直接被使用，这提醒了我们并没有清理所有的内容
+
+    当使用不那么优雅的 ctrl-c 终止主线程时，所有其他线程也会立刻停止，即便它们正处于处理请求的过程中
+</pre>
+
+<ol class="org-ol">
+<li>现在要为 ThreadPool 实现 <span class="underline">Drop trait</span> 对 <span class="underline">线程池中的每一个线程</span> <b>调用</b> <span class="underline">join</span> ，这样这些线程将会执行完他们的请求</li>
+<li>接着会为 ThreadPool 实现一个 <b>告诉</b> <span class="underline">线程</span> 他们应该 <b>停止接收</b> <span class="underline">新请求</span> 并结束的方式</li>
+</ol>
+
+<pre class="example">
+    为了实践这些代码，修改 server 在优雅停机之前只接受两个请求
+</pre>
+</div>
+
+<div id="outline-container-org8d3c7f2" class="outline-3">
+<h3 id="org8d3c7f2">为 ThreadPool 实现 Drop Trait</h3>
+<div class="outline-text-3" id="text-org8d3c7f2">
+<p>
+当线程池被丢弃时，应该 join 所有线程以确保他们完成其操作。下面展示了 Drop 实现的第一次尝试：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">impl</span> <span style="color: #98f5ff;">Drop</span> <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #98f5ff;">ThreadPool</span> {
+    <span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">drop</span>(&amp;<span style="color: #00bfff; font-weight: bold;">mut</span> <span style="color: #00bfff; font-weight: bold;">self</span>) {
+        <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">worker</span> <span style="color: #00bfff; font-weight: bold;">in</span> &amp;<span style="color: #00bfff; font-weight: bold;">mut</span> <span style="color: #00bfff; font-weight: bold;">self</span>.workers {
+            <span style="color: #f08080;">println!</span>(<span style="color: #deb887;">"Shutting down worker </span><span style="color: #deb887; font-style: italic;">{}</span><span style="color: #deb887;">"</span>, worker.id);
+
+            worker.thread.join().unwrap();
+        }
+    }
+}
+</pre>
+</div>
+
+<p>
+遍历线程池中的每个 workers，使用了 <span class="underline">&amp;mut</span> 因为 <span class="underline">self</span> 本身是一个 <b>可变引用</b> 而且也 <b>需要</b> 能够 <span class="underline">修改</span> worker
+</p>
+<ul class="org-ul">
+<li>对于每一个线程，会打印出说明信息表明此特定 worker 正在关闭</li>
+<li>接着在 worker 线程上调用 join
+<ul class="org-ul">
+<li>如果 join 调用失败，通过 unwrap 使得 panic 并进行不优雅的关闭</li>
+</ul></li>
+</ul>
+
+<p>
+但是尝试编译代码时得到的错误：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">error[E0507]: cannot move out of borrowed content
+  --&gt; src/lib.rs:65:13
+   |
+65 |             worker.thread.join().unwrap();
+   |             ^^^^^^ cannot move out of borrowed content
+</pre>
+</div>
+
+<p>
+这告诉我们并不能调用 join，因为 <b>只有</b> 每一个 <span class="underline">worker</span> 的 <span class="underline">可变借用</span> ，而 <span class="underline">join</span> <b>获取</b> 其 <span class="underline">参数的所有权</span>
+</p>
+
+<pre class="example">
+     为了解决这个问题，需要一个方法将 thread 移动出拥有其所有权的 Worker 实例以便 join 可以消费这个线程
+
+     办法是：如果 Worker 存放的是 Option&lt;thread::JoinHandle&lt;()&gt;，就可以在 Option 上调用 take 方法将值从 Some 成员中移动出来而对 None 成员不做处理
+
+     换句话说，正在运行的 Worker 的 thread 将是 Some 成员值，而当需要清理 worker 时，将 Some 替换为 None，这样 worker 就没有可以运行的线程了
+</pre>
+
+<p>
+为此需要更新 Worker 的定义为如下：
+</p>
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">struct</span> <span style="color: #98f5ff;">Worker</span> {
+    <span style="color: #4eee94;">id</span>: <span style="color: #98f5ff;">usize</span>,
+    <span style="color: #4eee94;">thread</span>: <span style="color: #98f5ff;">Option</span>&lt;<span style="color: #ffd700;">thread</span>::<span style="color: #98f5ff;">JoinHandle</span>&lt;()&gt;&gt;,
+}
+</pre>
+</div>
+
+<p>
+现在依靠编译器来找出其他需要修改的地方。check 代码会得到两个错误：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">error[E0599]: no method named <span style="color: #fa8072;">`join`</span> found for type
+<span style="color: #fa8072;">`std::option::Option&lt;std::thread::JoinHandle&lt;()&gt;&gt;`</span> <span style="color: #00bfff; font-weight: bold;">in</span> the current scope
+  --&gt; src/lib.rs:65:27
+   |
+65 |             worker.thread.join().unwrap();
+   |                           ^^^^
+
+error[E0308]: mismatched types
+  --&gt; src/lib.rs:89:13
+   |
+89 |             thread,
+   |             ^^^^^^
+   |             |
+   |             expected enum <span style="color: #fa8072;">`std::option::Option`</span>, found struct
+   <span style="color: #fa8072;">`std::thread::JoinHandle`</span>
+   |             <span style="color: #f08080;">help</span>: try using a variant of the expected type: <span style="color: #fa8072;">`Some(thread)`</span>
+   |
+   = note: expected type <span style="color: #fa8072;">`std::option::Option&lt;std::thread::JoinHandle&lt;()&gt;&gt;`</span>
+              found type <span style="color: #fa8072;">`std::thread::JoinHandle&lt;_&gt;`</span>
+</pre>
+</div>
+
+<p>
+先修复第二个错误，它指向 Worker::new 结尾的代码；当新建 Worker 时需要将 thread 值封装进 Some。做出如下改变以修复问题：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">impl</span> <span style="color: #98f5ff;">Worker</span> {
+    <span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">new</span>(<span style="color: #4eee94;">id</span>: <span style="color: #98f5ff;">usize</span>, <span style="color: #4eee94;">receiver</span>: <span style="color: #98f5ff;">Arc</span>&lt;<span style="color: #98f5ff;">Mutex</span>&lt;<span style="color: #ffd700;">mpsc</span>::<span style="color: #98f5ff;">Receiver</span>&lt;<span style="color: #98f5ff;">Job</span>&gt;&gt;&gt;) -&gt; <span style="color: #98f5ff;">Worker</span> {
+        <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
+
+        <span style="color: #98f5ff;">Worker</span> {
+            id,
+            <span style="color: #4eee94;">thread</span>: <span style="color: #98f5ff;">Some</span>(thread),
+        }
+    }
+}
+</pre>
+</div>
+
+<p>
+第一个错误位于 Drop 实现中。之前提到过要调用 Option 上的 take 将 thread 移动出 worker。如下改变会修复问题：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">impl</span> <span style="color: #98f5ff;">Drop</span> <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #98f5ff;">ThreadPool</span> {
+    <span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">drop</span>(&amp;<span style="color: #00bfff; font-weight: bold;">mut</span> <span style="color: #00bfff; font-weight: bold;">self</span>) {
+        <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">worker</span> <span style="color: #00bfff; font-weight: bold;">in</span> &amp;<span style="color: #00bfff; font-weight: bold;">mut</span> <span style="color: #00bfff; font-weight: bold;">self</span>.workers {
+            <span style="color: #f08080;">println!</span>(<span style="color: #deb887;">"Shutting down worker </span><span style="color: #deb887; font-style: italic;">{}</span><span style="color: #deb887;">"</span>, worker.id);
+
+            <span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #98f5ff;">Some</span>(thread) = worker.thread.take() {
+                thread.join().unwrap();
+            }
+        }
+    }
+}
+</pre>
+</div>
+
+<pre class="example">
+Option 上的 take 方法会取出 Some 而留下 None
+
+使用 if let 解构 Some 并得到线程，接着在线程上调用 join
+
+如果 worker 的线程已然是 None，就知道此时这个 worker 已经清理了其线程所以无需做任何操作
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orgeffbb8b" class="outline-3">
+<h3 id="orgeffbb8b">向线程发送信号使其停止接收任务</h3>
+<div class="outline-text-3" id="text-orgeffbb8b">
+<pre class="example">
+     有了所有这些修改，代码就能编译且没有任何警告。不过也有坏消息，这些代码还不能以我们期望的方式运行
+
+     问题的关键在于 Worker 中分配的线程所运行的闭包中的逻辑：调用 join 并不会关闭线程，因为他们一直 loop 来寻找任务
+
+     如果采用这个实现来尝试丢弃 ThreadPool ，则主线程会永远阻塞在等待第一个线程结束上
+</pre>
+
+<p>
+为了修复这个问题，线程既监听是否有 Job 运行也要 <b>监听</b> 一个应该 <span class="underline">停止监听并退出无限循环</span> 的 <b>信号</b> 。所以通道将发送这个枚举的两个成员之一而不是 Job 实例： 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">enum</span> <span style="color: #98f5ff;">Message</span> {
+    <span style="color: #98f5ff;">NewJob</span>(<span style="color: #98f5ff;">Job</span>),
+    <span style="color: #98f5ff;">Terminate</span>,
+}
+</pre>
+</div>
+
+<pre class="example">
+Message 枚举要么是存放了线程需要运行的 Job 的 NewJob 成员，要么是会导致线程退出循环并终止的 Terminate 成员
+</pre>
+
+<p>
+同时需要修改通道来使用 Message 类型值而不是 Job：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">pub</span> <span style="color: #00bfff; font-weight: bold;">struct</span> <span style="color: #98f5ff;">ThreadPool</span> {
+    <span style="color: #4eee94;">workers</span>: <span style="color: #98f5ff;">Vec</span>&lt;<span style="color: #98f5ff;">Worker</span>&gt;,
+    <span style="color: #4eee94;">sender</span>: <span style="color: #ffd700;">mpsc</span>::<span style="color: #98f5ff;">Sender</span>&lt;<span style="color: #98f5ff;">Message</span>&gt;,
+}
+
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
+
+<span style="color: #00bfff; font-weight: bold;">impl</span> <span style="color: #98f5ff;">ThreadPool</span> {
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
+
+    <span style="color: #00bfff; font-weight: bold;">pub</span> <span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">execute</span>&lt;<span style="color: #98f5ff;">F</span>&gt;(&amp;<span style="color: #00bfff; font-weight: bold;">self</span>, <span style="color: #4eee94;">f</span>: <span style="color: #98f5ff;">F</span>)
+        <span style="color: #00bfff; font-weight: bold;">where</span>
+            <span style="color: #4eee94;">F</span>: <span style="color: #98f5ff;">FnOnce</span>() + <span style="color: #98f5ff;">Send</span> + '<span style="color: #00bfff; font-weight: bold;">static</span>
+    {
+        <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">job</span> = <span style="color: #98f5ff;">Box</span>::new(f);
+
+        <span style="color: #00bfff; font-weight: bold;">self</span>.sender.send(<span style="color: #98f5ff;">Message</span>::<span style="color: #98f5ff;">NewJob</span>(job)).unwrap();
+    }
+}
+
+<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">--snip--</span>
+
+<span style="color: #00bfff; font-weight: bold;">impl</span> <span style="color: #98f5ff;">Worker</span> {
+    <span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">new</span>(<span style="color: #4eee94;">id</span>: <span style="color: #98f5ff;">usize</span>, <span style="color: #4eee94;">receiver</span>: <span style="color: #98f5ff;">Arc</span>&lt;<span style="color: #98f5ff;">Mutex</span>&lt;<span style="color: #ffd700;">mpsc</span>::<span style="color: #98f5ff;">Receiver</span>&lt;<span style="color: #98f5ff;">Message</span>&gt;&gt;&gt;) -&gt;
+        <span style="color: #98f5ff;">Worker</span> {
+
+        <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">thread</span> = <span style="color: #ffd700;">thread</span>::spawn(<span style="color: #00bfff; font-weight: bold;">move</span> ||{
+            <span style="color: #00bfff; font-weight: bold;">loop</span> {
+                <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">message</span> = receiver.lock().unwrap().recv().unwrap();
+
+                <span style="color: #00bfff; font-weight: bold;">match</span> message {
+                    <span style="color: #98f5ff;">Message</span>::<span style="color: #98f5ff;">NewJob</span>(job) =&gt; {
+                        <span style="color: #f08080;">println!</span>(<span style="color: #deb887;">"Worker </span><span style="color: #deb887; font-style: italic;">{}</span><span style="color: #deb887;"> got a job; executing."</span>, id);
+
+                        job();
+                    },
+                    <span style="color: #98f5ff;">Message</span>::<span style="color: #98f5ff;">Terminate</span> =&gt; {
+                        <span style="color: #f08080;">println!</span>(<span style="color: #deb887;">"Worker </span><span style="color: #deb887; font-style: italic;">{}</span><span style="color: #deb887;"> was told to terminate."</span>, id);
+
+                        <span style="color: #00bfff; font-weight: bold;">break</span>;
+                    },
+                }
+            }
+        });
+
+        <span style="color: #98f5ff;">Worker</span> {
+            id,
+            <span style="color: #4eee94;">thread</span>: <span style="color: #98f5ff;">Some</span>(thread),
+        }
+    }
+}
+</pre>
+</div>
+
+<pre class="example">
+为了适用 Message 枚举需要将两个地方的 Job 修改为 Message：ThreadPool 的定义和 Worker::new 的签名
+
+ThreadPool 的 execute 方法需要发送封装进 Message::NewJob 成员的任务
+
+然后，在 Worker::new 中当从通道接收 Message 时，当获取到 NewJob成员会处理任务而收到 Terminate 成员则会退出循环
+</pre>
+
+<p>
+通过这些修改，代码再次能够编译，不过还是会得到一个警告，因为并没有创建任何 Terminate 成员的消息。下面修改 Drop 实现来修复此问题：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">impl</span> <span style="color: #98f5ff;">Drop</span> <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #98f5ff;">ThreadPool</span> {
+    <span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">drop</span>(&amp;<span style="color: #00bfff; font-weight: bold;">mut</span> <span style="color: #00bfff; font-weight: bold;">self</span>) {
+        <span style="color: #f08080;">println!</span>(<span style="color: #deb887;">"Sending terminate message to all workers."</span>);
+
+        <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">_</span> <span style="color: #00bfff; font-weight: bold;">in</span> &amp;<span style="color: #00bfff; font-weight: bold;">mut</span> <span style="color: #00bfff; font-weight: bold;">self</span>.workers {
+            <span style="color: #00bfff; font-weight: bold;">self</span>.sender.send(<span style="color: #98f5ff;">Message</span>::<span style="color: #98f5ff;">Terminate</span>).unwrap();
+        }
+
+        <span style="color: #f08080;">println!</span>(<span style="color: #deb887;">"Shutting down all workers."</span>);
+
+        <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">worker</span> <span style="color: #00bfff; font-weight: bold;">in</span> &amp;<span style="color: #00bfff; font-weight: bold;">mut</span> <span style="color: #00bfff; font-weight: bold;">self</span>.workers {
+            <span style="color: #f08080;">println!</span>(<span style="color: #deb887;">"Shutting down worker </span><span style="color: #deb887; font-style: italic;">{}</span><span style="color: #deb887;">"</span>, worker.id);
+
+            <span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #98f5ff;">Some</span>(thread) = worker.thread.take() {
+                thread.join().unwrap();
+            }
+        }
+    }
+}
+</pre>
+</div>
+
+<p>
+现在遍历了 worker 两次：
+</p>
+<ul class="org-ul">
+<li>一次向每个 worker 发送一个 Terminate 消息</li>
+<li>一个调用每个 worker 线程上的 join</li>
+</ul>
+
+<p>
+如果尝试在同一循环中发送消息并立即 join 线程，则无法保证当前迭代的 worker 是从通道收到终止消息的 worker：
+</p>
+<pre class="example">
+       为了更好的理解为什么需要两个分开的循环，想象一下只有两个 worker 的场景
+
+       如果在一个单独的循环中遍历每个 worker，在第一次迭代中向通道发出终止消息并对第一个 worker 线程调用 join。会一直等待第一个 worker 结束，不过它永远也不会结束因为第二个线程接收了终止消息
+
+       死锁！
+</pre>
+
+<p>
+为了避免此情况，首先在一个循环中向通道发出所有的 Terminate 消息，接着在另一个循环中 join 所有的线程。每个 worker 一旦收到终止消息即会停止从通道接收消息，意味着可以　 <b>确保如果发送同 worker 数相同的终止消息，在 join 之前每个线程都会收到一个终止消息</b> 
+</p>
+</div>
+</div>
+
+<div id="outline-container-org66ec4e0" class="outline-3">
+<h3 id="org66ec4e0">最后测试</h3>
+<div class="outline-text-3" id="text-org66ec4e0">
+<p>
+为了实践这些代码，修改 main 在优雅停机 server 之前只接受两个请求：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-rust"><span style="color: #00bfff; font-weight: bold;">fn</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">listener</span> = <span style="color: #98f5ff;">TcpListener</span>::bind(<span style="color: #deb887;">"127.0.0.1:7878"</span>).unwrap();
+    <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">pool</span> = <span style="color: #98f5ff;">ThreadPool</span>::new(4);
+
+    <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">stream</span> <span style="color: #00bfff; font-weight: bold;">in</span> listener.incoming().take(2) {
+        <span style="color: #00bfff; font-weight: bold;">let</span> <span style="color: #4eee94;">stream</span> = stream.unwrap();
+
+        pool.execute(|| {
+            handle_connection(stream);
+        });
+    }
+
+    <span style="color: #f08080;">println!</span>(<span style="color: #deb887;">"Shutting down."</span>);
+}
+</pre>
+</div>
+
+<p>
+take 方法定义于 Iterator trait，这里限制循环最多头 2 次。ThreadPool 会在 main 的结尾离开作用域，而且还会看到 drop 实现的运行 
+</p>
+
+<pre class="example">
+     当然不会希望真实世界的 web server 只处理两次请求就停机了，这只是为了展示优雅停机和清理处于正常工作状态
+</pre>
+
+<p>
+使用 cargo run 启动 server，并发起三个请求。第三个请求应该会失败，而终端的输出应该看起来像这样：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ cargo run 
+   Compiling hello v0.1.0 (~/Documents/programming/html/klose911.github.io/src/rust/src/web_server/hello)
+    Finished dev [unoptimized + debuginfo] target(s) <span style="color: #00bfff; font-weight: bold;">in</span> 0.52s
+     Running <span style="color: #fa8072;">`target/debug/main`</span>
+Worker 0 got a job; executing.
+Shutting down.
+Sending terminate message to all workers.
+Shutting down all workers.
+Shutting down worker 0
+Worker 2 got a job; executing.
+Worker 1 was told to terminate.
+Worker 3 was told to terminate.
+Worker 0 was told to terminate.
+Shutting down worker 1
+Shutting down worker 2
+Worker 2 was told to terminate.
+Shutting down worker 3
+</pre>
+</div>
+
+<p>
+可能会出现不同顺序的 worker 和信息输出。可以从信息中看到服务是如何运行的：
+</p>
+<ol class="org-ol">
+<li>worker 0 和 worker 2 获取了头两个请求</li>
+<li>在第三个请求时，我们停止接收连接</li>
+<li>当 ThreadPool 在 main 的结尾离开作用域时，其 Drop 实现开始工作，线程池通知所有线程终止</li>
+<li>每个 worker 在收到终止消息时会打印出一个信息</li>
+<li>接着线程池调用 join 来终止每一个 worker 线程</li>
+</ol>
+
+<pre class="example">
+     这个特定的运行过程中一个有趣的地方在于： 向通道中发出终止消息，而在任何线程收到消息之前，就尝试 join worker 0 了。而worker 0 还没有收到终止消息，所以主线程阻塞直到 worker 0 结束
+
+     与此同时，每一个线程都收到了终止消息。一旦 worker 0 结束，主线程就等待其他 worker 结束，此时他们都已经收到终止消息并能够停止了
+</pre>
+
+<p>
+这里还有很多可以做的事！如果希望继续增强这个项目，如下是一些点子：
+</p>
+<ul class="org-ul">
+<li>为 ThreadPool 和其公有方法增加更多文档</li>
+<li>为库的功能增加测试</li>
+<li>将 unwrap 调用改为更健壮的错误处理</li>
+<li>使用 ThreadPool 进行其他不同于处理网络请求的任务</li>
+<li>在 crates.io 上寻找一个线程池 crate 并使用它实现一个类似的 web server，将其 API 和鲁棒性与这里的实现做对比　</li>
+</ul>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org8d77012" class="outline-2">
+<h2 id="org8d77012">总结</h2>
+<div class="outline-text-2" id="text-org8d77012">
+<p>
+恭喜！现在有了一个使用线程池异步响应请求的基础 web server，并且能对 server 执行优雅停机，它会清理线程池中的所有线程
+</p>
+
+<pre class="example">
+    终于结束了这次 Rust 之旅，现在已经准备好出发并实现自己的 Rust 项目并帮助他人了
+
+    请不要忘记 Rust 的社区，这里有其他 Rustaceans 正乐于帮助任何人迎接 Rust 之路上的任何挑战
+</pre>
+
+<p>
+<a href="advanced.html">Previous：高级特性</a>
+</p>
+
+<p>
+<a href="rust.html">Home: 目录</a>
+</p>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">

@@ -437,19 +437,19 @@
 
 * 多线程 web server  
 
-#+BEGIN_EXAMPLE
-  目前 server 会依次处理每一个请求，意味着它在完成第一个连接的处理之前不会处理第二个连接
+  #+BEGIN_EXAMPLE
+    目前 server 会依次处理每一个请求，意味着它在完成第一个连接的处理之前不会处理第二个连接
 
-  如果 server 正接收越来越多的请求，这类串行操作会使性能越来越差
+    如果 server 正接收越来越多的请求，这类串行操作会使性能越来越差
 
-  如果一个请求花费很长时间来处理，随后而来的请求则不得不等待这个长请求结束，即便这些新请求可以很快就处理完
-#+END_EXAMPLE
-需要修复这种情况，不过首先来实际尝试一下这个问题
+    如果一个请求花费很长时间来处理，随后而来的请求则不得不等待这个长请求结束，即便这些新请求可以很快就处理完
+  #+END_EXAMPLE
+  需要修复这种情况，不过首先来实际尝试一下这个问题
 
 ** 在当前 server 实现中模拟慢请求
-下面通过模拟慢响应实现了 /sleep 请求处理，它会使 server 在响应之前休眠五秒：
+   下面通过模拟慢响应实现了 /sleep 请求处理，它会使 server 在响应之前休眠五秒：
 
-#+BEGIN_SRC rust 
+   #+BEGIN_SRC rust 
   use std::thread;
   use std::time::Duration;
   // --snip--
@@ -471,59 +471,59 @@
 
       // --snip--
   }
-#+END_SRC
+   #+END_SRC
 
-这段代码有些凌乱，不过对于模拟的目的来说已经足够。这里创建了第二个请求 sleep，会识别其数据。在 if 块之后增加了一个 else if 来检查 /sleep 请求，当接收到这个请求时，在渲染成功 HTML 页面之前会先休眠五秒
+   这段代码有些凌乱，不过对于模拟的目的来说已经足够。这里创建了第二个请求 sleep，会识别其数据。在 if 块之后增加了一个 else if 来检查 /sleep 请求，当接收到这个请求时，在渲染成功 HTML 页面之前会先休眠五秒
 
-#+BEGIN_EXAMPLE
-现在就可以真切的看出我们的 server 有多么的原始：真实的库将会以更简洁的方式处理多请求识别问题！
-#+END_EXAMPLE
-使用 cargo run 启动 server，并接着打开两个浏览器窗口：一个请求 http://127.0.0.1:7878/ 而另一个请求 http://127.0.0.1:7878/sleep 。如果像之前一样多次请求 /，会发现响应的比较快速。不过如果请求 /sleep 之后在请求 /，就会看到 / 会等待直到 sleep 休眠完五秒之后才出现
-#+BEGIN_EXAMPLE
-这里有多种办法来改变我们的 web server 使其避免所有请求都排在慢请求之后；将要实现的一个便是线程池
-#+END_EXAMPLE
+   #+BEGIN_EXAMPLE
+   现在就可以真切的看出我们的 server 有多么的原始：真实的库将会以更简洁的方式处理多请求识别问题！
+   #+END_EXAMPLE
+   使用 cargo run 启动 server，并接着打开两个浏览器窗口：一个请求 http://127.0.0.1:7878/ 而另一个请求 http://127.0.0.1:7878/sleep 。如果像之前一样多次请求 /，会发现响应的比较快速。不过如果请求 /sleep 之后在请求 /，就会看到 / 会等待直到 sleep 休眠完五秒之后才出现
+   #+BEGIN_EXAMPLE
+   这里有多种办法来改变我们的 web server 使其避免所有请求都排在慢请求之后；将要实现的一个便是线程池
+   #+END_EXAMPLE
 
 ** 使用线程池改善吞吐量
-_线程池_ 是一组 _预先分配_ 的 _等待_ 或 _准备_ *处理任务* 的 _线程_ ：
-+ 当程序收到一个新任务，线程池中的一个线程会被分配任务，这个线程会离开并处理任务
-  + 其余的线程则可用于处理在第一个线程处理任务的同时处理其他接收到的任务
-+ 当第一个线程处理完任务时，它会返回空闲线程池中等待处理新任务
-+ 线程池允许我们并发处理连接，增加 server 的吞吐量
+   _线程池_ 是一组 _预先分配_ 的 _等待_ 或 _准备_ *处理任务* 的 _线程_ ：
+   + 当程序收到一个新任务，线程池中的一个线程会被分配任务，这个线程会离开并处理任务
+     + 其余的线程则可用于处理在第一个线程处理任务的同时处理其他接收到的任务
+   + 当第一个线程处理完任务时，它会返回空闲线程池中等待处理新任务
+   + 线程池允许我们并发处理连接，增加 server 的吞吐量
 
-#+BEGIN_EXAMPLE
-  我们会将池中线程限制为较少的数量，以防拒绝服务 Dos 攻击
+   #+BEGIN_EXAMPLE
+     我们会将池中线程限制为较少的数量，以防拒绝服务 Dos 攻击
 
-  如果程序为每一个接收的请求都新建一个线程，某人向 server 发起千万级的请求时会耗尽服务器的资源并导致所有请求的处理都被终止
-#+END_EXAMPLE
+     如果程序为每一个接收的请求都新建一个线程，某人向 server 发起千万级的请求时会耗尽服务器的资源并导致所有请求的处理都被终止
+   #+END_EXAMPLE
 
-不同于分配无限的线程，线程池中将有 *固定数量* 的等待线程：
-+ 当新进请求时，将请求发送到线程池中做处理
-+ 线程池会维护一个接收请求的队列。每一个线程会从队列中取出一个请求，处理请求，接着向对队列索取另一个请求
-+ 通过这种设计，则可以并发处理 N 个请求，其中 N 为线程数
-+ 如果每一个线程都在响应慢请求，之后的请求仍然会阻塞队列，不过相比之前增加了能处理的慢请求的数量
+   不同于分配无限的线程，线程池中将有 *固定数量* 的等待线程：
+   + 当新进请求时，将请求发送到线程池中做处理
+   + 线程池会维护一个接收请求的队列。每一个线程会从队列中取出一个请求，处理请求，接着向对队列索取另一个请求
+   + 通过这种设计，则可以并发处理 N 个请求，其中 N 为线程数
+   + 如果每一个线程都在响应慢请求，之后的请求仍然会阻塞队列，不过相比之前增加了能处理的慢请求的数量
 
-#+BEGIN_EXAMPLE
-  这个设计仅仅是多种改善 web server 吞吐量的方法之一，其他可供探索的方法有 fork/join 模型和单线程异步 I/O 模型
+   #+BEGIN_EXAMPLE
+     这个设计仅仅是多种改善 web server 吞吐量的方法之一，其他可供探索的方法有 fork/join 模型和单线程异步 I/O 模型
 
-  如果你对这个主题感兴趣，则可以阅读更多关于其他解决方案的内容并尝试用 Rust 实现他们，对于一个像 Rust 这样的底层语言，所有这些方法都是可能的
-#+END_EXAMPLE
-在开始之前，先讨论一下线程池应用看起来怎样
+     如果你对这个主题感兴趣，则可以阅读更多关于其他解决方案的内容并尝试用 Rust 实现他们，对于一个像 Rust 这样的底层语言，所有这些方法都是可能的
+   #+END_EXAMPLE
+   在开始之前，先讨论一下线程池应用看起来怎样
 
-#+BEGIN_EXAMPLE
-  当尝试设计代码时，首先编写客户端接口确实有助于指导代码设计。以期望的调用方式来构建 API 代码的结构，接着在这个结构之内实现功能，而不是先实现功能再设计公有 API
+   #+BEGIN_EXAMPLE
+     当尝试设计代码时，首先编写客户端接口确实有助于指导代码设计。以期望的调用方式来构建 API 代码的结构，接着在这个结构之内实现功能，而不是先实现功能再设计公有 API
 
-  类似于前面使用的“测试驱动开发”。这里将要使用“编译器驱动开发”：将编写调用所期望的函数的代码，接着观察编译器错误告诉接下来需要修改什么使得代码可以工作
-#+END_EXAMPLE
+     类似于前面使用的“测试驱动开发”。这里将要使用“编译器驱动开发”：将编写调用所期望的函数的代码，接着观察编译器错误告诉接下来需要修改什么使得代码可以工作
+   #+END_EXAMPLE
 
 *** 为每一个请求分配线程的代码结构
-首先，探索一下为每一个连接都创建一个线程的代码看起来如何
+    首先，探索一下为每一个连接都创建一个线程的代码看起来如何
 
-#+BEGIN_EXAMPLE
-这并不是最终方案，因为正如之前讲到的它会潜在的分配无限的线程，不过这是一个开始
-#+END_EXAMPLE
+    #+BEGIN_EXAMPLE
+    这并不是最终方案，因为正如之前讲到的它会潜在的分配无限的线程，不过这是一个开始
+    #+END_EXAMPLE
 
-下面展示了 main 的改变，它在 for 循环中为每一个流分配了一个新线程进行处理：
-#+BEGIN_SRC rust 
+    下面展示了 main 的改变，它在 for 循环中为每一个流分配了一个新线程进行处理：
+    #+BEGIN_SRC rust 
   fn main() {
       let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
 
@@ -535,20 +535,20 @@ _线程池_ 是一组 _预先分配_ 的 _等待_ 或 _准备_ *处理任务* �
 	  });
       }
   }
-#+END_SRC
+    #+END_SRC
 
-#+BEGIN_EXAMPLE
-  正如前面讲到的，thread::spawn 会创建一个新线程并在其中运行闭包中的代码
+    #+BEGIN_EXAMPLE
+      正如前面讲到的，thread::spawn 会创建一个新线程并在其中运行闭包中的代码
 
-  如果运行这段代码并在在浏览器中加载 /sleep，接着在另两个浏览器标签页中加载 /，确实会发现 / 请求不必等待 /sleep 结束
+      如果运行这段代码并在在浏览器中加载 /sleep，接着在另两个浏览器标签页中加载 /，确实会发现 / 请求不必等待 /sleep 结束
 
-  不过正如之前提到的，这最终会使系统崩溃因为无限制的创建新线程
-#+END_EXAMPLE
+      不过正如之前提到的，这最终会使系统崩溃因为无限制的创建新线程
+    #+END_EXAMPLE
 
 *** 为有限数量的线程创建一个类似的接口
-现在期望线程池以类似且熟悉的方式工作，以便从线程切换到线程池并不会对使用该 API 的代码做出较大的修改。下面展示了希望用来替换 thread::spawn 的 ThreadPool 结构体的假想接口：
+    现在期望线程池以类似且熟悉的方式工作，以便从线程切换到线程池并不会对使用该 API 的代码做出较大的修改。下面展示了希望用来替换 thread::spawn 的 ThreadPool 结构体的假想接口：
 
-#+BEGIN_SRC rust 
+    #+BEGIN_SRC rust 
   fn main() {
       let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
       let pool = ThreadPool::new(4);
@@ -561,19 +561,19 @@ _线程池_ 是一组 _预先分配_ 的 _等待_ 或 _准备_ *处理任务* �
 	  });
       }
   }
-#+END_SRC
-+ 使用 _ThreadPool::new_ 来 *创建* 一个 _新的线程池_ ，它有一个可配置的线程数的参数，在这里是4
-+ 在 for 循环中， _pool.execute_ 有着类似 thread::spawn 的接口，它获取一个线程池运行于每一个流的闭包
-  + pool.execute 需要实现为获取闭包并传递给池中的线程运行
+    #+END_SRC
+    + 使用 _ThreadPool::new_ 来 *创建* 一个 _新的线程池_ ，它有一个可配置的线程数的参数，在这里是4
+    + 在 for 循环中， _pool.execute_ 有着类似 thread::spawn 的接口，它获取一个线程池运行于每一个流的闭包
+      + pool.execute 需要实现为获取闭包并传递给池中的线程运行
 
-#+BEGIN_EXAMPLE
-这段代码还不能编译，不过通过尝试编译器会指导我们如何修复它
-#+END_EXAMPLE
+    #+BEGIN_EXAMPLE
+    这段代码还不能编译，不过通过尝试编译器会指导我们如何修复它
+    #+END_EXAMPLE
 
 *** 构建 ThreadPool 结构体
-利用来自 cargo check 的编译器错误来驱动开发。下面是得到的第一个错误：
+    利用来自 cargo check 的编译器错误来驱动开发。下面是得到的第一个错误：
 
-#+BEGIN_SRC sh 
+    #+BEGIN_SRC sh 
   $ cargo check
      Compiling hello v0.1.0 (file:///projects/hello)
   error[E0433]: failed to resolve. Use of undeclared type or module `ThreadPool`
@@ -584,36 +584,36 @@ _线程池_ 是一组 _预先分配_ 的 _等待_ 或 _准备_ *处理任务* �
      `ThreadPool`
 
   error: aborting due to previous error
-#+END_SRC
+    #+END_SRC
 
-#+BEGIN_EXAMPLE
-好的，这告诉我们需要一个 ThreadPool 类型或模块，所以将构建一个
-#+END_EXAMPLE
-ThreadPool 的实现会与 web server 的特定工作相独立，所以从 hello crate 切换到存放 ThreadPool 实现的新库 crate
-#+BEGIN_EXAMPLE
-这也意味着可以在任何工作中使用这个单独的线程池库，而不仅仅是处理网络请求
-#+END_EXAMPLE
-创建 src/lib.rs 文件，它包含了目前可用的最简单的 ThreadPool 定义：
+    #+BEGIN_EXAMPLE
+    好的，这告诉我们需要一个 ThreadPool 类型或模块，所以将构建一个
+    #+END_EXAMPLE
+    ThreadPool 的实现会与 web server 的特定工作相独立，所以从 hello crate 切换到存放 ThreadPool 实现的新库 crate
+    #+BEGIN_EXAMPLE
+    这也意味着可以在任何工作中使用这个单独的线程池库，而不仅仅是处理网络请求
+    #+END_EXAMPLE
+    创建 src/lib.rs 文件，它包含了目前可用的最简单的 ThreadPool 定义：
 
-#+BEGIN_SRC rust 
+    #+BEGIN_SRC rust 
   pub struct ThreadPool;
-#+END_SRC
+    #+END_SRC
 
-接着创建一个新目录 _src/bin_ ，并将二进制 crate 根文件从 _src/main.rs_ 移动到 _src/bin/main.rs_ 
-#+BEGIN_EXAMPLE
-  这使得库 crate 成为 hello 目录的主要 crate
+    接着创建一个新目录 _src/bin_ ，并将二进制 crate 根文件从 _src/main.rs_ 移动到 _src/bin/main.rs_ 
+    #+BEGIN_EXAMPLE
+      这使得库 crate 成为 hello 目录的主要 crate
 
-  不过仍然可以使用 cargo run 运行 src/bin/main.rs 二进制文件
-#+END_EXAMPLE
+      不过仍然可以使用 cargo run 运行 src/bin/main.rs 二进制文件
+    #+END_EXAMPLE
 
-移动了 main.rs 文件之后，修改 src/bin/main.rs 文件开头加入如下代码来引入库 crate 并将 ThreadPool 引入作用域：
+    移动了 main.rs 文件之后，修改 src/bin/main.rs 文件开头加入如下代码来引入库 crate 并将 ThreadPool 引入作用域：
 
-#+BEGIN_SRC rust 
+    #+BEGIN_SRC rust 
   use hello::ThreadPool;
-#+END_SRC
+    #+END_SRC
 
-这仍然不能工作，再次尝试运行来得到下一个需要解决的错误：
-#+BEGIN_SRC sh 
+    这仍然不能工作，再次尝试运行来得到下一个需要解决的错误：
+    #+BEGIN_SRC sh 
   $ cargo check
      Compiling hello v0.1.0 (file:///projects/hello)
   error[E0599]: no function or associated item named `new` found for type
@@ -623,14 +623,14 @@ ThreadPool 的实现会与 web server 的特定工作相独立，所以从 hello
   13 |     let pool = ThreadPool::new(4);
      |                ^^^^^^^^^^^^^^^ function or associated item not found in
      `hello::ThreadPool`
-#+END_SRC
+    #+END_SRC
 
-#+BEGIN_EXAMPLE
-这告诉我们下一步是为 ThreadPool 创建一个叫做 new 的关联函数
-#+END_EXAMPLE
-我们知道 new 需要有一个参数可以接受 4，而且 new 应该返回 ThreadPool 实例。实现拥有此特征的最小化 new 函数：
+    #+BEGIN_EXAMPLE
+    这告诉我们下一步是为 ThreadPool 创建一个叫做 new 的关联函数
+    #+END_EXAMPLE
+    我们知道 new 需要有一个参数可以接受 4，而且 new 应该返回 ThreadPool 实例。实现拥有此特征的最小化 new 函数：
 
-#+BEGIN_SRC rust 
+    #+BEGIN_SRC rust 
   pub struct ThreadPool;
 
   impl ThreadPool {
@@ -638,15 +638,15 @@ ThreadPool 的实现会与 web server 的特定工作相独立，所以从 hello
 	  ThreadPool
       }
   }
-#+END_SRC
+    #+END_SRC
 
-#+BEGIN_EXAMPLE
-  这里选择 usize 作为 size 参数的类型，因为负的线程数没有意义
-#+END_EXAMPLE
+    #+BEGIN_EXAMPLE
+      这里选择 usize 作为 size 参数的类型，因为负的线程数没有意义
+    #+END_EXAMPLE
 
-再次编译检查这段代码：
+    再次编译检查这段代码：
 
-#+BEGIN_SRC sh 
+    #+BEGIN_SRC sh 
   $ cargo check
      Compiling hello v0.1.0 (file:///projects/hello)
   warning: unused variable: `size`
@@ -663,37 +663,37 @@ ThreadPool 的实现会与 web server 的特定工作相独立，所以从 hello
      |
   18 |         pool.execute(|| {
      |              ^^^^^^^
-#+END_SRC
+    #+END_SRC
 
-#+BEGIN_EXAMPLE
-  现在有了一个警告和一个错误，暂时先忽略警告，发生错误是因为并没有 ThreadPool 上的 execute 方法
+    #+BEGIN_EXAMPLE
+      现在有了一个警告和一个错误，暂时先忽略警告，发生错误是因为并没有 ThreadPool 上的 execute 方法
 
-  这个方法应该有与 thread::spawn 类似的接口，同时将实现 execute 函数来获取传递的闭包并将其传递给池中的空闲线程执行
+      这个方法应该有与 thread::spawn 类似的接口，同时将实现 execute 函数来获取传递的闭包并将其传递给池中的空闲线程执行
 
-  回忆前面关于 “使用带有泛型和 Fn trait 的闭包” 部分，闭包作为参数时可以使用三个不同的 trait：Fn、FnMut 和 FnOnce，我们需要决定这里应该使用哪种闭包。
-#+END_EXAMPLE
+      回忆前面关于 “使用带有泛型和 Fn trait 的闭包” 部分，闭包作为参数时可以使用三个不同的 trait：Fn、FnMut 和 FnOnce，我们需要决定这里应该使用哪种闭包。
+    #+END_EXAMPLE
 
-最终需要实现的类似于标准库的 thread::spawn，所以先来观察 thread::spawn 的签名在其参数中使用了何种 bound。查看文档会发现：
+    最终需要实现的类似于标准库的 thread::spawn，所以先来观察 thread::spawn 的签名在其参数中使用了何种 bound。查看文档会发现：
 
-#+BEGIN_SRC rust 
+    #+BEGIN_SRC rust 
   pub fn spawn<F, T>(f: F) -> JoinHandl`e<T>
       where
 	  F: FnOnce() -> T + Send + 'static,
 	  T: Send + 'static
-#+END_SRC
+    #+END_SRC
 
-#+BEGIN_EXAMPLE
-  F 是这里我们关心的参数；T 与返回值有关所以并不关心
+    #+BEGIN_EXAMPLE
+      F 是这里我们关心的参数；T 与返回值有关所以并不关心
 
-  考虑到 spawn 使用 FnOnce 作为 F 的 trait bound，这可能也是我们需要的，因为最终会将传递给 execute 的参数传给 spawn。因为处理请求的线程只会执行闭包一次，这也进一步确认了 FnOnce 是我们需要的 trait，这里符合 FnOnce 中 Once 的意思
+      考虑到 spawn 使用 FnOnce 作为 F 的 trait bound，这可能也是我们需要的，因为最终会将传递给 execute 的参数传给 spawn。因为处理请求的线程只会执行闭包一次，这也进一步确认了 FnOnce 是我们需要的 trait，这里符合 FnOnce 中 Once 的意思
 
-  F 还有 trait bound Send 和生命周期绑定 'static，这对我们的情况也是有意义的：需要 Send 来将闭包从一个线程转移到另一个线程，而 'static 是因为并不知道线程会执行多久
+      F 还有 trait bound Send 和生命周期绑定 'static，这对我们的情况也是有意义的：需要 Send 来将闭包从一个线程转移到另一个线程，而 'static 是因为并不知道线程会执行多久
 
-#+END_EXAMPLE
+    #+END_EXAMPLE
 
-现在可以定义一个使用带有这些 bound 的泛型参数 F 的 ThreadPool 的 execute 方法：
+    现在可以定义一个使用带有这些 bound 的泛型参数 F 的 ThreadPool 的 execute 方法：
 
-#+BEGIN_SRC rust 
+    #+BEGIN_SRC rust 
   impl ThreadPool {
       // --snip--
 
@@ -704,18 +704,18 @@ ThreadPool 的实现会与 web server 的特定工作相独立，所以从 hello
 
       }
   }
-#+END_SRC
+    #+END_SRC
 
-#+BEGIN_EXAMPLE
-  FnOnce trait 仍然需要之后的 ()，因为这里的 FnOnce 代表一个没有参数也没有返回值的闭包
+    #+BEGIN_EXAMPLE
+      FnOnce trait 仍然需要之后的 ()，因为这里的 FnOnce 代表一个没有参数也没有返回值的闭包
 
-  正如函数的定义，返回值类型可以从签名中省略，不过即便没有参数也需要括号
+      正如函数的定义，返回值类型可以从签名中省略，不过即便没有参数也需要括号
 
-  这里再一次增加了 execute 方法的最小化实现：它没有做任何工作，只是尝试让代码能够编译
-#+END_EXAMPLE
-再次进行检查：
+      这里再一次增加了 execute 方法的最小化实现：它没有做任何工作，只是尝试让代码能够编译
+    #+END_EXAMPLE
+    再次进行检查：
 
-#+BEGIN_SRC sh 
+    #+BEGIN_SRC sh 
   $ cargo check
      Compiling hello v0.1.0 (file:///projects/hello)
   warning: unused variable: `size`
@@ -735,30 +735,30 @@ ThreadPool 的实现会与 web server 的特定工作相独立，所以从 hello
     |
     = note: to avoid this warning, consider using `_f` instead
 
-#+END_SRC
+    #+END_SRC
 
-现在就只有警告了，这意味着能够编译了！
+    现在就只有警告了，这意味着能够编译了！
 
-#+BEGIN_EXAMPLE
-  注意：如果尝试 cargo run 运行程序并在浏览器中发起请求，仍会在浏览器中出现在本章开始时“连接重置”的错误，因为这个库实际上还没有调用传递给 execute 的闭包！
+    #+BEGIN_EXAMPLE
+      注意：如果尝试 cargo run 运行程序并在浏览器中发起请求，仍会在浏览器中出现在本章开始时“连接重置”的错误，因为这个库实际上还没有调用传递给 execute 的闭包！
 
-  一个你可能听说过的关于像 Haskell 和 Rust 这样有严格编译器的语言的说法是 “如果代码能够编译，它就能工作”
+      一个你可能听说过的关于像 Haskell 和 Rust 这样有严格编译器的语言的说法是 “如果代码能够编译，它就能工作”
 
-  这是一个提醒大家的好时机，实际上这并不是普适的。我们的项目可以编译，不过它完全没有做任何工作！
+      这是一个提醒大家的好时机，实际上这并不是普适的。我们的项目可以编译，不过它完全没有做任何工作！
 
-  如果构建一个真实且功能完整的项目，则需花费大量的时间来开始编写单元测试来检查代码能否编译“并且”拥有期望的行为
-#+END_EXAMPLE
+      如果构建一个真实且功能完整的项目，则需花费大量的时间来开始编写单元测试来检查代码能否编译“并且”拥有期望的行为
+    #+END_EXAMPLE
 
 *** 在 new 中验证池中线程数量
-#+BEGIN_EXAMPLE
-  这里仍然存在警告是因为其并没有对 new 和 execute 的参数做任何操作。现在用期望的行为来实现这些函数
+    #+BEGIN_EXAMPLE
+      这里仍然存在警告是因为其并没有对 new 和 execute 的参数做任何操作。现在用期望的行为来实现这些函数
 
-  以考虑 new 作为开始。之前选择使用无符号类型作为 size 参数的类型，因为线程数为负的线程池没有意义。然而，线程数为零的线程池同样没有意义，不过零是一个完全有效的 u32 值
-#+END_EXAMPLE
+      以考虑 new 作为开始。之前选择使用无符号类型作为 size 参数的类型，因为线程数为负的线程池没有意义。然而，线程数为零的线程池同样没有意义，不过零是一个完全有效的 u32 值
+    #+END_EXAMPLE
 
-增加在返回 ThreadPool 实例之前检查 size 是否大于零的代码，并使用 assert! 宏在得到零时 panic：
+    增加在返回 ThreadPool 实例之前检查 size 是否大于零的代码，并使用 assert! 宏在得到零时 panic：
 
-#+BEGIN_SRC rust 
+    #+BEGIN_SRC rust 
   impl ThreadPool {
       /// 创建线程池。
       ///
@@ -775,45 +775,45 @@ ThreadPool 的实现会与 web server 的特定工作相独立，所以从 hello
 
       // --snip--
   }
-#+END_SRC
+    #+END_SRC
 
-#+BEGIN_EXAMPLE
-  这里用文档注释为 ThreadPool 增加了一些文档
+    #+BEGIN_EXAMPLE
+      这里用文档注释为 ThreadPool 增加了一些文档
 
-  注意：这里遵循了良好的文档实践并增加了一个部分来提示函数会 panic 的情况
+      注意：这里遵循了良好的文档实践并增加了一个部分来提示函数会 panic 的情况
 
-  正如以前所讨论过的：尝试运行 cargo doc --open 并点击 ThreadPool 结构体来查看生成的 new 的文档看起来如何！
-#+END_EXAMPLE
+      正如以前所讨论过的：尝试运行 cargo doc --open 并点击 ThreadPool 结构体来查看生成的 new 的文档看起来如何！
+    #+END_EXAMPLE
 
-相比像这里使用 assert! 宏，也可以让 new 像之前 I/O 项目中 Config::new 那样返回一个 Result：
+    相比像这里使用 assert! 宏，也可以让 new 像之前 I/O 项目中 Config::new 那样返回一个 Result：
 
-#+BEGIN_SRC rust 
+    #+BEGIN_SRC rust 
   pub fn new(size: usize) -> Result<ThreadPool, PoolCreationError> {
-#+END_SRC
+    #+END_SRC
 
-#+BEGIN_EXAMPLE
-  在这里选择创建一个没有任何线程的线程池，被认为是不可恢复的错误
-#+END_EXAMPLE
+    #+BEGIN_EXAMPLE
+      在这里选择创建一个没有任何线程的线程池，被认为是不可恢复的错误
+    #+END_EXAMPLE
 
 *** 分配空间以储存线程
-现在有了一个有效的线程池线程数，就可以实际创建这些线程并在返回之前将他们储存在 ThreadPool 结构体中。不过如何 “储存” 一个线程？再看看 thread::spawn 的签名：
+    现在有了一个有效的线程池线程数，就可以实际创建这些线程并在返回之前将他们储存在 ThreadPool 结构体中。不过如何 “储存” 一个线程？再看看 thread::spawn 的签名：
 
-#+BEGIN_SRC rust 
+    #+BEGIN_SRC rust 
   pub fn spawn<F, T>(f: F) -> JoinHandle<T>
       where
 	  F: FnOnce() -> T + Send + 'static,
 	  T: Send + 'static
-#+END_SRC
+    #+END_SRC
 
-#+BEGIN_EXAMPLE
-  spawn 返回 JoinHandle<T>，其中 T 是闭包返回的类型，尝试使用 JoinHandle 来看看会发生什么
+    #+BEGIN_EXAMPLE
+      spawn 返回 JoinHandle<T>，其中 T 是闭包返回的类型，尝试使用 JoinHandle 来看看会发生什么
 
-  在我们的情况中，传递给线程池的闭包会处理连接并不返回任何值，所以 T 将会是单元类型 ()
-#+END_EXAMPLE
+      在我们的情况中，传递给线程池的闭包会处理连接并不返回任何值，所以 T 将会是单元类型 ()
+    #+END_EXAMPLE
 
-现在改变了 ThreadPool 的定义来存放一个 thread::JoinHandle<()> 的 vector 实例，使用 size 容量来初始化，并设置一个 for 循环了来运行创建线程的代码，并返回包含这些线程的 ThreadPool 实例：
+    现在改变了 ThreadPool 的定义来存放一个 thread::JoinHandle<()> 的 vector 实例，使用 size 容量来初始化，并设置一个 for 循环了来运行创建线程的代码，并返回包含这些线程的 ThreadPool 实例：
 
-#+BEGIN_SRC rust 
+    #+BEGIN_SRC rust 
   use std::thread;
 
   pub struct ThreadPool {
@@ -838,50 +838,50 @@ ThreadPool 的实现会与 web server 的特定工作相独立，所以从 hello
 
       // --snip--
   }
-#+END_SRC
+    #+END_SRC
 
-+ 将 std::thread 引入库 crate 的作用域，因为使用了 thread::JoinHandle 作为 ThreadPool 中 vector 元素的类型
-+ 在得到了有效的数量之后，ThreadPool 新建一个存放 size 个元素的 vector
+    + 将 std::thread 引入库 crate 的作用域，因为使用了 thread::JoinHandle 作为 ThreadPool 中 vector 元素的类型
+    + 在得到了有效的数量之后，ThreadPool 新建一个存放 size 个元素的 vector
 
-#+BEGIN_EXAMPLE
-  这里使用 with_capacity，它与 Vec::new 做了同样的工作，不过有一个重要的区别：它为 vector 预先分配空间
+    #+BEGIN_EXAMPLE
+      这里使用 with_capacity，它与 Vec::new 做了同样的工作，不过有一个重要的区别：它为 vector 预先分配空间
 
-  已经知道了 vector 中需要 size 个元素，预先进行分配比仅仅 Vec::new 要稍微有效率一些，因为 Vec::new 随着插入元素而重新改变大小
-#+END_EXAMPLE
+      已经知道了 vector 中需要 size 个元素，预先进行分配比仅仅 Vec::new 要稍微有效率一些，因为 Vec::new 随着插入元素而重新改变大小
+    #+END_EXAMPLE
 
-如果再次运行 cargo check，会看到一些警告，不过应该可以编译成功
+    如果再次运行 cargo check，会看到一些警告，不过应该可以编译成功
 
 *** Worker 结构体：负责从 ThreadPool 中将代码传递给线程
-#+BEGIN_EXAMPLE
-  前面 for 循环中留下了一个关于创建线程的注释。如何实际创建线程呢？这是一个难题
+    #+BEGIN_EXAMPLE
+      前面 for 循环中留下了一个关于创建线程的注释。如何实际创建线程呢？这是一个难题
 
-  标准库提供的创建线程的方法，thread::spawn，它期望获取一些一旦创建线程就应该执行的代码。然而，我们希望开始线程并使其等待稍后传递的代码
+      标准库提供的创建线程的方法，thread::spawn，它期望获取一些一旦创建线程就应该执行的代码。然而，我们希望开始线程并使其等待稍后传递的代码
 
-  标准库的线程实现并没有包含这么做的方法：我们必须自己实现
-#+END_EXAMPLE
+      标准库的线程实现并没有包含这么做的方法：我们必须自己实现
+    #+END_EXAMPLE
 
-将要实现的行为是创建线程并稍后发送代码，这会在 ThreadPool 和线程间引入一个新数据类型来管理这种新行为。这个数据结构称为 _Worker_ 
+    将要实现的行为是创建线程并稍后发送代码，这会在 ThreadPool 和线程间引入一个新数据类型来管理这种新行为。这个数据结构称为 _Worker_ 
 
-#+BEGIN_EXAMPLE
-  这是一个池实现中的常见概念
+    #+BEGIN_EXAMPLE
+      这是一个池实现中的常见概念
 
-  想象一下在餐馆厨房工作的员工：员工等待来自客户的订单，他们负责接受这些订单并完成它们
-#+END_EXAMPLE
-不同于在线程池中储存一个 JoinHandle<()> 实例的 vector，会储存 _Worker 结构体_ 的实例：
-+ 每一个 Worker 会储存一个单独的 JoinHandle<()> 实例
-+ 接着会在 Worker 上实现一个方法，它会获取需要允许代码的闭包并将其发送给已经运行的线程执行
-+ 还会赋予每一个 worker id，这样就可以在日志和调试中区别线程池中的不同 worker
+      想象一下在餐馆厨房工作的员工：员工等待来自客户的订单，他们负责接受这些订单并完成它们
+    #+END_EXAMPLE
+    不同于在线程池中储存一个 JoinHandle<()> 实例的 vector，会储存 _Worker 结构体_ 的实例：
+    + 每一个 Worker 会储存一个单独的 JoinHandle<()> 实例
+    + 接着会在 Worker 上实现一个方法，它会获取需要允许代码的闭包并将其发送给已经运行的线程执行
+    + 还会赋予每一个 worker id，这样就可以在日志和调试中区别线程池中的不同 worker
 
-首先，做出如此创建 ThreadPool 时所需的修改。在通过如下方式设置完 Worker 之后，会实现向线程发送闭包的代码：
-1. *定义* _Worker 结构体_ ：存放 _id_ 和 _JoinHandle<()>_ 
-2. *修改* ThreadPool： 存放一个 _Worker 实例_ 的 _vector_ 
-3. *定义* _Worker::new_ 函数： *获取* 一个 _id 数字_ 并 *返回* 一个带有 _id_ 和用 _空闭包_ 分配的线程的 *Worker 实例* 
-4. 在 _ThreadPool::new_ 中：使用 for 循环计数生成 id，使用这个 id 新建 Worker，并储存进 vector 中
+    首先，做出如此创建 ThreadPool 时所需的修改。在通过如下方式设置完 Worker 之后，会实现向线程发送闭包的代码：
+    1. *定义* _Worker 结构体_ ：存放 _id_ 和 _JoinHandle<()>_ 
+    2. *修改* ThreadPool： 存放一个 _Worker 实例_ 的 _vector_ 
+    3. *定义* _Worker::new_ 函数： *获取* 一个 _id 数字_ 并 *返回* 一个带有 _id_ 和用 _空闭包_ 分配的线程的 *Worker 实例* 
+    4. 在 _ThreadPool::new_ 中：使用 for 循环计数生成 id，使用这个 id 新建 Worker，并储存进 vector 中
 
 
-示例代码如下：
+    示例代码如下：
 
-#+BEGIN_SRC rust 
+    #+BEGIN_SRC rust 
 
   use std::thread;
 
@@ -922,36 +922,36 @@ ThreadPool 的实现会与 web server 的特定工作相独立，所以从 hello
 	  }
       }
   }
-#+END_SRC
+    #+END_SRC
 
-+ 这里将 ThreadPool 中字段名从 threads 改为 workers，因为它现在储存 Worker 而不是 JoinHandle<()>
-+ 使用 for 循环中的计数作为 Worker::new 的参数，并将每一个新建的 Worker 储存在叫做 workers 的 vector 中
-+ Worker 结构体和其 new 函数是私有的，因为外部代码（比如 src/bin/main.rs 中的 server）并不需要知道关于 ThreadPool 中使用 Worker 结构体的实现细节
-+ Worker::new 函数使用 id 参数并储存了使用一个 _空闭包_ 创建的 JoinHandle<()>。
+    + 这里将 ThreadPool 中字段名从 threads 改为 workers，因为它现在储存 Worker 而不是 JoinHandle<()>
+    + 使用 for 循环中的计数作为 Worker::new 的参数，并将每一个新建的 Worker 储存在叫做 workers 的 vector 中
+    + Worker 结构体和其 new 函数是私有的，因为外部代码（比如 src/bin/main.rs 中的 server）并不需要知道关于 ThreadPool 中使用 Worker 结构体的实现细节
+    + Worker::new 函数使用 id 参数并储存了使用一个 _空闭包_ 创建的 JoinHandle<()>。
 
-#+BEGIN_EXAMPLE
-  这段代码能够编译并用指定给 ThreadPool::new 的参数创建储存了一系列的 Worker 实例，不过 仍然 没有处理 execute 中得到的闭包
-#+END_EXAMPLE
+    #+BEGIN_EXAMPLE
+      这段代码能够编译并用指定给 ThreadPool::new 的参数创建储存了一系列的 Worker 实例，不过 仍然 没有处理 execute 中得到的闭包
+    #+END_EXAMPLE
 *** 使用通道向线程发送请求
-#+BEGIN_EXAMPLE
-  下一个需要解决的问题是传递给 thread::spawn 的闭包完全没有做任何工作
+    #+BEGIN_EXAMPLE
+      下一个需要解决的问题是传递给 thread::spawn 的闭包完全没有做任何工作
 
-  目前，在 execute 方法中获得期望执行的闭包，不过在创建 ThreadPool 的过程中创建每一个 Worker 时需要向 thread::spawn 传递一个闭包
+      目前，在 execute 方法中获得期望执行的闭包，不过在创建 ThreadPool 的过程中创建每一个 Worker 时需要向 thread::spawn 传递一个闭包
 
-  我们希望刚创建的 Worker 结构体能够从 ThreadPool 的队列中获取需要执行的代码，并发送到线程中执行他们
-#+END_EXAMPLE
+      我们希望刚创建的 Worker 结构体能够从 ThreadPool 的队列中获取需要执行的代码，并发送到线程中执行他们
+    #+END_EXAMPLE
 
 
-已经学习了 _通道_ ：一个沟通两个线程的简单手段。这里通道将充当任务队列的作用，execute 将通过 ThreadPool 向其中线程正在寻找工作的 Worker 实例发送任务。如下是这个计划：
-1. _ThreadPool_ 会 *创建* 一个 _通道_ 并充当 *发送端* 
-2. 每个 _Worker_ 将会充当 _通道_ 的 *接收端* 
-3. 新建一个 _Job 结构体_ 来 *存放* 用于向 _通道_ 中 *发送的闭包* 
-4. _execute_ 方法会在 _通道发送端_ *发出* _期望执行的任务_
-5. 在线程中， _Worker_ 会 *遍历* _通道的接收端_ 并 *执行* 任何 _接收到的任务_ 
+    已经学习了 _通道_ ：一个沟通两个线程的简单手段。这里通道将充当任务队列的作用，execute 将通过 ThreadPool 向其中线程正在寻找工作的 Worker 实例发送任务。如下是这个计划：
+    1. _ThreadPool_ 会 *创建* 一个 _通道_ 并充当 *发送端* 
+    2. 每个 _Worker_ 将会充当 _通道_ 的 *接收端* 
+    3. 新建一个 _Job 结构体_ 来 *存放* 用于向 _通道_ 中 *发送的闭包* 
+    4. _execute_ 方法会在 _通道发送端_ *发出* _期望执行的任务_
+    5. 在线程中， _Worker_ 会 *遍历* _通道的接收端_ 并 *执行* 任何 _接收到的任务_ 
 
-在 ThreadPool::new 中创建通道并让 ThreadPool 实例充当发送端开始，而Job 是将在通道中发出的类型，目前它是一个没有任何内容的结构体：
+    在 ThreadPool::new 中创建通道并让 ThreadPool 实例充当发送端开始，而Job 是将在通道中发出的类型，目前它是一个没有任何内容的结构体：
 
-#+BEGIN_SRC rust 
+    #+BEGIN_SRC rust 
   // --snip--
   use std::sync::mpsc;
 
@@ -982,17 +982,17 @@ ThreadPool 的实现会与 web server 的特定工作相独立，所以从 hello
       }
       // --snip--
   }
-#+END_SRC
+    #+END_SRC
 
-#+BEGIN_EXAMPLE
-  在 ThreadPool::new 中，新建了一个通道，并接着让线程池在接收端等待
+    #+BEGIN_EXAMPLE
+      在 ThreadPool::new 中，新建了一个通道，并接着让线程池在接收端等待
 
-  这段代码能够编译，不过仍有警告
-#+END_EXAMPLE
+      这段代码能够编译，不过仍有警告
+    #+END_EXAMPLE
 
-尝试在线程池 _创建_ 每个 _worker_ 时将 _通道的接收端_ *传递* 给他们，所以将在闭包中引用 _receiver_ 参数：
+    尝试在线程池 _创建_ 每个 _worker_ 时将 _通道的接收端_ *传递* 给他们，所以将在闭包中引用 _receiver_ 参数：
 
-#+BEGIN_SRC rust 
+    #+BEGIN_SRC rust 
 
   impl ThreadPool {
       // --snip--
@@ -1029,14 +1029,14 @@ ThreadPool 的实现会与 web server 的特定工作相独立，所以从 hello
 	  }
       }
   }
-#+END_SRC
+    #+END_SRC
 
-#+BEGIN_EXAMPLE
-这是一些小而直观的修改：将通道的接收端传递进了 Worker::new，并接着在闭包中使用它
-#+END_EXAMPLE
-如果尝试 check 代码，会得到这个错误：
+    #+BEGIN_EXAMPLE
+    这是一些小而直观的修改：将通道的接收端传递进了 Worker::new，并接着在闭包中使用它
+    #+END_EXAMPLE
+    如果尝试 check 代码，会得到这个错误：
 
-#+BEGIN_SRC sh 
+    #+BEGIN_SRC sh 
   $ cargo check
      Compiling hello v0.1.0 (file:///projects/hello)
   error[E0382]: use of moved value: `receiver`
@@ -1048,23 +1048,23 @@ ThreadPool 的实现会与 web server 的特定工作相独立，所以从 hello
      |
      = note: move occurs because `receiver` has type
      `std::sync::mpsc::Receiver<Job>`, which does not implement the `Copy` trait
-#+END_SRC
+    #+END_SRC
 
-#+BEGIN_EXAMPLE
-  这段代码尝试将 receiver 传递给多个 Worker 实例。这是不行的
+    #+BEGIN_EXAMPLE
+      这段代码尝试将 receiver 传递给多个 Worker 实例。这是不行的
 
-  Rust 所提供的通道实现是”多生产者，单消费者“的。这意味着不能简单的克隆通道的消费端来解决问题
+      Rust 所提供的通道实现是”多生产者，单消费者“的。这意味着不能简单的克隆通道的消费端来解决问题
 
-  即便可以，那也不是希望使用的技术：我们希望通过在所有的 worker 中共享单一 receiver，在线程间分发任务
+      即便可以，那也不是希望使用的技术：我们希望通过在所有的 worker 中共享单一 receiver，在线程间分发任务
 
-  另外，从通道队列中取出任务涉及到修改 receiver，所以这些线程需要一个能安全的共享和修改 receiver 的方式，否则可能导致竞争状态
-#+END_EXAMPLE
+      另外，从通道队列中取出任务涉及到修改 receiver，所以这些线程需要一个能安全的共享和修改 receiver 的方式，否则可能导致竞争状态
+    #+END_EXAMPLE
 
-回忆一下曾经讨论的 *线程安全* _智能指针_ ，为了在多个线程间共享所有权并允许线程修改其值，需要使用 _Arc<Mutex<T>>_ ：
-+ Arc 使得多个 worker 拥有接收端
-+ Mutex 则确保一次只有一个 worker 能从接收端得到任务
+    回忆一下曾经讨论的 *线程安全* _智能指针_ ，为了在多个线程间共享所有权并允许线程修改其值，需要使用 _Arc<Mutex<T>>_ ：
+    + Arc 使得多个 worker 拥有接收端
+    + Mutex 则确保一次只有一个 worker 能从接收端得到任务
 
-#+BEGIN_SRC rust  
+    #+BEGIN_SRC rust  
   use std::sync::Arc;
   use std::sync::Mutex;
   // --snip--
@@ -1098,18 +1098,18 @@ ThreadPool 的实现会与 web server 的特定工作相独立，所以从 hello
 	  // --snip--
       }
   }
-#+END_SRC
+    #+END_SRC
 
-#+BEGIN_EXAMPLE
-  在 ThreadPool::new 中，将通道的接收端放入一个 Arc 和一个 Mutex 中
+    #+BEGIN_EXAMPLE
+      在 ThreadPool::new 中，将通道的接收端放入一个 Arc 和一个 Mutex 中
 
-  对于每一个新 worker，克隆 Arc 来增加引用计数，如此这些 worker 就可以共享接收端的所有权了
-#+END_EXAMPLE
+      对于每一个新 worker，克隆 Arc 来增加引用计数，如此这些 worker 就可以共享接收端的所有权了
+    #+END_EXAMPLE
 
 *** 实现 execute 方法
-最后 *实现* _ThreadPool_ 上的 _execute_ 方法。同时也要修改 Job 结构体：它将不再是结构体，Job 将是一个有着 _execute_ *接收* 到的 _闭包类型的 trait 对象_ 的类型别名。类型别名允许将长的类型变短：
+    最后 *实现* _ThreadPool_ 上的 _execute_ 方法。同时也要修改 Job 结构体：它将不再是结构体，Job 将是一个有着 _execute_ *接收* 到的 _闭包类型的 trait 对象_ 的类型别名。类型别名允许将长的类型变短：
 
-#+BEGIN_SRC rust 
+    #+BEGIN_SRC rust 
   // --snip--
 
   type Job = Box<dyn FnOnce() + Send + 'static>;
@@ -1126,18 +1126,18 @@ ThreadPool 的实现会与 web server 的特定工作相独立，所以从 hello
 	  self.sender.send(job).unwrap();
       }
   }
-#+END_SRC
+    #+END_SRC
 
-在使用 execute 得到的闭包新建 Job 实例之后，将这些任务从通道的发送端发出
-#+BEGIN_EXAMPLE
-  这里调用 send 上的 unwrap，因为发送可能会失败，这可能发生于例如停止了所有线程执行的情况，这意味着接收端停止接收新消息了。不过目前我们无法停止线程执行：只要线程池存在他们就会一直执行
+    在使用 execute 得到的闭包新建 Job 实例之后，将这些任务从通道的发送端发出
+    #+BEGIN_EXAMPLE
+      这里调用 send 上的 unwrap，因为发送可能会失败，这可能发生于例如停止了所有线程执行的情况，这意味着接收端停止接收新消息了。不过目前我们无法停止线程执行：只要线程池存在他们就会一直执行
 
-  使用 unwrap 是因为知道失败不可能发生，即便编译器不这么认为
-#+END_EXAMPLE
+      使用 unwrap 是因为知道失败不可能发生，即便编译器不这么认为
+    #+END_EXAMPLE
 
-不过到此事情还没有结束！在 worker 中，传递给 thread::spawn 的闭包仍然还只是 *引用* 了 _通道的接收端_ 。相反需要闭包一直循环，向通道的接收端请求任务，并在得到任务时执行他们：
+    不过到此事情还没有结束！在 worker 中，传递给 thread::spawn 的闭包仍然还只是 *引用* 了 _通道的接收端_ 。相反需要闭包一直循环，向通道的接收端请求任务，并在得到任务时执行他们：
 
-#+BEGIN_SRC rust 
+    #+BEGIN_SRC rust 
   // --snip--
 
   impl Worker {
@@ -1158,26 +1158,26 @@ ThreadPool 的实现会与 web server 的特定工作相独立，所以从 hello
 	  }
       }
   }
-#+END_SRC
+    #+END_SRC
 
-+ 首先在 _receiver_ 上调用了 _lock_ 来获取 *互斥器*
-+ unwrap 在出现任何错误时 panic
-#+BEGIN_EXAMPLE
-  如果互斥器处于一种叫做”被污染“的状态时获取锁可能会失败，这可能发生于其他线程在持有锁时 panic 了且没有释放锁
+    + 首先在 _receiver_ 上调用了 _lock_ 来获取 *互斥器*
+    + unwrap 在出现任何错误时 panic
+    #+BEGIN_EXAMPLE
+      如果互斥器处于一种叫做”被污染“的状态时获取锁可能会失败，这可能发生于其他线程在持有锁时 panic 了且没有释放锁
 
-  在这种情况下，调用 unwrap 使其 panic 是正确的行为
+      在这种情况下，调用 unwrap 使其 panic 是正确的行为
 
-  请随意将 unwrap 改为包含有意义错误信息的 expect
-#+END_EXAMPLE
-+ 如果锁定了互斥器，接着调用 _recv_ 从 _通道_ 中 *接收* _Job_
-+ 最后的 _unwrap_ 也绕过了一些错误
-#+BEGIN_EXAMPLE
-这可能发生于持有通道发送端的线程停止的情况，类似于如果接收端关闭时 send 方法如何返回 Err 一样
-#+END_EXAMPLE
+      请随意将 unwrap 改为包含有意义错误信息的 expect
+    #+END_EXAMPLE
+    + 如果锁定了互斥器，接着调用 _recv_ 从 _通道_ 中 *接收* _Job_
+    + 最后的 _unwrap_ 也绕过了一些错误
+    #+BEGIN_EXAMPLE
+    这可能发生于持有通道发送端的线程停止的情况，类似于如果接收端关闭时 send 方法如何返回 Err 一样
+    #+END_EXAMPLE
 
-调用 _recv_ 会 *阻塞* _当前线程_ ，所以如果还没有任务，其会等待直到有可用的任务。 _Mutex<T>_  *确保* _一次只有一个 Worker_ 线程 *尝试* _请求任务_ 。现在可以尝试运行下程序：
+    调用 _recv_ 会 *阻塞* _当前线程_ ，所以如果还没有任务，其会等待直到有可用的任务。 _Mutex<T>_  *确保* _一次只有一个 Worker_ 线程 *尝试* _请求任务_ 。现在可以尝试运行下程序：
 
-#+BEGIN_SRC sh 
+    #+BEGIN_SRC sh 
   $ cargo run
      Compiling hello v0.1.0 (file:///projects/hello)
   warning: field is never used: `workers`
@@ -1216,20 +1216,20 @@ ThreadPool 的实现会与 web server 的特定工作相独立，所以从 hello
   Worker 3 got a job; executing.
   Worker 0 got a job; executing.
   Worker 2 got a job; executing.
-#+END_SRC
+    #+END_SRC
 
-成功了！现在有了一个可以异步执行连接的线程池！它绝不会创建超过四个线程，所以当 server 收到大量请求时系统也不会负担过重。如果请求 /sleep，server 也能够通过另外一个线程处理其他请求
+    成功了！现在有了一个可以异步执行连接的线程池！它绝不会创建超过四个线程，所以当 server 收到大量请求时系统也不会负担过重。如果请求 /sleep，server 也能够通过另外一个线程处理其他请求
 
-#+BEGIN_EXAMPLE
-  注意如果同时在多个浏览器窗口打开 /sleep，它们可能会彼此间隔地加载 5 秒，因为一些浏览器处于缓存的原因会顺序执行相同请求的多个实例
+    #+BEGIN_EXAMPLE
+      注意如果同时在多个浏览器窗口打开 /sleep，它们可能会彼此间隔地加载 5 秒，因为一些浏览器处于缓存的原因会顺序执行相同请求的多个实例
 
-  这些限制并不是由于我们的 web server 造成的
-#+END_EXAMPLE
+      这些限制并不是由于我们的 web server 造成的
+    #+END_EXAMPLE
 
 **** while let 陷阱
-在学习了的 while let 循环之后，可能会好奇为何不能如此编写 worker 线程：
+     在学习了的 while let 循环之后，可能会好奇为何不能如此编写 worker 线程：
 
-#+BEGIN_SRC rust 
+     #+BEGIN_SRC rust 
   // --snip--
 
   impl Worker {
@@ -1248,18 +1248,346 @@ ThreadPool 的实现会与 web server 的特定工作相独立，所以从 hello
 	  }
       }
   }
-#+END_SRC
+     #+END_SRC
 
-这段代码可以编译和运行，但是并不会产生所期望的线程行为：一个慢请求仍然会导致其他请求等待执行
+     这段代码可以编译和运行，但是并不会产生所期望的线程行为：一个慢请求仍然会导致其他请求等待执行
 
-#+BEGIN_EXAMPLE
-  其原因有些微妙：Mutex 结构体没有公有 unlock 方法，因为锁的所有权依赖 lock 方法返回的 LockResult<MutexGuard<T>> 中 MutexGuard<T> 的生命周期，这允许借用检查器在编译时确保绝不会在没有持有锁的情况下访问由 Mutex 守护的资源
+     #+BEGIN_EXAMPLE
+       其原因有些微妙：Mutex 结构体没有公有 unlock 方法，因为锁的所有权依赖 lock 方法返回的 LockResult<MutexGuard<T>> 中 MutexGuard<T> 的生命周期，这允许借用检查器在编译时确保绝不会在没有持有锁的情况下访问由 Mutex 守护的资源
 
-  不过如果没有认真的思考 MutexGuard<T> 的生命周期的话，也可能会导致比预期更久的持有锁
+       不过如果没有认真的思考 MutexGuard<T> 的生命周期的话，也可能会导致比预期更久的持有锁
 
-  因为 while 表达式中的值在整个块一直处于作用域中，job() 调用的过程中其仍然持有锁，这意味着其他 worker 不能接收任务！！！
-#+END_EXAMPLE
+       因为 while 表达式中的值在整个块一直处于作用域中，job() 调用的过程中其仍然持有锁，这意味着其他 worker 不能接收任务！！！
+     #+END_EXAMPLE
 
-相反通过使用 _loop_ 并在循环块之内而不是之外获取锁和任务，lock 方法返回的 MutexGuard 在 let job 语句结束之后立刻就被丢弃了。这确保了 _recv 调用过程_ 中 *持有锁* ，而在 _job() 调用前_ *锁就被释放* 了，这就 *允许* _并发处理多个请求_ 了
+     相反通过使用 _loop_ 并在循环块之内而不是之外获取锁和任务，lock 方法返回的 MutexGuard 在 let job 语句结束之后立刻就被丢弃了。这确保了 _recv 调用过程_ 中 *持有锁* ，而在 _job() 调用前_ *锁就被释放* 了，这就 *允许* _并发处理多个请求_ 了
+
 
 * 优雅停机
+  #+BEGIN_EXAMPLE
+    上面的代码如期通过使用线程池异步的响应请求，但有一些警告说 workers、id 和 thread 字段没有直接被使用，这提醒了我们并没有清理所有的内容
+
+    当使用不那么优雅的 ctrl-c 终止主线程时，所有其他线程也会立刻停止，即便它们正处于处理请求的过程中
+  #+END_EXAMPLE
+
+  1. 现在要为 ThreadPool 实现 _Drop trait_ 对 _线程池中的每一个线程_ *调用* _join_ ，这样这些线程将会执行完他们的请求
+  2. 接着会为 ThreadPool 实现一个 *告诉* _线程_ 他们应该 *停止接收* _新请求_ 并结束的方式
+
+  #+BEGIN_EXAMPLE
+    为了实践这些代码，修改 server 在优雅停机之前只接受两个请求
+  #+END_EXAMPLE
+
+** 为 ThreadPool 实现 Drop Trait
+   当线程池被丢弃时，应该 join 所有线程以确保他们完成其操作。下面展示了 Drop 实现的第一次尝试：
+
+   #+BEGIN_SRC rust 
+  impl Drop for ThreadPool {
+      fn drop(&mut self) {
+	  for worker in &mut self.workers {
+	      println!("Shutting down worker {}", worker.id);
+
+	      worker.thread.join().unwrap();
+	  }
+      }
+  }
+   #+END_SRC
+
+   遍历线程池中的每个 workers，使用了 _&mut_ 因为 _self_ 本身是一个 *可变引用* 而且也 *需要* 能够 _修改_ worker
+   + 对于每一个线程，会打印出说明信息表明此特定 worker 正在关闭
+   + 接着在 worker 线程上调用 join
+     + 如果 join 调用失败，通过 unwrap 使得 panic 并进行不优雅的关闭
+
+   但是尝试编译代码时得到的错误：
+   #+BEGIN_SRC sh 
+  error[E0507]: cannot move out of borrowed content
+    --> src/lib.rs:65:13
+     |
+  65 |             worker.thread.join().unwrap();
+     |             ^^^^^^ cannot move out of borrowed content
+   #+END_SRC
+
+   这告诉我们并不能调用 join，因为 *只有* 每一个 _worker_ 的 _可变借用_ ，而 _join_ *获取* 其 _参数的所有权_
+
+   #+BEGIN_EXAMPLE
+     为了解决这个问题，需要一个方法将 thread 移动出拥有其所有权的 Worker 实例以便 join 可以消费这个线程
+
+     办法是：如果 Worker 存放的是 Option<thread::JoinHandle<()>，就可以在 Option 上调用 take 方法将值从 Some 成员中移动出来而对 None 成员不做处理
+
+     换句话说，正在运行的 Worker 的 thread 将是 Some 成员值，而当需要清理 worker 时，将 Some 替换为 None，这样 worker 就没有可以运行的线程了
+   #+END_EXAMPLE
+
+   为此需要更新 Worker 的定义为如下：
+   #+BEGIN_SRC rust 
+  struct Worker {
+      id: usize,
+      thread: Option<thread::JoinHandle<()>>,
+  }
+   #+END_SRC
+
+   现在依靠编译器来找出其他需要修改的地方。check 代码会得到两个错误：
+   #+BEGIN_SRC sh 
+  error[E0599]: no method named `join` found for type
+  `std::option::Option<std::thread::JoinHandle<()>>` in the current scope
+    --> src/lib.rs:65:27
+     |
+  65 |             worker.thread.join().unwrap();
+     |                           ^^^^
+
+  error[E0308]: mismatched types
+    --> src/lib.rs:89:13
+     |
+  89 |             thread,
+     |             ^^^^^^
+     |             |
+     |             expected enum `std::option::Option`, found struct
+     `std::thread::JoinHandle`
+     |             help: try using a variant of the expected type: `Some(thread)`
+     |
+     = note: expected type `std::option::Option<std::thread::JoinHandle<()>>`
+		found type `std::thread::JoinHandle<_>`
+   #+END_SRC
+
+   先修复第二个错误，它指向 Worker::new 结尾的代码；当新建 Worker 时需要将 thread 值封装进 Some。做出如下改变以修复问题：
+
+   #+BEGIN_SRC rust 
+  impl Worker {
+      fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Job>>>) -> Worker {
+	  // --snip--
+
+	  Worker {
+	      id,
+	      thread: Some(thread),
+	  }
+      }
+  }
+   #+END_SRC
+
+   第一个错误位于 Drop 实现中。之前提到过要调用 Option 上的 take 将 thread 移动出 worker。如下改变会修复问题：
+
+   #+BEGIN_SRC rust 
+  impl Drop for ThreadPool {
+      fn drop(&mut self) {
+	  for worker in &mut self.workers {
+	      println!("Shutting down worker {}", worker.id);
+
+	      if let Some(thread) = worker.thread.take() {
+		  thread.join().unwrap();
+	      }
+	  }
+      }
+  }
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     Option 上的 take 方法会取出 Some 而留下 None
+
+     使用 if let 解构 Some 并得到线程，接着在线程上调用 join
+
+     如果 worker 的线程已然是 None，就知道此时这个 worker 已经清理了其线程所以无需做任何操作
+   #+END_EXAMPLE
+
+** 向线程发送信号使其停止接收任务
+   #+BEGIN_EXAMPLE
+     有了所有这些修改，代码就能编译且没有任何警告。不过也有坏消息，这些代码还不能以我们期望的方式运行
+
+     问题的关键在于 Worker 中分配的线程所运行的闭包中的逻辑：调用 join 并不会关闭线程，因为他们一直 loop 来寻找任务
+
+     如果采用这个实现来尝试丢弃 ThreadPool ，则主线程会永远阻塞在等待第一个线程结束上
+   #+END_EXAMPLE
+
+   为了修复这个问题，线程既监听是否有 Job 运行也要 *监听* 一个应该 _停止监听并退出无限循环_ 的 *信号* 。所以通道将发送这个枚举的两个成员之一而不是 Job 实例： 
+
+   #+BEGIN_SRC rust 
+  enum Message {
+      NewJob(Job),
+      Terminate,
+  }
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     Message 枚举要么是存放了线程需要运行的 Job 的 NewJob 成员，要么是会导致线程退出循环并终止的 Terminate 成员
+   #+END_EXAMPLE
+
+   同时需要修改通道来使用 Message 类型值而不是 Job：
+
+   #+BEGIN_SRC rust 
+  pub struct ThreadPool {
+      workers: Vec<Worker>,
+      sender: mpsc::Sender<Message>,
+  }
+
+  // --snip--
+
+  impl ThreadPool {
+      // --snip--
+
+      pub fn execute<F>(&self, f: F)
+	  where
+	      F: FnOnce() + Send + 'static
+      {
+	  let job = Box::new(f);
+
+	  self.sender.send(Message::NewJob(job)).unwrap();
+      }
+  }
+
+  // --snip--
+
+  impl Worker {
+      fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Message>>>) ->
+	  Worker {
+
+	  let thread = thread::spawn(move ||{
+	      loop {
+		  let message = receiver.lock().unwrap().recv().unwrap();
+
+		  match message {
+		      Message::NewJob(job) => {
+			  println!("Worker {} got a job; executing.", id);
+
+			  job();
+		      },
+		      Message::Terminate => {
+			  println!("Worker {} was told to terminate.", id);
+
+			  break;
+		      },
+		  }
+	      }
+	  });
+
+	  Worker {
+	      id,
+	      thread: Some(thread),
+	  }
+      }
+  }
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     为了适用 Message 枚举需要将两个地方的 Job 修改为 Message：ThreadPool 的定义和 Worker::new 的签名
+
+     ThreadPool 的 execute 方法需要发送封装进 Message::NewJob 成员的任务
+
+     然后，在 Worker::new 中当从通道接收 Message 时，当获取到 NewJob成员会处理任务而收到 Terminate 成员则会退出循环
+   #+END_EXAMPLE
+
+   通过这些修改，代码再次能够编译，不过还是会得到一个警告，因为并没有创建任何 Terminate 成员的消息。下面修改 Drop 实现来修复此问题：
+
+   #+BEGIN_SRC rust 
+  impl Drop for ThreadPool {
+      fn drop(&mut self) {
+	  println!("Sending terminate message to all workers.");
+
+	  for _ in &mut self.workers {
+	      self.sender.send(Message::Terminate).unwrap();
+	  }
+
+	  println!("Shutting down all workers.");
+
+	  for worker in &mut self.workers {
+	      println!("Shutting down worker {}", worker.id);
+
+	      if let Some(thread) = worker.thread.take() {
+		  thread.join().unwrap();
+	      }
+	  }
+      }
+  }
+   #+END_SRC
+
+   现在遍历了 worker 两次：
+   + 一次向每个 worker 发送一个 Terminate 消息
+   + 一个调用每个 worker 线程上的 join 
+
+   如果尝试在同一循环中发送消息并立即 join 线程，则无法保证当前迭代的 worker 是从通道收到终止消息的 worker：
+   #+BEGIN_EXAMPLE
+       为了更好的理解为什么需要两个分开的循环，想象一下只有两个 worker 的场景
+
+       如果在一个单独的循环中遍历每个 worker，在第一次迭代中向通道发出终止消息并对第一个 worker 线程调用 join。会一直等待第一个 worker 结束，不过它永远也不会结束因为第二个线程接收了终止消息
+
+       死锁！
+   #+END_EXAMPLE
+
+   为了避免此情况，首先在一个循环中向通道发出所有的 Terminate 消息，接着在另一个循环中 join 所有的线程。每个 worker 一旦收到终止消息即会停止从通道接收消息，意味着可以　 *确保如果发送同 worker 数相同的终止消息，在 join 之前每个线程都会收到一个终止消息* 
+
+** 最后测试
+   为了实践这些代码，修改 main 在优雅停机 server 之前只接受两个请求：
+
+   #+BEGIN_SRC rust 
+  fn main() {
+      let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+      let pool = ThreadPool::new(4);
+
+      for stream in listener.incoming().take(2) {
+	  let stream = stream.unwrap();
+
+	  pool.execute(|| {
+	      handle_connection(stream);
+	  });
+      }
+
+      println!("Shutting down.");
+  }
+   #+END_SRC
+
+   take 方法定义于 Iterator trait，这里限制循环最多头 2 次。ThreadPool 会在 main 的结尾离开作用域，而且还会看到 drop 实现的运行 
+
+   #+BEGIN_EXAMPLE
+     当然不会希望真实世界的 web server 只处理两次请求就停机了，这只是为了展示优雅停机和清理处于正常工作状态
+   #+END_EXAMPLE
+
+   使用 cargo run 启动 server，并发起三个请求。第三个请求应该会失败，而终端的输出应该看起来像这样：
+
+   #+BEGIN_SRC sh  
+  $ cargo run 
+     Compiling hello v0.1.0 (~/Documents/programming/html/klose911.github.io/src/rust/src/web_server/hello)
+      Finished dev [unoptimized + debuginfo] target(s) in 0.52s
+       Running `target/debug/main`
+  Worker 0 got a job; executing.
+  Shutting down.
+  Sending terminate message to all workers.
+  Shutting down all workers.
+  Shutting down worker 0
+  Worker 2 got a job; executing.
+  Worker 1 was told to terminate.
+  Worker 3 was told to terminate.
+  Worker 0 was told to terminate.
+  Shutting down worker 1
+  Shutting down worker 2
+  Worker 2 was told to terminate.
+  Shutting down worker 3
+   #+END_SRC
+
+   可能会出现不同顺序的 worker 和信息输出。可以从信息中看到服务是如何运行的：
+   1. worker 0 和 worker 2 获取了头两个请求
+   2. 在第三个请求时，我们停止接收连接
+   3. 当 ThreadPool 在 main 的结尾离开作用域时，其 Drop 实现开始工作，线程池通知所有线程终止
+   4. 每个 worker 在收到终止消息时会打印出一个信息
+   5. 接着线程池调用 join 来终止每一个 worker 线程
+
+   #+BEGIN_EXAMPLE
+     这个特定的运行过程中一个有趣的地方在于： 向通道中发出终止消息，而在任何线程收到消息之前，就尝试 join worker 0 了。而worker 0 还没有收到终止消息，所以主线程阻塞直到 worker 0 结束
+
+     与此同时，每一个线程都收到了终止消息。一旦 worker 0 结束，主线程就等待其他 worker 结束，此时他们都已经收到终止消息并能够停止了
+   #+END_EXAMPLE
+
+   这里还有很多可以做的事！如果希望继续增强这个项目，如下是一些点子：
+   + 为 ThreadPool 和其公有方法增加更多文档
+   + 为库的功能增加测试
+   + 将 unwrap 调用改为更健壮的错误处理
+   + 使用 ThreadPool 进行其他不同于处理网络请求的任务
+   + 在 crates.io 上寻找一个线程池 crate 并使用它实现一个类似的 web server，将其 API 和鲁棒性与这里的实现做对比　
+
+* 总结
+  恭喜！现在有了一个使用线程池异步响应请求的基础 web server，并且能对 server 执行优雅停机，它会清理线程池中的所有线程
+
+  #+BEGIN_EXAMPLE
+    终于结束了这次 Rust 之旅，现在已经准备好出发并实现自己的 Rust 项目并帮助他人了
+
+    请不要忘记 Rust 的社区，这里有其他 Rustaceans 正乐于帮助任何人迎接 Rust 之路上的任何挑战
+  #+END_EXAMPLE
+
+  [[file:advanced.org][Previous：高级特性]]
+
+  [[file:rust.org][Home: 目录]]
