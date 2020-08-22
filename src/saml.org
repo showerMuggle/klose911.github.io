@@ -1,0 +1,110 @@
+#+TITLE: SAML2.0 指南
+#+HTML_HEAD: <link rel="stylesheet" type="text/css" href="css/main.css" />
+#+OPTIONS: num:nil timestamp:nil ^:nil
+
+SAML 全称为 _Security Assertion Markup Language_ ，是一种用于 _安全性断言_ 的 _标记语言_ ，目前的最新版本是 _2.0_ 
+* 入门
+SAML在单点登录中大有用处：在SAML协议中，一旦用户身份被主网站（ _身份鉴别服务器_ ，Identity Provider，IDP）认证过后，该用户再去访问其他在主站注册过的应用（ _服务提供者_ Service Providers，SP）时，都可以直接登录，而不用再输入身份和口令
+
+#+BEGIN_EXAMPLE
+  SAML协议的核心是: IDP和SP通过用户的浏览器的重定向访问来实现交换数据
+#+END_EXAMPLE
+
+
+1. _SP_ 向 _IDP_ 发出 *SAML身份认证请求消息* ，来请求IDP鉴别用户身份
+2. _IDP_ 向 _用户_ 索要 *用户名和口令* ，并验证其是否正确
+3. 如果 _验证无误_ ，则向 _SP_ 返回 *SAML身份认证应答* ，表示该用户已经登录成功了
+   + 应答中里还包括一些额外的信息，来 *确保* 应答 *未被篡改和伪造*
+
+** 实例
+下面以用户登录SP，SP向IDP发起请求来确认用户身份为例子，看看SAML的工作流程
+#+BEGIN_EXAMPLE
+  比如 SP是Google的Apps，IDP是一所大学的身份服务器，Alice是该大学的一名学生 
+#+END_EXAMPLE
+
+   #+ATTR_HTML: image :width 60% 
+   [[./pic/saml_1.png]]
+
+现在Alice要通过浏览器查阅她的邮件，Alice一般会通过浏览器访问一个网页，比如https://mail.google.com/a/my-university.nl 。因为这是个联合身份域，所以Google不会向用户索要用户名和密码，而是将其从定向到IDP来认证其身份。用户被重定向的URL类似于这种：
+
+#+BEGIN_SRC sh 
+  https://idp.uni.nl/sso?SAMLRequest=fVLLTuswEN0j8Q…c%3D
+#+END_SRC
+嵌入到HTTP请求中的SAML Request就是 _SAML认证请求消息_ 。在压缩和编码之前，SAML消息有如下格式：
+
+#+BEGIN_SRC xml 
+    <AuthnRequest 
+      ID="kfcn...lfki" 
+      Version="2.0" 
+      IssueInstant="2013-02-05T08:28:50Z" 
+      ProtocolBinding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" 
+      ProviderName="google.com" 
+      AssertionConsumerServiceURL="https://www.google.com/a/uni.nl/acs">
+      <Issuer>google.com</Issuer>
+      <NameIDPolicy  AllowCreate="true" Format="urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified"/>
+    </AuthnRequest>
+#+END_SRC
+
+上面的内容用最直白的方式解释出来就是：这个来自Google的请求，请验证当前用户的身份，并将结果返回 
+#+BEGIN_EXAMPLE
+  因为SAML是基于XML的，通常比较长，所以完整认证请求消息要经过压缩（为Url节省空间）和编码（防止特殊字符）才能传输
+#+END_EXAMPLE
+
+当 _IDP_ 收到消息并 *确认要接受认证请求* 之后，就会要求Alice输入用户名和口令来验证其身份
+#+BEGIN_EXAMPLE
+如果Alice已经登录过了，就会跳过该步骤
+#+END_EXAMPLE
+当验证通过之后，Alice的浏览器将会跳转回Google的特定页面（ _AssertionConsumerService_ ，简称ACS） SAML身份认证响应的内容也是在压缩并编码后以参数的形式传输。在压缩和编码之前，其结构类如下：
+
+#+BEGIN_SRC xml 
+  <Response Version="2.0" 
+    IssueInstant="2013-02-05T08:29:00Z" 
+    Destination="https://www.google.com/a/my.uni.nl/acs" InResponseTo="kfcn...lfki">   
+    <Issuer>https://idp.uni.nl/</Issuer>   
+    <Status>
+      <StatusCode   
+	Value="urn:oasis:names:tc:SAML:2.0:status:Success"/> 
+    </Status> 
+    <Assertion Version="2.0" 
+      IssueInstant="2013-02-05T08:29:00Z">     
+      <Issuer>https://idp.uni.nl/</Issuer>   
+      <Subject> 
+	<NameID>alice</NameID>   
+	<SubjectConfirmation ...> 
+	  <SubjectConfirmationData 
+	    NotOnOrAfter="2013-02-05T08:34:00Z"   
+	    Recipient="https://www.google.com/a/my.uni.nl/acs" InResponseTo="kfcn...lfki"/>  
+	  </SubjectConfirmation> 
+      </Subject> 
+      <Conditions NotBefore="2013-02-05T08:28:30Z" NotOnOrAfter="2013-02-05T08:34:00Z"> 
+      </Conditions> 
+      <AuthnStatement 
+	AuthnInstant="2013-02-05T08:29:00Z" 
+	SessionNotOnOrAfter="2013-02-05T16:29:00Z> 
+      </AuthnStatement> 
+    </Assertion>
+   </Response>
+#+END_SRC
+虽然内容很多，但是其主要表达的是：该消息来自idp.uni.nl，名为Alice用户的身份已经被我验证，该消息的有效期为2分钟
+#+BEGIN_EXAMPLE
+  此外，重定向的URL中还要有该消息的签名以保证其不备篡改，验证签名的公钥和算法，都是IDP和SP提前协商好的
+#+END_EXAMPLE
+
+当Google接受到SAML认证响应之后：
+1. 首先验证消息的签名是否正确以及是否因超时而失效
+2. 再从认证消息中提取出Google能识别用户身份（NameID，即Alice）
+
+#+BEGIN_EXAMPLE
+如果以上的步骤都是顺利的，用户将会成功登陆Google 
+#+END_EXAMPLE
+
+** 工具
+如果想要去看看真实的SAML信息，建议推荐使用火狐浏览器的插件工具 _SAML tracer_ 。该插件将会在浏览器中添加一个窗口来显示SAML消息，以下是截图：
+
+   #+ATTR_HTML: image :width 60% 
+   [[./pic/saml_2.png]]
+* OpenSAML  
+
+** AuthnRequest
+** Artifact与断言
+* 安全特性
