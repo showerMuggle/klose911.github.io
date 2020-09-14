@@ -6,7 +6,6 @@
 
 这一节介绍一下 elisp 编程中一些最基本的概念，比如如何 _定义函数_ ，程序的 _控制结构_ ， _变量_ 的使用和 *作用域* 等等 
 *  函数
-
 elisp 中定义一个函数是用这样的形式：
 
 #+BEGIN_SRC lisp 
@@ -31,17 +30,16 @@ elisp 中定义一个函数是用这样的形式：
 
 在 emacs 里，当光标处于一个函数名上时，可以用  _C-h f_ 查看这个函数的文档。比如前面这个函数，在 *Help* 缓冲区里的文档是：
 
-#+BEGIN_SRC sh 
+#+BEGIN_EXAMPLE
   hello-world is a Lisp function.
   (hello-world name)
 
   Say hello to user whose name is name.
-#+END_SRC
-
-#+BEGIN_EXAMPLE
-  如果你的函数是在文件中定义的。这个文档里还会给出一个链接能跳到定义的地方
 #+END_EXAMPLE
 
+如果你的函数是在文件中定义的。这个文档里还会给出一个链接能跳到定义的地方
+
+** 调用函数
 要运行一个函数，最一般的方式是：
 
 #+BEGIN_SRC lisp 
@@ -56,4 +54,87 @@ elisp 中定义一个函数是用这样的形式：
 
 *每个函数都有一个返回值* 。这个返回值一般是函数定义里的 _最后一个表达式的值_ 
 * 变量
+
+elisp 里的变量使用无需象 C 语言那样需要声明，可以用 _setq_ 直接对一个变量 *赋值* ：
+
+#+BEGIN_SRC lisp 
+  (setq foo "I'm foo")                    ; => "I'm foo"
+  (message foo)                           ; => "I'm foo"
+#+END_SRC
+
+和函数一样，你可以用 C-h v 查看一个变量的文档。比如当光标在 foo 上时用 C-h v 时，文档是这样的：
+
+#+BEGIN_EXAMPLE
+  foo's value is "I'm foo"
+
+  Documentation:
+  Not documented as a variable.
+#+END_EXAMPLE
+
+有一个特殊表达式 _defvar_ ，它可以 *声明* 一个变量，一般的形式是：
+
+#+BEGIN_SRC lisp
+(defvar variable-name value
+  "document string")
+#+END_SRC
+
+它与 setq 所不同的是：
+1. 如果变量在声明之前，这个变量已经有一个值的话，用 defvar 声明的变量值不会改变成声明的那个值
+2. defvar 可以为变量提供文档字符串，当变量是在文件中定义的话，C-h v 后能给出变量定义的位置 
+
+#+BEGIN_SRC lisp 
+  (defvar foo "Did I have a value?"
+    "A demo variable")                    ; => foo
+  foo                                     ; => "I'm foo"
+  (defvar bar "I'm bar"
+    "A demo variable named \"bar\"")      ; => bar
+  bar                                     ; => "I'm bar"
+#+END_SRC
+
+用 C-h v 查看 foo 的文档，可以看到它已经变成：
+
+#+BEGIN_EXAMPLE
+  foo's value is "I'm foo"
+
+  Documentation:
+  A demo variable
+#+END_EXAMPLE
+
+由于 elisp 中函数是全局的，变量也很容易成为全局变量（因为全局变量和局部变量的赋值都是使用 setq 函数），名字不互相冲突是很关键的
+
+#+BEGIN_EXAMPLE
+所以除了为你的函数和变量选择一个合适的前缀之外，用 C-h f 和 C-h v 查看一下函数名和变量名有没有已经被使用过是很关键的
+#+END_EXAMPLE
+** 局部作用域的变量
+如果没有局部作用域的变量，都使用全局变量，函数会相当难写。elisp 里可以用 _let_ 和 _let*_ 进行局部变量的绑定。let 使用的形式是：
+
+#+BEGIN_SRC lisp 
+  (let (bindings)
+    body)
+#+END_SRC
+
+bingdings 可以是 _(var value)_ 这样对 var 赋初始值的形式，或者用 _var_ 声明一个 *初始值为 nil* 的变量。比如：
+
+#+BEGIN_SRC lisp 
+  (defun circle-area (radix)
+    (let ((pi 3.1415926)
+	  area)
+      (setq area (* pi radix radix))
+      (message "直径为 %.2f 的圆面积是 %.2f" radix area)))
+  (circle-area 3) ;; =>直径为 3.00 的圆面积是 28.27 
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+C-h v 查看 area 和 local-pi 应该没有这两个变量
+#+END_EXAMPLE
+
+let* 和 let 的使用形式完全相同，唯一的区别是在 _let*_ 声明中就 *能使用前面声明的变量* ，比如：
+
+#+BEGIN_SRC lisp 
+  (defun circle-area (radix)
+    (let* ((local-pi 3.1415926)
+	   (area (* local-pi radix radix)))
+      (message "直径为 %.2f 的圆面积是 %.2f" radix area)))
+#+END_SRC
+* lambda 表达式
 
