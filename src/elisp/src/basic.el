@@ -73,4 +73,18 @@ bar
     res))
 (factorial 10)      ;; => 55 
 
+;;;;;;;;;;;;;;;;;;;;;
+;; logic operator  ;;
+;;;;;;;;;;;;;;;;;;;;;
 
+(defun hello-world (&optional name)
+  (or name (setq name "Emacser"))
+  (message "Hello, %s" name))           ; => hello-world
+(hello-world)                           ; => "Hello, Emacser"
+(hello-world "Ye")                      ; => "Hello, Ye"
+
+(defun square-number-p (n)
+  (and (>= n 0)
+       (= (/ n (sqrt n)) (sqrt n))))
+(square-number-p -1)                    ; => nil
+(square-number-p 25)                    ; => t
