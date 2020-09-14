@@ -252,8 +252,11 @@ for the JavaScript code in this tag.
 <li><a href="#org37c24dc">控制结构</a>
 <ul>
 <li><a href="#orgd07d1a3">顺序执行</a></li>
+<li><a href="#orgff8e816">条件判断</a></li>
+<li><a href="#org36d8021">循环</a></li>
 </ul>
 </li>
+<li><a href="#org0ef54d5">逻辑运算</a></li>
 </ul>
 </div>
 </div>
@@ -286,9 +289,9 @@ elisp 中定义一个函数是用这样的形式：
 </div>
 
 <pre class="example">
-  其中函数的文档字符串是可以省略的。但是建议为你的函数（除了最简单，不作为接口的）都加上文档字符串
+    其中函数的文档字符串是可以省略的。但是建议为你的函数（除了最简单，不作为接口的）都加上文档字符串
 
-  这样将来别人使用你的扩展或者别人阅读你的代码或者自己进行维护都提供很大的方便
+    这样将来别人使用你的扩展或者别人阅读你的代码或者自己进行维护都提供很大的方便
 </pre>
 
 <p>
@@ -402,7 +405,7 @@ A demo variable
 </p>
 
 <pre class="example">
-所以除了为你的函数和变量选择一个合适的前缀之外，用 C-h f 和 C-h v 查看一下函数名和变量名有没有已经被使用过是很关键的
+  所以除了为你的函数和变量选择一个合适的前缀之外，用 C-h f 和 C-h v 查看一下函数名和变量名有没有已经被使用过是很关键的
 </pre>
 </div>
 <div id="outline-container-org9b8c02b" class="outline-3">
@@ -497,7 +500,120 @@ lambda 表达式最常用的是 <b>作为参数传递给其它函数</b> ，比�
 </div>
 <div id="outline-container-orgd07d1a3" class="outline-3">
 <h3 id="orgd07d1a3">顺序执行</h3>
+<div class="outline-text-3" id="text-orgd07d1a3">
+<p>
+一般来说程序都是按表达式顺序依次执行的。这在 defun 等特殊环境中是自动进行的
+</p>
+
+<pre class="example">
+     但是一般情况下都不是这样的。比如你法用 eval-last-sexp 同时执行两个表达式，在 if 表达式中的条件为真时执行的部分也只能运行一个表达式
+</pre>
+<p>
+这时就需要用 progn 这个特殊表达式。它的使用形式如下：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(<span style="color: #00ffff;">progn</span> A B C ...)
+</pre>
 </div>
+
+<p>
+它的作用就是让表达式 A, B, C 顺序执行。比如：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(<span style="color: #00ffff;">progn</span>
+  (setq foo 3)
+  (message <span style="color: #ffa07a;">"Square of %d is %d"</span> foo (* foo foo)))
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-orgff8e816" class="outline-3">
+<h3 id="orgff8e816">条件判断</h3>
+<div class="outline-text-3" id="text-orgff8e816">
+<p>
+elisp 有两个最基本的条件判断表达式 <span class="underline">if</span> 和 <span class="underline">cond</span> 。使用形式分别如下：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(<span style="color: #00ffff;">if</span> condition
+    then
+  else)
+
+(<span style="color: #00ffff;">cond</span> (case1 do-when-case1)
+      (case2 do-when-case2)
+      ...
+      (t do-when-none-meet))
+</pre>
+</div>
+
+<p>
+例子如下：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(<span style="color: #00ffff;">defun</span> <span style="color: #87cefa;">my-max</span> (a b)
+  (<span style="color: #00ffff;">if</span> (&gt; a b)
+      a b))
+(my-max 3 4)                            <span style="color: #ff4500;">; =&gt; 4</span>
+
+(<span style="color: #00ffff;">defun</span> <span style="color: #87cefa;">fib</span> (n)
+  (<span style="color: #00ffff;">cond</span> ((= n 0) 0)
+        ((= n 1) 1)
+        (t (+ (fib (- n 1))
+                 (fib (- n 2))))))
+(fib 10)                                <span style="color: #ff4500;">; =&gt; 55</span>
+</pre>
+</div>
+
+<p>
+还有两个 <b>宏</b> <span class="underline">when</span> 和 <span class="underline">unless</span> ，。使用这两个宏的好处是使代码可读性提高:
+</p>
+<ul class="org-ul">
+<li>when 能省去 if 里的 progn 结构</li>
+<li>unless 省去 条件为真子句需要的的 nil 表达式</li>
+</ul>
+</div>
+</div>
+<div id="outline-container-org36d8021" class="outline-3">
+<h3 id="org36d8021">循环</h3>
+<div class="outline-text-3" id="text-org36d8021">
+<p>
+循环最常用的是 <span class="underline">while</span> 表达式。它的形式是：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(<span style="color: #00ffff;">while</span> condition
+  body) 
+</pre>
+</div>
+
+<p>
+比如：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(<span style="color: #00ffff;">defun</span> <span style="color: #87cefa;">factorial</span> (n)
+  (<span style="color: #00ffff;">let</span> ((res 1))
+    (<span style="color: #00ffff;">while</span> (&gt; n 1)
+      (setq res (* res n)
+            n (- n 1)))
+    res))
+(factorial 10)      
+</pre>
+</div>
+
+<pre class="example">
+函数式语言里并不内置循环，实际上是通过递归来实现
+
+while 和 loop 一般都是宏表达式
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org0ef54d5" class="outline-2">
+<h2 id="org0ef54d5">逻辑运算</h2>
 </div>
 </div>
 <div id="postamble" class="status">
