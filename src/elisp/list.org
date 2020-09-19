@@ -3,3 +3,93 @@
 #+HTML_LINK_UP: data_type.html   
 #+HTML_LINK_HOME: elisp.html
 #+OPTIONS: num:nil timestamp:nil ^:nil
+
+* cons cell 
+
+如果从概念上来说，cons cell 其实非常简单的，就是两个有顺序的元素。第一个叫 CAR，第二个就 CDR
+#+BEGIN_EXAMPLE
+  CAR 和 CDR 名字来自于 Lisp。它最初在IBM 704机器上的实现。在这种机器有一种取址模式，使人可以访问一个存储地址中的“地址（address）”部分和“减量（decrement）”部分
+
+  CAR 指令用于取出地址部分，表示(Contents of Address part of Register)，CDR 指令用于取出地址的减量部分(Contents of the Decrement part of Register)
+#+END_EXAMPLE
+cons cell 也就是 construction of cells
++ _car_ 函数：取得 cons cell 的 CAR 部分
++ _cdr_ 取得cons cell 的 CDR 部分
+
+#+BEGIN_EXAMPLE
+  cons cell 如此简单，但是它却能衍生出许多高级的数据结构，比如链表，树，关联表等等
+#+END_EXAMPLE
+
+cons cell 的读入语法是用 _._ 分开两个部分，比如：
+
+#+BEGIN_SRC lisp 
+  '(1 . 2)                                ; => (1 . 2)
+  '(?a . 1)                               ; => (97 . 1)
+  '(1 . "a")                              ; => (1 . "a")
+  '(1 . nil)                              ; => (1)
+  '(nil . nil)                            ; => (nil)
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  注意到前面的表达式中都有一个 ' 号，这是什么意思呢？其实理解了 eval-last-sexp 的作用就能明白了
+
+  eval-last-sexp 其实包含了两个步骤，一是读入前一个 S-表达式，二是对读入的 S-表达式求值
+
+  如果读入的 S-表达式是一个 cons cell 的话，求值时会把这个 cons cell 的第一个元素作为一个函数来调用。而事实上，前面这些例子的第一个元素都不是一个函数，这样就会产生一个错误 invalid-function
+
+  之所以前面没有遇到这个问题，那是因为前面数字和字符串是一类特殊的 S-表达式，它们求值后和求值前是不变，称为自求值表达式（self-evaluating form）
+#+END_EXAMPLE
+_'_ 号其实是一个特殊的函数 _quote_ ，它的作用是将它的参数返回而不作求值
+
+#+BEGIN_EXAMPLE
+'(1 . 2) 等价于 (quote (1 . 2))
+#+END_EXAMPLE
+
+为了证明 cons cell 的读入语法确实就是它的输出形式，可以看下面这个语句：
+
+#+BEGIN_SRC lisp 
+  (read "(1 . 2)")                        ; => (1 . 2)
+#+END_SRC
+
+* 列表
+列表包括了 cons cell。但是列表中有一个特殊的元素： *空表* _nil_ 
+
+#+BEGIN_SRC lisp 
+  nil                                     ; => nil
+  '()                                     ; => nil
+#+END_SRC
+
+空表不是一个 cons cell，因为它没有 CAR 和 CDR 两个部分，事实上空表里没有任何内容。但是为了编程的方便，可以认为 nil 的 CAR 和 CDR 都是 nil：
+
+#+BEGIN_SRC lisp 
+  (car nil)                               ; => nil
+  (cdr nil)                               ; => nil
+#+END_SRC
+
+按列表最后一个 cons cell 的 _CDR 部分_ 的类型分，可以把列表分为三类：
+1. 如果它是 nil 的话，这个列表也称为 _真列表_ 
+2. 如果既不是 nil 也不是一个 cons cell，则这个列表称为 _点列表_
+3. 它指向列表中之前的一个 cons cell，则称为 _环形列表_  
+
+#+BEGIN_SRC lisp 
+  '(1 2 3)                                  ; => (1 2 3)
+  '(1 2 . 3)                                ; => (1 2 . 3)
+  '(1 . #1=(2 3 . #1#))                     ; => (1 2 3 . #1)
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  可以看出前两种列表的读入语法和输出形式都是相同的，而环形列表的读入语法是很古怪的，输出形式不能作为环形列表的读入形式
+#+END_EXAMPLE
+
+如果把真列表最后一个 cons cell 的 nil 省略不写，也就是 (1 . nil) 简写成 (1)，把 ( obj1 . ( obj2 . list)) 简写成 (obj1 obj2 . list)，那么列表最后可以写成一个用括号括起的元素列表：
+
+#+BEGIN_SRC lisp 
+  '(1 . (2 . (3 . nil)))                  ; => (1 2 3)
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  尽管这样写是清爽多了，但是，看一个列表时还是在脑子里反映的前面的形式，这样在和复杂的 cons cell 打交道时就不会搞不清楚这个 cons cell 的 CDR 是一个列表呢，还是一个元素或者是嵌套的列表 
+#+END_EXAMPLE
+
+* 测试
+

@@ -234,6 +234,142 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="elisp.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">列表</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#orgd87546d">cons cell</a></li>
+<li><a href="#org27a5fc2">列表</a></li>
+<li><a href="#org33a954c">测试</a></li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-orgd87546d" class="outline-2">
+<h2 id="orgd87546d">cons cell</h2>
+<div class="outline-text-2" id="text-orgd87546d">
+<p>
+如果从概念上来说，cons cell 其实非常简单的，就是两个有顺序的元素。第一个叫 CAR，第二个就 CDR
+</p>
+<pre class="example">
+CAR 和 CDR 名字来自于 Lisp。它最初在IBM 704机器上的实现。在这种机器有一种取址模式，使人可以访问一个存储地址中的“地址（address）”部分和“减量（decrement）”部分
+
+CAR 指令用于取出地址部分，表示(Contents of Address part of Register)，CDR 指令用于取出地址的减量部分(Contents of the Decrement part of Register)
+</pre>
+<p>
+cons cell 也就是 construction of cells
+</p>
+<ul class="org-ul">
+<li><span class="underline">car</span> 函数：取得 cons cell 的 CAR 部分</li>
+<li><span class="underline">cdr</span> 取得cons cell 的 CDR 部分</li>
+</ul>
+
+<pre class="example">
+cons cell 如此简单，但是它却能衍生出许多高级的数据结构，比如链表，树，关联表等等
+</pre>
+
+<p>
+cons cell 的读入语法是用 <span class="underline">.</span> 分开两个部分，比如：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">'(1 . 2)                                <span style="color: #5f9ea0; font-style: italic;">; =&gt; (1 . 2)</span>
+'(?a . 1)                               <span style="color: #5f9ea0; font-style: italic;">; =&gt; (97 . 1)</span>
+'(1 . <span style="color: #deb887;">"a"</span>)                              <span style="color: #5f9ea0; font-style: italic;">; =&gt; (1 . "a")</span>
+'(1 . nil)                              <span style="color: #5f9ea0; font-style: italic;">; =&gt; (1)</span>
+'(nil . nil)                            <span style="color: #5f9ea0; font-style: italic;">; =&gt; (nil)</span>
+</pre>
+</div>
+
+<pre class="example">
+注意到前面的表达式中都有一个 ' 号，这是什么意思呢？其实理解了 eval-last-sexp 的作用就能明白了
+
+eval-last-sexp 其实包含了两个步骤，一是读入前一个 S-表达式，二是对读入的 S-表达式求值
+
+如果读入的 S-表达式是一个 cons cell 的话，求值时会把这个 cons cell 的第一个元素作为一个函数来调用。而事实上，前面这些例子的第一个元素都不是一个函数，这样就会产生一个错误 invalid-function
+
+之所以前面没有遇到这个问题，那是因为前面数字和字符串是一类特殊的 S-表达式，它们求值后和求值前是不变，称为自求值表达式（self-evaluating form）
+</pre>
+<p>
+<span class="underline">'</span> 号其实是一个特殊的函数 <span class="underline">quote</span> ，它的作用是将它的参数返回而不作求值
+</p>
+
+<pre class="example">
+'(1 . 2) 等价于 (quote (1 . 2))
+</pre>
+
+<p>
+为了证明 cons cell 的读入语法确实就是它的输出形式，可以看下面这个语句：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(read <span style="color: #deb887;">"(1 . 2)"</span>)                        <span style="color: #5f9ea0; font-style: italic;">; =&gt; (1 . 2)</span>
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org27a5fc2" class="outline-2">
+<h2 id="org27a5fc2">列表</h2>
+<div class="outline-text-2" id="text-org27a5fc2">
+<p>
+列表包括了 cons cell。但是列表中有一个特殊的元素： <b>空表</b> <span class="underline">nil</span> 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">nil                                     <span style="color: #5f9ea0; font-style: italic;">; =&gt; nil</span>
+'()                                     <span style="color: #5f9ea0; font-style: italic;">; =&gt; nil</span>
+</pre>
+</div>
+
+<p>
+空表不是一个 cons cell，因为它没有 CAR 和 CDR 两个部分，事实上空表里没有任何内容。但是为了编程的方便，可以认为 nil 的 CAR 和 CDR 都是 nil：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(car nil)                               <span style="color: #5f9ea0; font-style: italic;">; =&gt; nil</span>
+(cdr nil)                               <span style="color: #5f9ea0; font-style: italic;">; =&gt; nil</span>
+</pre>
+</div>
+
+<p>
+按列表最后一个 cons cell 的 <span class="underline">CDR 部分</span> 的类型分，可以把列表分为三类：
+</p>
+<ol class="org-ol">
+<li>如果它是 nil 的话，这个列表也称为 <span class="underline">真列表</span></li>
+<li>如果既不是 nil 也不是一个 cons cell，则这个列表称为 <span class="underline">点列表</span></li>
+<li>它指向列表中之前的一个 cons cell，则称为 <span class="underline">环形列表</span></li>
+</ol>
+
+<div class="org-src-container">
+<pre class="src src-lisp">'(1 2 3)                                  <span style="color: #5f9ea0; font-style: italic;">; =&gt; (1 2 3)</span>
+'(1 2 . 3)                                <span style="color: #5f9ea0; font-style: italic;">; =&gt; (1 2 . 3)</span>
+'(1 . #1=(2 3 . #1#))                     <span style="color: #5f9ea0; font-style: italic;">; =&gt; (1 2 3 . #1)</span>
+</pre>
+</div>
+
+<pre class="example">
+  可以看出前两种列表的读入语法和输出形式都是相同的，而环形列表的读入语法是很古怪的，输出形式不能作为环形列表的读入形式
+</pre>
+
+<p>
+如果把真列表最后一个 cons cell 的 nil 省略不写，也就是 (1 . nil) 简写成 (1)，把 ( obj1 . ( obj2 . list)) 简写成 (obj1 obj2 . list)，那么列表最后可以写成一个用括号括起的元素列表：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">'(1 . (2 . (3 . nil)))                  <span style="color: #5f9ea0; font-style: italic;">; =&gt; (1 2 3)</span>
+</pre>
+</div>
+
+<pre class="example">
+  尽管这样写是清爽多了，但是，看一个列表时还是在脑子里反映的前面的形式，这样在和复杂的 cons cell 打交道时就不会搞不清楚这个 cons cell 的 CDR 是一个列表呢，还是一个元素或者是嵌套的列表 
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org33a954c" class="outline-2">
+<h2 id="org33a954c">测试</h2>
+</div>
 </div>
 <div id="postamble" class="status">
 
