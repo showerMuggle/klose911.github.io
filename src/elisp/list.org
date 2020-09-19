@@ -92,4 +92,113 @@ _'_ 号其实是一个特殊的函数 _quote_ ，它的作用是将它的参数�
 #+END_EXAMPLE
 
 * 测试
+测试一个对象是否是 cons cell 用 _consp_ ，是否是列表用 _listp_ 
 
+#+BEGIN_SRC lisp 
+  (consp '(1 . 2))                        ; => t
+  (consp '(1 . (2 . nil)))                ; => t
+  (consp nil)                             ; => nil
+  (listp '(1 . 2))                        ; => t
+  (listp '(1 . (2 . nil)))                ; => t
+  (listp nil)                             ; => t
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  没有内建的方法测试一个列表是不是一个真列表
+
+  通常如果一个函数需要一个真列表作为参数，都是在运行时发出错误，而不是进行参数检查，因为检查一个列表是真列表的代价比较高
+#+END_EXAMPLE
+
+测试一个对象是否是 nil 用 _null_ 函数。只有当对象是空表时，null 才返回空值 
+
+* 构造
+生成一个 cons cell 可以用 _cons_ 函数。比如：
+
+#+BEGIN_SRC lisp 
+  (cons 1 2)                              ; => (1 . 2)
+  (cons 1 '())                            ; => (1)
+#+END_SRC
+
+这也是在 _列表_ 前面 *增加* _元素_ 的方法。比如：
+
+#+BEGIN_SRC lisp 
+  (setq foo '(a b))                       ; => (a b)
+  (cons 'x foo)                           ; => (x a b)
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  注意：例子的 foo 值并没有改变，返回的是一个新建的列表
+#+END_EXAMPLE
+
+一个宏 _push_ 可以加入元素的同时改变列表的值：
+
+#+BEGIN_SRC lisp 
+  (push 'x foo)                           ; => (x a b)
+  foo                                     ; => (x a b)
+#+END_SRC
+
+生成一个列表的函数是 _list_ 。比如： 
+
+#+BEGIN_SRC lisp 
+  (list 1 2 3)                            ; => (1 2 3)
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  可能这时有一个疑惑，前面产生一个列表，常用 quote（也就是 ' 符号）这个函数，它和这个 cons 和 list 函数有什么区别呢？
+#+END_EXAMPLE
+其实区别是很明显的：
++ quote 是把参数直接返回不进行求值
++ list 和 cons 是对参数求值后再生成一个列表或者 cons cell
+
+#+BEGIN_SRC lisp 
+  '((+ 1 2) 3)                            ; => ((+ 1 2) 3)
+  (list (+ 1 2) 3)                        ; => (3 3)
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  前一个生成的列表的 CAR 部分是 (+ 1 2) 这个列表，而后一个是先对 (+ 1 2) 求值得到 3 后再生成列表
+#+END_EXAMPLE
+
+前面提到在列表前端增加元素的方法是用 cons，在列表后端增加元素的函数是用 _append_ 。比如：
+
+#+BEGIN_SRC lisp 
+  (append '(a b) '(c))                    ; => (a b c)
+#+END_SRC
+
+append 的功能可以认为它是把第一个参数最后一个列表的 nil 换成第二个参数
+#+BEGIN_SRC lisp 
+  比如前面这个例子，第一个参数写成 cons cell 表示方式是(a . (b . nil))，把这个 nil 替换成 (c) 就成了 (a . (b . (c)))
+#+END_SRC
+
+对于多个参数的情况也是一样的，依次把下一个参数替换新列表最后一个 nil 就是最后的结果了：
+
+#+BEGIN_SRC lisp 
+  (append '(a b) '(c) '(d))               ; => (a b c d)
+#+END_SRC
+
+一般来说 append 的参数都要是列表，但是最后一个参数可以不是一个列表，这也不违背前面说的，因为 cons cell 的 CDR 部分本来就可以是任何对象：
+
+#+BEGIN_SRC lisp 
+  (append '(a b) 'c)                      ; => (a b . c)
+#+END_SRC
+这样得到的结果就不再是一个真列表了，如果再进行 append 操作就会产生一个错误
+
+#+BEGIN_EXAMPLE
+  如果写过 c 的链表类型，可能就知道如果链表只保留一个指针，那么链表只能在一端增加元素
+
+  elisp 的列表类型也是类似的，用 cons 在列表前增加元素比用 append 要快得多
+#+END_EXAMPLE
+
+append 的参数不限于列表，还可以是 _字符串_ 或者 _向量_ 。前面字符串里已经提到可以把一个字符串转换成一个字符列表，同样可能把向量转换成一个列表：
+
+#+BEGIN_SRC lisp 
+  (append [a b] "cd" nil)                 ; => (a b 99 100)
+#+END_SRC
+
+* 数组
+
+* 堆栈
+
+* 集合
+
+* 关联表

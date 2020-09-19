@@ -241,6 +241,11 @@ for the JavaScript code in this tag.
 <li><a href="#orgd87546d">cons cell</a></li>
 <li><a href="#org27a5fc2">列表</a></li>
 <li><a href="#org33a954c">测试</a></li>
+<li><a href="#orgd2f3a60">构造</a></li>
+<li><a href="#orgd4d37a4">数组</a></li>
+<li><a href="#org62b9d40">堆栈</a></li>
+<li><a href="#orgbc45d77">集合</a></li>
+<li><a href="#org4acc716">关联表</a></li>
 </ul>
 </div>
 </div>
@@ -369,6 +374,169 @@ eval-last-sexp 其实包含了两个步骤，一是读入前一个 S-表达式�
 
 <div id="outline-container-org33a954c" class="outline-2">
 <h2 id="org33a954c">测试</h2>
+<div class="outline-text-2" id="text-org33a954c">
+<p>
+测试一个对象是否是 cons cell 用 <span class="underline">consp</span> ，是否是列表用 <span class="underline">listp</span> 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(consp '(1 . 2))                        <span style="color: #5f9ea0; font-style: italic;">; =&gt; t</span>
+(consp '(1 . (2 . nil)))                <span style="color: #5f9ea0; font-style: italic;">; =&gt; t</span>
+(consp nil)                             <span style="color: #5f9ea0; font-style: italic;">; =&gt; nil</span>
+(listp '(1 . 2))                        <span style="color: #5f9ea0; font-style: italic;">; =&gt; t</span>
+(listp '(1 . (2 . nil)))                <span style="color: #5f9ea0; font-style: italic;">; =&gt; t</span>
+(listp nil)                             <span style="color: #5f9ea0; font-style: italic;">; =&gt; t</span>
+</pre>
+</div>
+
+<pre class="example">
+  没有内建的方法测试一个列表是不是一个真列表
+
+  通常如果一个函数需要一个真列表作为参数，都是在运行时发出错误，而不是进行参数检查，因为检查一个列表是真列表的代价比较高
+</pre>
+
+<p>
+测试一个对象是否是 nil 用 <span class="underline">null</span> 函数。只有当对象是空表时，null 才返回空值 
+</p>
+</div>
+</div>
+
+<div id="outline-container-orgd2f3a60" class="outline-2">
+<h2 id="orgd2f3a60">构造</h2>
+<div class="outline-text-2" id="text-orgd2f3a60">
+<p>
+生成一个 cons cell 可以用 <span class="underline">cons</span> 函数。比如：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(cons 1 2)                              <span style="color: #5f9ea0; font-style: italic;">; =&gt; (1 . 2)</span>
+(cons 1 '())                            <span style="color: #5f9ea0; font-style: italic;">; =&gt; (1)</span>
+</pre>
+</div>
+
+<p>
+这也是在 <span class="underline">列表</span> 前面 <b>增加</b> <span class="underline">元素</span> 的方法。比如：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(setq foo '(a b))                       <span style="color: #5f9ea0; font-style: italic;">; =&gt; (a b)</span>
+(cons 'x foo)                           <span style="color: #5f9ea0; font-style: italic;">; =&gt; (x a b)</span>
+</pre>
+</div>
+
+<pre class="example">
+  注意：例子的 foo 值并没有改变，返回的是一个新建的列表
+</pre>
+
+<p>
+一个宏 <span class="underline">push</span> 可以加入元素的同时改变列表的值：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(push 'x foo)                           <span style="color: #5f9ea0; font-style: italic;">; =&gt; (x a b)</span>
+foo                                     <span style="color: #5f9ea0; font-style: italic;">; =&gt; (x a b)</span>
+</pre>
+</div>
+
+<p>
+生成一个列表的函数是 <span class="underline">list</span> 。比如： 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(list 1 2 3)                            <span style="color: #5f9ea0; font-style: italic;">; =&gt; (1 2 3)</span>
+</pre>
+</div>
+
+<pre class="example">
+  可能这时有一个疑惑，前面产生一个列表，常用 quote（也就是 ' 符号）这个函数，它和这个 cons 和 list 函数有什么区别呢？
+</pre>
+<p>
+其实区别是很明显的：
+</p>
+<ul class="org-ul">
+<li>quote 是把参数直接返回不进行求值</li>
+<li>list 和 cons 是对参数求值后再生成一个列表或者 cons cell</li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-lisp">'((+ 1 2) 3)                            <span style="color: #5f9ea0; font-style: italic;">; =&gt; ((+ 1 2) 3)</span>
+(list (+ 1 2) 3)                        <span style="color: #5f9ea0; font-style: italic;">; =&gt; (3 3)</span>
+</pre>
+</div>
+
+<pre class="example">
+  前一个生成的列表的 CAR 部分是 (+ 1 2) 这个列表，而后一个是先对 (+ 1 2) 求值得到 3 后再生成列表
+</pre>
+
+<p>
+前面提到在列表前端增加元素的方法是用 cons，在列表后端增加元素的函数是用 <span class="underline">append</span> 。比如：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(append '(a b) '(c))                    <span style="color: #5f9ea0; font-style: italic;">; =&gt; (a b c)</span>
+</pre>
+</div>
+
+<p>
+append 的功能可以认为它是把第一个参数最后一个列表的 nil 换成第二个参数
+</p>
+<div class="org-src-container">
+<pre class="src src-lisp">  &#27604;&#22914;&#21069;&#38754;&#36825;&#20010;&#20363;&#23376;&#65292;&#31532;&#19968;&#20010;&#21442;&#25968;&#20889;&#25104; cons cell &#34920;&#31034;&#26041;&#24335;&#26159;(a . (b . nil))&#65292;&#25226;&#36825;&#20010; nil &#26367;&#25442;&#25104; (c) &#23601;&#25104;&#20102; (a . (b . (c)))
+</pre>
+</div>
+
+<p>
+对于多个参数的情况也是一样的，依次把下一个参数替换新列表最后一个 nil 就是最后的结果了：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(append '(a b) '(c) '(d))               <span style="color: #5f9ea0; font-style: italic;">; =&gt; (a b c d)</span>
+</pre>
+</div>
+
+<p>
+一般来说 append 的参数都要是列表，但是最后一个参数可以不是一个列表，这也不违背前面说的，因为 cons cell 的 CDR 部分本来就可以是任何对象：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(append '(a b) 'c)                      <span style="color: #5f9ea0; font-style: italic;">; =&gt; (a b . c)</span>
+</pre>
+</div>
+<p>
+这样得到的结果就不再是一个真列表了，如果再进行 append 操作就会产生一个错误
+</p>
+
+<pre class="example">
+如果写过 c 的链表类型，可能就知道如果链表只保留一个指针，那么链表只能在一端增加元素
+
+elisp 的列表类型也是类似的，用 cons 在列表前增加元素比用 append 要快得多
+</pre>
+
+<p>
+append 的参数不限于列表，还可以是 <span class="underline">字符串</span> 或者 <span class="underline">向量</span> 。前面字符串里已经提到可以把一个字符串转换成一个字符列表，同样可能把向量转换成一个列表：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(append [a b] <span style="color: #deb887;">"cd"</span> nil)                 <span style="color: #5f9ea0; font-style: italic;">; =&gt; (a b 99 100)</span>
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgd4d37a4" class="outline-2">
+<h2 id="orgd4d37a4">数组</h2>
+</div>
+
+<div id="outline-container-org62b9d40" class="outline-2">
+<h2 id="org62b9d40">堆栈</h2>
+</div>
+
+<div id="outline-container-orgbc45d77" class="outline-2">
+<h2 id="orgbc45d77">集合</h2>
+</div>
+
+<div id="outline-container-org4acc716" class="outline-2">
+<h2 id="org4acc716">关联表</h2>
 </div>
 </div>
 <div id="postamble" class="status">
