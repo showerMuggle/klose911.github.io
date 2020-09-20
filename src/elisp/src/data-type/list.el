@@ -69,3 +69,49 @@ foo                                     ; => (x a b)
 ;;;;;;;;;;;;
 ;; array  ;;
 ;;;;;;;;;;;;
+(nth 3 '(0 1 2 3 4 5))                  ; => 3
+(nthcdr 2 '(0 1 2 3 4 5))               ; => (2 3 4 5)
+(last '(0 1 2 3 4 5) 2)                 ; => (4 5)
+(butlast '(0 1 2 3 4 5) 2)              ; => (0 1 2 3)
+
+;;;;;;;;;;;;;
+;; modify  ;;
+;;;;;;;;;;;;;
+(setq foo '(a b c))                     ; => (a b c)
+(setcar foo 'x)                         ; => x
+foo                                     ; => (x b c)
+(setcdr foo '(y z))                     ; => (y z)
+foo                                     ; => (x y z)
+
+(setq foo '(a b c))                     ; => (a b c)
+(setcdr foo foo)
+foo ; => (a . #0) 这里的 #0 代表的其实是foo这个变量在内存中的地址
+
+(setq foo '(1 2 3))                     ; => (1 2 3)
+(setcar foo 'a)                         ; => a
+(setcar (cdr foo) 'b)                   ; => b
+(setcar (nthcdr 2 foo) 'c)              ; => c
+foo                                     ; => (a b c)
+
+;;;;;;;;;;;;
+;; stack  ;;
+;;;;;;;;;;;;
+(setq foo nil)                          ; => nil
+(push 'a foo)                           ; => (a)
+(push 'b foo)                           ; => (b a)
+(pop foo)                               ; => b
+foo                                     ; => (a)
+
+;;;;;;;;;;;
+;; sort  ;;
+;;;;;;;;;;;
+(setq foo '(a b c))                     ; => (a b c)
+(reverse foo)                           ; => (c b a)
+foo                                     ; => (a b c)
+
+(nreverse foo)                          ; => (c b a)
+foo                                     ; => (a) 原列表已经被破坏了!!!
+
+(setq foo '(3 2 4 1 5))                 ; => (3 2 4 1 5)
+(sort foo '<)                           ; => (1 2 3 4 5)
+foo                                     ; => (3 4 5)
