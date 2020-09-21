@@ -321,8 +321,107 @@
   #+END_EXAMPLE
 
 * 集合
+  列表可以作为 *无序* 的 _集合_ :
+  + *合并* 集合用 _append_ 函数
+  + *去除重复* 的 equal 元素用 _delete-dups_
+  + *查找* 一个元素是否在列表中：
+    + 如果测试函数是用 eq，就用 _memq_
+    + 如果测试用 equal，可以用 _member_ 
+  + *删除* 列表中的指定的元素：
+    + 测试函数为 eq 对应 _delq_ 函数
+    + equal 对应 _delete_ 
+    + 两个函数 _remq_ 和 _remove_ 也是删除指定元素
+
+  #+BEGIN_EXAMPLE
+    它们的差别是 delq 和 delete 可能会修改参数，而 remq 和 remove 总是返回删除后列表的拷贝
+
+    注意：前面这是说的是可能会修改参数的值，也就是说可能不会
+
+    所以保险起见，用 delq 和 delete 函数要么只用返回值，要么用 setq 设置参数的值为返回值
+  #+END_EXAMPLE
+
+  #+BEGIN_SRC lisp 
+  (setq foo '(a b c))                     ; => (a b c)
+  (remq 'b foo)                           ; => (a c)
+  foo                                     ; => (a b c)
+  (delq 'b foo)                           ; => (a c)
+  foo                                     ; => (a c)
+  (delq 'a foo)                           ; => (c)
+  foo                                     ; => (a c)
+  #+END_SRC
 
 * 关联表
+  #+BEGIN_EXAMPLE
+    在 elisp 编程中，列表最常用的形式应该是作为一个 关联表 了
+
+    由列表实现的关联表有一个专门的名字叫 association list
+  #+END_EXAMPLE
+
+  所谓 *关联表* ，就是可以用一个 _字符串_ （通常叫关键字，key）来 *查找* 对应 _值_ 的数据结构
+
+** 与hash table 的区别
+   尽管 elisp里也有 hash table，但是 hash table 相比于 association list 至少这样几个缺点：
+   + hash table 里的关键字（key）是无序的，而 association list 的关键字 可以按想要的顺序排列
+   + hash table 没有列表那样丰富的函数，只有一个 maphash 函数可以遍历列 表。而 association list 就是一个列表，所有列表函数都能适用
+   + hash table 没有读入语法和输入形式，这对于调试和使用都带来很多不便 
+
+   #+BEGIN_EXAMPLE
+     所以 elisp的hash table 不是一个首要的数据结构，只要不对效率要求很高，通常直接用association list
+
+     数组可以作为关联表，但是数组不适合作为与人交互使用数据结构（毕竟一个有意义的名字比纯数字的下标更适合人脑）
+
+     所以关联表的地位在 elisp 中就非比寻常了，因此emacs 为关联表专门用 c 程序实现了查找的相关函数以提高程序的效率
+   #+END_EXAMPLE
+
+** 操作
+   在 association list 中 _关键字_ 是放在 _元素的 CAR 部分_ ，与它对应的数据放在 _这个元素的 CDR 部分_ 。根据比较方法的不同：
+   + _assq_ 函数：查找使用 eq 方法
+   + _assoc_ 函数： 查找使用 equal 方法 
+
+   #+BEGIN_SRC lisp 
+  (assoc "a" '(("a" 97) ("b" 98)))        ; => ("a" 97)
+  (assq 'a '((a . 97) (b . 98)))          ; => (a . 97)
+   #+END_SRC
+
+   通常只需要查找对应的数据，所以一般来说都要用 _cdr_ 来得到对应的数据：
+   #+BEGIN_SRC lisp 
+  (cdr (assoc "a" '(("a" 97) ("b" 98))))  ; => (97)
+  (cdr (assq 'a '((a . 97) (b . 98))))    ; => 97
+   #+END_SRC
+
+   _assoc-default_ 可以一步完成这样的操作：
+
+   #+BEGIN_SRC lisp 
+  (assoc-default "a" '(("a" 97) ("b" 98)))          ; => (97)
+   #+END_SRC
+
+   还可以用 _rassoc_ 和 _rassq_ 来根据值(value)查找键值(key)：
+
+   #+BEGIN_SRC lisp 
+  (rassoc '(97) '(("a" 97) ("b" 98)))     ; => ("a" 97)
+  (rassq '97 '((a . 97) (b . 98)))        ; => (a . 97)
+   #+END_SRC
+
+   + 如果要修改 _关键字_ 对应的值，最省事的作法就是用 _cons_ 把新的键值对加到列表的头端
+   #+BEGIN_EXAMPLE
+   但是这会让列表越来越长，浪费空间
+   #+END_EXAMPLE
+   + 如果要 *替换* 已经存在的值：
+     + 用 _setcdr_ 来更改键值对应的数据。但是在更改之前要先 *确定这个键值在对应的列表里* ，否则会产生一个错误
+     + 用 _assoc_ 查找到对应的元素，再用 _delq_ 删除这个数据，然后用 _cons_ 加到列表里： 
+
+   #+BEGIN_SRC lisp 
+  (setq foo '(("a" . 97) ("b" . 98)))     ; => (("a" . 97) ("b" . 98))
+
+  ;; update value by setcdr
+  (if (setq bar (assoc "a" foo))
+      (setcdr bar "this is a")
+    (setq foo (cons '("a" . "this is a") foo))) ; => "this is a"
+  foo                         ; => (("a" . "this is a") ("b" . 98))
+  ;; update value by delq and cons
+  (setq foo (cons '("a" . 97)
+		  (delq (assoc "a" foo) foo))) ; => (("a" . 97) ("b" . 98))
+   #+END_SRC
 
 * 树
 

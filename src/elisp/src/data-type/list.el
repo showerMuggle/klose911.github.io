@@ -115,3 +115,47 @@ foo                                     ; => (a) 原列表已经被破坏了!!!
 (setq foo '(3 2 4 1 5))                 ; => (3 2 4 1 5)
 (sort foo '<)                           ; => (1 2 3 4 5)
 foo                                     ; => (3 4 5)
+
+;;;;;;;;;;;;;;;;;;;
+;; No order Set  ;;
+;;;;;;;;;;;;;;;;;;;
+(setq foo '(a b c))                     ; => (a b c)
+(remq 'b foo)                           ; => (a c)
+foo                                     ; => (a b c)
+;; delq might damage the parameter 
+(delq 'b foo)                           ; => (a c)
+foo                                     ; => (a c)
+(delq 'a foo)                           ; => (c)
+foo                                     ; => (a c)
+
+;;;;;;;;;;;;;;;;;;;;;;;
+;; association list  ;;
+;;;;;;;;;;;;;;;;;;;;;;;
+;;; assoc 用值做比较，assq 用地址做比较
+(assoc "a" '(("a" 97) ("b" 98)))        ; => ("a" 97)
+(assq "a" '(("a" 97) ("b" 98)))         ; => nil
+
+(assq 'a '((a . 97) (b . 98)))          ; => (a . 97)
+(assoc 'a '((a . 97) (b . 98)))          ; => (a . 97)
+
+(cdr (assoc "a" '(("a" 97) ("b" 98))))  ; => (97)
+(cdr (assq 'a '((a . 97) (b . 98))))    ; => 97
+
+(assoc-default "a" '(("a" 97) ("b" 98)))          ; => (97)
+
+(rassoc '(97) '(("a" 97) ("b" 98)))     ; => ("a" 97)
+(rassq '97 '((a . 97) (b . 98)))        ; => (a . 97)
+
+(setq foo '(("a" . 97) ("b" . 98)))     ; => (("a" . 97) ("b" . 98))
+
+;; update value by setcdr
+(if (setq bar (assoc "a" foo))
+    (setcdr bar "this is a")
+  (setq foo (cons '("a" . "this is a") foo))) ; => "this is a"
+foo                         ; => (("a" . "this is a") ("b" . 98))
+
+;; update value by delq and cons
+(setq foo (cons '("a" . 97)
+                (delq (assoc "a" foo) foo))) ; => (("a" . 97) ("b" . 98))
+foo   ; => => (("a" . 97) ("b" . 98))
+
