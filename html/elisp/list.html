@@ -863,14 +863,129 @@ foo                         <span style="color: #5f9ea0; font-style: italic;">; 
 
 <div id="outline-container-orgaae2f88" class="outline-2">
 <h2 id="orgaae2f88">树</h2>
+<div class="outline-text-2" id="text-orgaae2f88">
+<p>
+列表的第一个元素如果作为结点的数据，其它元素看作是子节点，就是一个树了
+</p>
+</div>
 </div>
 
 <div id="outline-container-org84c351e" class="outline-2">
 <h2 id="org84c351e">遍历</h2>
+<div class="outline-text-2" id="text-org84c351e">
+<p>
+遍历列表最常用的函数就是 <span class="underline">mapc</span> 和 <span class="underline">mapcar</span> 了。它们的第一个参数都是一个函数，这个函数只接受一个参数，每次处理一个列表里的元素
+</p>
+
+<p>
+这两个函数唯一的差别是返回值：
+</p>
+<ul class="org-ul">
+<li>mapc 返回输入的列表</li>
+<li>mapcar 返回的 <span class="underline">函数返回值</span> 构成的列表</li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(mapc '1+ '(1 2 3))                     <span style="color: #5f9ea0; font-style: italic;">; =&gt; (1 2 3)</span>
+(mapcar '1+ '(1 2 3))                   <span style="color: #5f9ea0; font-style: italic;">; =&gt; (2 3 4)</span>
+</pre>
+</div>
+
+<p>
+另一个比较常用的遍历列表的方法是用 <span class="underline">dolist</span> 宏。它的形式是：
+</p>
+<div class="org-src-container">
+<pre class="src src-lisp">(<span style="color: #00bfff; font-weight: bold;">dolist</span> (var list [result]) body...)
+</pre>
+</div>
+
+<p>
+<span class="underline">var</span> 是一个 <b>临时变量</b> ，在 <span class="underline">body</span> 里可以用来得到列表中元素的值
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(<span style="color: #00bfff; font-weight: bold;">dolist</span> (foo '(1 2 3))
+  (incf foo))                           <span style="color: #5f9ea0; font-style: italic;">; =&gt; nil</span>
+(setq bar nil)
+(<span style="color: #00bfff; font-weight: bold;">dolist</span> (foo '(1 2 3) bar)
+  (push (incf foo) bar))                <span style="color: #5f9ea0; font-style: italic;">; =&gt; (4 3 2)</span>
+</pre>
+</div>
+<pre class="example">
+    使用 dolist 的好处是不用写lambda 函数
+
+    一般情况下它的返回值是 nil，但是也可以指定一个值作为返回值
+</pre>
+</div>
 </div>
 
 <div id="outline-container-org1de6a01" class="outline-2">
 <h2 id="org1de6a01">其他</h2>
+<div class="outline-text-2" id="text-org1de6a01">
+<pre class="example">
+如果看过一些函数式语言教程的话，一定对 fold（或叫 accumulate、reduce）和 filter 这些函数记忆深刻
+
+不过 elisp 里好像没有提供这样的函数
+
+remove-if 和 remove-if-not 可以作 filter 函数，但是它们是 cl 里的，自己用用没有关系，不能强迫别人也跟着用，所以最好不要写到 elisp 里
+</pre>
+
+<p>
+如果不用这两个函数，也不用别人的函数的话，不妨用这样的方法：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(<span style="color: #00bfff; font-weight: bold;">defun</span> <span style="color: #daa520; font-weight: bold;">my-remove-if</span> (predicate list)
+  (delq nil (mapcar (<span style="color: #00bfff; font-weight: bold;">lambda</span> (n)
+                      (and (not (funcall predicate n)) n))
+                    list)))
+
+(<span style="color: #00bfff; font-weight: bold;">defun</span> <span style="color: #daa520; font-weight: bold;">evenp</span> (n)
+  (= (% n 2) 0))
+
+(my-remove-if 'evenp '(0 1 2 3 4 5))    <span style="color: #5f9ea0; font-style: italic;">; =&gt; (1 3 5)</span>
+</pre>
+</div>
+
+<p>
+fold 的操作只能用变量加循环或 mapc 操作来代替了：
+</p>
+<div class="org-src-container">
+<pre class="src src-lisp">(<span style="color: #00bfff; font-weight: bold;">defun</span> <span style="color: #daa520; font-weight: bold;">my-fold-left</span> (op initial list)
+  (<span style="color: #00bfff; font-weight: bold;">dolist</span> (var list initial)
+    (setq initial (funcall op initial var))))
+
+(my-fold-left '+ 0 '(1 2 3 4))          <span style="color: #5f9ea0; font-style: italic;">; =&gt; 10</span>
+</pre>
+</div>
+
+<pre class="example">
+    这里只是举个例子，事实上不必一定要写这样的函数，直接用函数里的遍历操作更好读一些
+</pre>
+
+<ul class="org-ul">
+<li>产生数列常用的方法是用 <span class="underline">number-sequence</span></li>
+<li>解析文本时一个很常用的操作是把字符串按分隔符分解，可以用 <span class="underline">split-string</span> 函数：</li>
+</ul>
+<div class="org-src-container">
+<pre class="src src-lisp">(split-string <span style="color: #deb887;">"key = val"</span> <span style="color: #deb887;">"\\s-*=\\s-*"</span>)  <span style="color: #5f9ea0; font-style: italic;">; =&gt; ("key" "val")</span>
+</pre>
+</div>
+<ul class="org-ul">
+<li>与 split-string 对应是把几个字符串用一个分隔符连接起来，这可以用 <span class="underline">mapconcat</span> 完成：</li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(mapconcat 'identity '(<span style="color: #deb887;">"a"</span> <span style="color: #deb887;">"b"</span> <span style="color: #deb887;">"c"</span>) <span style="color: #deb887;">"\t"</span>) <span style="color: #5f9ea0; font-style: italic;">; =&gt; "a   b   c"</span>
+</pre>
+</div>
+
+<pre class="example">
+identity 是一个特殊的函数，它会直接返回参数
+
+mapconcat 第一个参数是一个函数，可以很灵活的使用
+</pre>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">

@@ -159,3 +159,44 @@ foo                         ; => (("a" . "this is a") ("b" . 98))
                 (delq (assoc "a" foo) foo))) ; => (("a" . 97) ("b" . 98))
 foo   ; => => (("a" . 97) ("b" . 98))
 
+;;;;;;;;;;;
+;; Tree  ;;
+;;;;;;;;;;;
+
+;;;;;;;;;;;;;;;
+;; Traverse  ;;
+;;;;;;;;;;;;;;;
+(mapc '1+ '(1 2 3))                     ; => (1 2 3)
+(mapcar '1+ '(1 2 3))                   ; => (2 3 4)
+
+(dolist (foo '(1 2 3))
+  (incf foo))                           ; => nil
+
+(setq bar nil)
+(dolist (foo-tmp '(1 2 3) bar)
+  (push (incf foo-tmp) bar))                ; => (4 3 2)
+bar   ; => (4 3 2) 
+
+;;;;;;;;;;;
+;; Misc  ;;
+;;;;;;;;;;;
+(defun my-remove-if (predicate list)
+  (delq nil (mapcar (lambda (n)
+                      (and (not (funcall predicate n)) n))
+                    list)))
+
+(defun evenp (n)
+  (= (% n 2) 0))
+
+(my-remove-if 'evenp '(0 1 2 3 4 5))    ; => (1 3 5)
+
+(defun my-fold-left (op initial list)
+  (dolist (var list initial)
+    (setq initial (funcall op initial var))))
+
+(my-fold-left '+ 0 '(1 2 3 4))          ; => 10
+
+(split-string "key = val" "\\s-*=\\s-*")  ; => ("key" "val")
+
+(mapconcat 'identity '("a" "b" "c") "\t") ; => "a     b     c"
+

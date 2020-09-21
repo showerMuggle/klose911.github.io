@@ -424,7 +424,90 @@
    #+END_SRC
 
 * 树
+  列表的第一个元素如果作为结点的数据，其它元素看作是子节点，就是一个树了
 
 * 遍历
+  遍历列表最常用的函数就是 _mapc_ 和 _mapcar_ 了。它们的第一个参数都是一个函数，这个函数只接受一个参数，每次处理一个列表里的元素
+
+  这两个函数唯一的差别是返回值：
+  + mapc 返回输入的列表
+  + mapcar 返回的 _函数返回值_ 构成的列表
+
+  #+BEGIN_SRC lisp 
+  (mapc '1+ '(1 2 3))                     ; => (1 2 3)
+  (mapcar '1+ '(1 2 3))                   ; => (2 3 4)
+  #+END_SRC
+
+  另一个比较常用的遍历列表的方法是用 _dolist_ 宏。它的形式是：
+  #+BEGIN_SRC lisp 
+(dolist (var list [result]) body...)
+  #+END_SRC
+
+  _var_ 是一个 *临时变量* ，在 _body_ 里可以用来得到列表中元素的值
+
+  #+BEGIN_SRC lisp 
+  (dolist (foo '(1 2 3))
+    (incf foo))                           ; => nil
+  (setq bar nil)
+  (dolist (foo '(1 2 3) bar)
+    (push (incf foo) bar))                ; => (4 3 2)
+  #+END_SRC
+  #+BEGIN_EXAMPLE
+    使用 dolist 的好处是不用写lambda 函数
+
+    一般情况下它的返回值是 nil，但是也可以指定一个值作为返回值
+  #+END_EXAMPLE
 
 * 其他
+  #+BEGIN_EXAMPLE
+    如果看过一些函数式语言教程的话，一定对 fold（或叫 accumulate、reduce）和 filter 这些函数记忆深刻
+
+    不过 elisp 里好像没有提供这样的函数
+
+    remove-if 和 remove-if-not 可以作 filter 函数，但是它们是 cl 里的，自己用用没有关系，不能强迫别人也跟着用，所以最好不要写到 elisp 里
+  #+END_EXAMPLE
+
+  如果不用这两个函数，也不用别人的函数的话，不妨用这样的方法：
+
+  #+BEGIN_SRC lisp 
+  (defun my-remove-if (predicate list)
+    (delq nil (mapcar (lambda (n)
+			(and (not (funcall predicate n)) n))
+		      list)))
+
+  (defun evenp (n)
+    (= (% n 2) 0))
+
+  (my-remove-if 'evenp '(0 1 2 3 4 5))    ; => (1 3 5)
+  #+END_SRC
+
+  fold 的操作只能用变量加循环或 mapc 操作来代替了：
+  #+BEGIN_SRC lisp 
+  (defun my-fold-left (op initial list)
+    (dolist (var list initial)
+      (setq initial (funcall op initial var))))
+
+  (my-fold-left '+ 0 '(1 2 3 4))          ; => 10
+  #+END_SRC
+
+  #+BEGIN_EXAMPLE
+    这里只是举个例子，事实上不必一定要写这样的函数，直接用函数里的遍历操作更好读一些
+  #+END_EXAMPLE
+
+  + 产生数列常用的方法是用 _number-sequence_
+  + 解析文本时一个很常用的操作是把字符串按分隔符分解，可以用 _split-string_ 函数：
+  #+BEGIN_SRC lisp 
+  (split-string "key = val" "\\s-*=\\s-*")  ; => ("key" "val")
+  #+END_SRC
+  + 与 split-string 对应是把几个字符串用一个分隔符连接起来，这可以用 _mapconcat_ 完成：
+
+  #+BEGIN_SRC lisp 
+  (mapconcat 'identity '("a" "b" "c") "\t") ; => "a   b   c"
+  #+END_SRC
+
+  #+BEGIN_EXAMPLE
+    identity 是一个特殊的函数，它会直接返回参数
+
+    mapconcat 第一个参数是一个函数，可以很灵活的使用
+  #+END_EXAMPLE
+
