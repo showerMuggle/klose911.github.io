@@ -234,7 +234,287 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="elisp.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">数组</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#orgaa3e9db">比较</a></li>
+<li><a href="#org9d2f1b4">测试</a></li>
+<li><a href="#orge98dcd1">序列的通用函数</a></li>
+<li><a href="#orgdb3f6eb">数组操作</a></li>
+<li><a href="#org36be473">应用</a>
+<ul>
+<li><a href="#orge7c89a1">测试列表是否是环形列表</a></li>
+<li><a href="#org5e2a0e7">转换字符的 tr 函数</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<p>
+<span class="underline">序列</span> 是 <span class="underline">列表</span> 和 <span class="underline">数组</span> 的统称，也就是说列表和数组都是序列。它们的共性是 <span class="underline">内部的元素</span> 都是 <b>有序的</b> 。elisp 里的 <span class="underline">数组</span> 包括 <span class="underline">字符串</span> 、 <span class="underline">向量</span> 、 <span class="underline">char-table</span> 和 <span class="underline">布尔向量</span> 。它们的关系可以用下面图表示：
+</p>
 
+<pre class="example">
+
+_____________________________________________
+|                                             |
+|          Sequence                           |
+|  ______   ________________________________  |
+| |      | |                                | |
+| | List | |             Array              | |
+| |      | |    ________       ________     | |
+| |______| |   |        |     |        |    | |
+|          |   | Vector |     | String |    | |
+|          |   |________|     |________|    | |
+|          |  ____________   _____________  | |
+|          | |            | |             | | |
+|          | | Char-table | | Bool-vector | | |
+|          | |____________| |_____________| | |
+|          |________________________________| |
+|_____________________________________________|
+</pre>
+
+<p>
+数组有这样一些特性：
+</p>
+<ul class="org-ul">
+<li>数组内的 <span class="underline">元素</span> 都对应一个 <span class="underline">下标</span> ，第一个元素下标为 0，接下来是 1</li>
+</ul>
+<pre class="example">
+数组内 的元素可以在常数时间内访问
+</pre>
+<ul class="org-ul">
+<li>数组在创建之后就 <b>无法改变</b> 它的 <span class="underline">长度</span></li>
+<li>数组是 <b>自求值的</b></li>
+<li>数组里的元素都可以用 <span class="underline">aref</span> 来访问，用 <span class="underline">aset</span> 来设置</li>
+</ul>
+
+<div id="outline-container-orgaa3e9db" class="outline-2">
+<h2 id="orgaa3e9db">比较</h2>
+<div class="outline-text-2" id="text-orgaa3e9db">
+<ul class="org-ul">
+<li>向量：可以看成是一种通用的数组，它的 <b>元素可以是任意的对象</b></li>
+<li>字符串：一种特殊的数组，它的 <b>元素只能是字符</b></li>
+</ul>
+<pre class="example">
+  如果元素是字符时，使用字符串相比向量更好，因为字符串需要的空间更少（只需要向量的1/4），输出更直观，能用文本属性
+
+  但是有时必须使用向量，比如存储按键序列
+
+  由于 char-table 和 bool-vector 使用较少
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org9d2f1b4" class="outline-2">
+<h2 id="org9d2f1b4">测试</h2>
+<div class="outline-text-2" id="text-org9d2f1b4">
+<ul class="org-ul">
+<li><span class="underline">sequencep</span> : 用来测试一个对象是否是一个序列</li>
+<li><span class="underline">arrayp</span> : 测试对象是否是数组</li>
+<li><span class="underline">vectorp</span>: 测试对象是否是向量</li>
+<li><span class="underline">char-table-p</span> : 测试对象是否 char-table</li>
+<li><span class="underline">bool-vector-p</span> : 测试对象是否 bool-vector</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-orge98dcd1" class="outline-2">
+<h2 id="orge98dcd1">序列的通用函数</h2>
+<div class="outline-text-2" id="text-orge98dcd1">
+<p>
+一个重要的函数 <span class="underline">length</span> ，它可以得到 <span class="underline">序列的长度</span> 
+</p>
+
+<pre class="example">
+  但是这个函数只对真列表有效，对于一个点列表和环形列表这个函数就不适用了
+
+  点列表会出参数类型不对的错误，而环形列表就更危险，会陷入死循环
+</pre>
+
+<p>
+如果不确定参数类型，不妨用 <span class="underline">safe-length</span> ：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(safe-length '(a . b))                  <span style="color: #5f9ea0; font-style: italic;">; =&gt; 1</span>
+(safe-length '#1=(1 2 . #1#))           <span style="color: #5f9ea0; font-style: italic;">; =&gt; 3</span>
+</pre>
+</div>
+
+<p>
+取得序列里第 n 个元素可以用 <span class="underline">elt</span> 函数
+</p>
+<pre class="example">
+  对于已知类型的序列，还是用对应的函数比较好。也就是说，如果是列表就用 nth，如果是数组就用 aref
+
+  这样一方面是省去 elt 内部的判断，另一方面读代码时能很清楚知道序列的类型
+</pre>
+
+<p>
+<span class="underline">copy-sequence</span> 在前面已经提到了
+</p>
+
+<pre class="example">
+  不过同样 copy-sequence 不能用于点列表和环形列表
+
+  对于点列表可以用 copy-tree 函数
+
+  环形列表就没有办法复制了。 好在这样的数据结构很少用到
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orgdb3f6eb" class="outline-2">
+<h2 id="orgdb3f6eb">数组操作</h2>
+<div class="outline-text-2" id="text-orgdb3f6eb">
+<p>
+创建字符串已经说过了。创建向量可以用 <span class="underline">vector</span> 函数：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(vector 'foo 23 [bar baz] <span style="color: #deb887;">"rats"</span>)
+</pre>
+</div>
+
+<p>
+也可以直接用 <span class="underline">向量的读入语法</span> 创建向量，但是由于数组是 <span class="underline">自求值的</span> ，所以这样得到的向量和原来是一样的，也就是说 <b>参数不进行求值</b> ，看下面的例子就明白了：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(setq foo '(a b)) 
+foo                                     <span style="color: #5f9ea0; font-style: italic;">; =&gt; (a b)</span>
+[foo]                                   <span style="color: #5f9ea0; font-style: italic;">; =&gt; [foo]</span>
+(vector foo)                            <span style="color: #5f9ea0; font-style: italic;">; =&gt; [(a b)]</span>
+</pre>
+</div>
+
+<p>
+用 <span class="underline">make-vector</span> 可以生成元素相同的向量
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(make-vector 9 'Z)                      <span style="color: #5f9ea0; font-style: italic;">; =&gt; [Z Z Z Z Z Z Z Z Z]</span>
+</pre>
+</div>
+
+<p>
+<span class="underline">fillarray</span> 可以把整个数组用某个元素填充 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(fillarray (make-vector 3 'Z) 5)        <span style="color: #5f9ea0; font-style: italic;">; =&gt; [5 5 5]</span>
+</pre>
+</div>
+
+<p>
+<span class="underline">aref</span> 和 <span class="underline">aset</span> 可以用于访问和修改数组的元素
+</p>
+
+<pre class="example">
+  如果使用下标超出数组长度的话，会产生一个错误。所以要先确定数组的长度才能用这两个函数！！
+</pre>
+
+<p>
+<span class="underline">vconcat</span> 可以把多个序列连接成一个向量。但是这个序列必须是 <b>真列表</b> 。这也是把列表转换成向量的方法 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(vconcat [A B C] <span style="color: #deb887;">"aa"</span> '(foo (6 7)))     <span style="color: #5f9ea0; font-style: italic;">; =&gt; [A B C 97 97 foo (6 7)]</span>
+</pre>
+</div>
+
+<p>
+把向量转换成列表可以用 append 函数 
+</p>
+</div>
+</div>
+
+<div id="outline-container-org36be473" class="outline-2">
+<h2 id="org36be473">应用</h2>
+<div class="outline-text-2" id="text-org36be473">
+</div>
+<div id="outline-container-orge7c89a1" class="outline-3">
+<h3 id="orge7c89a1">测试列表是否是环形列表</h3>
+<div class="outline-text-3" id="text-orge7c89a1">
+<p>
+这个算法是从 safe-length 定义中得到的。可以直接看它的源码
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(<span style="color: #00bfff; font-weight: bold;">defun</span> <span style="color: #daa520; font-weight: bold;">circular-list-p</span> (list)
+  (and (consp list)
+       (circular-list-p-1 (cdr list) list 0)))
+
+(<span style="color: #00bfff; font-weight: bold;">defun</span> <span style="color: #daa520; font-weight: bold;">circular-list-p-1</span> (tail halftail len)
+  (<span style="color: #00bfff; font-weight: bold;">if</span> (eq tail halftail)
+      t
+    (<span style="color: #00bfff; font-weight: bold;">if</span> (consp tail)
+        (circular-list-p-1 (cdr tail)
+                           (<span style="color: #00bfff; font-weight: bold;">if</span> (= (% len 2) 0)
+                               (cdr halftail)
+                             halftail)
+                           (1+ len))
+      nil)))
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org5e2a0e7" class="outline-3">
+<h3 id="org5e2a0e7">转换字符的 tr 函数</h3>
+<div class="outline-text-3" id="text-org5e2a0e7">
+<pre class="example">
+如果知道 elisp 的 let 绑定和循环的使用方法，不妨试试实现一个 elisp 的 tr 函数，它接受三个参数：
+1. 要操作的字符串
+2. 要替换的字符集
+3. 对应的替换后的字符集（当它是空集时，删除字符串中所有对应的字符）
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(<span style="color: #00bfff; font-weight: bold;">defun</span> <span style="color: #daa520; font-weight: bold;">my-tr</span> (str from to)
+  (<span style="color: #00bfff; font-weight: bold;">if</span> (= (length to) 0)                 <span style="color: #5f9ea0; font-style: italic;">; &#31354;&#23383;&#31526;&#20018;</span>
+      (<span style="color: #00bfff; font-weight: bold;">progn</span>
+        (setq from (append from nil))
+        (concat
+         (delq nil
+               (mapcar (<span style="color: #00bfff; font-weight: bold;">lambda</span> (c)
+                         (<span style="color: #00bfff; font-weight: bold;">if</span> (member c from)
+                             nil c))
+                       (append str nil)))))
+      (<span style="color: #00bfff; font-weight: bold;">let</span> (table newstr pair)
+        <span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">&#26500;&#24314;&#36716;&#25442;&#34920;</span>
+        (<span style="color: #00bfff; font-weight: bold;">dotimes</span> (i (length from))
+          (push (cons (aref from i) (aref to i)) table))
+        (<span style="color: #00bfff; font-weight: bold;">dotimes</span> (i (length str))
+          (push
+           (<span style="color: #00bfff; font-weight: bold;">if</span> (setq pair (assoc (aref str i) table))
+               (cdr pair)
+               (aref str i))
+           newstr))
+        (concat (nreverse newstr) nil))))
+</pre>
+</div>
+
+<p>
+这里用到的 dotimes 函数相当于一个 C 里的 for 循环。如果改写成 while 循环，相当于：
+</p>
+<div class="org-src-container">
+<pre class="src src-lisp">(<span style="color: #00bfff; font-weight: bold;">let</span> (var)
+  (<span style="color: #00bfff; font-weight: bold;">while</span> (&lt; var count)
+    body
+    (setq var (1+ var)))
+  result)
+</pre>
+</div>
+
+<pre class="example">
+  从这个例子也可以看出，由于列表具有丰富的函数和可变长度，使列表比数组使用更方便，而且效率往往更高
+</pre>
+</div>
+</div>
+</div>
 </div>
 <div id="postamble" class="status">
 
