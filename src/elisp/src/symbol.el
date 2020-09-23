@@ -106,3 +106,12 @@ count                                   ; => 70395
 (setq my-plist (plist-put my-plist 'foo 69)) ; => (bar t foo 69)
 (setq my-plist (plist-put my-plist 'quux '(a))) ; => (bar t foo 69 quux (a))
 
+(defun my-plist-get (plist prop)
+  (cadr (memq plist prop)))
+
+(defun my-plist-put (plist prop val)
+  (let ((tail (memq prop plist)))
+    (if tail
+        (setcar (cdr tail) val)
+      (setcdr (last plist) (list prop val))))
+  plist)

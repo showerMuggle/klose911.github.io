@@ -204,7 +204,7 @@ _符号_ 是有 *名字* 的对象
    类似的，可以用 fboundp 测试一个符号的函数部分是否有设置
    #+END_EXAMPLE
 
-** 属性
+** 属性列表
    符号的第四个组成部分是 _属性列表_ 。通常属性列表用于 *存储* 和 _符号相关的信息_ ，比如变量和函数的 _文档_ ，定义的 _文件名_ 和 _位置_ ，语法类型
 
    属性名和值可以是任意的 lisp 对象，通常名字是符号，可以用 _get_ 和 _put_ 来访问和修改属性值，用 _symbol-plist_ 得到所有的属性列表：
@@ -232,3 +232,28 @@ _符号_ 是有 *名字* 的对象
   (setq my-plist (plist-put my-plist 'foo 69)) ; => (bar t foo 69)
   (setq my-plist (plist-put my-plist 'quux '(a))) ; => (bar t foo 69 quux (a))
    #+END_SRC
+
+*** plist-get 和 plist-put 的实现
+    #+BEGIN_SRC lisp 
+  (defun my-plist-get (plist prop)
+    (cadr (memq plist prop)))
+
+  (defun my-plist-put (plist prop val)
+    (let ((tail (memq prop plist)))
+      (if tail
+	  (setcar (cdr tail) val)
+	  (setcdr (last plist) (list prop val))))
+    plist)
+    #+END_SRC
+
+    #+BEGIN_EXAMPLE
+      my-plist-put 函数没有 plist-put 那样 robust，如果属性列表是 '(bar t foo) 这样的话，这个函数就会出错
+
+      而且加入一个属性的时间复杂度比 plist 更高（memq 和 last 都是 O(n)），不过可以用循环来达到相同的时间复杂度
+    #+END_EXAMPLE
+
+    [[file:evalution.org][Next：求值]]
+
+    [[file:array.org][Previous：数组]]
+
+    [[file:elisp.org][Home：目录]]
