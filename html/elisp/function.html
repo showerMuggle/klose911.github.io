@@ -363,7 +363,7 @@ for the JavaScript code in this tag.
 <h2 id="org8b4c6f5">调用函数</h2>
 <div class="outline-text-2" id="text-org8b4c6f5">
 <pre class="example">
-通常函数的调用都是用 eval 进行的，但是有时需要在“运行时”才决定使用什么函数
+  通常函数的调用都是用 eval 进行的，但是有时需要在“运行时”才决定使用什么函数
 </pre>
 <p>
 这时就需要用 <span class="underline">funcall</span> 和 <span class="underline">apply</span> 两个函数了，这两个函数都是把其余的参数作为函数的参数进行调用。唯一的区别就：
@@ -419,7 +419,7 @@ apply 是用了 'z 'a, 去掉了列表
 </div>
 
 <pre class="example">
-上面用 macroexpand 得到的结果就是用于求值的表达式
+  上面用 macroexpand 得到的结果就是用于求值的表达式
 </pre>
 
 <p>
@@ -484,7 +484,7 @@ indent 的类型比较简单，它可以使用这样几种类型：
 </div>
 
 <pre class="example">
-注意：这个 backquote 本身就是一个宏
+  注意：这个 backquote 本身就是一个宏
 </pre>
 <p>
 从这里可以看出宏除了 <span class="underline">减少重复代码</span> 这个作用之外的另一个用途： <b>定义新的控制结构</b> ，甚至增加新的语法特性
@@ -494,6 +494,252 @@ indent 的类型比较简单，它可以使用这样几种类型：
 
 <div id="outline-container-orgd353874" class="outline-2">
 <h2 id="orgd353874">命令</h2>
+<div class="outline-text-2" id="text-orgd353874">
+<p>
+emacs 运行时就是处于一个 <span class="underline">命令循环</span> 中，不断从用户那得到 <span class="underline">按键序列</span> ，然后调用对应 <span class="underline">命令</span> 来执行。lisp 编写的命令都含有一个 <span class="underline">interactive</span> 表达式。这个表达式指明了这个命令的 <span class="underline">参数</span> ：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(<span style="color: #00bfff; font-weight: bold;">defun</span> <span style="color: #daa520; font-weight: bold;">hello-world</span> (name)
+  (interactive <span style="color: #deb887;">"sWhat you name? "</span>)
+  (message <span style="color: #deb887;">"Hello, %s"</span> name))
+</pre>
+</div>
+
+<pre class="example">
+  现在可以用 M-x 来调用这个命令
+</pre>
+
+<p>
+interactive 的参数中的第一个字符（也称为代码字符）代表 <b>参数的类型</b> ，比如这里 <span class="underline">s</span> 代表参数的类型是一个 <b>字符串</b> ，而其后的字符串是用来 <span class="underline">提示的字符串</span> 。如果这个命令有多个参数，可以在这个提示字符串后使用换行符分开，比如：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(<span style="color: #00bfff; font-weight: bold;">defun</span> <span style="color: #daa520; font-weight: bold;">hello-world</span> (name time)
+  (interactive <span style="color: #deb887;">"sWhat you name? \nnWhat the time? "</span>)
+  (message <span style="color: #deb887;">"Good %s, %s"</span>
+           (<span style="color: #00bfff; font-weight: bold;">cond</span> ((&lt; time 13) <span style="color: #deb887;">"morning"</span>)
+                 ((&lt; time 19) <span style="color: #deb887;">"afternoon"</span>)
+                 (t <span style="color: #deb887;">"evening"</span>))
+           name))
+</pre>
+</div>
+
+<p>
+interactive 可以使用的代码字符很多，虽然有一定的规则，比如字符串用 <span class="underline">s</span> ，数字用 <span class="underline">n</span> ，文件用 <span class="underline">f</span> ，区域用 <span class="underline">r</span>  
+</p>
+
+<pre class="example">
+    但是还是很容易忘记，用的时候看 interactive 函数的文档还是很有必要的
+
+    但是不是所有时候都参数类型都能使用代码字符
+
+    而且一个好的命令，应该尽可能的让提供默认参数以让用户少花时间在输入参数上，这时，就有可能要自己定制参数
+</pre>
+
+<p>
+代码字符等价的几个函数。s 对应的函数是 <span class="underline">read-string</span> ：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(read-string <span style="color: #deb887;">"What your name? "</span> user-full-name)
+</pre>
+</div>
+
+<p>
+n 对应的函数是 <span class="underline">read-number</span> ，文件对应 <span class="underline">read-file-name</span> 。大部分代码字符都是有这样对应的函数或替换的方法：
+</p>
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 1:</span> 代码字符对应的函数</caption>
+
+<colgroup>
+<col  class="org-left" />
+
+<col  class="org-left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="org-left">字符代码</td>
+<td class="org-left">代替的表达式</td>
+</tr>
+
+<tr>
+<td class="org-left">a</td>
+<td class="org-left">(completing-read prompt obarray 'fboundp t)</td>
+</tr>
+
+<tr>
+<td class="org-left">b</td>
+<td class="org-left">(read-buffer prompt nil t)</td>
+</tr>
+
+<tr>
+<td class="org-left">B</td>
+<td class="org-left">(read-buffer prompt)</td>
+</tr>
+
+<tr>
+<td class="org-left">c</td>
+<td class="org-left">(read-char prompt)</td>
+</tr>
+
+<tr>
+<td class="org-left">C</td>
+<td class="org-left">(read-command prompt)</td>
+</tr>
+
+<tr>
+<td class="org-left">d</td>
+<td class="org-left">(point)</td>
+</tr>
+
+<tr>
+<td class="org-left">D</td>
+<td class="org-left">(read-directory-name prompt)</td>
+</tr>
+
+<tr>
+<td class="org-left">e</td>
+<td class="org-left">(read-event)</td>
+</tr>
+
+<tr>
+<td class="org-left">f</td>
+<td class="org-left">(read-file-name prompt nil nil t)</td>
+</tr>
+
+<tr>
+<td class="org-left">F</td>
+<td class="org-left">(read-file-name prompt)</td>
+</tr>
+
+<tr>
+<td class="org-left">G</td>
+<td class="org-left">暂时不知道和 f 的差别</td>
+</tr>
+
+<tr>
+<td class="org-left">k</td>
+<td class="org-left">(read-key-sequence prompt)</td>
+</tr>
+
+<tr>
+<td class="org-left">K</td>
+<td class="org-left">(read-key-sequence prompt nil t)</td>
+</tr>
+
+<tr>
+<td class="org-left">m</td>
+<td class="org-left">(mark)</td>
+</tr>
+
+<tr>
+<td class="org-left">n</td>
+<td class="org-left">(read-number prompt)</td>
+</tr>
+
+<tr>
+<td class="org-left">N</td>
+<td class="org-left">(if current-prefix-arg (prefix-numeric-value current-prefix-arg) (read-number prompt))</td>
+</tr>
+
+<tr>
+<td class="org-left">p</td>
+<td class="org-left">(prefix-numeric-value current-prefix-arg)</td>
+</tr>
+
+<tr>
+<td class="org-left">P</td>
+<td class="org-left">current-prefix-arg</td>
+</tr>
+
+<tr>
+<td class="org-left">r</td>
+<td class="org-left">(region-beginning) (region-end)</td>
+</tr>
+
+<tr>
+<td class="org-left">s</td>
+<td class="org-left">(read-string prompt)</td>
+</tr>
+
+<tr>
+<td class="org-left">S</td>
+<td class="org-left">(completing-read prompt obarray nil t)</td>
+</tr>
+
+<tr>
+<td class="org-left">v</td>
+<td class="org-left">(read-variable prompt)</td>
+</tr>
+
+<tr>
+<td class="org-left">x</td>
+<td class="org-left">(read-from-minibuffer prompt nil nil t)</td>
+</tr>
+
+<tr>
+<td class="org-left">X</td>
+<td class="org-left">(eval (read-from-minibuffer prompt nil nil t))</td>
+</tr>
+
+<tr>
+<td class="org-left">z</td>
+<td class="org-left">(read-coding-system prompt)</td>
+</tr>
+
+<tr>
+<td class="org-left">Z</td>
+<td class="org-left">(and current-prefix-arg (read-coding-system prompt))</td>
+</tr>
+</tbody>
+</table>
+
+<pre class="example">
+  知道这些表达式如何用于 interactive 表达式里呢？
+</pre>
+
+<p>
+简而言之，如果 interactive 的参数是一个表达式，则这个表达式 <span class="underline">求值后的列表元素</span> 对应于这个 <span class="underline">命令的参数</span> ：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(<span style="color: #00bfff; font-weight: bold;">defun</span> <span style="color: #daa520; font-weight: bold;">read-hiden-file</span> (file arg)
+  (interactive
+   (list (read-file-name <span style="color: #deb887;">"Choose a hiden file: "</span> <span style="color: #deb887;">"~/"</span> nil nil nil
+                         (<span style="color: #00bfff; font-weight: bold;">lambda</span> (name)
+                           (string-match <span style="color: #deb887;">"^\\."</span> (file-name-nondirectory name))))
+         current-prefix-arg))
+  (message <span style="color: #deb887;">"%s, %S"</span> file arg))
+</pre>
+</div>
+
+<ul class="org-ul">
+<li>第一个参数是读入一个以 <span class="underline">.</span> 开头的文件名</li>
+<li>第二个参数为 <span class="underline">当前的前缀参数</span> （prefix argument），它可以用 <span class="underline">C-u</span> 或 C-u 加数字提供</li>
+<li>list 把这两个参数构成一个列表。这就是命令一般的自定义设定参数的方法</li>
+</ul>
+
+<p>
+需要注意的是 <span class="underline">current-prefix-arg</span> 这个变量。这个变量当一个命令被调用，它就被赋与一个值，可以用 C-u 就能改变它的值。在命令运行过程中，它的值始终都存在。即使你的命令不用参数，也可以访问它
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(<span style="color: #00bfff; font-weight: bold;">defun</span> <span style="color: #daa520; font-weight: bold;">foo</span> ()
+  (interactive)
+  (message <span style="color: #deb887;">"%S"</span> current-prefix-arg))
+</pre>
+</div>
+
+<pre class="example">
+    用 C-u foo 调用它，可以发现它的值是 (4)
+
+    那为什么大多数命令还单独为它设置一个参数呢？这是因为命令不仅是用户可以调用，很可能其它函数也可以调用，单独设置一个参数可以方便的用参数传递的方法调用这个命令
+
+    事实上所有的命令都可以不带参数，而使用前面介绍的方法在命令定义的部分读入需要的参数，但是为了提高命令的可重用性和代码的可读性，还是把参数分离到 interactive 表达式里好
+</pre>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">

@@ -67,4 +67,28 @@ See also `substitute-command-keys' and `documentation'"
 ;;;;;;;;;;;;;
 ;; Command ;;
 ;;;;;;;;;;;;;
+(defun hello-world (name)
+  (interactive "sWhat you name? ")
+  (message "Hello, %s" name))
 
+(defun hello-world (name time)
+  (interactive "sWhat you name? \nnWhat the time? ")
+  (message "Good %s, %s"
+           (cond ((< time 13) "morning")
+                 ((< time 19) "afternoon")
+                 (t "evening"))
+           name))
+
+(read-string "What your name? " user-full-name)
+
+(defun foo ()
+  (interactive)
+  (message "%S" current-prefix-arg))
+
+(defun read-hiden-file (file arg)
+  (interactive
+   (list (read-file-name "Choose a hiden file: " "~/" nil nil nil
+                         (lambda (name)
+                           (string-match "^\\." (file-name-nondirectory name))))
+         current-prefix-arg))
+  (message "%s, %S" file arg))
