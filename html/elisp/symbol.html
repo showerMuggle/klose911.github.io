@@ -160,6 +160,19 @@
   .footdef  { margin-bottom: 1em; }
   .figure { padding: 1em; }
   .figure p { text-align: center; }
+  .equation-container {
+    display: table;
+    text-align: center;
+    width: 100%;
+  }
+  .equation {
+    vertical-align: middle;
+  }
+  .equation-label {
+    display: table-cell;
+    text-align: right;
+    vertical-align: middle;
+  }
   .inlinetask {
     padding: 10px;
     border: 2px solid gray;
@@ -185,7 +198,7 @@
 @licstart  The following is the entire license notice for the
 JavaScript code in this tag.
 
-Copyright (C) 2012-2019 Free Software Foundation, Inc.
+Copyright (C) 2012-2020 Free Software Foundation, Inc.
 
 The JavaScript code in this tag is free software: you can
 redistribute it and/or modify it under the terms of the GNU
@@ -238,19 +251,19 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org63d2086">命名规则</a></li>
-<li><a href="#orgf5992c4">创建</a>
+<li><a href="#orgf63c6d8">命名规则</a></li>
+<li><a href="#org6d568ea">创建</a>
 <ul>
-<li><a href="#org70ed06b">obarry实现</a></li>
+<li><a href="#org3e7257c">obarry实现</a></li>
 </ul>
 </li>
-<li><a href="#org1e9b219">组成</a>
+<li><a href="#orgaa0bc01">组成</a>
 <ul>
-<li><a href="#org1005d02">名字和值</a></li>
-<li><a href="#orgf3684e5">函数</a></li>
-<li><a href="#org4ed2e3d">属性列表</a>
+<li><a href="#orge058c55">名字和值</a></li>
+<li><a href="#org1372af2">函数</a></li>
+<li><a href="#orgda0edfc">属性列表</a>
 <ul>
-<li><a href="#orgccf951d">plist-get 和 plist-put 的实现</a></li>
+<li><a href="#orga4647b0">plist-get 和 plist-put 的实现</a></li>
 </ul>
 </li>
 </ul>
@@ -263,13 +276,13 @@ for the JavaScript code in this tag.
 </p>
 
 <pre class="example">
-  作个不恰当的比方，符号可以看作是 C 语言里的指针
+作个不恰当的比方，符号可以看作是 C 语言里的指针
 
-  通过符号可以得到和这个符号相关联的信息，比如值，函数，属性列表等等
+通过符号可以得到和这个符号相关联的信息，比如值，函数，属性列表等等
 </pre>
-<div id="outline-container-org63d2086" class="outline-2">
-<h2 id="org63d2086">命名规则</h2>
-<div class="outline-text-2" id="text-org63d2086">
+<div id="outline-container-orgf63c6d8" class="outline-2">
+<h2 id="orgf63c6d8">命名规则</h2>
+<div class="outline-text-2" id="text-orgf63c6d8">
 <p>
 符号名字可以含有任何字符。大多数的符号名字只含有字母、数字和标点 <span class="underline">-+=*/</span> 。这样的名字不需要其它标点。名字前缀要足够把符号名和数字区分开来，如果需要的话，可以在前面用 <span class="underline">\</span> 表示为符号：
 </p>
@@ -282,11 +295,11 @@ for the JavaScript code in this tag.
 </div>
 
 <pre class="example">
-    其它字符 _~!@$%^&amp;amp;:&lt;&gt;{}? 用的比较少，但是也可以直接作为符号的名字
+其它字符 _~!@$%^&amp;amp;:&lt;&gt;{}? 用的比较少，但是也可以直接作为符号的名字
 
-    任何其它字符都可以用 \ 转义后用在符号名字里。但是和字符串里字符表示不同，\ 转义后只是表示其后的字符，比如 \t 代表的字符 t，而不是制表符
+任何其它字符都可以用 \ 转义后用在符号名字里。但是和字符串里字符表示不同，\ 转义后只是表示其后的字符，比如 \t 代表的字符 t，而不是制表符
 
-    如果要在符号名里使用制表符，必须在 \ 后加上制表符本身
+如果要在符号名里使用制表符，必须在 \ 后加上制表符本身
 </pre>
 
 <p>
@@ -306,18 +319,18 @@ char-to-string      <span style="color: #5f9ea0; font-style: italic;">; &#21517;
 </div>
 </div>
 </div>
-<div id="outline-container-orgf5992c4" class="outline-2">
-<h2 id="orgf5992c4">创建</h2>
-<div class="outline-text-2" id="text-orgf5992c4">
+<div id="outline-container-org6d568ea" class="outline-2">
+<h2 id="org6d568ea">创建</h2>
+<div class="outline-text-2" id="text-org6d568ea">
 <pre class="example">
-  一个名字如何与数据对应上呢？这就要了解一下符号是如何创建的了
+一个名字如何与数据对应上呢？这就要了解一下符号是如何创建的了
 </pre>
 <p>
 符号名要有唯一性，所以一定会有一个表与名字关联，这个表在 elisp 里称为 <span class="underline">obarray</span> 
 </p>
 
 <pre class="example">
-  从这个名字可以看出这个表是用数组类型，事实上是一个向量
+从这个名字可以看出这个表是用数组类型，事实上是一个向量
 </pre>
 
 <p>
@@ -325,14 +338,14 @@ char-to-string      <span style="color: #5f9ea0; font-style: italic;">; &#21517;
 </p>
 
 <pre class="example">
-  这里强调的是obarray 不是一个特殊的数据结构，就是一个一般的向量
+这里强调的是obarray 不是一个特殊的数据结构，就是一个一般的向量
 </pre>
 
 <p>
 <b>全局变量</b> obarray里 emacs 所有变量、函数和其它符号所使用的 obarray
 </p>
 <pre class="example">
-    注意不同语境中obarray 的含义不同。前一个 obarray 是变量名，后一个 obarray 是数据类型名
+注意不同语境中obarray 的含义不同。前一个 obarray 是变量名，后一个 obarray 是数据类型名
 </pre>
 
 <p>
@@ -347,7 +360,7 @@ char-to-string      <span style="color: #5f9ea0; font-style: italic;">; &#21517;
 当 lisp 读入一个符号时，通常会先查找这个符号是否在 obarray 里出现过，如果没有则会把这个符号加入到 obarray 里
 </p>
 <pre class="example">
-  这样查找并加入一个符号的过程称为是 intern
+这样查找并加入一个符号的过程称为是 intern
 </pre>
 <ul class="org-ul">
 <li>intern 函数可以查找或加入一个名字到 obarray 里，返回对应的符号。默认是全局的obarray，也可以指定一个 obarray</li>
@@ -363,9 +376,9 @@ char-to-string      <span style="color: #5f9ea0; font-style: italic;">; &#21517;
 </div>
 
 <pre class="example">
-    为了不污染 obarray，例子中尽量在 foo 这个 obarray 里进行
+为了不污染 obarray，例子中尽量在 foo 这个 obarray 里进行
 
-    一般来说，去了 foo 参数，则会在 obarray 里进行。其结果应该是相同的
+一般来说，去了 foo 参数，则会在 obarray 里进行。其结果应该是相同的
 </pre>
 
 <p>
@@ -377,7 +390,7 @@ lisp 每读入一个符号都会 intern 到 obarray 里，如果想避免，可�
 'abc                                    <span style="color: #5f9ea0; font-style: italic;">; =&gt; abc</span>
 (intern-soft <span style="color: #deb887;">"abc"</span>)                     <span style="color: #5f9ea0; font-style: italic;">; =&gt; abc</span>
 (intern-soft <span style="color: #deb887;">"abcd"</span>)                    <span style="color: #5f9ea0; font-style: italic;">; =&gt; nil</span>
-'#<span style="color: #f08080;">:abcd</span>                                 <span style="color: #5f9ea0; font-style: italic;">; =&gt; abcd</span>
+'<span style="color: #5f9ea0; font-style: italic;">#:</span><span style="color: #ffebcd;">abcd</span>                                 <span style="color: #5f9ea0; font-style: italic;">; =&gt; abcd</span>
 (intern-soft <span style="color: #deb887;">"abcd"</span>)                    <span style="color: #5f9ea0; font-style: italic;">; =&gt; nil</span>
 </pre>
 </div>
@@ -413,13 +426,13 @@ count                                   <span style="color: #5f9ea0; font-style:
 </div>
 </div>
 
-<div id="outline-container-org70ed06b" class="outline-3">
-<h3 id="org70ed06b">obarry实现</h3>
-<div class="outline-text-3" id="text-org70ed06b">
+<div id="outline-container-org3e7257c" class="outline-3">
+<h3 id="org3e7257c">obarry实现</h3>
+<div class="outline-text-3" id="text-org3e7257c">
 <pre class="example">
-     由前面的例子可以看出elisp 中的向量长度都是有限的，而 obarray 里的符号有成千上万个
+由前面的例子可以看出elisp 中的向量长度都是有限的，而 obarray 里的符号有成千上万个
 
-     那这些符号是怎样放到 obarray 里的呢？
+那这些符号是怎样放到 obarray 里的呢？
 </pre>
 
 <p>
@@ -479,13 +492,13 @@ Now I’am in the slot too: [d e f g h i j k b c]
 </div>
 </div>
 
-<div id="outline-container-org1e9b219" class="outline-2">
-<h2 id="org1e9b219">组成</h2>
-<div class="outline-text-2" id="text-org1e9b219">
+<div id="outline-container-orgaa0bc01" class="outline-2">
+<h2 id="orgaa0bc01">组成</h2>
+<div class="outline-text-2" id="text-orgaa0bc01">
 </div>
-<div id="outline-container-org1005d02" class="outline-3">
-<h3 id="org1005d02">名字和值</h3>
-<div class="outline-text-3" id="text-org1005d02">
+<div id="outline-container-orge058c55" class="outline-3">
+<h3 id="orge058c55">名字和值</h3>
+<div class="outline-text-3" id="text-orge058c55">
 <p>
 每个符号可以对应四个组成部分：
 </p>
@@ -513,9 +526,9 @@ setq 可以看成是一个宏，它可以让你用 (setq sym val) 代替 (set (q
 </div>
 </div>
 
-<div id="outline-container-orgf3684e5" class="outline-3">
-<h3 id="orgf3684e5">函数</h3>
-<div class="outline-text-3" id="text-orgf3684e5">
+<div id="outline-container-org1372af2" class="outline-3">
+<h3 id="org1372af2">函数</h3>
+<div class="outline-text-3" id="text-org1372af2">
 <p>
 符号的第三个组成部分是 <b>函数</b> ：它可以用 <span class="underline">symbol-function</span> 来访问，用 <span class="underline">fset</span> 来设置
 </p>
@@ -527,14 +540,14 @@ setq 可以看成是一个宏，它可以让你用 (setq sym val) 代替 (set (q
 </div>
 
 <pre class="example">
-   类似的，可以用 fboundp 测试一个符号的函数部分是否有设置
+类似的，可以用 fboundp 测试一个符号的函数部分是否有设置
 </pre>
 </div>
 </div>
 
-<div id="outline-container-org4ed2e3d" class="outline-3">
-<h3 id="org4ed2e3d">属性列表</h3>
-<div class="outline-text-3" id="text-org4ed2e3d">
+<div id="outline-container-orgda0edfc" class="outline-3">
+<h3 id="orgda0edfc">属性列表</h3>
+<div class="outline-text-3" id="text-orgda0edfc">
 <p>
 符号的第四个组成部分是 <span class="underline">属性列表</span> 。通常属性列表用于 <b>存储</b> 和 <span class="underline">符号相关的信息</span> ，比如变量和函数的 <span class="underline">文档</span> ，定义的 <span class="underline">文件名</span> 和 <span class="underline">位置</span> ，语法类型
 </p>
@@ -551,11 +564,11 @@ setq 可以看成是一个宏，它可以让你用 (setq sym val) 代替 (set (q
 </div>
 
 <pre class="example">
-     关联列表和属性列表很相似。符号的属性列表在内部表示上是用(prop1 value1 prop2 value2 ...) 的形式，和关联列表也是很相似的
+关联列表和属性列表很相似。符号的属性列表在内部表示上是用(prop1 value1 prop2 value2 ...) 的形式，和关联列表也是很相似的
 
-     属性列表在查找和这个符号相关的信息时，要比直接用关联列表要简单快捷的多，所以变量的文档等信息都是放在符号的属性列表里
+属性列表在查找和这个符号相关的信息时，要比直接用关联列表要简单快捷的多，所以变量的文档等信息都是放在符号的属性列表里
 
-     但是关联表在头端加入元素是很快的，而且它可以删除表里的元素，而属性列表则不能删除一个属性
+但是关联表在头端加入元素是很快的，而且它可以删除表里的元素，而属性列表则不能删除一个属性
 </pre>
 
 <p>
@@ -572,9 +585,9 @@ setq 可以看成是一个宏，它可以让你用 (setq sym val) 代替 (set (q
 </div>
 </div>
 
-<div id="outline-container-orgccf951d" class="outline-4">
-<h4 id="orgccf951d">plist-get 和 plist-put 的实现</h4>
-<div class="outline-text-4" id="text-orgccf951d">
+<div id="outline-container-orga4647b0" class="outline-4">
+<h4 id="orga4647b0">plist-get 和 plist-put 的实现</h4>
+<div class="outline-text-4" id="text-orga4647b0">
 <div class="org-src-container">
 <pre class="src src-lisp">(<span style="color: #00bfff; font-weight: bold;">defun</span> <span style="color: #daa520; font-weight: bold;">my-plist-get</span> (plist prop)
   (cadr (memq plist prop)))
