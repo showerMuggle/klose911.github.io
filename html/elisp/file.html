@@ -240,6 +240,12 @@ for the JavaScript code in this tag.
 <ul>
 <li><a href="#org4d8b707">打开文件</a></li>
 <li><a href="#org6b2cdd7">文件读写</a></li>
+<li><a href="#org024910e">文件信息</a></li>
+<li><a href="#org2360b04">修改文件信息</a></li>
+<li><a href="#org272c4cb">文件名操作</a></li>
+<li><a href="#orgd22acaa">临时文件</a></li>
+<li><a href="#orgb6d8dcb">读取目录内容</a></li>
+<li><a href="#orgbd1f2c2">文件Handle</a></li>
 </ul>
 </div>
 </div>
@@ -371,6 +377,333 @@ insert-file-contents 会处理文件的编码，如果不需要解码文件的�
 <li>lockname 则是文件锁定的名字</li>
 <li>mustbenew 确保文件存在时会要求用户确认操作</li>
 </ul>
+</div>
+</div>
+<div id="outline-container-org024910e" class="outline-2">
+<h2 id="org024910e">文件信息</h2>
+<div class="outline-text-2" id="text-org024910e">
+<ul class="org-ul">
+<li>文件是否存在可以使用 <span class="underline">file-exists-p</span> 来判断：对于目录和一般文件都可以用这个函数进行判断
+<ul class="org-ul">
+<li>符号链接只有当 <span class="underline">目标文件</span> 存在时才返回 t</li>
+</ul></li>
+<li><span class="underline">file-readable-p</span> 、 <span class="underline">file-writable-p</span> ， <span class="underline">file-executable-p</span> 分用来测试用户对文件的权限
+<ul class="org-ul">
+<li>文件的位模式还可以用 <span class="underline">file-modes</span> 函数得到</li>
+</ul></li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(file-exists-p <span style="color: #deb887;">"~/tmp/test.txt"</span>)              <span style="color: #5f9ea0; font-style: italic;">; =&gt; t</span>
+(file-readable-p <span style="color: #deb887;">"~/tmp/test.txt"</span>)            <span style="color: #5f9ea0; font-style: italic;">; =&gt; t</span>
+(file-writable-p <span style="color: #deb887;">"~/tmp/test.txt"</span>)            <span style="color: #5f9ea0; font-style: italic;">; =&gt; t</span>
+(file-executable-p <span style="color: #deb887;">"~/tmp/test.txt"</span>)          <span style="color: #5f9ea0; font-style: italic;">; =&gt; nil</span>
+(format <span style="color: #deb887;">"%o"</span> (file-modes <span style="color: #deb887;">"~/tmp/test.txt"</span>))   <span style="color: #5f9ea0; font-style: italic;">; =&gt; "644"</span>
+</pre>
+</div>
+
+<p>
+文件类型判断：
+</p>
+<ul class="org-ul">
+<li><span class="underline">file-regular-p</span> : 判断一个文件名是否是一个普通文件（不是目录，命名管道、终端或者其它 IO 设备）</li>
+<li><span class="underline">file-directory-p</span>: 判断一个文件名是否一个存在的目录</li>
+<li><span class="underline">file-symlink-p</span> : 判断一个文件名是否是一个符号链接
+<ul class="org-ul">
+<li>当文件名是一个符号链接时会返回 <span class="underline">目标文件名</span></li>
+<li>文件的真实名字也就是除去相对链接和符号链接后得到的文件名可以用 <span class="underline">file-truename</span> 得到</li>
+</ul></li>
+</ul>
+
+<pre class="example">
+事实上每个和文件关联的 buffer 里也有一个缓冲区局部变量 buffer-file-truename 来记录这个文件名
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ ls -l t.txt
+lrwxrwxrwx 1 klose klose 8 2007-07-15 15:51 t.txt -&gt; test.txt
+</pre>
+</div>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(file-regular-p <span style="color: #deb887;">"~/tmp/t.txt"</span>)         <span style="color: #5f9ea0; font-style: italic;">; =&gt; t</span>
+(file-directory-p <span style="color: #deb887;">"~/tmp/t.txt"</span>)       <span style="color: #5f9ea0; font-style: italic;">; =&gt; nil</span>
+(file-symlink-p <span style="color: #deb887;">"~/tmp/t.txt"</span>)         <span style="color: #5f9ea0; font-style: italic;">; =&gt; "test.txt"</span>
+(file-truename <span style="color: #deb887;">"~/tmp/t.txt"</span>)          <span style="color: #5f9ea0; font-style: italic;">; =&gt; "/home/klose/tmp/test.txt"</span>
+</pre>
+</div>
+
+<p>
+文件更详细的信息可以用 <span class="underline">file-attributes</span> 函数得到。这个函数类似系统的 stat 命令，返回文件几乎所有的信息，包括 <span class="underline">文件类型</span> ， <span class="underline">用户</span> 和 <span class="underline">组用户</span> ， <span class="underline">访问日期</span> 、 <span class="underline">修改日期</span> 、 <span class="underline">status change 日期</span> 、 <span class="underline">文件大小</span> 、 <span class="underline">文件位模式</span> 、 <span class="underline">inode number</span> 、 <span class="underline">system number</span> &#x2026;..
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(<span style="color: #00bfff; font-weight: bold;">defun</span> <span style="color: #daa520; font-weight: bold;">file-stat-type</span> (file <span style="color: #98f5ff;">&amp;optional</span> id-format)
+  (car (file-attributes file id-format)))
+(<span style="color: #00bfff; font-weight: bold;">defun</span> <span style="color: #daa520; font-weight: bold;">file-stat-name-number</span> (file <span style="color: #98f5ff;">&amp;optional</span> id-format)
+  (cadr (file-attributes file id-format)))
+(<span style="color: #00bfff; font-weight: bold;">defun</span> <span style="color: #daa520; font-weight: bold;">file-stat-uid</span> (file <span style="color: #98f5ff;">&amp;optional</span> id-format)
+  (nth 2 (file-attributes file id-format)))
+(<span style="color: #00bfff; font-weight: bold;">defun</span> <span style="color: #daa520; font-weight: bold;">file-stat-gid</span> (file <span style="color: #98f5ff;">&amp;optional</span> id-format)
+  (nth 3 (file-attributes file id-format)))
+(<span style="color: #00bfff; font-weight: bold;">defun</span> <span style="color: #daa520; font-weight: bold;">file-stat-atime</span> (file <span style="color: #98f5ff;">&amp;optional</span> id-format)
+  (nth 4 (file-attributes file id-format)))
+(<span style="color: #00bfff; font-weight: bold;">defun</span> <span style="color: #daa520; font-weight: bold;">file-stat-mtime</span> (file <span style="color: #98f5ff;">&amp;optional</span> id-format)
+  (nth 5 (file-attributes file id-format)))
+(<span style="color: #00bfff; font-weight: bold;">defun</span> <span style="color: #daa520; font-weight: bold;">file-stat-ctime</span> (file <span style="color: #98f5ff;">&amp;optional</span> id-format)
+  (nth 6 (file-attributes file id-format)))
+(<span style="color: #00bfff; font-weight: bold;">defun</span> <span style="color: #daa520; font-weight: bold;">file-stat-size</span> (file <span style="color: #98f5ff;">&amp;optional</span> id-format)
+  (nth 7 (file-attributes file id-format)))
+(<span style="color: #00bfff; font-weight: bold;">defun</span> <span style="color: #daa520; font-weight: bold;">file-stat-modes</span> (file <span style="color: #98f5ff;">&amp;optional</span> id-format)
+  (nth 8 (file-attributes file id-format)))
+(<span style="color: #00bfff; font-weight: bold;">defun</span> <span style="color: #daa520; font-weight: bold;">file-stat-guid-changep</span> (file <span style="color: #98f5ff;">&amp;optional</span> id-format)
+  (nth 9 (file-attributes file id-format)))
+(<span style="color: #00bfff; font-weight: bold;">defun</span> <span style="color: #daa520; font-weight: bold;">file-stat-inode-number</span> (file <span style="color: #98f5ff;">&amp;optional</span> id-format)
+  (nth 10 (file-attributes file id-format)))
+(<span style="color: #00bfff; font-weight: bold;">defun</span> <span style="color: #daa520; font-weight: bold;">file-stat-system-number</span> (file <span style="color: #98f5ff;">&amp;optional</span> id-format)
+  (nth 11 (file-attributes file id-format)))
+(<span style="color: #00bfff; font-weight: bold;">defun</span> <span style="color: #daa520; font-weight: bold;">file-attr-type</span> (attr)
+  (car attr))
+(<span style="color: #00bfff; font-weight: bold;">defun</span> <span style="color: #daa520; font-weight: bold;">file-attr-name-number</span> (attr)
+  (cadr attr))
+(<span style="color: #00bfff; font-weight: bold;">defun</span> <span style="color: #daa520; font-weight: bold;">file-attr-uid</span> (attr)
+  (nth 2 attr))
+(<span style="color: #00bfff; font-weight: bold;">defun</span> <span style="color: #daa520; font-weight: bold;">file-attr-gid</span> (attr)
+  (nth 3 attr))
+(<span style="color: #00bfff; font-weight: bold;">defun</span> <span style="color: #daa520; font-weight: bold;">file-attr-atime</span> (attr)
+  (nth 4 attr))
+(<span style="color: #00bfff; font-weight: bold;">defun</span> <span style="color: #daa520; font-weight: bold;">file-attr-mtime</span> (attr)
+  (nth 5 attr))
+(<span style="color: #00bfff; font-weight: bold;">defun</span> <span style="color: #daa520; font-weight: bold;">file-attr-ctime</span> (attr)
+  (nth 6 attr))
+(<span style="color: #00bfff; font-weight: bold;">defun</span> <span style="color: #daa520; font-weight: bold;">file-attr-size</span> (attr)
+  (nth 7 attr))
+(<span style="color: #00bfff; font-weight: bold;">defun</span> <span style="color: #daa520; font-weight: bold;">file-attr-modes</span> (attr)
+  (nth 8 attr))
+(<span style="color: #00bfff; font-weight: bold;">defun</span> <span style="color: #daa520; font-weight: bold;">file-attr-guid-changep</span> (attr)
+  (nth 9 attr))
+(<span style="color: #00bfff; font-weight: bold;">defun</span> <span style="color: #daa520; font-weight: bold;">file-attr-inode-number</span> (attr)
+  (nth 10 attr))
+(<span style="color: #00bfff; font-weight: bold;">defun</span> <span style="color: #daa520; font-weight: bold;">file-attr-system-number</span> (attr)
+  (nth 11 attr))
+</pre>
+</div>
+
+<pre class="example">
+前一组函数是直接由文件名访问文件信息，而后一组函数是由 file-attributes 的返回值来得到文件信息
+</pre>
+</div>
+</div>
+<div id="outline-container-org2360b04" class="outline-2">
+<h2 id="org2360b04">修改文件信息</h2>
+<div class="outline-text-2" id="text-org2360b04">
+<ul class="org-ul">
+<li>重命名和复制文件可以用 <span class="underline">rename-file</span> 和 <span class="underline">copy-file</span></li>
+<li>删除文件使用 <span class="underline">delete-file</span></li>
+<li>创建目录使用 <span class="underline">make-directory</span> 函数</li>
+<li>不能用 delete-file 删除 目录，只能用 <span class="underline">delete-directory</span> 删除目录，当目录不为空时会产生一个错误</li>
+<li>设置文件修改时间使用 <span class="underline">set-file-times</span></li>
+<li>设置文件位模式可以用 <span class="underline">set-file-modes</span> 函数：参数必须是一个整数
+<ul class="org-ul">
+<li>可以用位函数 logand、logior 和 logxor 函数来进行位操作</li>
+</ul></li>
+</ul>
+</div>
+</div>
+<div id="outline-container-org272c4cb" class="outline-2">
+<h2 id="org272c4cb">文件名操作</h2>
+<div class="outline-text-2" id="text-org272c4cb">
+<p>
+路径一般由 <span class="underline">目录</span> 和 <span class="underline">文件名</span> ，而文件名一般由 <span class="underline">主文件名</span> (basename)、 <span class="underline">文件名后缀</span> 和 <span class="underline">版本号</span> 构成。 Emacs 有一系列函数来得到路径中的不同部分：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(file-name-directory <span style="color: #deb887;">"~/tmp/test.txt"</span>)      <span style="color: #5f9ea0; font-style: italic;">; =&gt; "~/tmp/"</span>
+(file-name-nondirectory <span style="color: #deb887;">"~/tmp/test.txt"</span>)   <span style="color: #5f9ea0; font-style: italic;">; =&gt; "test.txt"</span>
+(file-name-sans-extension <span style="color: #deb887;">"~/tmp/test.txt"</span>) <span style="color: #5f9ea0; font-style: italic;">; =&gt; "~/tmp/test"</span>
+(file-name-extension <span style="color: #deb887;">"~/tmp/test.txt"</span>)      <span style="color: #5f9ea0; font-style: italic;">; =&gt; "txt"</span>
+(file-name-sans-versions <span style="color: #deb887;">"~/tmp/test.txt~"</span>) <span style="color: #5f9ea0; font-style: italic;">; =&gt; "~/tmp/test.txt"</span>
+(file-name-sans-versions <span style="color: #deb887;">"~/tmp/test.txt.~1~"</span>) <span style="color: #5f9ea0; font-style: italic;">; =&gt; "~/tmp/test.txt"</span>
+</pre>
+</div>
+
+<pre class="example">
+虽然 MSWin 的文件名使用的路径分隔符不同，但是这里介绍的函数都能用于 MSWin 形式的文件名，只是返回的文件名都是 Unix 形式了
+</pre>
+
+<p>
+路径如果是从根目录开始的称为是绝对路径：
+</p>
+<ul class="org-ul">
+<li>测试一个路径是否是绝对路径使用 <span class="underline">file-name-absolute-p</span> 
+<ul class="org-ul">
+<li>如果在 Unix 或 GNU/Linux 系统，以 ~ 开头的路径也是绝对路径</li>
+<li>在 MSWin 上，以 "/" 、 "\"、"X:" 开头的路径都是绝对路径</li>
+</ul></li>
+<li>如果不是绝对路径，可以使用 <span class="underline">expand-file-name</span> 来得到绝对路径</li>
+<li>把一个绝对路径转换成相对某个路径的相对路径的可以用 <span class="underline">file-relative-name</span> 函数</li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(file-name-absolute-p <span style="color: #deb887;">"~rms/foo"</span>)       <span style="color: #5f9ea0; font-style: italic;">; =&gt; t</span>
+(file-name-absolute-p <span style="color: #deb887;">"/user/rms/foo"</span>)  <span style="color: #5f9ea0; font-style: italic;">; =&gt; t</span>
+(expand-file-name <span style="color: #deb887;">"foo"</span>)                <span style="color: #5f9ea0; font-style: italic;">; =&gt; "/home/klose/foo"</span>
+(expand-file-name <span style="color: #deb887;">"foo"</span> <span style="color: #deb887;">"/usr/spool/"</span>)  <span style="color: #5f9ea0; font-style: italic;">; =&gt; "/usr/spool/foo"</span>
+(file-relative-name <span style="color: #deb887;">"/foo/bar"</span> <span style="color: #deb887;">"/foo/"</span>) <span style="color: #5f9ea0; font-style: italic;">; =&gt; "bar"</span>
+(file-relative-name <span style="color: #deb887;">"/foo/bar"</span> <span style="color: #deb887;">"/hack/"</span>) <span style="color: #5f9ea0; font-style: italic;">; =&gt; "../foo/bar"</span>
+</pre>
+</div>
+<p>
+对于目录，如果要将其作为目录，也就是确保它是以路径分隔符结束，可以用 <span class="underline">file-name-as-directory</span> 
+</p>
+<pre class="example">
+不要用 (concat dir "/") 来转换，这会有移植问题
+</pre>
+<p>
+和它相对应的函数是 <span class="underline">directory-file-name</span>
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(file-name-as-directory <span style="color: #deb887;">"~rms/lewis"</span>)   <span style="color: #5f9ea0; font-style: italic;">; =&gt; "~rms/lewis/"</span>
+(directory-file-name <span style="color: #deb887;">"~lewis/"</span>)         <span style="color: #5f9ea0; font-style: italic;">; =&gt; "~lewis"</span>
+</pre>
+</div>
+
+<p>
+如果要得到所在系统使用的文件名，可以用 <span class="underline">convert-standard-filename</span>
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(convert-standard-filename <span style="color: #deb887;">"c:/windows"</span>)  <span style="color: #5f9ea0; font-style: italic;">;=&gt; "c:\\windows"</span>
+</pre>
+</div>
+
+<pre class="example">
+比如 在 MSWin 系统上，可以用这个函数返回用 "\" 分隔的文件名
+</pre>
+</div>
+</div>
+<div id="outline-container-orgd22acaa" class="outline-2">
+<h2 id="orgd22acaa">临时文件</h2>
+<div class="outline-text-2" id="text-orgd22acaa">
+<ul class="org-ul">
+<li>如果需要产生一个临时文件，可以使用 <span class="underline">make-temp-file</span>
+<ul class="org-ul">
+<li>这个函数按给定前缀产生一个不和现有文件冲突的文件，并返回它的文件名</li>
+<li>如果给定的名字是一个相对文件名，则产生的文件名会用 <span class="underline">temporary-file-directory</span>  进行扩展
+<ul class="org-ul">
+<li>也可以用这个函数产生一个临时文件夹</li>
+</ul></li>
+</ul></li>
+<li>如果只想产生一个不存在的文件名，可以用 <span class="underline">make-temp-name</span> 函数</li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(make-temp-file <span style="color: #deb887;">"foo"</span>)                  <span style="color: #5f9ea0; font-style: italic;">; =&gt; "/tmp/foo5611dxf"</span>
+(make-temp-name <span style="color: #deb887;">"foo"</span>)                  <span style="color: #5f9ea0; font-style: italic;">; =&gt; "foo5611q7l"</span>
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-orgb6d8dcb" class="outline-2">
+<h2 id="orgb6d8dcb">读取目录内容</h2>
+<div class="outline-text-2" id="text-orgb6d8dcb">
+<p>
+可以用 <span class="underline">directory-files</span> 来得到某个目录中的全部或者符合某个正则表达式的文件名：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(directory-files <span style="color: #deb887;">"~/tmp/dir/"</span>)
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">=&gt;</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">("#foo.el#" "." ".#foo.el" ".." "foo.el" "t.pl" "t2.pl")</span>
+(directory-files <span style="color: #deb887;">"~/tmp/dir/"</span> t)
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">=&gt;</span>
+<span style="color: #5f9ea0; font-style: italic;">;; </span><span style="color: #5f9ea0; font-style: italic;">("/home/ywb/tmp/dir/#foo.el#"</span>
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">"/home/ywb/tmp/dir/."</span>
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">"/home/ywb/tmp/dir/.#foo.el"</span>
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">"/home/ywb/tmp/dir/.."</span>
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">"/home/ywb/tmp/dir/foo.el"</span>
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">"/home/ywb/tmp/dir/t.pl"</span>
+<span style="color: #5f9ea0; font-style: italic;">;;  </span><span style="color: #5f9ea0; font-style: italic;">"/home/ywb/tmp/dir/t2.pl")</span>
+(directory-files <span style="color: #deb887;">"~/tmp/dir/"</span> nil <span style="color: #deb887;">"\\.pl$"</span>) <span style="color: #5f9ea0; font-style: italic;">; =&gt; ("t.pl" "t2.pl")</span>
+</pre>
+</div>
+
+<ul class="org-ul">
+<li><span class="underline">directory-files-and-attributes</span> 和 directory-files 相似，但是返回的列表 中包含了 file-attributes 得到的信息</li>
+<li><span class="underline">file-name-all-versions</span> 用于得到某个文件在目录中的所有版本</li>
+<li><span class="underline">file-expand-wildcards</span> 可以用通配符来得到目录中的文件列表</li>
+</ul>
+</div>
+</div>
+<div id="outline-container-orgbd1f2c2" class="outline-2">
+<h2 id="orgbd1f2c2">文件Handle</h2>
+<div class="outline-text-2" id="text-orgbd1f2c2">
+<pre class="example">
+  如果不把文件局限在存储在本地机器上的信息，而且有一套基本的文件操作，比如判断文件是否存在、打开文件、保存文件、得到目录内容之类，那远程的文件和本地文件的差别也仅在于文件名表示方法不同而已
+
+  在 Emacs 里，底层的文件操作函数都可以托管给 elisp 中的函数，这样只要用 elisp 实现了某种类型文件的基本操作，就能像编辑本地文件一样编辑其它类型文件了
+</pre>
+<p>
+决定何种类型的文件名使用什么方式来操作是在 <span class="underline">file-name-handler-alist</span> 变量定义的。它是由形如 <span class="underline">(REGEXP . HANDLER)</span> 的列表。如果文件名匹配这个 REGEXP 则使用 HANDLER 来进行相应的文件操作。这里所说的文件操作，具体的来说有这些函数：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">`<span style="color: #ffd700;">access-file</span>', `<span style="color: #ffd700;">add-name-to-file</span>', `<span style="color: #ffd700;">byte-compiler-base-file-name</span>',
+`<span style="color: #ffd700;">copy-file</span>', `<span style="color: #ffd700;">delete-directory</span>', `<span style="color: #ffd700;">delete-file</span>',
+`<span style="color: #ffd700;">diff-latest-backup-file</span>', `<span style="color: #ffd700;">directory-file-name</span>', `<span style="color: #ffd700;">directory-files</span>',
+`<span style="color: #ffd700;">directory-files-and-attributes</span>', `<span style="color: #ffd700;">dired-call-process</span>',
+`<span style="color: #ffd700;">dired-compress-file</span>', `<span style="color: #ffd700;">dired-uncache</span>',
+`<span style="color: #ffd700;">expand-file-name</span>', `<span style="color: #ffd700;">file-accessible-directory-p</span>', `<span style="color: #ffd700;">file-attributes</span>',
+`<span style="color: #ffd700;">file-directory-p</span>', `<span style="color: #ffd700;">file-executable-p</span>', `<span style="color: #ffd700;">file-exists-p</span>',
+`<span style="color: #ffd700;">file-local-copy</span>', `<span style="color: #ffd700;">file-remote-p</span>', `<span style="color: #ffd700;">file-modes</span>',
+`<span style="color: #ffd700;">file-name-all-completions</span>', `<span style="color: #ffd700;">file-name-as-directory</span>',
+`<span style="color: #ffd700;">file-name-completion</span>', `<span style="color: #ffd700;">file-name-directory</span>', `<span style="color: #ffd700;">file-name-nondirectory</span>',
+`<span style="color: #ffd700;">file-name-sans-versions</span>', `<span style="color: #ffd700;">file-newer-than-file-p</span>',
+`<span style="color: #ffd700;">file-ownership-preserved-p</span>', `<span style="color: #ffd700;">file-readable-p</span>', `<span style="color: #ffd700;">file-regular-p</span>',
+`<span style="color: #ffd700;">file-symlink-p</span>', `<span style="color: #ffd700;">file-truename</span>', `<span style="color: #ffd700;">file-writable-p</span>',
+`<span style="color: #ffd700;">find-backup-file-name</span>', `<span style="color: #ffd700;">find-file-noselect</span>',
+`<span style="color: #ffd700;">get-file-buffer</span>', `<span style="color: #ffd700;">insert-directory</span>', `<span style="color: #ffd700;">insert-file-contents</span>',
+`<span style="color: #ffd700;">load</span>', `<span style="color: #ffd700;">make-auto-save-file-name</span>', `<span style="color: #ffd700;">make-directory</span>',
+`<span style="color: #ffd700;">make-directory-internal</span>', `<span style="color: #ffd700;">make-symbolic-link</span>',
+`<span style="color: #ffd700;">rename-file</span>', `<span style="color: #ffd700;">set-file-modes</span>', `<span style="color: #ffd700;">set-file-times</span>',
+`<span style="color: #ffd700;">set-visited-file-modtime</span>', `<span style="color: #ffd700;">shell-command</span>', `<span style="color: #ffd700;">substitute-in-file-name</span>',
+`<span style="color: #ffd700;">unhandled-file-name-directory</span>', `<span style="color: #ffd700;">vc-registered</span>',
+`<span style="color: #ffd700;">verify-visited-file-modtime</span>',
+`<span style="color: #ffd700;">write-region</span>' 
+</pre>
+</div>
+<p>
+在 HANDLE 里，可以只接管部分的文件操作，其它仍交给 emacs 原来的函数来完成
+</p>
+
+<pre class="example">
+  举一个简单的例子。比如最新版本的 emacs 把 *scratch* 的 auto-save-mode 打开了
+
+  如果你不想这个缓冲区的自动保存的文件名散布得到处都是，可以想办法让这个缓冲区的自动保存文件放到指定的目录中
+
+  刚好 make-auto-save-file-name 是在上面这个列表里的，但是不幸的是在函数定义里 make-auto-save-file-name 里不对不关联文件的缓冲区使用 handler
+
+  继续往下看，发现生成保存文件名是使用了 expand-file-name 函数
+</pre>
+
+<p>
+一个解决方法就是：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(<span style="color: #00bfff; font-weight: bold;">defun</span> <span style="color: #daa520; font-weight: bold;">my-scratch-auto-save-file-name</span> (operation <span style="color: #98f5ff;">&amp;rest</span> args)
+  (<span style="color: #00bfff; font-weight: bold;">if</span> (and (eq operation 'expand-file-name)
+           (string= (car args) <span style="color: #deb887;">"#*scratch*#"</span>))
+      (expand-file-name (concat <span style="color: #deb887;">"~/.emacs.d/backup/"</span> (car args)))
+    (<span style="color: #00bfff; font-weight: bold;">let</span> ((inhibit-file-name-handlers
+           (cons 'my-scratch-auto-save-file-name
+                 (and (eq inhibit-file-name-operation operation)
+                      inhibit-file-name-handlers)))
+          (inhibit-file-name-operation operation))
+      (apply operation args))))
+</pre>
+</div>
 </div>
 </div>
 </div>
