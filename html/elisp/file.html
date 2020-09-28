@@ -234,7 +234,145 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="elisp.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">文件</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#org4d8b707">打开文件</a></li>
+<li><a href="#org6b2cdd7">文件读写</a></li>
+</ul>
+</div>
+</div>
+<pre class="example">
+  作为一个编辑器，自然文件是最重要的操作对象之一
 
+  这一节要介绍有关文件的一系列命令，比如查找文件，读写文件，文件信息、读取目录、文件名操作等
+</pre>
+<div id="outline-container-org4d8b707" class="outline-2">
+<h2 id="org4d8b707">打开文件</h2>
+<div class="outline-text-2" id="text-org4d8b707">
+<p>
+当打开一个文件时，实际上 emacs 做了很多事情：
+</p>
+<ul class="org-ul">
+<li>把文件名展开成为完整的文件名</li>
+<li>判断文件是否存在</li>
+<li>判断文件是否可读或者文件大小是否太大</li>
+<li>查看文件是否已经打开，是否被锁定</li>
+<li>向缓冲区插入文件内容</li>
+<li>设置缓冲区的模式</li>
+</ul>
+
+<pre class="example">
+    这还只是简单的一个步骤，实际情况比这要复杂的多，许多异常需要考虑
+
+    而且为了所有函数的可扩展性，许多变量、handler 和 hook 被加入到文件操作的函数中，使得每一个环节都可以让用户或者 elisp 开发者可以定制，甚至完全接管所有的文件操作
+</pre>
+
+<p>
+这里需要区分两个概念：文件和缓冲区。它们是两个不同的对象：
+</p>
+<ul class="org-ul">
+<li>文件：是在计算机上可持久保存的信息</li>
+<li>缓冲区： Emacs 中包含文件内容信息的对象，在 emacs 退出后就会消失，只有当保存缓冲区之后缓冲区里的内容才写到文件中去</li>
+</ul>
+</div>
+</div>
+<div id="outline-container-org6b2cdd7" class="outline-2">
+<h2 id="org6b2cdd7">文件读写</h2>
+<div class="outline-text-2" id="text-org6b2cdd7">
+<p>
+打开一个文件的命令是 <span class="underline">find-file</span> : 这命令使一个缓冲区访问某个文件，并让这个缓冲区成为当前缓冲区
+</p>
+<ul class="org-ul">
+<li><span class="underline">find-file-noselect</span> ：所有访问文件的核心函数，它只返回访问文件的缓冲区</li>
+<li>find-file 在打开文件过程中会调用 <span class="underline">find-file-hook</span></li>
+</ul>
+
+<p>
+这两个函数都有一个特点，如果 emacs 里已经有一个缓冲区访问这个文件的话，emacs 不会创建另一个缓冲区来访问文件，而只是简单返回或者转到这个缓冲区
+</p>
+
+<pre class="example">
+    怎样检查有没有缓冲区是否访问某个文件呢？
+
+    所有和文件关联的缓冲区里都有一个 buffer-local 变量buffer-file-name。但是不要直接设置这个变量来改变缓冲区关联的文件，而是使用 set-visited-file-name 来修改
+
+    同样不要直接从 buffer-list 里搜索buffer-file-name 来查找和某个文件关联的缓冲区，应该使用get-file-buffer 或者 find-buffer-visiting
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(find-file <span style="color: #deb887;">"~/tmp/test.txt"</span>)
+(<span style="color: #00bfff; font-weight: bold;">with-current-buffer</span>
+    (find-file-noselect <span style="color: #deb887;">"~/tmp/test.txt"</span>)
+  buffer-file-name)                     <span style="color: #5f9ea0; font-style: italic;">; =&gt; "/home/klose/tmp/test.txt"</span>
+(find-buffer-visiting <span style="color: #deb887;">"~/tmp/test.txt"</span>) <span style="color: #5f9ea0; font-style: italic;">; =&gt; #&lt;buffer test.txt&gt;</span>
+(get-file-buffer <span style="color: #deb887;">"~/tmp/test.txt"</span>)      <span style="color: #5f9ea0; font-style: italic;">; =&gt; #&lt;buffer test.txt&gt;</span>
+</pre>
+</div>
+
+<p>
+保存一个文件的过程相对简单一些：
+</p>
+<ol class="org-ol">
+<li>首先创建备份文件</li>
+<li>处理文件的位模式</li>
+<li>将缓冲区写入文件</li>
+</ol>
+
+<p>
+保存文件的命令是 <span class="underline">save-buffer</span> 
+</p>
+<ul class="org-ul">
+<li>相当于其它编辑器里 <b>另存为</b> 的命令是 <span class="underline">write-file</span> ，在这个过程中会调用一些函数或者 hook: 
+<ul class="org-ul">
+<li>write-file-functions 和 write-contents-functions 几乎功能完全相同，都是在写入文件之前运行的函数，如果这些函数中有一个返回了 non-nil 的值， 则会认为文件已经写入了，后面的函数都不会运行，而且也不会使用再调用其它 写入文件的函数
+<ul class="org-ul">
+<li>这两个变量有一个重要的区别是write-contents-functions 在改变主模式之后会被修改，因为它没有permanent-local 属性，而 write-file-functions 则会仍然保留</li>
+</ul></li>
+<li>before-save-hook 和 write-file-functions 功能也比较类似，但是这个变量里的函数会逐个执行，不论返回什么值也不会影响后面文件的写入</li>
+<li>after-save-hook 是在文件已经写入之后才调用的 hook，它是 save-buffer 最后一个动作</li>
+</ul></li>
+</ul>
+
+<pre class="example">
+    但是实际上在 elisp 编程过程中经常遇到的一个问题是读取一个文件中的内容， 读取完之后并不希望这个缓冲区还留下来
+
+    如果直接用 kill-buffer 可能会把用户打开的文件关闭。而且 find-file-noselect 做的事情实在超出我们的需要
+
+</pre>
+<p>
+这时可能需要的是更底层的文件读写函数，它们是 <span class="underline">insert-file-contents</span> 和 <span class="underline">write-region</span> ，调用形式分别是：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-lisp">(insert-file-contents filename <span style="color: #98f5ff;">&amp;optional</span> visit beg end replace)
+(write-region start end filename <span style="color: #98f5ff;">&amp;optional</span> append visit lockname mustbenew)
+</pre>
+</div>
+<p>
+<span class="underline">insert-file-contents</span> 可以插入文件中指定部分到当前缓冲区中：
+</p>
+<ul class="org-ul">
+<li>如果指定 visit 则会标记缓冲区的修改状态并关联缓冲区到文件，一般是不用的</li>
+<li>replace 是指是否要删除缓冲区里其它内容，这比先删除缓冲区其它内容后插入文件内容要快一些，但是一般也用不上</li>
+</ul>
+
+<pre class="example">
+insert-file-contents 会处理文件的编码，如果不需要解码文件的话，可以用 insert-file-contents-literally 
+</pre>
+
+<p>
+<span class="underline">write-region</span> 可以把缓冲区中的一部分写入到指定文件中：
+</p>
+<ul class="org-ul">
+<li>如果指定 append 则是添加到文件末尾</li>
+<li>visit 参数也会把缓冲区和文件关联</li>
+<li>lockname 则是文件锁定的名字</li>
+<li>mustbenew 确保文件存在时会要求用户确认操作</li>
+</ul>
+</div>
+</div>
 </div>
 <div id="postamble" class="status">
 
