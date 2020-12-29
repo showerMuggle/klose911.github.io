@@ -1,5 +1,9 @@
-func main()
-{
+package main
+
+import "fmt"
+import "bytes"
+
+func main(){
 	path := []byte("AAAA/BBBBBBBBB")
 	sepIndex := bytes.IndexByte(path,'/')
 	//dir1 := path[:sepIndex]
