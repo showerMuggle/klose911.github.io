@@ -5,7 +5,7 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Go 编程模式</title>
+<title>基础概念</title>
 <meta name="generator" content="Org mode" />
 <meta name="author" content="Wu, Shanliang" />
 <style type="text/css">
@@ -228,12 +228,181 @@ for the JavaScript code in this tag.
 </script>
 </head>
 <body>
-<div id="content">
-<h1 class="title">Go 编程模式</h1>
-<ul class="org-ul">
-<li><a href="basic.html">基础概念</a></li>
-<li></li>
+<div id="org-div-home-and-up">
+ <a accesskey="h" href="go-patterns.html"> UP </a>
+ |
+ <a accesskey="H" href="go-patterns.html"> HOME </a>
+</div><div id="content">
+<h1 class="title">基础概念</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#org04033cd">Slice</a></li>
+<li><a href="#orgdf7dc5d">深度比较</a></li>
 </ul>
+</div>
+</div>
+<pre class="example">
+  在本篇文章中，会对Go语言编程模式的一些基本技术和要点，这样可以让你更容易掌握Go语言编程
+
+  其中，主要包括，数组切片的一些小坑，还有接口编程，以及时间和程序运行性能相关的话题
+</pre>
+<div id="outline-container-org04033cd" class="outline-2">
+<h2 id="org04033cd">Slice</h2>
+<div class="outline-text-2" id="text-org04033cd">
+<p>
+<span class="underline">切片</span> 这个东西在Go语言中不是数组，而是一个结构体，其定义如下：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-go"><span style="color: #00bfff; font-weight: bold;">type</span> <span style="color: #98f5ff;">slice</span> <span style="color: #00bfff; font-weight: bold;">struct</span> {
+    array <span style="color: #98f5ff;">unsafe.Pointer</span> <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">&#25351;&#21521;&#23384;&#25918;&#25968;&#25454;&#30340;&#25968;&#32452;&#25351;&#38024;</span>
+    len   <span style="color: #98f5ff;">int</span>            <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">&#38271;&#24230;&#26377;&#22810;&#22823;</span>
+    cap   <span style="color: #98f5ff;">int</span>            <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">&#23481;&#37327;&#26377;&#22810;&#22823;</span>
+}
+</pre>
+</div>
+
+<p>
+用图示来看，一个空的slice的表现如下：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/slice1.png" alt="slice1.png" width="30%" /> 
+</p>
+</div>
+
+<pre class="example">
+  熟悉C/C++的同学一定会知道，在结构体里用数组指针的问题――数据会发生共享！
+</pre>
+
+<p>
+下面来看一下slice的一些操作：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-go">foo = <span style="color: #f08080;">make</span>([]<span style="color: #98f5ff;">int</span>, 5)
+foo[3] = 42
+foo[4] = 100
+<span style="color: #4eee94;">bar</span>  := foo[1:4]
+bar[1] = 99
+</pre>
+</div>
+
+<p>
+对于上面这段代码：
+</p>
+<ol class="org-ol">
+<li>创建一个foo的slice，其中的长度和容量都是5</li>
+<li>对foo所指向的数组中的索引为3和4的元素进行赋值</li>
+<li><p>
+对foo做切片后赋值给bar，再修改bar[1] 
+</p>
+
+
+<div class="figure">
+<p><img src="pic/slice2.png" alt="slice2.png" width="30%" /> 
+</p>
+</div></li>
+</ol>
+
+<pre class="example">
+  通过上图可以看到，因为foo和bar的内存是共享的，所以，foo和bar的对数组内容的修改都会影响到对方
+</pre>
+
+<p>
+接下来，再来看一个数据操作 <span class="underline">append</span> 的示例：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-go"><span style="color: #4eee94;">a</span> := <span style="color: #f08080;">make</span>([]<span style="color: #98f5ff;">int</span>, 32)
+<span style="color: #4eee94;">b</span> := a[1:16]
+a = <span style="color: #f08080;">append</span>(a, 1)
+a[2] = 42
+</pre>
+</div>
+
+<p>
+上面这段代码中：
+</p>
+<ol class="org-ol">
+<li>把 a[1:16] 的切片赋给到了 b ，此时，a 和 b 的内存空间是共享的</li>
+<li><p>
+对 a做了一个 append()的操作，这个操作会让 a  <span class="underline">重新分享内存</span>  ，导致 a 和 b  <b>不再共享</b> ，如下图所示：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/slice3.png" alt="slice3.png" width="30%" />  
+</p>
+</div></li>
+</ol>
+
+<pre class="example">
+  从上图可以看以看到 append()操作让 a 的容量变成了64，而长度是33
+</pre>
+
+<p>
+需要重点注意一下：append()这个函数在 <b>cap 不够用的时候就会重新分配内存以扩大容量，而如果够用的时候却不会重新分享内存</b> 
+</p>
+
+<p>
+再来看一个例子：
+</p>
+<div class="org-src-container">
+<pre class="src src-go"><span style="color: #00bfff; font-weight: bold;">func</span> <span style="color: #daa520; font-weight: bold;">main</span>()
+{
+        <span style="color: #4eee94;">path</span> := []<span style="color: #daa520; font-weight: bold;">byte</span>(<span style="color: #deb887;">"AAAA/BBBBBBBBB"</span>)
+        <span style="color: #4eee94;">sepIndex</span> := bytes.<span style="color: #daa520; font-weight: bold;">IndexByte</span>(path,<span style="color: #deb887;">'/'</span>)
+        <span style="color: #4eee94;">dir1</span> := path[:sepIndex]
+        <span style="color: #4eee94;">dir2</span> := path[sepIndex+1:]
+        fmt.<span style="color: #daa520; font-weight: bold;">Println</span>(<span style="color: #deb887;">"dir1 =&gt;"</span>,<span style="color: #daa520; font-weight: bold;">string</span>(dir1)) <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">prints: dir1 =&gt; AAAA</span>
+        fmt.<span style="color: #daa520; font-weight: bold;">Println</span>(<span style="color: #deb887;">"dir2 =&gt;"</span>,<span style="color: #daa520; font-weight: bold;">string</span>(dir2)) <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">prints: dir2 =&gt; BBBBBBBBB</span>
+        dir1 = <span style="color: #f08080;">append</span>(dir1,<span style="color: #deb887;">"suffix"</span>...)
+        fmt.<span style="color: #daa520; font-weight: bold;">Println</span>(<span style="color: #deb887;">"dir1 =&gt;"</span>,<span style="color: #daa520; font-weight: bold;">string</span>(dir1)) <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">prints: dir1 =&gt; AAAAsuffix</span>
+        fmt.<span style="color: #daa520; font-weight: bold;">Println</span>(<span style="color: #deb887;">"dir2 =&gt;"</span>,<span style="color: #daa520; font-weight: bold;">string</span>(dir2)) <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">prints: dir2 =&gt; uffixBBBB</span>
+}
+</pre>
+</div>
+
+<p>
+上面这个例子中，dir1 和 dir2 共享内存，虽然 dir1 有一个 append() 操作，但是因为 cap 足够，于是数据扩展到了dir2 的空间。下面是相关的图示（注意上图中 dir1 和 dir2 结构体中的 cap 和 len 的变化）
+</p>
+
+
+<div class="figure">
+<p><img src="pic/slice4.png" alt="slice4.png" width="30%" />  
+</p>
+</div>
+
+<p>
+如果要解决这个问题，只需要修改一行代码：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-go"><span style="color: #4eee94;">dir1</span> := path[:sepIndex] 
+</pre>
+</div>
+
+<p>
+修改为：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-go"><span style="color: #4eee94;">dir1</span> := path[:sepIndex:sepIndex]
+</pre>
+</div>
+
+<p>
+新的代码使用了 Full Slice Expression，其最后一个参数叫 <span class="underline">Limited Capacity</span> ，于是，后续的 append() 操作将会导致重新分配内存 
+</p>
+</div>
+</div>
+<div id="outline-container-orgdf7dc5d" class="outline-2">
+<h2 id="orgdf7dc5d">深度比较</h2>
+</div>
 </div>
 <div id="postamble" class="status">
 

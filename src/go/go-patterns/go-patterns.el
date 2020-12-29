@@ -27,8 +27,17 @@
          :recursive t
          :publishing-function org-publish-attachment
          )
+
+	;; picture
+        ("go-patterns-pic"
+         :base-directory "~/Documents/programming/html/klose911.github.io/src/go/go-patterns/pic"  ;; Change this to your local dir
+         :base-extension "png\\|jpg\\|gif"
+         :publishing-directory "~/Documents/programming/html/klose911.github.io/html/go/go-patterns/pic"
+         :recursive t
+         :publishing-function org-publish-attachment
+         )
 	
-        ("go-patterns" :components ("go-patterns-notes" "go-patterns-static"))
+        ("go-patterns" :components ("go-patterns-notes" "go-patterns-static" "go-patterns-pic"))
         )
       )
 
