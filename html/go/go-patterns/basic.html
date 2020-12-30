@@ -160,6 +160,19 @@
   .footdef  { margin-bottom: 1em; }
   .figure { padding: 1em; }
   .figure p { text-align: center; }
+  .equation-container {
+    display: table;
+    text-align: center;
+    width: 100%;
+  }
+  .equation {
+    vertical-align: middle;
+  }
+  .equation-label {
+    display: table-cell;
+    text-align: right;
+    vertical-align: middle;
+  }
   .inlinetask {
     padding: 10px;
     border: 2px solid gray;
@@ -185,7 +198,7 @@
 @licstart  The following is the entire license notice for the
 JavaScript code in this tag.
 
-Copyright (C) 2012-2019 Free Software Foundation, Inc.
+Copyright (C) 2012-2020 Free Software Foundation, Inc.
 
 The JavaScript code in this tag is free software: you can
 redistribute it and/or modify it under the terms of the GNU
@@ -238,35 +251,35 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org008af68">Slice</a></li>
-<li><a href="#orgcda7435">深度比较</a></li>
-<li><a href="#orga092959">接口编程</a>
+<li><a href="#org04033cd">Slice</a></li>
+<li><a href="#orgdf7dc5d">深度比较</a></li>
+<li><a href="#orgf8cd6f8">接口编程</a>
 <ul>
-<li><a href="#org7e5cedd">接口完整性检查</a></li>
+<li><a href="#org2dd039f">接口完整性检查</a></li>
 </ul>
 </li>
-<li><a href="#org95cd48a">时间</a></li>
-<li><a href="#org7a4e15b">性能提示</a></li>
+<li><a href="#org0d1d589">时间</a></li>
+<li><a href="#org5908fdd">性能提示</a></li>
 </ul>
 </div>
 </div>
 <pre class="example">
-  在本篇文章中，会对Go语言编程模式的一些基本技术和要点，这样可以让你更容易掌握Go语言编程
+在本篇文章中，会对Go语言编程模式的一些基本技术和要点，这样可以让你更容易掌握Go语言编程
 
-  其中，主要包括，数组切片的一些小坑，还有接口编程，以及时间和程序运行性能相关的话题
+其中，主要包括，数组切片的一些小坑，还有接口编程，以及时间和程序运行性能相关的话题
 </pre>
-<div id="outline-container-org008af68" class="outline-2">
-<h2 id="org008af68">Slice</h2>
-<div class="outline-text-2" id="text-org008af68">
+<div id="outline-container-org04033cd" class="outline-2">
+<h2 id="org04033cd">Slice</h2>
+<div class="outline-text-2" id="text-org04033cd">
 <p>
 <span class="underline">切片</span> 这个东西在Go语言中不是数组，而是一个结构体，其定义如下：
 </p>
 
 <div class="org-src-container">
-<pre class="src src-go"><span style="color: #00ffff;">type</span> <span style="color: #98fb98;">slice</span> <span style="color: #00ffff;">struct</span> {
-    array <span style="color: #98fb98;">unsafe.Pointer</span> <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#25351;&#21521;&#23384;&#25918;&#25968;&#25454;&#30340;&#25968;&#32452;&#25351;&#38024;</span>
-    len   <span style="color: #98fb98;">int</span>            <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#38271;&#24230;&#26377;&#22810;&#22823;</span>
-    cap   <span style="color: #98fb98;">int</span>            <span style="color: #ff4500;">//</span><span style="color: #ff4500;">&#23481;&#37327;&#26377;&#22810;&#22823;</span>
+<pre class="src src-go"><span style="color: #00bfff; font-weight: bold;">type</span> <span style="color: #98f5ff;">slice</span> <span style="color: #00bfff; font-weight: bold;">struct</span> {
+    array <span style="color: #98f5ff;">unsafe.Pointer</span> <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">&#25351;&#21521;&#23384;&#25918;&#25968;&#25454;&#30340;&#25968;&#32452;&#25351;&#38024;</span>
+    len   <span style="color: #98f5ff;">int</span>            <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">&#38271;&#24230;&#26377;&#22810;&#22823;</span>
+    cap   <span style="color: #98f5ff;">int</span>            <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">&#23481;&#37327;&#26377;&#22810;&#22823;</span>
 }
 </pre>
 </div>
@@ -282,7 +295,7 @@ for the JavaScript code in this tag.
 </div>
 
 <pre class="example">
-  熟悉C/C++的同学一定会知道，在结构体里用数组指针的问题――数据会发生共享！
+熟悉C/C++的同学一定会知道，在结构体里用数组指针的问题――数据会发生共享！
 </pre>
 
 <p>
@@ -290,10 +303,10 @@ for the JavaScript code in this tag.
 </p>
 
 <div class="org-src-container">
-<pre class="src src-go">foo = <span style="color: #b0c4de;">make</span>([]<span style="color: #98fb98;">int</span>, 5)
+<pre class="src src-go">foo = <span style="color: #f08080;">make</span>([]<span style="color: #98f5ff;">int</span>, 5)
 foo[3] = 42
 foo[4] = 100
-<span style="color: #eedd82;">bar</span>  := foo[1:4]
+<span style="color: #4eee94;">bar</span>  := foo[1:4]
 bar[1] = 99
 </pre>
 </div>
@@ -316,7 +329,7 @@ bar[1] = 99
 </ol>
 
 <pre class="example">
-  通过上图可以看到，因为foo和bar的内存是共享的，所以，foo和bar的对数组内容的修改都会影响到对方
+通过上图可以看到，因为foo和bar的内存是共享的，所以，foo和bar的对数组内容的修改都会影响到对方
 </pre>
 
 <p>
@@ -324,9 +337,9 @@ bar[1] = 99
 </p>
 
 <div class="org-src-container">
-<pre class="src src-go"><span style="color: #eedd82;">a</span> := <span style="color: #b0c4de;">make</span>([]<span style="color: #98fb98;">int</span>, 32)
-<span style="color: #eedd82;">b</span> := a[1:16]
-a = <span style="color: #b0c4de;">append</span>(a, 1)
+<pre class="src src-go"><span style="color: #4eee94;">a</span> := <span style="color: #f08080;">make</span>([]<span style="color: #98f5ff;">int</span>, 32)
+<span style="color: #4eee94;">b</span> := a[1:16]
+a = <span style="color: #f08080;">append</span>(a, 1)
 a[2] = 42
 </pre>
 </div>
@@ -348,7 +361,7 @@ a[2] = 42
 </ol>
 
 <pre class="example">
-  从上图可以看以看到 append()操作让 a 的容量变成了64，而长度是33
+从上图可以看以看到 append()操作让 a 的容量变成了64，而长度是33
 </pre>
 
 <p>
@@ -359,17 +372,17 @@ a[2] = 42
 再来看一个例子：
 </p>
 <div class="org-src-container">
-<pre class="src src-go"><span style="color: #00ffff;">func</span> <span style="color: #87cefa;">main</span>()
+<pre class="src src-go"><span style="color: #00bfff; font-weight: bold;">func</span> <span style="color: #daa520; font-weight: bold;">main</span>()
 {
-        <span style="color: #eedd82;">path</span> := []<span style="color: #87cefa;">byte</span>(<span style="color: #ffa07a;">"AAAA/BBBBBBBBB"</span>)
-        <span style="color: #eedd82;">sepIndex</span> := bytes.<span style="color: #87cefa;">IndexByte</span>(path,<span style="color: #ffa07a;">'/'</span>)
-        <span style="color: #eedd82;">dir1</span> := path[:sepIndex]
-        <span style="color: #eedd82;">dir2</span> := path[sepIndex+1:]
-        fmt.<span style="color: #87cefa;">Println</span>(<span style="color: #ffa07a;">"dir1 =&gt;"</span>,<span style="color: #87cefa;">string</span>(dir1)) <span style="color: #ff4500;">//</span><span style="color: #ff4500;">prints: dir1 =&gt; AAAA</span>
-        fmt.<span style="color: #87cefa;">Println</span>(<span style="color: #ffa07a;">"dir2 =&gt;"</span>,<span style="color: #87cefa;">string</span>(dir2)) <span style="color: #ff4500;">//</span><span style="color: #ff4500;">prints: dir2 =&gt; BBBBBBBBB</span>
-        dir1 = <span style="color: #b0c4de;">append</span>(dir1,<span style="color: #ffa07a;">"suffix"</span>...)
-        fmt.<span style="color: #87cefa;">Println</span>(<span style="color: #ffa07a;">"dir1 =&gt;"</span>,<span style="color: #87cefa;">string</span>(dir1)) <span style="color: #ff4500;">//</span><span style="color: #ff4500;">prints: dir1 =&gt; AAAAsuffix</span>
-        fmt.<span style="color: #87cefa;">Println</span>(<span style="color: #ffa07a;">"dir2 =&gt;"</span>,<span style="color: #87cefa;">string</span>(dir2)) <span style="color: #ff4500;">//</span><span style="color: #ff4500;">prints: dir2 =&gt; uffixBBBB</span>
+        <span style="color: #4eee94;">path</span> := []<span style="color: #daa520; font-weight: bold;">byte</span>(<span style="color: #deb887;">"AAAA/BBBBBBBBB"</span>)
+        <span style="color: #4eee94;">sepIndex</span> := bytes.<span style="color: #daa520; font-weight: bold;">IndexByte</span>(path,<span style="color: #deb887;">'/'</span>)
+        <span style="color: #4eee94;">dir1</span> := path[:sepIndex]
+        <span style="color: #4eee94;">dir2</span> := path[sepIndex+1:]
+        fmt.<span style="color: #daa520; font-weight: bold;">Println</span>(<span style="color: #deb887;">"dir1 =&gt;"</span>,<span style="color: #daa520; font-weight: bold;">string</span>(dir1)) <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">prints: dir1 =&gt; AAAA</span>
+        fmt.<span style="color: #daa520; font-weight: bold;">Println</span>(<span style="color: #deb887;">"dir2 =&gt;"</span>,<span style="color: #daa520; font-weight: bold;">string</span>(dir2)) <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">prints: dir2 =&gt; BBBBBBBBB</span>
+        dir1 = <span style="color: #f08080;">append</span>(dir1,<span style="color: #deb887;">"suffix"</span>...)
+        fmt.<span style="color: #daa520; font-weight: bold;">Println</span>(<span style="color: #deb887;">"dir1 =&gt;"</span>,<span style="color: #daa520; font-weight: bold;">string</span>(dir1)) <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">prints: dir1 =&gt; AAAAsuffix</span>
+        fmt.<span style="color: #daa520; font-weight: bold;">Println</span>(<span style="color: #deb887;">"dir2 =&gt;"</span>,<span style="color: #daa520; font-weight: bold;">string</span>(dir2)) <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">prints: dir2 =&gt; uffixBBBB</span>
 }
 </pre>
 </div>
@@ -389,7 +402,7 @@ a[2] = 42
 </p>
 
 <div class="org-src-container">
-<pre class="src src-go"><span style="color: #eedd82;">dir1</span> := path[:sepIndex] 
+<pre class="src src-go"><span style="color: #4eee94;">dir1</span> := path[:sepIndex] 
 </pre>
 </div>
 
@@ -398,7 +411,7 @@ a[2] = 42
 </p>
 
 <div class="org-src-container">
-<pre class="src src-go"><span style="color: #eedd82;">dir1</span> := path[:sepIndex:sepIndex]
+<pre class="src src-go"><span style="color: #4eee94;">dir1</span> := path[:sepIndex:sepIndex]
 </pre>
 </div>
 
@@ -407,15 +420,15 @@ a[2] = 42
 </p>
 </div>
 </div>
-<div id="outline-container-orgcda7435" class="outline-2">
-<h2 id="orgcda7435">深度比较</h2>
-<div class="outline-text-2" id="text-orgcda7435">
+<div id="outline-container-orgdf7dc5d" class="outline-2">
+<h2 id="orgdf7dc5d">深度比较</h2>
+<div class="outline-text-2" id="text-orgdf7dc5d">
 <p>
 一个复杂对象可以是 <span class="underline">内建数据类型</span> ， <span class="underline">数组</span> ， <span class="underline">结构体</span> ， <span class="underline">map</span> 等 
 </p>
 
 <pre class="example">
-  在复制结构体的时候，需要比较两个结构体中的数据是否相同时，这里必须使用深度比较，而不是只是简单地做浅度比较
+在复制结构体的时候，需要比较两个结构体中的数据是否相同时，这里必须使用深度比较，而不是只是简单地做浅度比较
 </pre>
 
 <p>
@@ -423,90 +436,90 @@ a[2] = 42
 </p>
 
 <div class="org-src-container">
-<pre class="src src-go"><span style="color: #00ffff;">import</span> (
-    <span style="color: #ffa07a;">"fmt"</span>
-    <span style="color: #ffa07a;">"reflect"</span>
+<pre class="src src-go"><span style="color: #00bfff; font-weight: bold;">import</span> (
+    <span style="color: #deb887;">"fmt"</span>
+    <span style="color: #deb887;">"reflect"</span>
 )
 
-<span style="color: #00ffff;">func</span> <span style="color: #87cefa;">main</span>() {
-    <span style="color: #eedd82;">v1</span> := <span style="color: #98fb98;">data</span>{}
-    <span style="color: #eedd82;">v2</span> := <span style="color: #98fb98;">data</span>{}
-    fmt.<span style="color: #87cefa;">Println</span>(<span style="color: #ffa07a;">"v1 == v2:"</span>,reflect.<span style="color: #87cefa;">DeepEqual</span>(v1,v2))
-    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">prints: v1 == v2: true</span>
-    <span style="color: #eedd82;">m1</span> := <span style="color: #00ffff;">map</span>[<span style="color: #98fb98;">string</span>]<span style="color: #98fb98;">string</span>{<span style="color: #ffa07a;">"one"</span>: <span style="color: #ffa07a;">"a"</span>,<span style="color: #ffa07a;">"two"</span>: <span style="color: #ffa07a;">"b"</span>}
-    <span style="color: #eedd82;">m2</span> := <span style="color: #00ffff;">map</span>[<span style="color: #98fb98;">string</span>]<span style="color: #98fb98;">string</span>{<span style="color: #ffa07a;">"two"</span>: <span style="color: #ffa07a;">"b"</span>, <span style="color: #ffa07a;">"one"</span>: <span style="color: #ffa07a;">"a"</span>}
-    fmt.<span style="color: #87cefa;">Println</span>(<span style="color: #ffa07a;">"m1 == m2:"</span>,reflect.<span style="color: #87cefa;">DeepEqual</span>(m1, m2))
-    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">prints: m1 == m2: true</span>
-    <span style="color: #eedd82;">s1</span> := []<span style="color: #98fb98;">int</span>{1, 2, 3}
-    <span style="color: #eedd82;">s2</span> := []<span style="color: #98fb98;">int</span>{1, 2, 3}
-    fmt.<span style="color: #87cefa;">Println</span>(<span style="color: #ffa07a;">"s1 == s2:"</span>,reflect.<span style="color: #87cefa;">DeepEqual</span>(s1, s2))
-    <span style="color: #ff4500;">//</span><span style="color: #ff4500;">prints: s1 == s2: true</span>
+<span style="color: #00bfff; font-weight: bold;">func</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+    <span style="color: #4eee94;">v1</span> := <span style="color: #98f5ff;">data</span>{}
+    <span style="color: #4eee94;">v2</span> := <span style="color: #98f5ff;">data</span>{}
+    fmt.<span style="color: #daa520; font-weight: bold;">Println</span>(<span style="color: #deb887;">"v1 == v2:"</span>,reflect.<span style="color: #daa520; font-weight: bold;">DeepEqual</span>(v1,v2))
+    <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">prints: v1 == v2: true</span>
+    <span style="color: #4eee94;">m1</span> := <span style="color: #00bfff; font-weight: bold;">map</span>[<span style="color: #98f5ff;">string</span>]<span style="color: #98f5ff;">string</span>{<span style="color: #deb887;">"one"</span>: <span style="color: #deb887;">"a"</span>,<span style="color: #deb887;">"two"</span>: <span style="color: #deb887;">"b"</span>}
+    <span style="color: #4eee94;">m2</span> := <span style="color: #00bfff; font-weight: bold;">map</span>[<span style="color: #98f5ff;">string</span>]<span style="color: #98f5ff;">string</span>{<span style="color: #deb887;">"two"</span>: <span style="color: #deb887;">"b"</span>, <span style="color: #deb887;">"one"</span>: <span style="color: #deb887;">"a"</span>}
+    fmt.<span style="color: #daa520; font-weight: bold;">Println</span>(<span style="color: #deb887;">"m1 == m2:"</span>,reflect.<span style="color: #daa520; font-weight: bold;">DeepEqual</span>(m1, m2))
+    <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">prints: m1 == m2: true</span>
+    <span style="color: #4eee94;">s1</span> := []<span style="color: #98f5ff;">int</span>{1, 2, 3}
+    <span style="color: #4eee94;">s2</span> := []<span style="color: #98f5ff;">int</span>{1, 2, 3}
+    fmt.<span style="color: #daa520; font-weight: bold;">Println</span>(<span style="color: #deb887;">"s1 == s2:"</span>,reflect.<span style="color: #daa520; font-weight: bold;">DeepEqual</span>(s1, s2))
+    <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">prints: s1 == s2: true</span>
 }
 </pre>
 </div>
 </div>
 </div>
-<div id="outline-container-orga092959" class="outline-2">
-<h2 id="orga092959">接口编程</h2>
-<div class="outline-text-2" id="text-orga092959">
+<div id="outline-container-orgf8cd6f8" class="outline-2">
+<h2 id="orgf8cd6f8">接口编程</h2>
+<div class="outline-text-2" id="text-orgf8cd6f8">
 <p>
 下面来看段代码，其中是两个方法，它们都是要输出一个结构体，其中一个使用一个 <span class="underline">函数</span> ，另一个使用一个 <span class="underline">成员函数</span> ：
 </p>
 <div class="org-src-container">
-<pre class="src src-go"><span style="color: #00ffff;">func</span> <span style="color: #87cefa;">PrintPerson</span>(<span style="color: #eedd82;">p</span> *<span style="color: #98fb98;">Person</span>) {
-        fmt.<span style="color: #87cefa;">Printf</span>(<span style="color: #ffa07a;">"Name=%s, Sexual=%s, Age=%d\n"</span>,
+<pre class="src src-go"><span style="color: #00bfff; font-weight: bold;">func</span> <span style="color: #daa520; font-weight: bold;">PrintPerson</span>(<span style="color: #4eee94;">p</span> *<span style="color: #98f5ff;">Person</span>) {
+        fmt.<span style="color: #daa520; font-weight: bold;">Printf</span>(<span style="color: #deb887;">"Name=%s, Sexual=%s, Age=%d\n"</span>,
                 p.Name, p.Sexual, p.Age)
 }
 
-<span style="color: #00ffff;">func</span> (<span style="color: #eedd82;">p</span> *<span style="color: #98fb98;">Person</span>) <span style="color: #87cefa;">Print</span>() {
-        fmt.<span style="color: #87cefa;">Printf</span>(<span style="color: #ffa07a;">"Name=%s, Sexual=%s, Age=%d\n"</span>,
+<span style="color: #00bfff; font-weight: bold;">func</span> (<span style="color: #4eee94;">p</span> *<span style="color: #98f5ff;">Person</span>) <span style="color: #daa520; font-weight: bold;">Print</span>() {
+        fmt.<span style="color: #daa520; font-weight: bold;">Printf</span>(<span style="color: #deb887;">"Name=%s, Sexual=%s, Age=%d\n"</span>,
                 p.Name, p.Sexual, p.Age)
 }
 
-<span style="color: #00ffff;">func</span> <span style="color: #87cefa;">main</span>() {
-        <span style="color: #00ffff;">var</span> <span style="color: #eedd82;">p</span> = <span style="color: #98fb98;">Person</span>{
-                <span style="color: #7fffd4;">Name</span>: <span style="color: #ffa07a;">"Hao Chen"</span>,
-                <span style="color: #7fffd4;">Sexual</span>: <span style="color: #ffa07a;">"Male"</span>,
-                <span style="color: #7fffd4;">Age</span>: 44,
+<span style="color: #00bfff; font-weight: bold;">func</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+        <span style="color: #00bfff; font-weight: bold;">var</span> <span style="color: #4eee94;">p</span> = <span style="color: #98f5ff;">Person</span>{
+                <span style="color: #ffd700;">Name</span>: <span style="color: #deb887;">"Hao Chen"</span>,
+                <span style="color: #ffd700;">Sexual</span>: <span style="color: #deb887;">"Male"</span>,
+                <span style="color: #ffd700;">Age</span>: 44,
         }
-        <span style="color: #87cefa;">PrintPerson</span>(&amp;p)
-        p.<span style="color: #87cefa;">Print</span>()
+        <span style="color: #daa520; font-weight: bold;">PrintPerson</span>(&amp;p)
+        p.<span style="color: #daa520; font-weight: bold;">Print</span>()
 }
 </pre>
 </div>
 
 <pre class="example">
-  在 Go 语言中，使用“成员函数”的方式叫“Receiver”
+在 Go 语言中，使用“成员函数”的方式叫“Receiver”
 
-  这种方式是一种封装，因为 PrintPerson()本来就是和 Person强耦合的，所以理应放在一起
+这种方式是一种封装，因为 PrintPerson()本来就是和 Person强耦合的，所以理应放在一起
 
-  更重要的是，这种方式可以进行接口编程，对于接口编程来说，也就是一种抽象，主要是用在“多态”
+更重要的是，这种方式可以进行接口编程，对于接口编程来说，也就是一种抽象，主要是用在“多态”
 </pre>
 <p>
 在这里想讲另一个Go语言接口的编程模式。首先，来看一下，有下面这段代码：
 </p>
 
 <div class="org-src-container">
-<pre class="src src-go"><span style="color: #00ffff;">type</span> <span style="color: #98fb98;">Country</span> <span style="color: #00ffff;">struct</span> {
-        Name <span style="color: #98fb98;">string</span>
+<pre class="src src-go"><span style="color: #00bfff; font-weight: bold;">type</span> <span style="color: #98f5ff;">Country</span> <span style="color: #00bfff; font-weight: bold;">struct</span> {
+        Name <span style="color: #98f5ff;">string</span>
 }
 
-<span style="color: #00ffff;">type</span> <span style="color: #98fb98;">City</span> <span style="color: #00ffff;">struct</span> {
-        Name <span style="color: #98fb98;">string</span>
+<span style="color: #00bfff; font-weight: bold;">type</span> <span style="color: #98f5ff;">City</span> <span style="color: #00bfff; font-weight: bold;">struct</span> {
+        Name <span style="color: #98f5ff;">string</span>
 }
 
-<span style="color: #00ffff;">func</span> (<span style="color: #eedd82;">c</span> <span style="color: #98fb98;">Country</span>) <span style="color: #87cefa;">PrintStr</span>() {
-        fmt.<span style="color: #87cefa;">Println</span>(c.Name)
+<span style="color: #00bfff; font-weight: bold;">func</span> (<span style="color: #4eee94;">c</span> <span style="color: #98f5ff;">Country</span>) <span style="color: #daa520; font-weight: bold;">PrintStr</span>() {
+        fmt.<span style="color: #daa520; font-weight: bold;">Println</span>(c.Name)
 }
 
-<span style="color: #00ffff;">func</span> (<span style="color: #eedd82;">c</span> <span style="color: #98fb98;">City</span>) <span style="color: #87cefa;">PrintStr</span>() {
-        fmt.<span style="color: #87cefa;">Println</span>(c.Name)
+<span style="color: #00bfff; font-weight: bold;">func</span> (<span style="color: #4eee94;">c</span> <span style="color: #98f5ff;">City</span>) <span style="color: #daa520; font-weight: bold;">PrintStr</span>() {
+        fmt.<span style="color: #daa520; font-weight: bold;">Println</span>(c.Name)
 }
 
-<span style="color: #eedd82;">c1</span> := Country {<span style="color: #ffa07a;">"China"</span>}
-<span style="color: #eedd82;">c2</span> := City {<span style="color: #ffa07a;">"Beijing"</span>}
-c1.<span style="color: #87cefa;">PrintStr</span>()
-c2.<span style="color: #87cefa;">PrintStr</span>()
+<span style="color: #4eee94;">c1</span> := Country {<span style="color: #deb887;">"China"</span>}
+<span style="color: #4eee94;">c2</span> := City {<span style="color: #deb887;">"Beijing"</span>}
+c1.<span style="color: #daa520; font-weight: bold;">PrintStr</span>()
+c2.<span style="color: #daa520; font-weight: bold;">PrintStr</span>()
 </pre>
 </div>
 
@@ -515,7 +528,7 @@ c2.<span style="color: #87cefa;">PrintStr</span>()
 </p>
 
 <pre class="example">
-  然而，这些代码都是一样的。能不能省掉呢？
+然而，这些代码都是一样的。能不能省掉呢？
 </pre>
 
 <p>
@@ -523,26 +536,26 @@ c2.<span style="color: #87cefa;">PrintStr</span>()
 </p>
 
 <div class="org-src-container">
-<pre class="src src-go"><span style="color: #00ffff;">type</span> <span style="color: #98fb98;">WithName</span> <span style="color: #00ffff;">struct</span> {
-        Name <span style="color: #98fb98;">string</span>
+<pre class="src src-go"><span style="color: #00bfff; font-weight: bold;">type</span> <span style="color: #98f5ff;">WithName</span> <span style="color: #00bfff; font-weight: bold;">struct</span> {
+        Name <span style="color: #98f5ff;">string</span>
 }
 
-<span style="color: #00ffff;">type</span> <span style="color: #98fb98;">Country</span> <span style="color: #00ffff;">struct</span> {
+<span style="color: #00bfff; font-weight: bold;">type</span> <span style="color: #98f5ff;">Country</span> <span style="color: #00bfff; font-weight: bold;">struct</span> {
         WithName
 }
 
-<span style="color: #00ffff;">type</span> <span style="color: #98fb98;">City</span> <span style="color: #00ffff;">struct</span> {
+<span style="color: #00bfff; font-weight: bold;">type</span> <span style="color: #98f5ff;">City</span> <span style="color: #00bfff; font-weight: bold;">struct</span> {
         WithName
 }
 
-<span style="color: #00ffff;">func</span> (<span style="color: #eedd82;">w</span> <span style="color: #98fb98;">WithName</span>) <span style="color: #87cefa;">PrintStr</span>() {
-        fmt.<span style="color: #87cefa;">Println</span>(w.Name)
+<span style="color: #00bfff; font-weight: bold;">func</span> (<span style="color: #4eee94;">w</span> <span style="color: #98f5ff;">WithName</span>) <span style="color: #daa520; font-weight: bold;">PrintStr</span>() {
+        fmt.<span style="color: #daa520; font-weight: bold;">Println</span>(w.Name)
 }
 
-<span style="color: #eedd82;">c1</span> := Country {<span style="color: #98fb98;">WithName</span>{ <span style="color: #ffa07a;">"China"</span>}}
-<span style="color: #eedd82;">c2</span> := City { <span style="color: #98fb98;">WithName</span>{<span style="color: #ffa07a;">"Beijing"</span>}}
-c1.<span style="color: #87cefa;">PrintStr</span>()
-c2.<span style="color: #87cefa;">PrintStr</span>()
+<span style="color: #4eee94;">c1</span> := Country {<span style="color: #98f5ff;">WithName</span>{ <span style="color: #deb887;">"China"</span>}}
+<span style="color: #4eee94;">c2</span> := City { <span style="color: #98f5ff;">WithName</span>{<span style="color: #deb887;">"Beijing"</span>}}
+c1.<span style="color: #daa520; font-weight: bold;">PrintStr</span>()
+c2.<span style="color: #daa520; font-weight: bold;">PrintStr</span>()
 </pre>
 </div>
 
@@ -551,7 +564,7 @@ c2.<span style="color: #87cefa;">PrintStr</span>()
 </p>
 
 <pre class="example">
-  然而，所带来的问题就是，在初始化的时候，变得有点乱。那么有没有更好的方法？
+然而，所带来的问题就是，在初始化的时候，变得有点乱。那么有没有更好的方法？
 </pre>
 
 <p>
@@ -559,34 +572,34 @@ c2.<span style="color: #87cefa;">PrintStr</span>()
 </p>
 
 <div class="org-src-container">
-<pre class="src src-go"><span style="color: #00ffff;">type</span> <span style="color: #98fb98;">Country</span> <span style="color: #00ffff;">struct</span> {
-        Name <span style="color: #98fb98;">string</span>
+<pre class="src src-go"><span style="color: #00bfff; font-weight: bold;">type</span> <span style="color: #98f5ff;">Country</span> <span style="color: #00bfff; font-weight: bold;">struct</span> {
+        Name <span style="color: #98f5ff;">string</span>
 }
 
-<span style="color: #00ffff;">type</span> <span style="color: #98fb98;">City</span> <span style="color: #00ffff;">struct</span> {
-        Name <span style="color: #98fb98;">string</span>
+<span style="color: #00bfff; font-weight: bold;">type</span> <span style="color: #98f5ff;">City</span> <span style="color: #00bfff; font-weight: bold;">struct</span> {
+        Name <span style="color: #98f5ff;">string</span>
 }
 
-<span style="color: #00ffff;">type</span> <span style="color: #98fb98;">Stringable</span> <span style="color: #00ffff;">interface</span> {
-        <span style="color: #87cefa;">ToString</span>() <span style="color: #98fb98;">string</span>
+<span style="color: #00bfff; font-weight: bold;">type</span> <span style="color: #98f5ff;">Stringable</span> <span style="color: #00bfff; font-weight: bold;">interface</span> {
+        <span style="color: #daa520; font-weight: bold;">ToString</span>() <span style="color: #98f5ff;">string</span>
 }
 
-<span style="color: #00ffff;">func</span> (<span style="color: #eedd82;">c</span> <span style="color: #98fb98;">Country</span>) <span style="color: #87cefa;">ToString</span>() <span style="color: #98fb98;">string</span> {
-        <span style="color: #00ffff;">return</span> <span style="color: #ffa07a;">"Country = "</span> + c.Name
+<span style="color: #00bfff; font-weight: bold;">func</span> (<span style="color: #4eee94;">c</span> <span style="color: #98f5ff;">Country</span>) <span style="color: #daa520; font-weight: bold;">ToString</span>() <span style="color: #98f5ff;">string</span> {
+        <span style="color: #00bfff; font-weight: bold;">return</span> <span style="color: #deb887;">"Country = "</span> + c.Name
 }
 
-<span style="color: #00ffff;">func</span> (<span style="color: #eedd82;">c</span> <span style="color: #98fb98;">City</span>) <span style="color: #87cefa;">ToString</span>() <span style="color: #98fb98;">string</span>{
-        <span style="color: #00ffff;">return</span> <span style="color: #ffa07a;">"City = "</span> + c.Name
+<span style="color: #00bfff; font-weight: bold;">func</span> (<span style="color: #4eee94;">c</span> <span style="color: #98f5ff;">City</span>) <span style="color: #daa520; font-weight: bold;">ToString</span>() <span style="color: #98f5ff;">string</span>{
+        <span style="color: #00bfff; font-weight: bold;">return</span> <span style="color: #deb887;">"City = "</span> + c.Name
 }
 
-<span style="color: #00ffff;">func</span> <span style="color: #87cefa;">PrintStr</span>(<span style="color: #eedd82;">p</span> <span style="color: #98fb98;">Stringable</span>) {
-        fmt.<span style="color: #87cefa;">Println</span>(p.<span style="color: #87cefa;">ToString</span>())
+<span style="color: #00bfff; font-weight: bold;">func</span> <span style="color: #daa520; font-weight: bold;">PrintStr</span>(<span style="color: #4eee94;">p</span> <span style="color: #98f5ff;">Stringable</span>) {
+        fmt.<span style="color: #daa520; font-weight: bold;">Println</span>(p.<span style="color: #daa520; font-weight: bold;">ToString</span>())
 }
 
-<span style="color: #eedd82;">d1</span> := Country {<span style="color: #ffa07a;">"USA"</span>}
-<span style="color: #eedd82;">d2</span> := <span style="color: #98fb98;">City</span>{<span style="color: #ffa07a;">"Los Angeles"</span>}
-<span style="color: #87cefa;">PrintStr</span>(d1)
-<span style="color: #87cefa;">PrintStr</span>(d2)
+<span style="color: #4eee94;">d1</span> := Country {<span style="color: #deb887;">"USA"</span>}
+<span style="color: #4eee94;">d2</span> := <span style="color: #98f5ff;">City</span>{<span style="color: #deb887;">"Los Angeles"</span>}
+<span style="color: #daa520; font-weight: bold;">PrintStr</span>(d1)
+<span style="color: #daa520; font-weight: bold;">PrintStr</span>(d2)
 </pre>
 </div>
 <p>
@@ -594,37 +607,37 @@ c2.<span style="color: #87cefa;">PrintStr</span>()
 </p>
 
 <pre class="example">
-  这种编程模式在Go 的标准库有很多的示例，最著名的就是 io.Read 和 ioutil.ReadAll 的玩法
+这种编程模式在Go 的标准库有很多的示例，最著名的就是 io.Read 和 ioutil.ReadAll 的玩法
 
-  其中 io.Read 是一个接口，你需要实现他的一个 Read(p []byte) (n int, err error) 接口方法，只要满足这个规模，就可以被 ioutil.ReadAll这个方法所使用
+其中 io.Read 是一个接口，你需要实现他的一个 Read(p []byte) (n int, err error) 接口方法，只要满足这个规模，就可以被 ioutil.ReadAll这个方法所使用
 
-  这就是面向对象编程方法的黄金法则：“Program to an interface not an implementation”
+这就是面向对象编程方法的黄金法则：“Program to an interface not an implementation”
 </pre>
 </div>
-<div id="outline-container-org7e5cedd" class="outline-3">
-<h3 id="org7e5cedd">接口完整性检查</h3>
-<div class="outline-text-3" id="text-org7e5cedd">
+<div id="outline-container-org2dd039f" class="outline-3">
+<h3 id="org2dd039f">接口完整性检查</h3>
+<div class="outline-text-3" id="text-org2dd039f">
 <p>
 另外可以看到，Go语言的编程器并没有 <b>严格检查一个对象是否实现了某接口所有的接口方法</b> ，如下面这个示例： 
 </p>
 
 <div class="org-src-container">
-<pre class="src src-go"><span style="color: #00ffff;">type</span> <span style="color: #98fb98;">Shape</span> <span style="color: #00ffff;">interface</span> {
-        <span style="color: #87cefa;">Sides</span>() <span style="color: #98fb98;">int</span>
-        <span style="color: #87cefa;">Area</span>() <span style="color: #98fb98;">int</span>
+<pre class="src src-go"><span style="color: #00bfff; font-weight: bold;">type</span> <span style="color: #98f5ff;">Shape</span> <span style="color: #00bfff; font-weight: bold;">interface</span> {
+        <span style="color: #daa520; font-weight: bold;">Sides</span>() <span style="color: #98f5ff;">int</span>
+        <span style="color: #daa520; font-weight: bold;">Area</span>() <span style="color: #98f5ff;">int</span>
 }
 
-<span style="color: #00ffff;">type</span> <span style="color: #98fb98;">Square</span> <span style="color: #00ffff;">struct</span> {
-        len <span style="color: #98fb98;">int</span>
+<span style="color: #00bfff; font-weight: bold;">type</span> <span style="color: #98f5ff;">Square</span> <span style="color: #00bfff; font-weight: bold;">struct</span> {
+        len <span style="color: #98f5ff;">int</span>
 }
 
-<span style="color: #00ffff;">func</span> (<span style="color: #eedd82;">s</span>* Square) <span style="color: #87cefa;">Sides</span>() <span style="color: #98fb98;">int</span> {
-        <span style="color: #00ffff;">return</span> 4
+<span style="color: #00bfff; font-weight: bold;">func</span> (<span style="color: #4eee94;">s</span>* Square) <span style="color: #daa520; font-weight: bold;">Sides</span>() <span style="color: #98f5ff;">int</span> {
+        <span style="color: #00bfff; font-weight: bold;">return</span> 4
 }
 
-<span style="color: #00ffff;">func</span> <span style="color: #87cefa;">main</span>() {
-        <span style="color: #eedd82;">s</span> := <span style="color: #98fb98;">Square</span>{<span style="color: #7fffd4;">len</span>: 5}
-        fmt.<span style="color: #87cefa;">Printf</span>(<span style="color: #ffa07a;">"%d\n"</span>,s.<span style="color: #87cefa;">Sides</span>())
+<span style="color: #00bfff; font-weight: bold;">func</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+        <span style="color: #4eee94;">s</span> := <span style="color: #98f5ff;">Square</span>{<span style="color: #ffd700;">len</span>: 5}
+        fmt.<span style="color: #daa520; font-weight: bold;">Printf</span>(<span style="color: #deb887;">"%d\n"</span>,s.<span style="color: #daa520; font-weight: bold;">Sides</span>())
 }
 </pre>
 </div>
@@ -640,7 +653,7 @@ Square 并没有实现 Shape 接口的所有方法，程序虽然可以跑通，
 </p>
 
 <div class="org-src-container">
-<pre class="src src-go"><span style="color: #00ffff;">var</span> <span style="color: #eedd82;">_</span> <span style="color: #98fb98;">Shape</span> = (*Square)(<span style="color: #7fffd4;">nil</span>)
+<pre class="src src-go"><span style="color: #00bfff; font-weight: bold;">var</span> <span style="color: #4eee94;">_</span> <span style="color: #98f5ff;">Shape</span> = (*Square)(<span style="color: #ffd700;">nil</span>)
 </pre>
 </div>
 
@@ -649,7 +662,7 @@ Square 并没有实现 Shape 接口的所有方法，程序虽然可以跑通，
 </p>
 
 <div class="org-src-container">
-<pre class="src src-sh">cannot use (*Square)(nil) (<span style="color: #b0c4de;">type</span> *Square) as type Shape<span style="color: #00ffff;"> in</span> assignment: *Square does not implement Shape (missing Area method)
+<pre class="src src-sh">cannot use (*Square)(nil) (<span style="color: #f08080;">type</span> *Square) as type Shape<span style="color: #00bfff; font-weight: bold;"> in</span> assignment: *Square does not implement Shape (missing Area method)
 </pre>
 </div>
 
@@ -659,15 +672,15 @@ Square 并没有实现 Shape 接口的所有方法，程序虽然可以跑通，
 </div>
 </div>
 </div>
-<div id="outline-container-org95cd48a" class="outline-2">
-<h2 id="org95cd48a">时间</h2>
-<div class="outline-text-2" id="text-org95cd48a">
+<div id="outline-container-org0d1d589" class="outline-2">
+<h2 id="org0d1d589">时间</h2>
+<div class="outline-text-2" id="text-org0d1d589">
 <pre class="example">
-  对于时间来说，这应该是编程中比较复杂的问题了
+对于时间来说，这应该是编程中比较复杂的问题了
 
-  时间有时区、格式、精度等等问题，其复杂度不是一般人能处理的
+时间有时区、格式、精度等等问题，其复杂度不是一般人能处理的
 
-  所以一定要重用已有的时间处理，而不是自己干
+所以一定要重用已有的时间处理，而不是自己干
 </pre>
 <p>
 在 Go 语言中，一定要使用 <span class="underline">time.Time</span> 和 <span class="underline">time.Duration</span> 两个类型：
@@ -680,7 +693,7 @@ Square 并没有实现 Shape 接口的所有方法，程序虽然可以跑通，
 </ul>
 
 <pre class="example">
-  如果要和第三方交互，实在没有办法，也请使用 RFC 3339 的格式
+如果要和第三方交互，实在没有办法，也请使用 RFC 3339 的格式
 </pre>
 
 <p>
@@ -689,9 +702,9 @@ Square 并没有实现 Shape 接口的所有方法，程序虽然可以跑通，
 </div>
 </div>
 
-<div id="outline-container-org7a4e15b" class="outline-2">
-<h2 id="org7a4e15b">性能提示</h2>
-<div class="outline-text-2" id="text-org7a4e15b">
+<div id="outline-container-org5908fdd" class="outline-2">
+<h2 id="org5908fdd">性能提示</h2>
+<div class="outline-text-2" id="text-org5908fdd">
 <pre class="example">
 Go 语言是一个高性能的语言，但并不是说这样就不用关心性能了，还是需要关心的
 </pre>
