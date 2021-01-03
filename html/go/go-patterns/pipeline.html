@@ -247,6 +247,351 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="go-patterns.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">管道</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#org0bf1cd6">HTTP</a></li>
+<li><a href="#org6d565e0">Channel 管理</a>
+<ul>
+<li><a href="#orga90f5a7">Channel转发函数</a></li>
+</ul>
+</li>
+<li><a href="#orgc4aff58">Fan in/Out</a></li>
+</ul>
+</div>
+</div>
+<pre class="example">
+对于Pipeline用过Unix/Linux命令行的人都不会陌生，它是一种把各种命令拼接起来完成一个更强功能的技术方法
+
+Pipeline可以很容易的把代码按单一职责的原则拆分成多个高内聚低耦合的小模块，然后可以很方便地拼装起来去完成比较复杂的功能
+
+今天，流式处理，函数式编程，以及应用网关对微服务进行简单的API编排，其实都是受pipeline这种技术方式的影响
+</pre>
+<div id="outline-container-org0bf1cd6" class="outline-2">
+<h2 id="org0bf1cd6">HTTP</h2>
+<div class="outline-text-2" id="text-org0bf1cd6">
+<p>
+上一节有过一个示例，有一堆如 WithServerHead() 、WithBasicAuth() 、WithDebugLog()这样的小功能代码，在需要实现某个HTTP API 的时候，可以很容易的组织起来：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-go">http.<span style="color: #daa520; font-weight: bold;">HandleFunc</span>(<span style="color: #deb887;">"/v1/hello"</span>, <span style="color: #daa520; font-weight: bold;">WithServerHeader</span>(<span style="color: #daa520; font-weight: bold;">WithAuthCookie</span>(hello)))
+http.<span style="color: #daa520; font-weight: bold;">HandleFunc</span>(<span style="color: #deb887;">"/v2/hello"</span>, <span style="color: #daa520; font-weight: bold;">WithServerHeader</span>(<span style="color: #daa520; font-weight: bold;">WithBasicAuth</span>(hello)))
+http.<span style="color: #daa520; font-weight: bold;">HandleFunc</span>(<span style="color: #deb887;">"/v3/hello"</span>, <span style="color: #daa520; font-weight: bold;">WithServerHeader</span>(<span style="color: #daa520; font-weight: bold;">WithBasicAuth</span>(<span style="color: #daa520; font-weight: bold;">WithDebugLog</span>(hello))))
+</pre>
+</div>
+
+<p>
+通过一个代理函数：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-go"><span style="color: #00bfff; font-weight: bold;">type</span> <span style="color: #98f5ff;">HttpHandlerDecorator</span> <span style="color: #00bfff; font-weight: bold;">func</span>(<span style="color: #98f5ff;">http.HandlerFunc</span>) <span style="color: #98f5ff;">http.HandlerFunc</span>
+
+<span style="color: #00bfff; font-weight: bold;">func</span> <span style="color: #daa520; font-weight: bold;">Handler</span>(<span style="color: #4eee94;">h</span> <span style="color: #98f5ff;">http.HandlerFunc</span>, <span style="color: #4eee94;">decors</span> ...<span style="color: #98f5ff;">HttpHandlerDecorator</span>) <span style="color: #98f5ff;">http.HandlerFunc</span> {
+        <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">i</span> := <span style="color: #00bfff; font-weight: bold;">range</span> decors {
+                <span style="color: #4eee94;">d</span> := decors[<span style="color: #f08080;">len</span>(decors)-1-i] <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">iterate in reverse</span>
+                h = <span style="color: #daa520; font-weight: bold;">d</span>(h)
+        }
+        <span style="color: #00bfff; font-weight: bold;">return</span> h
+}
+</pre>
+</div>
+
+<p>
+可以移除不断的嵌套像下面这样使用了：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-go">http.<span style="color: #daa520; font-weight: bold;">HandleFunc</span>(<span style="color: #deb887;">"/v4/hello"</span>, <span style="color: #daa520; font-weight: bold;">Handler</span>(hello,
+                WithServerHeader, WithBasicAuth, WithDebugLog))
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org6d565e0" class="outline-2">
+<h2 id="org6d565e0">Channel 管理</h2>
+<div class="outline-text-2" id="text-org6d565e0">
+<pre class="example">
+当然，如果要写出一个泛型的pipeline框架并不容易，必须要使用Go Generation
+</pre>
+
+<p>
+但是，别忘了Go语言最具特色的 <span class="underline">Go Routine</span> 和 <span class="underline">Channel</span> 这两个神器完全也可以被用来构造这种编程 
+</p>
+
+<pre class="example">
+Rob Pike在 Go Concurrency Patterns: Pipelines and cancellation 这篇blog中介绍了如下的一种编程模式 
+</pre>
+</div>
+<div id="outline-container-orga90f5a7" class="outline-3">
+<h3 id="orga90f5a7">Channel转发函数</h3>
+<div class="outline-text-3" id="text-orga90f5a7">
+<p>
+首先，需一个 <span class="underline">echo()</span> 函数，其会把一个整型数组放到一个Channel中，并返回这个Channel：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-go"><span style="color: #00bfff; font-weight: bold;">func</span> <span style="color: #daa520; font-weight: bold;">echo</span>(<span style="color: #4eee94;">nums</span> []<span style="color: #98f5ff;">int</span>) &lt;-<span style="color: #00bfff; font-weight: bold;">chan</span> <span style="color: #98f5ff;">int</span> {
+        <span style="color: #4eee94;">out</span> := <span style="color: #f08080;">make</span>(<span style="color: #00bfff; font-weight: bold;">chan</span> <span style="color: #98f5ff;">int</span>)
+        <span style="color: #00bfff; font-weight: bold;">go</span> <span style="color: #00bfff; font-weight: bold;">func</span>() {
+                <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">_</span>, <span style="color: #4eee94;">n</span> := <span style="color: #00bfff; font-weight: bold;">range</span> nums {
+                        out &lt;- n
+                }
+                <span style="color: #f08080;">close</span>(out)
+        }()
+        <span style="color: #00bfff; font-weight: bold;">return</span> out
+}
+</pre>
+</div>
+
+
+<p>
+然后，依照这个模式，可以写下：
+</p>
+<ul class="org-ul">
+<li>平方函数</li>
+</ul>
+<div class="org-src-container">
+<pre class="src src-go"><span style="color: #00bfff; font-weight: bold;">func</span> <span style="color: #daa520; font-weight: bold;">sq</span>(<span style="color: #4eee94;">in</span> &lt;-<span style="color: #00bfff; font-weight: bold;">chan</span> <span style="color: #98f5ff;">int</span>) &lt;-<span style="color: #00bfff; font-weight: bold;">chan</span> <span style="color: #98f5ff;">int</span> {
+        <span style="color: #4eee94;">out</span> := <span style="color: #f08080;">make</span>(<span style="color: #00bfff; font-weight: bold;">chan</span> <span style="color: #98f5ff;">int</span>)
+        <span style="color: #00bfff; font-weight: bold;">go</span> <span style="color: #00bfff; font-weight: bold;">func</span>() {
+                <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">n</span> := <span style="color: #00bfff; font-weight: bold;">range</span> in {
+                        out &lt;- n * n
+                }
+                <span style="color: #f08080;">close</span>(out)
+        }()
+        <span style="color: #00bfff; font-weight: bold;">return</span> out
+}
+</pre>
+</div>
+<ul class="org-ul">
+<li>过滤奇数函数</li>
+</ul>
+<div class="org-src-container">
+<pre class="src src-go"><span style="color: #00bfff; font-weight: bold;">func</span> <span style="color: #daa520; font-weight: bold;">odd</span>(<span style="color: #4eee94;">in</span> &lt;-<span style="color: #00bfff; font-weight: bold;">chan</span> <span style="color: #98f5ff;">int</span>) &lt;-<span style="color: #00bfff; font-weight: bold;">chan</span> <span style="color: #98f5ff;">int</span> {
+        <span style="color: #4eee94;">out</span> := <span style="color: #f08080;">make</span>(<span style="color: #00bfff; font-weight: bold;">chan</span> <span style="color: #98f5ff;">int</span>)
+        <span style="color: #00bfff; font-weight: bold;">go</span> <span style="color: #00bfff; font-weight: bold;">func</span>() {
+                <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">n</span> := <span style="color: #00bfff; font-weight: bold;">range</span> in {
+                        <span style="color: #00bfff; font-weight: bold;">if</span> n%2 != 0 {
+                                out &lt;- n
+                        }
+                }
+                <span style="color: #f08080;">close</span>(out)
+        }()
+        <span style="color: #00bfff; font-weight: bold;">return</span> out
+}
+</pre>
+</div>
+<ul class="org-ul">
+<li>求和函数</li>
+</ul>
+<div class="org-src-container">
+<pre class="src src-go"><span style="color: #00bfff; font-weight: bold;">func</span> <span style="color: #daa520; font-weight: bold;">sum</span>(<span style="color: #4eee94;">in</span> &lt;-<span style="color: #00bfff; font-weight: bold;">chan</span> <span style="color: #98f5ff;">int</span>) &lt;-<span style="color: #00bfff; font-weight: bold;">chan</span> <span style="color: #98f5ff;">int</span> {
+        <span style="color: #4eee94;">out</span> := <span style="color: #f08080;">make</span>(<span style="color: #00bfff; font-weight: bold;">chan</span> <span style="color: #98f5ff;">int</span>)
+        <span style="color: #00bfff; font-weight: bold;">go</span> <span style="color: #00bfff; font-weight: bold;">func</span>() {
+                <span style="color: #00bfff; font-weight: bold;">var</span> <span style="color: #4eee94;">sum</span> = 0
+                <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">n</span> := <span style="color: #00bfff; font-weight: bold;">range</span> in {
+                        sum += n
+                }
+                out &lt;- sum
+                <span style="color: #f08080;">close</span>(out)
+        }()
+        <span style="color: #00bfff; font-weight: bold;">return</span> out
+}
+</pre>
+</div>
+
+<pre class="example">
+可能会觉得，sum()，odd() 和 sq()太过于相似
+
+其实可以通过之前的Map/Reduce编程模式或是Go Generation的方式来合并一下
+</pre>
+
+<p>
+然后，可以把这一系列的函数组合起来：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-go"><span style="color: #00bfff; font-weight: bold;">var</span> <span style="color: #4eee94;">nums</span> = []<span style="color: #98f5ff;">int</span>{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+
+<span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">n</span> := <span style="color: #00bfff; font-weight: bold;">range</span> <span style="color: #daa520; font-weight: bold;">sum</span>(<span style="color: #daa520; font-weight: bold;">sq</span>(<span style="color: #daa520; font-weight: bold;">odd</span>(<span style="color: #daa520; font-weight: bold;">echo</span>(nums)))) {
+  fmt.<span style="color: #daa520; font-weight: bold;">Println</span>(n)
+}
+</pre>
+</div>
+
+<pre class="example">
+上面的代码类似于执行了Unix/Linux命令： echo $nums | sq | sum
+</pre>
+
+<p>
+如果不想有那么多的函数嵌套，也可以使用一个代理函数来完成：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-go"><span style="color: #00bfff; font-weight: bold;">type</span> <span style="color: #98f5ff;">EchoFunc</span> <span style="color: #00bfff; font-weight: bold;">func</span> ([]<span style="color: #98f5ff;">int</span>) (&lt;- <span style="color: #00bfff; font-weight: bold;">chan</span> <span style="color: #98f5ff;">int</span>) 
+<span style="color: #00bfff; font-weight: bold;">type</span> <span style="color: #98f5ff;">PipeFunc</span> <span style="color: #00bfff; font-weight: bold;">func</span> (&lt;- <span style="color: #00bfff; font-weight: bold;">chan</span> <span style="color: #98f5ff;">int</span>) (&lt;- <span style="color: #00bfff; font-weight: bold;">chan</span> <span style="color: #98f5ff;">int</span>) 
+
+<span style="color: #00bfff; font-weight: bold;">func</span> <span style="color: #daa520; font-weight: bold;">pipeline</span>(<span style="color: #4eee94;">nums</span> []<span style="color: #98f5ff;">int</span>, <span style="color: #4eee94;">echo</span> <span style="color: #98f5ff;">EchoFunc</span>, <span style="color: #4eee94;">pipeFns</span> ... PipeFunc) &lt;- <span style="color: #00bfff; font-weight: bold;">chan</span> <span style="color: #98f5ff;">int</span> {
+        <span style="color: #4eee94;">ch</span>  := <span style="color: #daa520; font-weight: bold;">echo</span>(nums)
+        <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">i</span> := <span style="color: #00bfff; font-weight: bold;">range</span> pipeFns {
+                ch = pipeFns[i](ch)
+        }
+        <span style="color: #00bfff; font-weight: bold;">return</span> ch
+}
+</pre>
+</div>
+
+<p>
+最后：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-go"><span style="color: #00bfff; font-weight: bold;">var</span> <span style="color: #4eee94;">nums</span> = []<span style="color: #98f5ff;">int</span>{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}    
+
+<span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">n</span> := <span style="color: #00bfff; font-weight: bold;">range</span> <span style="color: #daa520; font-weight: bold;">pipeline</span>(nums, echo, odd, sq, sum) {
+        fmt.<span style="color: #daa520; font-weight: bold;">Println</span>(n)
+}
+</pre>
+</div>
+</div>
+</div>
+</div>
+<div id="outline-container-orgc4aff58" class="outline-2">
+<h2 id="orgc4aff58">Fan in/Out</h2>
+<div class="outline-text-2" id="text-orgc4aff58">
+<pre class="example">
+动用Go语言的 Go Routine 和 Channel 还有一个好处，就是可以写出1对多，或多对1的pipeline，也就是Fan In/ Fan Out
+</pre>
+
+<p>
+下面来看一个 Fan in 的示例：
+</p>
+
+<pre class="example">
+想通过并发的方式来对一个很长的数组中的质数进行求和运算，想先把数组分段求和，然后再把其集中起来
+</pre>
+<p>
+下面是主函数：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-go"><span style="color: #00bfff; font-weight: bold;">func</span> <span style="color: #daa520; font-weight: bold;">makeRange</span>(<span style="color: #4eee94;">min</span>, <span style="color: #4eee94;">max</span> <span style="color: #98f5ff;">int</span>) []<span style="color: #98f5ff;">int</span> {
+        <span style="color: #4eee94;">a</span> := <span style="color: #f08080;">make</span>([]<span style="color: #98f5ff;">int</span>, max-min+1)
+        <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">i</span> := <span style="color: #00bfff; font-weight: bold;">range</span> a {
+                a[i] = min + i
+        }
+        <span style="color: #00bfff; font-weight: bold;">return</span> a
+}
+
+<span style="color: #00bfff; font-weight: bold;">func</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+        <span style="color: #4eee94;">nums</span> := <span style="color: #daa520; font-weight: bold;">makeRange</span>(1, 10000)
+        <span style="color: #4eee94;">in</span> := <span style="color: #daa520; font-weight: bold;">echo</span>(nums)
+
+        <span style="color: #00bfff; font-weight: bold;">const</span> <span style="color: #ffd700;">nProcess</span> = 5
+        <span style="color: #00bfff; font-weight: bold;">var</span> <span style="color: #4eee94;">chans</span> [nProcess]&lt;-<span style="color: #00bfff; font-weight: bold;">chan</span> <span style="color: #4eee94;">int</span>
+        <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">i</span> := <span style="color: #00bfff; font-weight: bold;">range</span> chans {
+                chans[i] = <span style="color: #daa520; font-weight: bold;">sum</span>(<span style="color: #daa520; font-weight: bold;">prime</span>(in))
+        }
+
+        <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">n</span> := <span style="color: #00bfff; font-weight: bold;">range</span> <span style="color: #daa520; font-weight: bold;">sum</span>(<span style="color: #daa520; font-weight: bold;">merge</span>(chans[:])) {
+                fmt.<span style="color: #daa520; font-weight: bold;">Println</span>(n)
+        }
+}
+</pre>
+</div>
+
+<p>
+再看 prime() 函数的实现 ：
+</p>
+<div class="org-src-container">
+<pre class="src src-go"><span style="color: #00bfff; font-weight: bold;">func</span> <span style="color: #daa520; font-weight: bold;">is_prime</span>(<span style="color: #4eee94;">value</span> <span style="color: #98f5ff;">int</span>) <span style="color: #98f5ff;">bool</span> {
+        <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">i</span> := 2; i &lt;= <span style="color: #daa520; font-weight: bold;">int</span>(math.<span style="color: #daa520; font-weight: bold;">Floor</span>(<span style="color: #daa520; font-weight: bold;">float64</span>(value) / 2)); i++ {
+                <span style="color: #00bfff; font-weight: bold;">if</span> value%i == 0 {
+                        <span style="color: #00bfff; font-weight: bold;">return</span> <span style="color: #ffd700;">false</span>
+                }
+        }
+        <span style="color: #00bfff; font-weight: bold;">return</span> value &gt; 1
+}
+
+<span style="color: #00bfff; font-weight: bold;">func</span> <span style="color: #daa520; font-weight: bold;">prime</span>(<span style="color: #4eee94;">in</span> &lt;-<span style="color: #00bfff; font-weight: bold;">chan</span> <span style="color: #98f5ff;">int</span>) &lt;-<span style="color: #00bfff; font-weight: bold;">chan</span> <span style="color: #98f5ff;">int</span> {
+        <span style="color: #4eee94;">out</span> := <span style="color: #f08080;">make</span>(<span style="color: #00bfff; font-weight: bold;">chan</span> <span style="color: #98f5ff;">int</span>)
+        <span style="color: #00bfff; font-weight: bold;">go</span> <span style="color: #00bfff; font-weight: bold;">func</span> ()  {
+                <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">n</span> := <span style="color: #00bfff; font-weight: bold;">range</span> in {
+                        <span style="color: #00bfff; font-weight: bold;">if</span> <span style="color: #daa520; font-weight: bold;">is_prime</span>(n) {
+                                out &lt;- n
+                        }
+                }
+                <span style="color: #f08080;">close</span>(out)
+        }()
+        <span style="color: #00bfff; font-weight: bold;">return</span> out
+}
+</pre>
+</div>
+
+<p>
+可以看到：
+</p>
+<ol class="org-ol">
+<li>先制造了从1到10000的一个数组</li>
+<li>把这堆数组全部 echo到一个channel里 in</li>
+<li>生成 5 个 Channel，然后都调用 sum(prime(in)) ，于是每个Sum的Go Routine都会开始计算和</li>
+<li>最后再把所有的结果再求和拼起来，得到最终的结果</li>
+</ol>
+
+<p>
+其中的merge代码如下：
+</p>
+<div class="org-src-container">
+<pre class="src src-go"><span style="color: #00bfff; font-weight: bold;">func</span> <span style="color: #daa520; font-weight: bold;">merge</span>(<span style="color: #4eee94;">cs</span> []&lt;-<span style="color: #00bfff; font-weight: bold;">chan</span> <span style="color: #98f5ff;">int</span>) &lt;-<span style="color: #00bfff; font-weight: bold;">chan</span> <span style="color: #98f5ff;">int</span> {
+        <span style="color: #00bfff; font-weight: bold;">var</span> <span style="color: #4eee94;">wg</span> <span style="color: #98f5ff;">sync.WaitGroup</span>
+        <span style="color: #4eee94;">out</span> := <span style="color: #f08080;">make</span>(<span style="color: #00bfff; font-weight: bold;">chan</span> <span style="color: #98f5ff;">int</span>)
+
+        wg.<span style="color: #daa520; font-weight: bold;">Add</span>(<span style="color: #f08080;">len</span>(cs))
+        <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">_</span>, <span style="color: #4eee94;">c</span> := <span style="color: #00bfff; font-weight: bold;">range</span> cs {
+                <span style="color: #00bfff; font-weight: bold;">go</span> <span style="color: #00bfff; font-weight: bold;">func</span>(<span style="color: #4eee94;">c</span> &lt;-<span style="color: #00bfff; font-weight: bold;">chan</span> <span style="color: #98f5ff;">int</span>) {
+                        <span style="color: #00bfff; font-weight: bold;">for</span> <span style="color: #4eee94;">n</span> := <span style="color: #00bfff; font-weight: bold;">range</span> c {
+                                out &lt;- n
+                        }
+                        wg.<span style="color: #daa520; font-weight: bold;">Done</span>()
+                }(c)
+        }
+
+        <span style="color: #00bfff; font-weight: bold;">go</span> <span style="color: #00bfff; font-weight: bold;">func</span>() {
+                wg.<span style="color: #daa520; font-weight: bold;">Wait</span>()
+                <span style="color: #f08080;">close</span>(out)
+        }()
+
+        <span style="color: #00bfff; font-weight: bold;">return</span> out
+}
+</pre>
+</div>
+
+<p>
+用图片表示一下，整个程序的结构如下所示：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/pipeline.png" alt="pipeline.png" width="70%" /> 
+</p>
+</div>
+
+<p>
+<a href="visitor.html">Next：访问者</a>
+</p>
+
+<p>
+<a href="decorator.html">Previous：修饰器</a> 
+</p>
+
+<p>
+<a href="go-patterns.html">Home：目录</a>
+</p>
+</div>
+</div>
 </div>
 <div id="postamble" class="status">
 
