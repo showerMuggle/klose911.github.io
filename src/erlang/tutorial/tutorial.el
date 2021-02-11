@@ -2,10 +2,10 @@
 (setq org-publish-project-alist
       '(
         ;; These are the main web files
-        ("erlang-notes"
-         :base-directory "~/Documents/programming/html/klose911.github.io/src/erlang" 
+        ("erlang-tutorial-notes"
+         :base-directory "~/Documents/programming/html/klose911.github.io/src/erlang/tutorial" 
          :base-extension "org"
-         :publishing-directory "~/Documents/programming/html/klose911.github.io/html/erlang"
+         :publishing-directory "~/Documents/programming/html/klose911.github.io/html/erlang/tutorial"
          :recursive t
          :publishing-function org-html-publish-to-html
          :headline-levels 4
@@ -20,24 +20,24 @@
          )
 
         ;; These are static files (images, pdf, etc)
-        ("erlang-static"
+        ("erlang-tutorial-static"
          :base-directory "~/Documents/programming/html/klose911.github.io/src/css" ;; Change this to your local dir
          :base-extension "css\\|js\\|png\\|jpg\\|gif"
-         :publishing-directory "~/Documents/programming/html/klose911.github.io/html/erlang/css"
+         :publishing-directory "~/Documents/programming/html/klose911.github.io/html/erlang/tutorial/css"
          :recursive t
          :publishing-function org-publish-attachment
          )
 
 	;; picture
-        ("erlang-pic"
-         :base-directory "~/Documents/programming/html/klose911.github.io/src/erlang/pic"  ;; Change this to your local dir
+        ("erlang-tutorial-pic"
+         :base-directory "~/Documents/programming/html/klose911.github.io/src/erlang-tutorial/pic"  ;; Change this to your local dir
          :base-extension "png\\|jpg\\|gif"
-         :publishing-directory "~/Documents/programming/html/klose911.github.io/html/erlang/pic"
+         :publishing-directory "~/Documents/programming/html/klose911.github.io/html/erlang/tutorial/pic"
          :recursive t
          :publishing-function org-publish-attachment
          )
 	
-        ("erlang" :components ("erlang-notes" "erlang-static" "erlang-pic"))
+        ("erlang-tutorial" :components ("erlang-tutorial-notes" "erlang-tutorial-static" "erlang-tutorial-pic"))
         )
       )
 
@@ -53,11 +53,11 @@
 (setq org-footnote-definition-re
       (org-re "^\\[\\(fn:[-_[:word:]]+\\)\\]"))
 
-(defun erlang-publish (no-cache)
-  "Publish erlang"
+(defun erlang-tutorial-publish (no-cache)
+  "Publish erlang-tutorial"
   (interactive "sno-cache?[y/n] ")
   (if (or (string= no-cache "y")
           (string= no-cache "Y"))
-      (org-publish "erlang" t)
-    (org-publish "erlang" nil)))
+      (org-publish "erlang-tutorial" t)
+    (org-publish "erlang-tutorial" nil)))
 
