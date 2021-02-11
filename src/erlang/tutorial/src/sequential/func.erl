@@ -1,4 +1,4 @@
--module(tut). 
+-module(func). 
 -export([double/1, fact/1, mult/2]).
 
 double(X) ->
