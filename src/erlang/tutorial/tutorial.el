@@ -30,7 +30,7 @@
 
 	;; picture
         ("erlang-tutorial-pic"
-         :base-directory "~/Documents/programming/html/klose911.github.io/src/erlang-tutorial/pic"  ;; Change this to your local dir
+         :base-directory "~/Documents/programming/html/klose911.github.io/src/erlang/tutorial/pic"  ;; Change this to your local dir
          :base-extension "png\\|jpg\\|gif"
          :publishing-directory "~/Documents/programming/html/klose911.github.io/html/erlang/tutorial/pic"
          :recursive t
