@@ -5,7 +5,7 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>注册进程</title>
+<title>分布式编程</title>
 <meta name="generator" content="Org mode" />
 <meta name="author" content="Wu, Shanliang" />
 <style type="text/css">
@@ -242,120 +242,12 @@ for the JavaScript code in this tag.
 </head>
 <body>
 <div id="org-div-home-and-up">
- <a accesskey="h" href="message.html"> UP </a>
+ <a accesskey="h" href="register.html"> UP </a>
  |
  <a accesskey="H" href="concurrency.html"> HOME </a>
 </div><div id="content">
-<h1 class="title">注册进程</h1>
-<pre class="example">
-上面的例子中，因为 “Pong” 在 “ping” 进程开始前已经创建完成，所以才能将 “pong” 进程的进程标识符作为参数传递给进程 “ping”
+<h1 class="title">分布式编程</h1>
 
-这也就说，“ping” 进程必须通过某种途径获得 “pong” 进程的进程标识符后才能将消息发送 “pong” 进程
-
-然而，某些情况下，进程需要相互独立地启动，而这些进程之间又要求知道彼此的进程标识符，前面提到的这种方式就不能满足要求了
-</pre>
-
-<p>
-因此，Erlang 提供了为每个 <span class="underline">进程</span> <b>绑定</b> 一个 <span class="underline">名称</span> 的机制，这样进程间通信就可以通过进程名来实现，而不需要知道进程的进程标识符了。为每个进程注册一个名称需要用到内置函数 <span class="underline">register</span> ：
-</p>
-
-<pre class="example">
-register(some_atom, Pid)
-</pre>
-
-<p>
-这一次，为 “pong” 进程赋予了一名进程名称 <span class="underline">pong</span> ：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-erlang"><span style="color: #ffd700;">-module</span>(register).
-
-<span style="color: #ffd700;">-export</span>([<span style="color: #98f5ff;">start/0</span>, <span style="color: #98f5ff;">ping/1</span>, <span style="color: #98f5ff;">pong/0</span>]).
-
-<span style="color: #daa520; font-weight: bold;">ping</span>(0) -&gt;
-    pong ! finished,
-    <span style="color: #98f5ff;">io</span>:<span style="color: #98f5ff;">format</span>(<span style="color: #deb887;">"ping finished~n"</span>, []);
-
-<span style="color: #daa520; font-weight: bold;">ping</span>(<span style="color: #4eee94;">N</span>) -&gt;
-    pong ! {ping, <span style="color: #f08080;">self</span>()},
-    <span style="color: #00bfff; font-weight: bold;">receive</span>
-        pong -&gt;
-            <span style="color: #98f5ff;">io</span>:<span style="color: #98f5ff;">format</span>(<span style="color: #deb887;">"Ping received pong~n"</span>, [])
-    <span style="color: #00bfff; font-weight: bold;">end</span>,
-    <span style="color: #98f5ff;">ping</span>(<span style="color: #4eee94;">N</span> - 1).
-
-<span style="color: #daa520; font-weight: bold;">pong</span>() -&gt;
-    <span style="color: #00bfff; font-weight: bold;">receive</span>
-        finished -&gt;
-            <span style="color: #98f5ff;">io</span>:<span style="color: #98f5ff;">format</span>(<span style="color: #deb887;">"Pong finished~n"</span>, []);
-        {ping, <span style="color: #4eee94;">Ping_PID</span>} -&gt;
-            <span style="color: #98f5ff;">io</span>:<span style="color: #98f5ff;">format</span>(<span style="color: #deb887;">"Pong received ping~n"</span>, []),
-            <span style="color: #4eee94;">Ping_PID</span> ! pong,
-            <span style="color: #98f5ff;">pong</span>()
-    <span style="color: #00bfff; font-weight: bold;">end</span>.
-
-<span style="color: #daa520; font-weight: bold;">start</span>() -&gt;
-    <span style="color: #f08080;">register</span>(pong, <span style="color: #f08080;">spawn</span>(register, pong, [])),
-    <span style="color: #f08080;">spawn</span>(register, ping, [3]).
-</pre>
-</div>
-
-<p>
-start/0 函数中创建 “pong” 进程的同时还 <b>赋予</b> 了它一个名称 <span class="underline">pong</span> ：
-</p>
-<div class="org-src-container">
-<pre class="src src-erlang"><span style="color: #daa520; font-weight: bold;">register</span>(pong, <span style="color: #f08080;">spawn</span>(tut16, pong, [])),
-</pre>
-</div>
-
-<p>
-在 “ping” 进程中使用了这个名称来发送消息： 
-</p>
-
-<div class="org-src-container">
-<pre class="src src-erlang"><span style="color: #daa520; font-weight: bold;">ping</span>(<span style="color: #4eee94;">N</span>) -&gt;
-    pong ! {ping, <span style="color: #f08080;">self</span>()},
-</pre>
-</div>
-
-<p>
-因此 ping 函数也不再需要Pong_Id 作为参数了，所以ping/2 变成了 ping/1 
-</p>
-<div class="org-src-container">
-<pre class="src src-erlang"><span style="color: #ffd700;">-export</span>([<span style="color: #98f5ff;">start/0</span>, <span style="color: #98f5ff;">ping/1</span>, <span style="color: #98f5ff;">pong/0</span>]).
-</pre>
-</div>
-
-<p>
-测试下：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-sh">7&gt; register:start() <span style="color: #f08080;">.</span> 
-Pong received ping
-&lt;0.109.0&gt;
-Ping received pong
-Pong received ping
-Ping received pong
-8&gt; 
-Pong received ping
-Ping received pong
-ping finished
-Pong finished
-</pre>
-</div>
-
-<p>
-<a href="distribution.html">Next：分布式编程</a>
-</p>
-
-<p>
-<a href="message.html">Previous：消息传递</a>
-</p>
-
-<p>
-<a href="concurrency.html">Home：并发编程</a>
-</p>
 </div>
 <div id="postamble" class="status">
 
