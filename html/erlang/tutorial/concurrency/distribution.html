@@ -247,7 +247,365 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="concurrency.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">分布式编程</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#orga0b7ae9">搭建环境</a></li>
+<li><a href="#org090670e">本地结点</a>
+<ul>
+<li><a href="#orga3ccb68">测试</a></li>
+</ul>
+</li>
+<li><a href="#org8918b80">异地启动</a>
+<ul>
+<li><a href="#orgad1d786">测试</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<pre class="example">
+下面进一步对 ping pong 示例程序进行改进
 
+这一次，要让 “ping”、“pong” 进程分别位于不同的计算机上
+</pre>
+
+<div id="outline-container-orga0b7ae9" class="outline-2">
+<h2 id="orga0b7ae9">搭建环境</h2>
+<div class="outline-text-2" id="text-orga0b7ae9">
+<pre class="example">
+要想让这个程序工作，首先的搭建一下分布式的系统环境
+</pre>
+<p>
+分布式 Erlang 系统的实现提供了基本的安全机制，它阻止未授权的外部设备访问本机的 Erlang 系统
+</p>
+<pre class="example">
+同一个系统中的 Erlang 要想相互通信需要设置相同的 magic cookie
+</pre>
+
+<p>
+设置 magic cookie 最便捷地实现方式就是在打算运行分布式 Erlang 系统的所有计算机的 <span class="underline">home 目录</span> 下创建一个 <span class="underline">.erlang.cookie</span> 文件：
+</p>
+<ul class="org-ul">
+<li>在 windows 系统中，home 目录为环境变量 $HOME 指定的目录（这个变量的值可能需要手动设置）</li>
+<li>在 Linux 或者 UNIX 系统中简单很多，你只需要在执行 cd 命令后所进入的目录下创建一个 .erlang.cookie 文件</li>
+</ul>
+
+<p>
+.erlang.cookie 文件只有一行内容，这一行包含一个原子值。例如，在 Linux 或 UNIX 系统的 shell 执行如下命令：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ cd
+$ cat &gt; .erlang.cookie
+this_is_very_secret
+$ chmod 400 .erlang.cookie
+</pre>
+</div>
+
+<pre class="example">
+使用 chmod 命令让 .erlang.cookie 文件只有文件拥者可以访问，这个是必须设置的！
+</pre>
+
+<p>
+启动 erlang 系统与其它 erlang 系统通信时，需要给 erlang 系统一个名称，例如：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$<span style="color: #4eee94;">erl</span> -sname my_name
+</pre>
+</div>
+<pre class="example">
+如果想尝试一下分布式 Erlang 系统，而又只有一台计算机，可以在同一台计算机上分别启动两个 Erlang 系统，并分别赋予不同的名称即可
+</pre>
+<p>
+运行在每个计算机上的 Erlang 被称为一个 <span class="underline">Erang 结点</span> 
+</p>
+
+<pre class="example">
+erl -sname 要求所有的 结点在同一个 IP 域内
+
+如果 Erlang 结点位于不同的 IP 域中，不仅需要使用 -name，而且需要指定 IP 地址
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org090670e" class="outline-2">
+<h2 id="org090670e">本地结点</h2>
+<div class="outline-text-2" id="text-org090670e">
+<p>
+下面是可以运行在两个结点的pingpong程序：
+</p>
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #ffd700;">-module</span>(node).
+
+<span style="color: #ffd700;">-export</span>([<span style="color: #98f5ff;">start_ping/1</span>, <span style="color: #98f5ff;">start_pong/0</span>,  <span style="color: #98f5ff;">ping/2</span>, <span style="color: #98f5ff;">pong/0</span>]).
+
+<span style="color: #daa520; font-weight: bold;">ping</span>(0, <span style="color: #4eee94;">Pong_Node</span>) -&gt;
+    {pong, <span style="color: #4eee94;">Pong_Node</span>} ! finished,
+    <span style="color: #98f5ff;">io</span>:<span style="color: #98f5ff;">format</span>(<span style="color: #deb887;">"ping finished~n"</span>, []);
+
+<span style="color: #daa520; font-weight: bold;">ping</span>(<span style="color: #4eee94;">N</span>, <span style="color: #4eee94;">Pong_Node</span>) -&gt;
+    {pong, <span style="color: #4eee94;">Pong_Node</span>} ! {ping, <span style="color: #f08080;">self</span>()},
+    <span style="color: #00bfff; font-weight: bold;">receive</span>
+        pong -&gt;
+            <span style="color: #98f5ff;">io</span>:<span style="color: #98f5ff;">format</span>(<span style="color: #deb887;">"Ping received pong~n"</span>, [])
+    <span style="color: #00bfff; font-weight: bold;">end</span>,
+    <span style="color: #98f5ff;">ping</span>(<span style="color: #4eee94;">N</span> - 1, <span style="color: #4eee94;">Pong_Node</span>).
+
+<span style="color: #daa520; font-weight: bold;">pong</span>() -&gt;
+    <span style="color: #00bfff; font-weight: bold;">receive</span>
+        finished -&gt;
+            <span style="color: #98f5ff;">io</span>:<span style="color: #98f5ff;">format</span>(<span style="color: #deb887;">"Pong finished~n"</span>, []);
+        {ping, <span style="color: #4eee94;">Ping_PID</span>} -&gt;
+            <span style="color: #98f5ff;">io</span>:<span style="color: #98f5ff;">format</span>(<span style="color: #deb887;">"Pong received ping~n"</span>, []),
+            <span style="color: #4eee94;">Ping_PID</span> ! pong,
+            <span style="color: #98f5ff;">pong</span>()
+    <span style="color: #00bfff; font-weight: bold;">end</span>.
+
+<span style="color: #daa520; font-weight: bold;">start_pong</span>() -&gt;
+    <span style="color: #f08080;">register</span>(pong, <span style="color: #f08080;">spawn</span>(node, pong, [])).
+
+<span style="color: #daa520; font-weight: bold;">start_ping</span>(<span style="color: #4eee94;">Pong_Node</span>) -&gt;
+    <span style="color: #f08080;">spawn</span>(node, ping, [3, <span style="color: #4eee94;">Pong_Node</span>]).
+</pre>
+</div>
+
+<p>
+可以看到 pong 函数根本就没有发生任何改变，无论 “ping” 进程运行在哪个结点下，下面这一行代码都可以正确的工作：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang">{ping, <span style="color: #4eee94;">Ping_PID</span>} -&gt;
+    <span style="color: #98f5ff;">io</span>:<span style="color: #98f5ff;">format</span>(<span style="color: #deb887;">"Pong received ping~n"</span>, []),
+    <span style="color: #4eee94;">Ping_PID</span> ! pong,
+</pre>
+</div>
+
+<p>
+这是因为 Erlang 的 <span class="underline">进程标识符</span> 中包含了程序运行在哪个 <b>结点上的位置信息</b> 
+</p>
+<pre class="example">
+所以如果知道了进程的进程标识符，无论进程是运行在本地结点上还是其它结点上面，"!" 操作符都可以将消息发送到该进程
+</pre>
+
+<p>
+要想通过 <span class="underline">进程注册的名称</span> 向其它结点上的进程 <b>发送消息</b> ，这时候就有一些不同之处了：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang">{pong, <span style="color: #4eee94;">Pong_Node</span>} ! {ping, <span style="color: #f08080;">self</span>()},
+</pre>
+</div>
+
+<p>
+这个时候，就不能再只用 registered_name 作为参数了，而需要使用元组 <span class="underline">{registered_name,node_name}</span> 作为 <b>注册进程的名称参数</b> 
+</p>
+</div>
+
+<div id="outline-container-orga3ccb68" class="outline-3">
+<h3 id="orga3ccb68">测试</h3>
+<div class="outline-text-3" id="text-orga3ccb68">
+<pre class="example">
+假设两台计算分别称之为 gollum 与 kosken：
+</pre>
+<p>
+在 kosken 系统上启动结点 ping ：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">kosken&gt; erl -sname ping
+<span style="color: #daa520; font-weight: bold;">Erlang</span> (BEAM) emulator version 5.2.3.7 [hipe] [threads:0]
+
+Eshell V5.2.3.7  (abort with ^G)
+(ping@kosken)1&gt;
+</pre>
+</div>
+
+<p>
+在 gollum 上启动节点 pong ： 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">gollum&gt; erl -sname pong
+<span style="color: #daa520; font-weight: bold;">Erlang</span> (BEAM) emulator version 5.2.3.7 [hipe] [threads:0]
+
+Eshell V5.2.3.7  (abort with ^G)
+(pong@gollum)1&gt;
+</pre>
+</div>
+
+<p>
+然后在 gollum 上启动 "pong" 进程：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">(pong@gollum)1&gt; node:start_pong()<span style="color: #f08080;">.</span>
+true
+</pre>
+</div>
+
+<p>
+最后在 kosken 上启动 “ping” 进程：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">(ping@kosken)1&gt; node:start_ping(pong@gollum)<span style="color: #f08080;">.</span>
+&lt;0.37.0&gt;
+Ping received pong
+Ping received pong 
+Ping received pong
+ping finished
+</pre>
+</div>
+
+<pre class="example">
+从上面的代码中可以看出，start_ping 的函数的其中一个参数为 “pong” 进程所在结点的名称
+</pre>
+
+<p>
+在gollum 结点的 “pong” 的这一端：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">(pong@gollum)2&gt;
+Pong received ping                 
+Pong received ping                 
+Pong received ping                 
+Pong finished                      
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org8918b80" class="outline-2">
+<h2 id="org8918b80">异地启动</h2>
+<div class="outline-text-2" id="text-org8918b80">
+<pre class="example">
+在之前的代码中了，“ping”、“pong” 进程是在两个独立的 Erlang 结点上通过 shell 启动的
+</pre>
+<p>
+spawn 也可以在其它结点（非本地结点）启动新的进程：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #ffd700;">-module</span>(network).
+
+<span style="color: #ffd700;">-export</span>([<span style="color: #98f5ff;">start/1</span>, <span style="color: #98f5ff;">ping/2</span>, <span style="color: #98f5ff;">pong/0</span>]).
+
+<span style="color: #daa520; font-weight: bold;">ping</span>(0, <span style="color: #4eee94;">Pong_Node</span>) -&gt;
+    {pong, <span style="color: #4eee94;">Pong_Node</span>} ! finished,
+    <span style="color: #98f5ff;">io</span>:<span style="color: #98f5ff;">format</span>(<span style="color: #deb887;">"ping finished~n"</span>, []);
+
+<span style="color: #daa520; font-weight: bold;">ping</span>(<span style="color: #4eee94;">N</span>, <span style="color: #4eee94;">Pong_Node</span>) -&gt;
+    {pong, <span style="color: #4eee94;">Pong_Node</span>} ! {ping, <span style="color: #f08080;">self</span>()},
+    <span style="color: #00bfff; font-weight: bold;">receive</span>
+        pong -&gt;
+            <span style="color: #98f5ff;">io</span>:<span style="color: #98f5ff;">format</span>(<span style="color: #deb887;">"Ping received pong~n"</span>, [])
+    <span style="color: #00bfff; font-weight: bold;">end</span>,
+    <span style="color: #98f5ff;">ping</span>(<span style="color: #4eee94;">N</span> - 1, <span style="color: #4eee94;">Pong_Node</span>).
+
+<span style="color: #daa520; font-weight: bold;">pong</span>() -&gt;
+    <span style="color: #00bfff; font-weight: bold;">receive</span>
+        finished -&gt;
+            <span style="color: #98f5ff;">io</span>:<span style="color: #98f5ff;">format</span>(<span style="color: #deb887;">"Pong finished~n"</span>, []);
+        {ping, <span style="color: #4eee94;">Ping_PID</span>} -&gt;
+            <span style="color: #98f5ff;">io</span>:<span style="color: #98f5ff;">format</span>(<span style="color: #deb887;">"Pong received ping~n"</span>, []),
+            <span style="color: #4eee94;">Ping_PID</span> ! pong,
+            <span style="color: #98f5ff;">pong</span>()
+    <span style="color: #00bfff; font-weight: bold;">end</span>.
+
+<span style="color: #daa520; font-weight: bold;">start</span>(<span style="color: #4eee94;">Ping_Node</span>) -&gt;
+    <span style="color: #f08080;">register</span>(pong, <span style="color: #f08080;">spawn</span>(network, pong, [])),
+    <span style="color: #f08080;">spawn</span>(<span style="color: #4eee94;">Ping_Node</span>, network, ping, [3, <span style="color: #f08080;">node</span>()]). 
+</pre>
+</div>
+
+<p>
+这个程序和前面的主要变化：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #daa520; font-weight: bold;">spawn</span>(<span style="color: #4eee94;">Ping_Node</span>, network, ping, [3, <span style="color: #f08080;">node</span>()]). 
+</pre>
+</div>
+
+<pre class="example">
+在节点 Ping_Node 结点上启动了进程 ping
+</pre>
+
+<p>
+其中 <span class="underline">node</span> () 是获取了本地的结点信息，并传递给运行在 Ping_Node 节点的 ping 进程
+</p>
+</div>
+
+<div id="outline-container-orgad1d786" class="outline-3">
+<h3 id="orgad1d786">测试</h3>
+<div class="outline-text-3" id="text-orgad1d786">
+<p>
+在 kosken 系统上启动结点 ping ：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">kosken&gt; erl -sname ping
+<span style="color: #daa520; font-weight: bold;">Erlang</span> (BEAM) emulator version 5.2.3.7 [hipe] [threads:0]
+
+Eshell V5.2.3.7  (abort with ^G)
+(ping@kosken)1&gt;
+</pre>
+</div>
+
+<p>
+在 gollum 上启动节点 pong ： 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">gollum&gt; erl -sname pong
+<span style="color: #daa520; font-weight: bold;">Erlang</span> (BEAM) emulator version 5.2.3.7 [hipe] [threads:0]
+
+Eshell V5.2.3.7  (abort with ^G)
+(pong@gollum)1&gt;
+</pre>
+</div>
+<p>
+在 gollum 直接调用 start(ping@kosken) ： 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">(pong@gollum)1&gt; network:start(ping@kosken) <span style="color: #f08080;">.</span> 
+Pong received ping
+&lt;8806.92.0&gt;
+(pong@gollum)2&gt; 
+Ping received pong
+Pong received ping
+Ping received pong
+Pong received ping
+Ping received pong
+ping finished   
+Pong finished   
+</pre>
+</div>
+
+<pre class="example">
+注意：所有的内容都输出到了 gollum 结点上
+
+这是因为 I/O 系统发现进程是由其它结点启动的时候，会自将输出内容输出到启动进程所在的结点
+</pre>
+
+<p>
+<a href="example.html">Next：完整示例</a>
+</p>
+
+<p>
+<a href="register.html">Previous：注册进程</a>
+</p>
+
+<p>
+<a href="concurrency.html">Home：并发编程</a>
+</p>
+</div>
+</div>
+</div>
 </div>
 <div id="postamble" class="status">
 
