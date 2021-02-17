@@ -247,7 +247,258 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="fault-tolerance.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">完整实例</h1>
+<p>
+现在来改进 Messager 程序以增加该程序的健壮性：
+</p>
 
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #ffd700;">-module</span>(messenger).
+<span style="color: #ffd700;">-export</span>([<span style="color: #98f5ff;">start_server/0</span>, <span style="color: #98f5ff;">server/0</span>, 
+         <span style="color: #98f5ff;">logon/1</span>, <span style="color: #98f5ff;">logoff/0</span>, <span style="color: #98f5ff;">message/2</span>, <span style="color: #98f5ff;">client/2</span>]).
+
+<span style="color: #5f9ea0; font-style: italic;">%%% </span><span style="color: #5f9ea0; font-style: italic;">Change the function below to return the name of the node where the</span>
+<span style="color: #5f9ea0; font-style: italic;">%%% </span><span style="color: #5f9ea0; font-style: italic;">messenger server runs</span>
+<span style="color: #daa520; font-weight: bold;">server_node</span>() -&gt;
+    messenger@super.
+
+<span style="color: #5f9ea0; font-style: italic;">%%% </span><span style="color: #5f9ea0; font-style: italic;">This is the server process for the "messenger"</span>
+<span style="color: #5f9ea0; font-style: italic;">%%% </span><span style="color: #5f9ea0; font-style: italic;">the user list has the format [{ClientPid1, Name1},{ClientPid22, Name2},...]</span>
+<span style="color: #daa520; font-weight: bold;">server</span>() -&gt;
+    <span style="color: #f08080;">process_flag</span>(trap_exit, true),
+    <span style="color: #98f5ff;">server</span>([]).
+
+<span style="color: #daa520; font-weight: bold;">server</span>(<span style="color: #4eee94;">User_List</span>) -&gt;
+    <span style="color: #00bfff; font-weight: bold;">receive</span>
+        {<span style="color: #4eee94;">From</span>, logon, <span style="color: #4eee94;">Name</span>} -&gt;
+            <span style="color: #4eee94;">New_User_List</span> = <span style="color: #98f5ff;">server_logon</span>(<span style="color: #4eee94;">From</span>, <span style="color: #4eee94;">Name</span>, <span style="color: #4eee94;">User_List</span>),
+            <span style="color: #98f5ff;">server</span>(<span style="color: #4eee94;">New_User_List</span>);
+        {<span style="color: #deb887;">'EXIT'</span>, <span style="color: #4eee94;">From</span>, <span style="color: #4eee94;">_</span>} -&gt;
+            <span style="color: #4eee94;">New_User_List</span> = <span style="color: #98f5ff;">server_logoff</span>(<span style="color: #4eee94;">From</span>, <span style="color: #4eee94;">User_List</span>),
+            <span style="color: #98f5ff;">server</span>(<span style="color: #4eee94;">New_User_List</span>);
+        {<span style="color: #4eee94;">From</span>, message_to, <span style="color: #4eee94;">To</span>, <span style="color: #4eee94;">Message</span>} -&gt;
+            <span style="color: #98f5ff;">server_transfer</span>(<span style="color: #4eee94;">From</span>, <span style="color: #4eee94;">To</span>, <span style="color: #4eee94;">Message</span>, <span style="color: #4eee94;">User_List</span>),
+            <span style="color: #98f5ff;">io</span>:<span style="color: #98f5ff;">format</span>(<span style="color: #deb887;">"list is now: ~p~n"</span>, [<span style="color: #4eee94;">User_List</span>]),
+            <span style="color: #98f5ff;">server</span>(<span style="color: #4eee94;">User_List</span>)
+    <span style="color: #00bfff; font-weight: bold;">end</span>.
+
+<span style="color: #5f9ea0; font-style: italic;">%%% </span><span style="color: #5f9ea0; font-style: italic;">Start the server</span>
+<span style="color: #daa520; font-weight: bold;">start_server</span>() -&gt;
+    <span style="color: #f08080;">register</span>(messenger, <span style="color: #f08080;">spawn</span>(messenger, server, [])).
+
+<span style="color: #5f9ea0; font-style: italic;">%%% </span><span style="color: #5f9ea0; font-style: italic;">Server adds a new user to the user list</span>
+<span style="color: #daa520; font-weight: bold;">server_logon</span>(<span style="color: #4eee94;">From</span>, <span style="color: #4eee94;">Name</span>, <span style="color: #4eee94;">User_List</span>) -&gt;
+    <span style="color: #5f9ea0; font-style: italic;">%% </span><span style="color: #5f9ea0; font-style: italic;">check if logged on anywhere else</span>
+    <span style="color: #00bfff; font-weight: bold;">case</span> <span style="color: #98f5ff;">lists</span>:<span style="color: #98f5ff;">keymember</span>(<span style="color: #4eee94;">Name</span>, 2, <span style="color: #4eee94;">User_List</span>) <span style="color: #00bfff; font-weight: bold;">of</span>
+        true -&gt;
+            <span style="color: #4eee94;">From</span> ! {messenger, stop, user_exists_at_other_node},  <span style="color: #5f9ea0; font-style: italic;">%</span><span style="color: #5f9ea0; font-style: italic;">reject logon</span>
+            <span style="color: #4eee94;">User_List</span>;
+        false -&gt;
+            <span style="color: #4eee94;">From</span> ! {messenger, logged_on},
+            <span style="color: #f08080;">link</span>(<span style="color: #4eee94;">From</span>),
+            [{<span style="color: #4eee94;">From</span>, <span style="color: #4eee94;">Name</span>} | <span style="color: #4eee94;">User_List</span>]        <span style="color: #5f9ea0; font-style: italic;">%</span><span style="color: #5f9ea0; font-style: italic;">add user to the list</span>
+    <span style="color: #00bfff; font-weight: bold;">end</span>.
+
+<span style="color: #5f9ea0; font-style: italic;">%%% </span><span style="color: #5f9ea0; font-style: italic;">Server deletes a user from the user list</span>
+<span style="color: #daa520; font-weight: bold;">server_logoff</span>(<span style="color: #4eee94;">From</span>, <span style="color: #4eee94;">User_List</span>) -&gt;
+    <span style="color: #98f5ff;">lists</span>:<span style="color: #98f5ff;">keydelete</span>(<span style="color: #4eee94;">From</span>, 1, <span style="color: #4eee94;">User_List</span>).
+
+<span style="color: #5f9ea0; font-style: italic;">%%% </span><span style="color: #5f9ea0; font-style: italic;">Server transfers a message between user</span>
+<span style="color: #daa520; font-weight: bold;">server_transfer</span>(<span style="color: #4eee94;">From</span>, <span style="color: #4eee94;">To</span>, <span style="color: #4eee94;">Message</span>, <span style="color: #4eee94;">User_List</span>) -&gt;
+    <span style="color: #5f9ea0; font-style: italic;">%% </span><span style="color: #5f9ea0; font-style: italic;">check that the user is logged on and who he is</span>
+    <span style="color: #00bfff; font-weight: bold;">case</span> <span style="color: #98f5ff;">lists</span>:<span style="color: #98f5ff;">keysearch</span>(<span style="color: #4eee94;">From</span>, 1, <span style="color: #4eee94;">User_List</span>) <span style="color: #00bfff; font-weight: bold;">of</span>
+        false -&gt;
+            <span style="color: #4eee94;">From</span> ! {messenger, stop, you_are_not_logged_on};
+        {value, {<span style="color: #4eee94;">_</span>, <span style="color: #4eee94;">Name</span>}} -&gt;
+            <span style="color: #98f5ff;">server_transfer</span>(<span style="color: #4eee94;">From</span>, <span style="color: #4eee94;">Name</span>, <span style="color: #4eee94;">To</span>, <span style="color: #4eee94;">Message</span>, <span style="color: #4eee94;">User_List</span>)
+    <span style="color: #00bfff; font-weight: bold;">end</span>.
+
+<span style="color: #5f9ea0; font-style: italic;">%%% </span><span style="color: #5f9ea0; font-style: italic;">If the user exists, send the message</span>
+<span style="color: #daa520; font-weight: bold;">server_transfer</span>(<span style="color: #4eee94;">From</span>, <span style="color: #4eee94;">Name</span>, <span style="color: #4eee94;">To</span>, <span style="color: #4eee94;">Message</span>, <span style="color: #4eee94;">User_List</span>) -&gt;
+    <span style="color: #5f9ea0; font-style: italic;">%% </span><span style="color: #5f9ea0; font-style: italic;">Find the receiver and send the message</span>
+    <span style="color: #00bfff; font-weight: bold;">case</span> <span style="color: #98f5ff;">lists</span>:<span style="color: #98f5ff;">keysearch</span>(<span style="color: #4eee94;">To</span>, 2, <span style="color: #4eee94;">User_List</span>) <span style="color: #00bfff; font-weight: bold;">of</span>
+        false -&gt;
+            <span style="color: #4eee94;">From</span> ! {messenger, receiver_not_found};
+        {value, {<span style="color: #4eee94;">ToPid</span>, <span style="color: #4eee94;">To</span>}} -&gt;
+            <span style="color: #4eee94;">ToPid</span> ! {message_from, <span style="color: #4eee94;">Name</span>, <span style="color: #4eee94;">Message</span>}, 
+            <span style="color: #4eee94;">From</span> ! {messenger, sent} 
+    <span style="color: #00bfff; font-weight: bold;">end</span>.
+
+<span style="color: #5f9ea0; font-style: italic;">%%% </span><span style="color: #5f9ea0; font-style: italic;">User Commands</span>
+<span style="color: #daa520; font-weight: bold;">logon</span>(<span style="color: #4eee94;">Name</span>) -&gt;
+    <span style="color: #00bfff; font-weight: bold;">case</span> <span style="color: #f08080;">whereis</span>(mess_client) <span style="color: #00bfff; font-weight: bold;">of</span> 
+        undefined -&gt;
+            <span style="color: #f08080;">register</span>(mess_client, 
+                     <span style="color: #f08080;">spawn</span>(messenger, client, [<span style="color: #98f5ff;">server_node</span>(), <span style="color: #4eee94;">Name</span>]));
+        <span style="color: #4eee94;">_</span> -&gt;<span style="color: #daa520; font-weight: bold;"> </span>already_logged_on
+    <span style="color: #00bfff; font-weight: bold;">end</span>.
+
+<span style="color: #daa520; font-weight: bold;">logoff</span>() -&gt;
+    mess_client ! logoff.
+
+<span style="color: #daa520; font-weight: bold;">message</span>(<span style="color: #4eee94;">ToName</span>, <span style="color: #4eee94;">Message</span>) -&gt;
+    <span style="color: #00bfff; font-weight: bold;">case</span> <span style="color: #f08080;">whereis</span>(mess_client) <span style="color: #00bfff; font-weight: bold;">of</span> <span style="color: #5f9ea0; font-style: italic;">% </span><span style="color: #5f9ea0; font-style: italic;">Test if the client is running</span>
+        undefined -&gt;
+            not_logged_on;
+        <span style="color: #4eee94;">_</span> -&gt;<span style="color: #daa520; font-weight: bold;"> </span>mess_client ! {message_to, <span style="color: #4eee94;">ToName</span>, <span style="color: #4eee94;">Message</span>},
+             ok
+    <span style="color: #00bfff; font-weight: bold;">end</span>.
+
+<span style="color: #5f9ea0; font-style: italic;">%%% </span><span style="color: #5f9ea0; font-style: italic;">The client process which runs on each user node</span>
+<span style="color: #daa520; font-weight: bold;">client</span>(<span style="color: #4eee94;">Server_Node</span>, <span style="color: #4eee94;">Name</span>) -&gt;
+    {messenger, <span style="color: #4eee94;">Server_Node</span>} ! {<span style="color: #f08080;">self</span>(), logon, <span style="color: #4eee94;">Name</span>},
+    <span style="color: #98f5ff;">await_result</span>(),
+    <span style="color: #98f5ff;">client</span>(<span style="color: #4eee94;">Server_Node</span>).
+
+<span style="color: #daa520; font-weight: bold;">client</span>(<span style="color: #4eee94;">Server_Node</span>) -&gt;
+    <span style="color: #00bfff; font-weight: bold;">receive</span>
+        logoff -&gt;
+            <span style="color: #f08080;">exit</span>(normal);
+        {message_to, <span style="color: #4eee94;">ToName</span>, <span style="color: #4eee94;">Message</span>} -&gt;
+            {messenger, <span style="color: #4eee94;">Server_Node</span>} ! {<span style="color: #f08080;">self</span>(), message_to, <span style="color: #4eee94;">ToName</span>, <span style="color: #4eee94;">Message</span>},
+            <span style="color: #98f5ff;">await_result</span>();
+        {message_from, <span style="color: #4eee94;">FromName</span>, <span style="color: #4eee94;">Message</span>} -&gt;
+            <span style="color: #98f5ff;">io</span>:<span style="color: #98f5ff;">format</span>(<span style="color: #deb887;">"Message from ~p: ~p~n"</span>, [<span style="color: #4eee94;">FromName</span>, <span style="color: #4eee94;">Message</span>])
+    <span style="color: #00bfff; font-weight: bold;">end</span>,
+    <span style="color: #98f5ff;">client</span>(<span style="color: #4eee94;">Server_Node</span>).
+
+<span style="color: #5f9ea0; font-style: italic;">%%% </span><span style="color: #5f9ea0; font-style: italic;">wait for a response from the server</span>
+<span style="color: #daa520; font-weight: bold;">await_result</span>() -&gt;
+    <span style="color: #00bfff; font-weight: bold;">receive</span>
+        {messenger, stop, <span style="color: #4eee94;">Why</span>} -&gt;<span style="color: #daa520; font-weight: bold;"> </span><span style="color: #5f9ea0; font-style: italic;">% </span><span style="color: #5f9ea0; font-style: italic;">Stop the client </span>
+            <span style="color: #98f5ff;">io</span>:<span style="color: #98f5ff;">format</span>(<span style="color: #deb887;">"~p~n"</span>, [<span style="color: #4eee94;">Why</span>]),
+            <span style="color: #f08080;">exit</span>(normal);
+        {messenger, <span style="color: #4eee94;">What</span>} -&gt;<span style="color: #daa520; font-weight: bold;"> </span> <span style="color: #5f9ea0; font-style: italic;">% </span><span style="color: #5f9ea0; font-style: italic;">Normal response</span>
+            <span style="color: #98f5ff;">io</span>:<span style="color: #98f5ff;">format</span>(<span style="color: #deb887;">"~p~n"</span>, [<span style="color: #4eee94;">What</span>])
+    <span style="color: #00bfff; font-weight: bold;">after</span> 5000 -&gt;
+            <span style="color: #98f5ff;">io</span>:<span style="color: #98f5ff;">format</span>(<span style="color: #deb887;">"No response from server~n"</span>, []),
+            <span style="color: #f08080;">exit</span>(timeout)
+    <span style="color: #00bfff; font-weight: bold;">end</span>.
+</pre>
+</div>
+
+<p>
+Messager 服务器捕捉进程退出：如果它收到进程终止信号， <span class="underline">{'EXIT',From,Reason}</span> ，则说明 <span class="underline">客户端进程已经终止</span> 或者由于下面的原因变得不可达：
+</p>
+<ul class="org-ul">
+<li>用户主动退出登录（替代了前面版本里的 “logoff” 消息）</li>
+<li>与客户端连接的网络已经断开</li>
+<li>客户进程所处的结点崩溃</li>
+<li>客户进程执行了某些非法操作</li>
+</ul>
+
+<p>
+如果服务器收到上面所述的退出信号，将调用 server_logoff 函数将 {From, Name} 元组从 User_Lists 列表中删除
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #daa520; font-weight: bold;">server</span>() -&gt;
+    <span style="color: #f08080;">process_flag</span>(trap_exit, true),
+    <span style="color: #98f5ff;">server</span>([]).
+
+<span style="color: #daa520; font-weight: bold;">server</span>(<span style="color: #4eee94;">User_List</span>) -&gt;
+    <span style="color: #00bfff; font-weight: bold;">receive</span>
+        {<span style="color: #4eee94;">From</span>, logon, <span style="color: #4eee94;">Name</span>} -&gt;
+            <span style="color: #4eee94;">New_User_List</span> = <span style="color: #98f5ff;">server_logon</span>(<span style="color: #4eee94;">From</span>, <span style="color: #4eee94;">Name</span>, <span style="color: #4eee94;">User_List</span>),
+            <span style="color: #98f5ff;">server</span>(<span style="color: #4eee94;">New_User_List</span>);
+        {<span style="color: #deb887;">'EXIT'</span>, <span style="color: #4eee94;">From</span>, <span style="color: #4eee94;">_</span>} -&gt;
+            <span style="color: #4eee94;">New_User_List</span> = <span style="color: #98f5ff;">server_logoff</span>(<span style="color: #4eee94;">From</span>, <span style="color: #4eee94;">User_List</span>),
+            <span style="color: #98f5ff;">server</span>(<span style="color: #4eee94;">New_User_List</span>);
+        {<span style="color: #4eee94;">From</span>, message_to, <span style="color: #4eee94;">To</span>, <span style="color: #4eee94;">Message</span>} -&gt;
+            <span style="color: #98f5ff;">server_transfer</span>(<span style="color: #4eee94;">From</span>, <span style="color: #4eee94;">To</span>, <span style="color: #4eee94;">Message</span>, <span style="color: #4eee94;">User_List</span>),
+            <span style="color: #98f5ff;">io</span>:<span style="color: #98f5ff;">format</span>(<span style="color: #deb887;">"list is now: ~p~n"</span>, [<span style="color: #4eee94;">User_List</span>]),
+            <span style="color: #98f5ff;">server</span>(<span style="color: #4eee94;">User_List</span>)
+    <span style="color: #00bfff; font-weight: bold;">end</span>.
+</pre>
+</div>
+
+
+<p>
+如果服务端所在的结点崩溃了，那么系统将将自动产生进程终止信号，并将其发送给所有的客户端进程：'EXIT',MessengerPID,noconnection} ，客户端进程收到该消息后会终止自身 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #daa520; font-weight: bold;">server_logon</span>(<span style="color: #4eee94;">From</span>, <span style="color: #4eee94;">Name</span>, <span style="color: #4eee94;">User_List</span>) -&gt;
+    <span style="color: #5f9ea0; font-style: italic;">%% </span><span style="color: #5f9ea0; font-style: italic;">check if logged on anywhere else</span>
+    <span style="color: #00bfff; font-weight: bold;">case</span> <span style="color: #98f5ff;">lists</span>:<span style="color: #98f5ff;">keymember</span>(<span style="color: #4eee94;">Name</span>, 2, <span style="color: #4eee94;">User_List</span>) <span style="color: #00bfff; font-weight: bold;">of</span>
+        true -&gt;
+            <span style="color: #4eee94;">From</span> ! {messenger, stop, user_exists_at_other_node},  <span style="color: #5f9ea0; font-style: italic;">%</span><span style="color: #5f9ea0; font-style: italic;">reject logon</span>
+            <span style="color: #4eee94;">User_List</span>;
+        false -&gt;
+            <span style="color: #4eee94;">From</span> ! {messenger, logged_on},
+            <span style="color: #f08080;">link</span>(<span style="color: #4eee94;">From</span>),
+            [{<span style="color: #4eee94;">From</span>, <span style="color: #4eee94;">Name</span>} | <span style="color: #4eee94;">User_List</span>]        <span style="color: #5f9ea0; font-style: italic;">%</span><span style="color: #5f9ea0; font-style: italic;">add user to the list</span>
+    <span style="color: #00bfff; font-weight: bold;">end</span>.
+</pre>
+</div>
+
+<pre class="example">
+这里的 link 调用就是把 服务器的messenger 进程和 客户端的mess_client进程 绑定起来，
+
+一旦服务器进程崩溃，就会发送信号给客户端进程
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #daa520; font-weight: bold;">client</span>(<span style="color: #4eee94;">Server_Node</span>) -&gt;
+    <span style="color: #00bfff; font-weight: bold;">receive</span>
+        logoff -&gt;
+            <span style="color: #f08080;">exit</span>(normal);
+        {message_to, <span style="color: #4eee94;">ToName</span>, <span style="color: #4eee94;">Message</span>} -&gt;
+            {messenger, <span style="color: #4eee94;">Server_Node</span>} ! {<span style="color: #f08080;">self</span>(), message_to, <span style="color: #4eee94;">ToName</span>, <span style="color: #4eee94;">Message</span>},
+            <span style="color: #98f5ff;">await_result</span>();
+        {message_from, <span style="color: #4eee94;">FromName</span>, <span style="color: #4eee94;">Message</span>} -&gt;
+            <span style="color: #98f5ff;">io</span>:<span style="color: #98f5ff;">format</span>(<span style="color: #deb887;">"Message from ~p: ~p~n"</span>, [<span style="color: #4eee94;">FromName</span>, <span style="color: #4eee94;">Message</span>])
+    <span style="color: #00bfff; font-weight: bold;">end</span>,
+    <span style="color: #98f5ff;">client</span>(<span style="color: #4eee94;">Server_Node</span>).
+</pre>
+</div>
+
+<p>
+当用户主动退出后，调用 exit(normal)，这同样会把终止信号发送给服务器端的messenger进程，服务器端则会把这个用户移除用户列表。这说明 link 调用的连接是双向的，无论那一边的进程终止，都会发送信号给另一边
+</p>
+
+
+<pre class="example">
+同样的道理：客户进程所处的结点崩溃 或者 客户进程执行了某些非法操作 也都会使客户端的 erlang 虚拟机发送信号给服务器端
+</pre>
+
+<p>
+最后在 await_result 函数中引入了一个 5 秒钟的定时器。也就是说，如果服务器 5 秒钟之类没有回复客户端，则客户端终止执行
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #daa520; font-weight: bold;">await_result</span>() -&gt;
+    <span style="color: #00bfff; font-weight: bold;">receive</span>
+        {messenger, stop, <span style="color: #4eee94;">Why</span>} -&gt;<span style="color: #daa520; font-weight: bold;"> </span><span style="color: #5f9ea0; font-style: italic;">% </span><span style="color: #5f9ea0; font-style: italic;">Stop the client </span>
+            <span style="color: #98f5ff;">io</span>:<span style="color: #98f5ff;">format</span>(<span style="color: #deb887;">"~p~n"</span>, [<span style="color: #4eee94;">Why</span>]),
+            <span style="color: #f08080;">exit</span>(normal);
+        {messenger, <span style="color: #4eee94;">What</span>} -&gt;<span style="color: #daa520; font-weight: bold;"> </span> <span style="color: #5f9ea0; font-style: italic;">% </span><span style="color: #5f9ea0; font-style: italic;">Normal response</span>
+            <span style="color: #98f5ff;">io</span>:<span style="color: #98f5ff;">format</span>(<span style="color: #deb887;">"~p~n"</span>, [<span style="color: #4eee94;">What</span>])
+    <span style="color: #00bfff; font-weight: bold;">after</span> 5000 -&gt;
+            <span style="color: #98f5ff;">io</span>:<span style="color: #98f5ff;">format</span>(<span style="color: #deb887;">"No response from server~n"</span>, []),
+            <span style="color: #f08080;">exit</span>(timeout)
+    <span style="color: #00bfff; font-weight: bold;">end</span>.
+</pre>
+</div>
+
+<pre class="example">
+这个超时只是在服务端与客户端建立连接前的登录阶段需要
+
+一个非常有意思的例子是如果客户端在服务端建立连接前终止会发生什么情况呢？
+
+如果一个进程与另一个不存在的进程建立连接，则会收到一个终止信号 {'EXIT',From, noproc}，这就好像连接建立后进程立马就结束了一样
+</pre>
+
+<p>
+<a href="../misc/misc.html">Next：杂项</a>
+</p>
+
+<p>
+<a href="error-handle.html">Previous：错误处理</a>
+</p>
+
+<p>
+<a href="fault-tolerance.html">Home：容错编程</a>
+</p>
 </div>
 <div id="postamble" class="status">
 
