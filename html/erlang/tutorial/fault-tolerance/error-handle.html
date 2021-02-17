@@ -5,7 +5,7 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>超时处理</title>
+<title>错误处理</title>
 <meta name="generator" content="Org mode" />
 <meta name="author" content="Wu, Shanliang" />
 <style type="text/css">
@@ -242,150 +242,12 @@ for the JavaScript code in this tag.
 </head>
 <body>
 <div id="org-div-home-and-up">
- <a accesskey="h" href="fault-tolerance.html"> UP </a>
+ <a accesskey="h" href="timeout.html"> UP </a>
  |
  <a accesskey="H" href="fault-tolerance.html"> HOME </a>
 </div><div id="content">
-<h1 class="title">超时处理</h1>
-<div id="table-of-contents">
-<h2>Table of Contents</h2>
-<div id="text-table-of-contents">
-<ul>
-<li><a href="#org65a079e">测试</a></li>
-</ul>
-</div>
-</div>
-<pre class="example">
-回忆一下，当 “ping” 结束的时候，它向 “pong” 发送一个原子值 finished 的消息以通知 “pong” 结束程序
-</pre>
+<h1 class="title">错误处理</h1>
 
-<p>
-另一种让 “pong” 结束的办法是当 “pong” 有一定时间没有收到来自 “ping” 的消息时则退出程序。在 pong 中添加一个 time-out 来实现它：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-erlang"><span style="color: #ffd700;">-module</span>(timeout).
-
-<span style="color: #ffd700;">-export</span>([<span style="color: #98f5ff;">start_ping/1</span>, <span style="color: #98f5ff;">start_pong/0</span>,  <span style="color: #98f5ff;">ping/2</span>, <span style="color: #98f5ff;">pong/0</span>]).
-
-<span style="color: #daa520; font-weight: bold;">ping</span>(0, <span style="color: #4eee94;">Pong_Node</span>) -&gt;
-    <span style="color: #98f5ff;">io</span>:<span style="color: #98f5ff;">format</span>(<span style="color: #deb887;">"ping finished~n"</span>, []);
-
-<span style="color: #daa520; font-weight: bold;">ping</span>(<span style="color: #4eee94;">N</span>, <span style="color: #4eee94;">Pong_Node</span>) -&gt;
-    {pong, <span style="color: #4eee94;">Pong_Node</span>} ! {ping, <span style="color: #f08080;">self</span>()},
-    <span style="color: #00bfff; font-weight: bold;">receive</span>
-        pong -&gt;
-            <span style="color: #98f5ff;">io</span>:<span style="color: #98f5ff;">format</span>(<span style="color: #deb887;">"Ping received pong~n"</span>, [])
-    <span style="color: #00bfff; font-weight: bold;">end</span>,
-    <span style="color: #98f5ff;">ping</span>(<span style="color: #4eee94;">N</span> - 1, <span style="color: #4eee94;">Pong_Node</span>).
-
-<span style="color: #daa520; font-weight: bold;">pong</span>() -&gt;
-    <span style="color: #00bfff; font-weight: bold;">receive</span>
-        {ping, <span style="color: #4eee94;">Ping_PID</span>} -&gt;
-            <span style="color: #98f5ff;">io</span>:<span style="color: #98f5ff;">format</span>(<span style="color: #deb887;">"Pong received ping~n"</span>, []),
-            <span style="color: #4eee94;">Ping_PID</span> ! pong,
-            <span style="color: #98f5ff;">pong</span>()
-    <span style="color: #00bfff; font-weight: bold;">after</span> 5000 -&gt;
-            <span style="color: #98f5ff;">io</span>:<span style="color: #98f5ff;">format</span>(<span style="color: #deb887;">"Pong timed out~n"</span>, [])
-    <span style="color: #00bfff; font-weight: bold;">end</span>.
-
-<span style="color: #daa520; font-weight: bold;">start_pong</span>() -&gt;
-    <span style="color: #f08080;">register</span>(pong, <span style="color: #f08080;">spawn</span>(timeout, pong, [])).
-
-<span style="color: #daa520; font-weight: bold;">start_ping</span>(<span style="color: #4eee94;">Pong_Node</span>) -&gt;
-    <span style="color: #f08080;">spawn</span>(timeout, ping, [3, <span style="color: #4eee94;">Pong_Node</span>]).
-</pre>
-</div>
-
-<p>
-time-out 被设置在：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-erlang"><span style="color: #daa520; font-weight: bold;">pong</span>() -&gt;
-    <span style="color: #00bfff; font-weight: bold;">receive</span>
-        {ping, <span style="color: #4eee94;">Ping_PID</span>} -&gt;
-            <span style="color: #98f5ff;">io</span>:<span style="color: #98f5ff;">format</span>(<span style="color: #deb887;">"Pong received ping~n"</span>, []),
-            <span style="color: #4eee94;">Ping_PID</span> ! pong,
-            <span style="color: #98f5ff;">pong</span>()
-    <span style="color: #00bfff; font-weight: bold;">after</span> 5000 -&gt;
-            <span style="color: #98f5ff;">io</span>:<span style="color: #98f5ff;">format</span>(<span style="color: #deb887;">"Pong timed out~n"</span>, [])
-    <span style="color: #00bfff; font-weight: bold;">end</span>.
-</pre>
-</div>
-
-<p>
-执行 recieve 时， <span class="underline">超时定时器</span> (5000 ms) 启动：
-</p>
-<ul class="org-ul">
-<li>一旦收到 {ping,Ping_PID} 消息，则取消该超时定时器</li>
-<li>如果没有收到 {ping,Ping_PID} 消息，那么 5000 毫秒后 time-out 后面的程序就会被执行</li>
-</ul>
-
-<pre class="example">
-after 必须是 recieve 中的最后一个，也就是说，recieve 中其它所有消息的接收处理都优先于超时消息
-</pre>
-
-<p>
-如果有一个 <span class="underline">返回值为整数值</span> 的函数，可以在 after 后调用该函数以将其返回值设为超时时间值： 
-</p>
-
-<div class="org-src-container">
-<pre class="src src-erlang"><span style="color: #00bfff; font-weight: bold;">after</span> <span style="color: #98f5ff;">pong_timeout</span>() -&gt;
-</pre>
-</div>
-
-<div id="outline-container-org65a079e" class="outline-2">
-<h2 id="org65a079e">测试</h2>
-<div class="outline-text-2" id="text-org65a079e">
-<p>
-编译上面的代码并将生成的 beam 文件拷贝到两个结点上，下面是在结点 pong@gentoo 上的输出：
-</p>
-
-<div class="org-src-container">
-<pre class="src src-sh">(pong@gentoo)2&gt; timeout:start_pong() <span style="color: #f08080;">.</span> 
-true
-(pong@gentoo)3&gt; 
-Pong received ping
-Pong received ping
-Pong received ping
-Pong timed out  
-</pre>
-</div>
-
-<p>
-在结点 ping@raspberrypi 上的输出结果为：
-</p>
-
-<pre class="example">
-(ping@raspberrypi)4&gt; timeout:start_ping(pong@gentoo) .
-&lt;0.99.0&gt;
-(ping@raspberrypi)5&gt;
-Ping received pong
-Ping received pong
-Ping received pong
-ping finished
-</pre>
-
-<p>
-除了使用超时来监测分布式 Erlang 系统的各分部外，还有许多更好的办法来实现监测功能，超时适用于 <span class="underline">监测</span> 来自于 <b>系统外部</b> 的事件
-</p>
-
-<pre class="example">
-比如说，当希望在指定时间内收到来自外部系统的消息的时候
-
-比如说可以用超时来发现用户离开了messager 系统，当用户 10 分钟没有访问系统时，则认为其已离开了系统
-</pre>
-
-<p>
-<a href="error-handle.html">Next：错误处理</a>
-</p>
-
-<p>
-<a href="fault-tolerance.html">Home：容错编程</a>
-</p>
-</div>
-</div>
 </div>
 <div id="postamble" class="status">
 
