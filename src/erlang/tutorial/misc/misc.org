@@ -2,7 +2,7 @@
 #+HTML_HEAD: <link rel="stylesheet" type="text/css" href="../css/main.css" />
 #+HTML_LINK_UP: ../fault-tolerance/fault-tolerance.html   
 #+HTML_LINK_HOME: ../tutorial.html
-#+OPTIONS: num:nil timestamp:nil
+#+OPTIONS: num:nil timestamp:nil ^:nil 
 
 大型程序通常会把代码拆分成一组文件，各个文件之间通过良好定义的接口来连接 
 
@@ -18,7 +18,7 @@
 
      %%%----END FILE----
    #+end_src
-** 客户端与 messager 之间的接口定义：
+** 客户端与 messager 之间的接口定义
    #+begin_src erlang 
      %%%----FILE mess_interface.hrl----
 
@@ -330,8 +330,120 @@ User list = [{<12948.100.0>,peter}]
    #+end_example
 
 * 头文件
+  如上所示，某些文件的扩展名为 _.hrl_ 。这些是在 .erl 文件中会用到的 *头文件* ，使用方法如下： 
+
+  #+begin_example
+    -include("File_Name").
+  #+end_example
+
+  #+begin_src erlang 
+  -include("mess_interface.hrl").
+  #+end_src
+
+  #+begin_example
+    在本例中，上面所有的文件与 messager 系统的其它文件在同一个目录下
+  #+end_example
+
+  头文件中可以包含任何合法的 Erlang 代码，但是通常里面只包含一些 _记录_ 和 _宏_ 的定义 
 
 * 记录
+  记录的定义如下：
+  #+begin_example
+    -record(name_of_record,{field_name1, field_name2, field_name3, ......}).
+  #+end_example
+  例如：
+
+  #+begin_src erlang 
+  -record(message_to,{to_name, message}).
+  #+end_src
+
+  这等价于：
+
+  #+begin_src erlang 
+  {message_to, To_Name, Message}
+  #+end_src
+
+  用一个例子来说明怎样创建一个记录：
+
+  #+begin_src sh 
+  3> rd(message_to,{to_name, message}).    
+  message_to
+  4>  #message_to{message="hello", to_name=fred} . 
+  #message_to{to_name = fred,message = "hello"}
+  #+end_src 
+
+  上面的代码创建了如下的记录：
+  #+begin_src erlang 
+  {message_to, fred, "hello"}
+  #+end_src
+
+  #+begin_example
+    使用这种方式创建记录时，不需要考虑给每个部分赋值时的顺序问题
+  #+end_example 
+
+  把记录定义在头文件中的一个好处在于 *修改接口会变得非常容易* ：
+
+  #+begin_example
+    例如，如果想在记录中添加一个新的域，只需要在使用该新域的地方进行修改就可以了，而不需要在每个使用记录的地方都进行修改
+
+    如果你在创建记录时漏掉了其中的某些域，则这些域会得到一个默认的原子值 undefined 
+  #+end_example
+  使用记录进行 _模式匹配_ 与 _创建记录_ 是一样。例如，在 receive 的 case 中：
+
+  #+begin_src erlang 
+  #message_to{to_name=ToName, message=Message} ->
+  #+end_src
+
+  这与下面的代码是一样的：
+
+  #+begin_src erlang 
+  {message_to, ToName, Message}
+  #+end_src
 
 * 宏
+  #+begin_example
+    在 messager 系统添加的另外一种东西是宏
+  #+end_example
+  在mess_config.hrl文件中包含如下的定义：
 
+  #+begin_src erlang 
+  %%% Configure the location of the server node,
+  -define(server_node, messenger@super).
+  #+end_src
+
+  这个头文件被包括到了mess_server.erl文件中：
+
+  #+begin_src erlang 
+  -include("mess_config.hrl").
+  #+end_src
+
+  #+begin_example
+    这样在 mess_server.erl 中出现的每个 server_node 都被替换为 messenger@super
+  #+end_example
+
+  宏还被用于生成服务端进程：
+
+  #+begin_src erlang 
+  spawn(?MODULE, server, [])
+  #+end_src
+
+  #+begin_example
+    这是一个标准宏，也就是说，这是一个系统定义的宏而不是用户自定义的宏
+
+    ?MODULE 宏总是被替换为当前模块名（也就是在文件开始的部分的 -module 定义的名称）
+
+    宏有许多的高级用法，作为参数只是其中之一
+  #+end_example
+
+* 编译和链接
+  Messager 系统中的三个 Erlang _.erl_ 文件被分别编译成三个独立的目标代码文件 _.beam_ 中。当执行过程中引用到这些代码时，Erlang 系统会将它们 *加载* 并 *链接* 到系统里
+
+  #+begin_example
+    在本例中，把它们全部放到当前工作目录下，实际上也可以将这些文件放到其它目录下
+
+    在这个 messager 例子中，没有对发送消息的内容做出任何假设和限制，这些消息可以是任何合法的 Erlang 项 
+  #+end_example
+
+  [[file:../fault-tolerance/fault-tolerance.org][Previous：容错编程]]
+
+  [[file:../tutorial.org][Home：目录]]

@@ -36,5 +36,4 @@ await_result() ->
             io:format("No response from server~n", []),
             exit(timeout)
     end.
-
 %%%----END FILE---

@@ -254,7 +254,7 @@ for the JavaScript code in this tag.
 <li><a href="#orgc3c6eaf">拆分源码</a>
 <ul>
 <li><a href="#orgf08325b">服务器配置头文件</a></li>
-<li><a href="#org37aee4f">客户端与 messager 之间的接口定义：</a></li>
+<li><a href="#org84a9472">客户端与 messager 之间的接口定义</a></li>
 <li><a href="#org35bba78">用户接口函数</a></li>
 <li><a href="#org0e42c09">messager 系统客户端的函数</a></li>
 <li><a href="#org642c7be">messager 服务端的函数</a></li>
@@ -264,6 +264,7 @@ for the JavaScript code in this tag.
 <li><a href="#org1d3b4f3">头文件</a></li>
 <li><a href="#orge023c1a">记录</a></li>
 <li><a href="#org6c3ef9a">宏</a></li>
+<li><a href="#org935639c">编译和链接</a></li>
 </ul>
 </div>
 </div>
@@ -292,9 +293,9 @@ for the JavaScript code in this tag.
 </div>
 </div>
 </div>
-<div id="outline-container-org37aee4f" class="outline-3">
-<h3 id="org37aee4f">客户端与 messager 之间的接口定义：</h3>
-<div class="outline-text-3" id="text-org37aee4f">
+<div id="outline-container-org84a9472" class="outline-3">
+<h3 id="org84a9472">客户端与 messager 之间的接口定义</h3>
+<div class="outline-text-3" id="text-org84a9472">
 <div class="org-src-container">
 <pre class="src src-erlang"><span style="color: #5f9ea0; font-style: italic;">%%%</span><span style="color: #5f9ea0; font-style: italic;">----FILE mess_interface.hrl----</span>
 
@@ -653,14 +654,179 @@ fred 收到消息后，shell 会打印出：
 
 <div id="outline-container-org1d3b4f3" class="outline-2">
 <h2 id="org1d3b4f3">头文件</h2>
+<div class="outline-text-2" id="text-org1d3b4f3">
+<p>
+如上所示，某些文件的扩展名为 <span class="underline">.hrl</span> 。这些是在 .erl 文件中会用到的 <b>头文件</b> ，使用方法如下： 
+</p>
+
+<pre class="example">
+-include("File_Name").
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #ffd700;">-include</span>(<span style="color: #deb887;">"mess_interface.hrl"</span>).
+</pre>
+</div>
+
+<pre class="example">
+在本例中，上面所有的文件与 messager 系统的其它文件在同一个目录下
+</pre>
+
+<p>
+头文件中可以包含任何合法的 Erlang 代码，但是通常里面只包含一些 <span class="underline">记录</span> 和 <span class="underline">宏</span> 的定义 
+</p>
+</div>
 </div>
 
 <div id="outline-container-orge023c1a" class="outline-2">
 <h2 id="orge023c1a">记录</h2>
+<div class="outline-text-2" id="text-orge023c1a">
+<p>
+记录的定义如下：
+</p>
+<pre class="example">
+-record(name_of_record,{field_name1, field_name2, field_name3, ......}).
+</pre>
+<p>
+例如：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #ffd700;">-record</span>(<span style="color: #98f5ff;">message_to</span>,{to_name, message}).
+</pre>
+</div>
+
+<p>
+这等价于：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang">{message_to, <span style="color: #4eee94;">To_Name</span>, <span style="color: #4eee94;">Message</span>}
+</pre>
+</div>
+
+<p>
+用一个例子来说明怎样创建一个记录：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">3&gt; rd(message_to,{to_name, message})<span style="color: #f08080;">.</span>    
+message_to
+4&gt;  <span style="color: #5f9ea0; font-style: italic;">#</span><span style="color: #5f9ea0; font-style: italic;">message_to{message="hello", to_name=fred} . </span>
+<span style="color: #5f9ea0; font-style: italic;">#</span><span style="color: #5f9ea0; font-style: italic;">message_to{to_name = fred,message = "hello"}</span>
+</pre>
+</div>
+
+<p>
+上面的代码创建了如下的记录：
+</p>
+<div class="org-src-container">
+<pre class="src src-erlang">{message_to, fred, <span style="color: #deb887;">"hello"</span>}
+</pre>
+</div>
+
+<pre class="example">
+使用这种方式创建记录时，不需要考虑给每个部分赋值时的顺序问题
+</pre>
+
+<p>
+把记录定义在头文件中的一个好处在于 <b>修改接口会变得非常容易</b> ：
+</p>
+
+<pre class="example">
+例如，如果想在记录中添加一个新的域，只需要在使用该新域的地方进行修改就可以了，而不需要在每个使用记录的地方都进行修改
+
+如果你在创建记录时漏掉了其中的某些域，则这些域会得到一个默认的原子值 undefined 
+</pre>
+<p>
+使用记录进行 <span class="underline">模式匹配</span> 与 <span class="underline">创建记录</span> 是一样。例如，在 receive 的 case 中：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang">#<span style="color: #98f5ff;">message_to</span>{to_name=<span style="color: #4eee94;">ToName</span>, message=<span style="color: #4eee94;">Message</span>} -&gt;
+</pre>
+</div>
+
+<p>
+这与下面的代码是一样的：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang">{message_to, <span style="color: #4eee94;">ToName</span>, <span style="color: #4eee94;">Message</span>}
+</pre>
+</div>
+</div>
 </div>
 
 <div id="outline-container-org6c3ef9a" class="outline-2">
 <h2 id="org6c3ef9a">宏</h2>
+<div class="outline-text-2" id="text-org6c3ef9a">
+<pre class="example">
+在 messager 系统添加的另外一种东西是宏
+</pre>
+<p>
+在mess_config.hrl文件中包含如下的定义：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #5f9ea0; font-style: italic;">%%% </span><span style="color: #5f9ea0; font-style: italic;">Configure the location of the server node,</span>
+<span style="color: #ffd700;">-define</span>(<span style="color: #98f5ff;">server_node</span>, messenger@super).
+</pre>
+</div>
+
+<p>
+这个头文件被包括到了mess_server.erl文件中：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #ffd700;">-include</span>(<span style="color: #deb887;">"mess_config.hrl"</span>).
+</pre>
+</div>
+
+<pre class="example">
+这样在 mess_server.erl 中出现的每个 server_node 都被替换为 messenger@super
+</pre>
+
+<p>
+宏还被用于生成服务端进程：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #daa520; font-weight: bold;">spawn</span>(?<span style="color: #ffd700;">MODULE</span>, server, [])
+</pre>
+</div>
+
+<pre class="example">
+这是一个标准宏，也就是说，这是一个系统定义的宏而不是用户自定义的宏
+
+?MODULE 宏总是被替换为当前模块名（也就是在文件开始的部分的 -module 定义的名称）
+
+宏有许多的高级用法，作为参数只是其中之一
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org935639c" class="outline-2">
+<h2 id="org935639c">编译和链接</h2>
+<div class="outline-text-2" id="text-org935639c">
+<p>
+Messager 系统中的三个 Erlang <span class="underline">.erl</span> 文件被分别编译成三个独立的目标代码文件 <span class="underline">.beam</span> 中。当执行过程中引用到这些代码时，Erlang 系统会将它们 <b>加载</b> 并 <b>链接</b> 到系统里
+</p>
+
+<pre class="example">
+在本例中，把它们全部放到当前工作目录下，实际上也可以将这些文件放到其它目录下
+
+在这个 messager 例子中，没有对发送消息的内容做出任何假设和限制，这些消息可以是任何合法的 Erlang 项 
+</pre>
+
+<p>
+<a href="../fault-tolerance/fault-tolerance.html">Previous：容错编程</a>
+</p>
+
+<p>
+<a href="../tutorial.html">Home：目录</a>
+</p>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
