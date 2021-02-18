@@ -247,7 +247,421 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="../tutorial.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">杂项</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#orgc3c6eaf">拆分源码</a>
+<ul>
+<li><a href="#orgf08325b">服务器配置头文件</a></li>
+<li><a href="#org37aee4f">客户端与 messager 之间的接口定义：</a></li>
+<li><a href="#org35bba78">用户接口函数</a></li>
+<li><a href="#org0e42c09">messager 系统客户端的函数</a></li>
+<li><a href="#org642c7be">messager 服务端的函数</a></li>
+<li><a href="#org1af78ae">测试</a></li>
+</ul>
+</li>
+<li><a href="#org1d3b4f3">头文件</a></li>
+<li><a href="#orge023c1a">记录</a></li>
+<li><a href="#org6c3ef9a">宏</a></li>
+</ul>
+</div>
+</div>
+<p>
+大型程序通常会把代码拆分成一组文件，各个文件之间通过良好定义的接口来连接 
+</p>
 
+<div id="outline-container-orgc3c6eaf" class="outline-2">
+<h2 id="orgc3c6eaf">拆分源码</h2>
+<div class="outline-text-2" id="text-orgc3c6eaf">
+<p>
+现在将前面几节中 messager 程序分布到多个文件中 
+</p>
+</div>
+<div id="outline-container-orgf08325b" class="outline-3">
+<h3 id="orgf08325b">服务器配置头文件</h3>
+<div class="outline-text-3" id="text-orgf08325b">
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #5f9ea0; font-style: italic;">%%%</span><span style="color: #5f9ea0; font-style: italic;">----FILE mess_config.hrl----</span>
+
+<span style="color: #5f9ea0; font-style: italic;">%%% </span><span style="color: #5f9ea0; font-style: italic;">Configure the location of the server node,</span>
+<span style="color: #ffd700;">-define</span>(<span style="color: #98f5ff;">server_node</span>, messenger@gentoo).
+
+<span style="color: #5f9ea0; font-style: italic;">%%%</span><span style="color: #5f9ea0; font-style: italic;">----END FILE----</span>
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org37aee4f" class="outline-3">
+<h3 id="org37aee4f">客户端与 messager 之间的接口定义：</h3>
+<div class="outline-text-3" id="text-org37aee4f">
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #5f9ea0; font-style: italic;">%%%</span><span style="color: #5f9ea0; font-style: italic;">----FILE mess_interface.hrl----</span>
+
+<span style="color: #5f9ea0; font-style: italic;">%%%</span><span style="color: #5f9ea0; font-style: italic;">Message interface between client and server and client shell for</span>
+<span style="color: #5f9ea0; font-style: italic;">%%% </span><span style="color: #5f9ea0; font-style: italic;">messenger program </span>
+
+<span style="color: #5f9ea0; font-style: italic;">%%%</span><span style="color: #5f9ea0; font-style: italic;">Messages from Client to server received in server/1 function.</span>
+<span style="color: #ffd700;">-record</span>(<span style="color: #98f5ff;">logon</span>,{client_pid, username}).
+<span style="color: #ffd700;">-record</span>(<span style="color: #98f5ff;">message</span>,{client_pid, to_name, message}).
+<span style="color: #5f9ea0; font-style: italic;">%%% </span><span style="color: #5f9ea0; font-style: italic;">{'EXIT', ClientPid, Reason}  (client terminated or unreachable.</span>
+
+<span style="color: #5f9ea0; font-style: italic;">%%% </span><span style="color: #5f9ea0; font-style: italic;">Messages from Server to Client, received in await_result/0 function </span>
+<span style="color: #ffd700;">-record</span>(<span style="color: #98f5ff;">abort_client</span>,{message}).
+<span style="color: #5f9ea0; font-style: italic;">%%% </span><span style="color: #5f9ea0; font-style: italic;">Messages are: user_exists_at_other_node, </span>
+<span style="color: #5f9ea0; font-style: italic;">%%%               </span><span style="color: #5f9ea0; font-style: italic;">you_are_not_logged_on</span>
+<span style="color: #ffd700;">-record</span>(<span style="color: #98f5ff;">server_reply</span>,{message}).
+<span style="color: #5f9ea0; font-style: italic;">%%% </span><span style="color: #5f9ea0; font-style: italic;">Messages are: logged_on</span>
+<span style="color: #5f9ea0; font-style: italic;">%%%               </span><span style="color: #5f9ea0; font-style: italic;">receiver_not_found</span>
+<span style="color: #5f9ea0; font-style: italic;">%%%               </span><span style="color: #5f9ea0; font-style: italic;">sent  (Message has been sent (no guarantee)</span>
+<span style="color: #5f9ea0; font-style: italic;">%%% </span><span style="color: #5f9ea0; font-style: italic;">Messages from Server to Client received in client/1 function</span>
+<span style="color: #ffd700;">-record</span>(<span style="color: #98f5ff;">message_from</span>,{from_name, message}).
+
+<span style="color: #5f9ea0; font-style: italic;">%%% </span><span style="color: #5f9ea0; font-style: italic;">Messages from shell to Client received in client/1 function</span>
+<span style="color: #5f9ea0; font-style: italic;">%%% </span><span style="color: #5f9ea0; font-style: italic;">spawn(mess_client, client, [server_node(), Name])</span>
+<span style="color: #ffd700;">-record</span>(<span style="color: #98f5ff;">message_to</span>,{to_name, message}).
+<span style="color: #5f9ea0; font-style: italic;">%%% </span><span style="color: #5f9ea0; font-style: italic;">logoff</span>
+
+<span style="color: #5f9ea0; font-style: italic;">%%%</span><span style="color: #5f9ea0; font-style: italic;">----END FILE----</span>
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org35bba78" class="outline-3">
+<h3 id="org35bba78">用户接口函数</h3>
+<div class="outline-text-3" id="text-org35bba78">
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #5f9ea0; font-style: italic;">%%%</span><span style="color: #5f9ea0; font-style: italic;">----FILE user_interface.erl----</span>
+
+<span style="color: #5f9ea0; font-style: italic;">%%% </span><span style="color: #5f9ea0; font-style: italic;">User interface to the messenger program</span>
+<span style="color: #5f9ea0; font-style: italic;">%%% </span><span style="color: #5f9ea0; font-style: italic;">login(Name)</span>
+<span style="color: #5f9ea0; font-style: italic;">%%%     </span><span style="color: #5f9ea0; font-style: italic;">One user at a time can log in from each Erlang node in the</span>
+<span style="color: #5f9ea0; font-style: italic;">%%%     </span><span style="color: #5f9ea0; font-style: italic;">system messenger: and choose a suitable Name. If the Name</span>
+<span style="color: #5f9ea0; font-style: italic;">%%%     </span><span style="color: #5f9ea0; font-style: italic;">is already logged in at another node or if someone else is</span>
+<span style="color: #5f9ea0; font-style: italic;">%%%     </span><span style="color: #5f9ea0; font-style: italic;">already logged in at the same node, login will be rejected</span>
+<span style="color: #5f9ea0; font-style: italic;">%%%     </span><span style="color: #5f9ea0; font-style: italic;">with a suitable error message.</span>
+
+<span style="color: #5f9ea0; font-style: italic;">%%% </span><span style="color: #5f9ea0; font-style: italic;">logoff()</span>
+<span style="color: #5f9ea0; font-style: italic;">%%%     </span><span style="color: #5f9ea0; font-style: italic;">Logs off anybody at that node</span>
+
+<span style="color: #5f9ea0; font-style: italic;">%%% </span><span style="color: #5f9ea0; font-style: italic;">message(ToName, Message)</span>
+<span style="color: #5f9ea0; font-style: italic;">%%%     </span><span style="color: #5f9ea0; font-style: italic;">sends Message to ToName. Error messages if the user of this </span>
+<span style="color: #5f9ea0; font-style: italic;">%%%     </span><span style="color: #5f9ea0; font-style: italic;">function is not logged on or if ToName is not logged on at</span>
+<span style="color: #5f9ea0; font-style: italic;">%%%     </span><span style="color: #5f9ea0; font-style: italic;">any node.</span>
+
+<span style="color: #ffd700;">-module</span>(user_interface).
+<span style="color: #ffd700;">-export</span>([<span style="color: #98f5ff;">logon/1</span>, <span style="color: #98f5ff;">logoff/0</span>, <span style="color: #98f5ff;">message/2</span>]).
+<span style="color: #ffd700;">-include</span>(<span style="color: #deb887;">"mess_interface.hrl"</span>).
+<span style="color: #ffd700;">-include</span>(<span style="color: #deb887;">"mess_config.hrl"</span>).
+
+<span style="color: #daa520; font-weight: bold;">logon</span>(<span style="color: #4eee94;">Name</span>) -&gt;
+    <span style="color: #00bfff; font-weight: bold;">case</span> <span style="color: #f08080;">whereis</span>(mess_client) <span style="color: #00bfff; font-weight: bold;">of</span> 
+        undefined -&gt;
+            <span style="color: #f08080;">register</span>(mess_client, 
+                     <span style="color: #f08080;">spawn</span>(mess_client, client, [?<span style="color: #ffd700;">server_node</span>, <span style="color: #4eee94;">Name</span>]));
+        <span style="color: #4eee94;">_</span> -&gt;<span style="color: #daa520; font-weight: bold;"> </span>already_logged_on
+    <span style="color: #00bfff; font-weight: bold;">end</span>.
+
+<span style="color: #daa520; font-weight: bold;">logoff</span>() -&gt;
+    mess_client ! logoff.
+
+<span style="color: #daa520; font-weight: bold;">message</span>(<span style="color: #4eee94;">ToName</span>, <span style="color: #4eee94;">Message</span>) -&gt;
+    <span style="color: #00bfff; font-weight: bold;">case</span> <span style="color: #f08080;">whereis</span>(mess_client) <span style="color: #00bfff; font-weight: bold;">of</span> <span style="color: #5f9ea0; font-style: italic;">% </span><span style="color: #5f9ea0; font-style: italic;">Test if the client is running</span>
+        undefined -&gt;
+            not_logged_on;
+        <span style="color: #4eee94;">_</span> -&gt;<span style="color: #daa520; font-weight: bold;"> </span>mess_client ! #<span style="color: #98f5ff;">message_to</span>{to_name=<span style="color: #4eee94;">ToName</span>, message=<span style="color: #4eee94;">Message</span>},
+             ok
+    <span style="color: #00bfff; font-weight: bold;">end</span>.
+<span style="color: #5f9ea0; font-style: italic;">%%%</span><span style="color: #5f9ea0; font-style: italic;">----END FILE----</span>
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org0e42c09" class="outline-3">
+<h3 id="org0e42c09">messager 系统客户端的函数</h3>
+<div class="outline-text-3" id="text-org0e42c09">
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #5f9ea0; font-style: italic;">%%%</span><span style="color: #5f9ea0; font-style: italic;">----FILE mess_client.erl----</span>
+
+<span style="color: #5f9ea0; font-style: italic;">%%% </span><span style="color: #5f9ea0; font-style: italic;">The client process which runs on each user node</span>
+
+<span style="color: #ffd700;">-module</span>(mess_client).
+<span style="color: #ffd700;">-export</span>([<span style="color: #98f5ff;">client/2</span>]).
+<span style="color: #ffd700;">-include</span>(<span style="color: #deb887;">"mess_interface.hrl"</span>).
+
+<span style="color: #daa520; font-weight: bold;">client</span>(<span style="color: #4eee94;">Server_Node</span>, <span style="color: #4eee94;">Name</span>) -&gt;
+    {messenger, <span style="color: #4eee94;">Server_Node</span>} ! #<span style="color: #98f5ff;">logon</span>{client_pid=<span style="color: #f08080;">self</span>(), username=<span style="color: #4eee94;">Name</span>},
+    <span style="color: #98f5ff;">await_result</span>(),
+    <span style="color: #98f5ff;">client</span>(<span style="color: #4eee94;">Server_Node</span>).
+
+<span style="color: #daa520; font-weight: bold;">client</span>(<span style="color: #4eee94;">Server_Node</span>) -&gt;
+    <span style="color: #00bfff; font-weight: bold;">receive</span>
+        logoff -&gt;
+            <span style="color: #f08080;">exit</span>(normal);
+        #<span style="color: #98f5ff;">message_to</span>{to_name=<span style="color: #4eee94;">ToName</span>, message=<span style="color: #4eee94;">Message</span>} -&gt;
+            {messenger, <span style="color: #4eee94;">Server_Node</span>} ! 
+                #<span style="color: #98f5ff;">message</span>{client_pid=<span style="color: #f08080;">self</span>(), to_name=<span style="color: #4eee94;">ToName</span>, message=<span style="color: #4eee94;">Message</span>},
+            <span style="color: #98f5ff;">await_result</span>();
+        {message_from, <span style="color: #4eee94;">FromName</span>, <span style="color: #4eee94;">Message</span>} -&gt;
+            <span style="color: #98f5ff;">io</span>:<span style="color: #98f5ff;">format</span>(<span style="color: #deb887;">"Message from ~p: ~p~n"</span>, [<span style="color: #4eee94;">FromName</span>, <span style="color: #4eee94;">Message</span>])
+    <span style="color: #00bfff; font-weight: bold;">end</span>,
+    <span style="color: #98f5ff;">client</span>(<span style="color: #4eee94;">Server_Node</span>).
+
+<span style="color: #5f9ea0; font-style: italic;">%%% </span><span style="color: #5f9ea0; font-style: italic;">wait for a response from the server</span>
+<span style="color: #daa520; font-weight: bold;">await_result</span>() -&gt;
+    <span style="color: #00bfff; font-weight: bold;">receive</span>
+        #<span style="color: #98f5ff;">abort_client</span>{message=<span style="color: #4eee94;">Why</span>} -&gt;
+            <span style="color: #98f5ff;">io</span>:<span style="color: #98f5ff;">format</span>(<span style="color: #deb887;">"~p~n"</span>, [<span style="color: #4eee94;">Why</span>]),
+            <span style="color: #f08080;">exit</span>(normal);
+        #<span style="color: #98f5ff;">server_reply</span>{message=<span style="color: #4eee94;">What</span>} -&gt;
+            <span style="color: #98f5ff;">io</span>:<span style="color: #98f5ff;">format</span>(<span style="color: #deb887;">"~p~n"</span>, [<span style="color: #4eee94;">What</span>])
+    <span style="color: #00bfff; font-weight: bold;">after</span> 5000 -&gt;
+            <span style="color: #98f5ff;">io</span>:<span style="color: #98f5ff;">format</span>(<span style="color: #deb887;">"No response from server~n"</span>, []),
+            <span style="color: #f08080;">exit</span>(timeout)
+    <span style="color: #00bfff; font-weight: bold;">end</span>.
+
+<span style="color: #5f9ea0; font-style: italic;">%%%</span><span style="color: #5f9ea0; font-style: italic;">----END FILE---</span>
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org642c7be" class="outline-3">
+<h3 id="org642c7be">messager 服务端的函数</h3>
+<div class="outline-text-3" id="text-org642c7be">
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #5f9ea0; font-style: italic;">%%%</span><span style="color: #5f9ea0; font-style: italic;">----FILE mess_server.erl----</span>
+
+<span style="color: #5f9ea0; font-style: italic;">%%% </span><span style="color: #5f9ea0; font-style: italic;">This is the server process of the messenger service</span>
+
+<span style="color: #ffd700;">-module</span>(mess_server).
+<span style="color: #ffd700;">-export</span>([<span style="color: #98f5ff;">start_server/0</span>, <span style="color: #98f5ff;">server/0</span>]).
+<span style="color: #ffd700;">-include</span>(<span style="color: #deb887;">"mess_interface.hrl"</span>).
+
+<span style="color: #daa520; font-weight: bold;">server</span>() -&gt;
+    <span style="color: #f08080;">process_flag</span>(trap_exit, true),
+    <span style="color: #98f5ff;">server</span>([]).
+
+<span style="color: #5f9ea0; font-style: italic;">%%% </span><span style="color: #5f9ea0; font-style: italic;">the user list has the format [{ClientPid1, Name1},{ClientPid22, Name2},...]</span>
+<span style="color: #daa520; font-weight: bold;">server</span>(<span style="color: #4eee94;">User_List</span>) -&gt;
+    <span style="color: #98f5ff;">io</span>:<span style="color: #98f5ff;">format</span>(<span style="color: #deb887;">"User list = ~p~n"</span>, [<span style="color: #4eee94;">User_List</span>]),
+    <span style="color: #00bfff; font-weight: bold;">receive</span>
+        #<span style="color: #98f5ff;">logon</span>{client_pid=<span style="color: #4eee94;">From</span>, username=<span style="color: #4eee94;">Name</span>} -&gt;
+            <span style="color: #4eee94;">New_User_List</span> = <span style="color: #98f5ff;">server_logon</span>(<span style="color: #4eee94;">From</span>, <span style="color: #4eee94;">Name</span>, <span style="color: #4eee94;">User_List</span>),
+            <span style="color: #98f5ff;">server</span>(<span style="color: #4eee94;">New_User_List</span>);
+        {<span style="color: #deb887;">'EXIT'</span>, <span style="color: #4eee94;">From</span>, <span style="color: #4eee94;">_</span>} -&gt;
+            <span style="color: #4eee94;">New_User_List</span> = <span style="color: #98f5ff;">server_logoff</span>(<span style="color: #4eee94;">From</span>, <span style="color: #4eee94;">User_List</span>),
+            <span style="color: #98f5ff;">server</span>(<span style="color: #4eee94;">New_User_List</span>);
+        #<span style="color: #98f5ff;">message</span>{client_pid=<span style="color: #4eee94;">From</span>, to_name=<span style="color: #4eee94;">To</span>, message=<span style="color: #4eee94;">Message</span>} -&gt;
+            <span style="color: #98f5ff;">server_transfer</span>(<span style="color: #4eee94;">From</span>, <span style="color: #4eee94;">To</span>, <span style="color: #4eee94;">Message</span>, <span style="color: #4eee94;">User_List</span>),
+            <span style="color: #98f5ff;">server</span>(<span style="color: #4eee94;">User_List</span>)
+    <span style="color: #00bfff; font-weight: bold;">end</span>.
+
+<span style="color: #5f9ea0; font-style: italic;">%%% </span><span style="color: #5f9ea0; font-style: italic;">Start the server</span>
+<span style="color: #daa520; font-weight: bold;">start_server</span>() -&gt;
+    <span style="color: #f08080;">register</span>(messenger, <span style="color: #f08080;">spawn</span>(?<span style="color: #ffd700;">MODULE</span>, server, [])).
+
+<span style="color: #5f9ea0; font-style: italic;">%%% </span><span style="color: #5f9ea0; font-style: italic;">Server adds a new user to the user list</span>
+<span style="color: #daa520; font-weight: bold;">server_logon</span>(<span style="color: #4eee94;">From</span>, <span style="color: #4eee94;">Name</span>, <span style="color: #4eee94;">User_List</span>) -&gt;
+    <span style="color: #5f9ea0; font-style: italic;">%% </span><span style="color: #5f9ea0; font-style: italic;">check if logged on anywhere else</span>
+    <span style="color: #00bfff; font-weight: bold;">case</span> <span style="color: #98f5ff;">lists</span>:<span style="color: #98f5ff;">keymember</span>(<span style="color: #4eee94;">Name</span>, 2, <span style="color: #4eee94;">User_List</span>) <span style="color: #00bfff; font-weight: bold;">of</span>
+        true -&gt;
+            <span style="color: #4eee94;">From</span> ! #<span style="color: #98f5ff;">abort_client</span>{message=user_exists_at_other_node},
+            <span style="color: #4eee94;">User_List</span>;
+        false -&gt;
+            <span style="color: #4eee94;">From</span> ! #<span style="color: #98f5ff;">server_reply</span>{message=logged_on},
+            <span style="color: #f08080;">link</span>(<span style="color: #4eee94;">From</span>),
+            [{<span style="color: #4eee94;">From</span>, <span style="color: #4eee94;">Name</span>} | <span style="color: #4eee94;">User_List</span>]        <span style="color: #5f9ea0; font-style: italic;">%</span><span style="color: #5f9ea0; font-style: italic;">add user to the list</span>
+    <span style="color: #00bfff; font-weight: bold;">end</span>.
+
+<span style="color: #5f9ea0; font-style: italic;">%%% </span><span style="color: #5f9ea0; font-style: italic;">Server deletes a user from the user list</span>
+<span style="color: #daa520; font-weight: bold;">server_logoff</span>(<span style="color: #4eee94;">From</span>, <span style="color: #4eee94;">User_List</span>) -&gt;
+    <span style="color: #98f5ff;">lists</span>:<span style="color: #98f5ff;">keydelete</span>(<span style="color: #4eee94;">From</span>, 1, <span style="color: #4eee94;">User_List</span>).
+
+<span style="color: #5f9ea0; font-style: italic;">%%% </span><span style="color: #5f9ea0; font-style: italic;">Server transfers a message between user</span>
+<span style="color: #daa520; font-weight: bold;">server_transfer</span>(<span style="color: #4eee94;">From</span>, <span style="color: #4eee94;">To</span>, <span style="color: #4eee94;">Message</span>, <span style="color: #4eee94;">User_List</span>) -&gt;
+    <span style="color: #5f9ea0; font-style: italic;">%% </span><span style="color: #5f9ea0; font-style: italic;">check that the user is logged on and who he is</span>
+    <span style="color: #00bfff; font-weight: bold;">case</span> <span style="color: #98f5ff;">lists</span>:<span style="color: #98f5ff;">keysearch</span>(<span style="color: #4eee94;">From</span>, 1, <span style="color: #4eee94;">User_List</span>) <span style="color: #00bfff; font-weight: bold;">of</span>
+        false -&gt;
+            <span style="color: #4eee94;">From</span> ! #<span style="color: #98f5ff;">abort_client</span>{message=you_are_not_logged_on};
+        {value, {<span style="color: #4eee94;">_</span>, <span style="color: #4eee94;">Name</span>}} -&gt;
+            <span style="color: #98f5ff;">server_transfer</span>(<span style="color: #4eee94;">From</span>, <span style="color: #4eee94;">Name</span>, <span style="color: #4eee94;">To</span>, <span style="color: #4eee94;">Message</span>, <span style="color: #4eee94;">User_List</span>)
+    <span style="color: #00bfff; font-weight: bold;">end</span>.
+<span style="color: #5f9ea0; font-style: italic;">%%% </span><span style="color: #5f9ea0; font-style: italic;">If the user exists, send the message</span>
+<span style="color: #daa520; font-weight: bold;">server_transfer</span>(<span style="color: #4eee94;">From</span>, <span style="color: #4eee94;">Name</span>, <span style="color: #4eee94;">To</span>, <span style="color: #4eee94;">Message</span>, <span style="color: #4eee94;">User_List</span>) -&gt;
+    <span style="color: #5f9ea0; font-style: italic;">%% </span><span style="color: #5f9ea0; font-style: italic;">Find the receiver and send the message</span>
+    <span style="color: #00bfff; font-weight: bold;">case</span> <span style="color: #98f5ff;">lists</span>:<span style="color: #98f5ff;">keysearch</span>(<span style="color: #4eee94;">To</span>, 2, <span style="color: #4eee94;">User_List</span>) <span style="color: #00bfff; font-weight: bold;">of</span>
+        false -&gt;
+            <span style="color: #4eee94;">From</span> ! #<span style="color: #98f5ff;">server_reply</span>{message=receiver_not_found};
+        {value, {<span style="color: #4eee94;">ToPid</span>, <span style="color: #4eee94;">To</span>}} -&gt;
+            <span style="color: #4eee94;">ToPid</span> ! #<span style="color: #98f5ff;">message_from</span>{from_name=<span style="color: #4eee94;">Name</span>, message=<span style="color: #4eee94;">Message</span>}, 
+            <span style="color: #4eee94;">From</span> !  #<span style="color: #98f5ff;">server_reply</span>{message=sent} 
+    <span style="color: #00bfff; font-weight: bold;">end</span>.
+
+<span style="color: #5f9ea0; font-style: italic;">%%%</span><span style="color: #5f9ea0; font-style: italic;">----END FILE---</span>
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org1af78ae" class="outline-3">
+<h3 id="org1af78ae">测试</h3>
+<div class="outline-text-3" id="text-org1af78ae">
+<p>
+在服务器节点messenger@gentoo编译并启动服务器：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ erl -sname messenger
+
+Erlang/OTP 23 [erts-11.1.5] [source] [64-bit] [smp:4:4] [ds:4:4:10] [async-threads:1] [hipe]
+
+Eshell V11.1.5  (abort with ^G)
+(messenger@gentoo)1&gt; c (mess_server) <span style="color: #f08080;">.</span>
+{ok,mess_server}
+(messenger@gentoo)2&gt;
+(messenger@gentoo)2&gt; mess_server:start_server() <span style="color: #f08080;">.</span>
+User list = []
+true
+</pre>
+</div>
+
+<p>
+编译客户端后，peter在c1@raspberrypi登录：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ erl -sname c1
+
+Erlang/OTP 21 [erts-10.2.4] [source] [smp:4:4] [ds:4:4:10] [async-threads:1]
+
+Eshell V10.2.4  (abort with ^G)
+(c1@raspberrypi)1&gt; c (user_interface) <span style="color: #f08080;">.</span>
+{ok,user_interface}
+(c1@raspberrypi)2&gt;
+(c1@raspberrypi)2&gt; user_interface:logon(peter) <span style="color: #f08080;">.</span>
+true
+(c1@raspberrypi)3&gt;
+(c1@raspberrypi)3&gt; =ERROR <span style="color: #4eee94;">REPORT</span>==== 18-Feb-2021::12:44:02.314766 ===
+Error<span style="color: #00bfff; font-weight: bold;"> in</span> process &lt;0.92.0&gt; on node c1@raspberrypi with exit value:
+{undef,[{mess_client,client,[messenger@gentoo,peter],[]}]}
+
+
+(c1@raspberrypi)3&gt; c (mess_client) <span style="color: #f08080;">.</span>
+{ok,mess_client}
+(c1@raspberrypi)4&gt;
+(c1@raspberrypi)4&gt; user_interface:logon(peter) <span style="color: #f08080;">.</span>
+true
+(c1@raspberrypi)5&gt;
+logged_on
+</pre>
+</div>
+
+<pre class="example">
+注意：这里不仅要编译 user_interface.erl，还需要编译 mess_client.erl
+
+否则就会报错：
+
+=ERROR REPORT==== 18-Feb-2021::12:44:02.314766 ===
+  Error in process &lt;0.92.0&gt; on node c1@raspberrypi with exit value:
+  {undef,[{mess_client,client,[messenger@gentoo,peter],[]}]}
+</pre>
+
+<p>
+peter登录后，服务器端也会打印出新的用户列表：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">(messenger@gentoo)3&gt;
+User list = [{&lt;12948.100.0&gt;,peter}] 
+</pre>
+</div>
+
+<p>
+fred在节点 c2@gentoo 登录：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">erl -sname c2
+Erlang/OTP 23 [erts-11.1.5] [source] [64-bit] [smp:4:4] [ds:4:4:10] [async-threads:1] [hipe]
+
+Eshell V11.1.5  (abort with ^G)
+(c2@gentoo)1&gt; c (user_interface) <span style="color: #f08080;">.</span>
+{ok,user_interface}
+(c2@gentoo)2&gt;
+(c2@gentoo)2&gt; c (mess_client) <span style="color: #f08080;">.</span>
+{ok,mess_client}
+(c2@gentoo)3&gt;
+(c2@gentoo)3&gt; user_interface:logon(fred) <span style="color: #f08080;">.</span>
+true
+(c2@gentoo)4&gt;
+logged_on
+</pre>
+</div>
+
+<p>
+peter登录后，服务器端也会再次打印出用户列表： 
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">User list = [{&lt;12950.102.0&gt;,fred},{&lt;12948.100.0&gt;,peter}]
+</pre>
+</div>
+
+<p>
+peter 尝试向 fred 发送消息： 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">(c1@raspberrypi)5&gt; user_interface:message(fred, <span style="color: #deb887;">'hello'</span>) <span style="color: #f08080;">.</span>
+ok
+(c1@raspberrypi)6&gt;
+sent
+</pre>
+</div>
+
+<p>
+fred 收到消息后，shell 会打印出：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">Message from peter: hello
+</pre>
+</div>
+
+<p>
+同样的服务器在转发消息的时候会再次打印用户列表：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">User list = [{&lt;12950.102.0&gt;,fred},{&lt;12948.100.0&gt;,peter}]
+</pre>
+</div>
+
+<p>
+基本测试到此已经成功
+</p>
+<pre class="example">
+除了完成上述工作外：
+1. 编写了头文件
+2. 使用记录重新定义了 shell 、客户端以及服务端的消息格式
+3. 引入了宏
+
+下面会具体解释这些新知识
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org1d3b4f3" class="outline-2">
+<h2 id="org1d3b4f3">头文件</h2>
+</div>
+
+<div id="outline-container-orge023c1a" class="outline-2">
+<h2 id="orge023c1a">记录</h2>
+</div>
+
+<div id="outline-container-org6c3ef9a" class="outline-2">
+<h2 id="org6c3ef9a">宏</h2>
+</div>
 </div>
 <div id="postamble" class="status">
 
