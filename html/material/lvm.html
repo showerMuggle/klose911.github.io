@@ -251,6 +251,26 @@ for the JavaScript code in this tag.
 <li><a href="#org7fc9dcd">优点</a></li>
 <li><a href="#orgb4c4ae7">缺点</a></li>
 <li><a href="#org275e16d">准备</a></li>
+<li><a href="#org3236fb7">在LVM上安装 Linux</a>
+<ul>
+<li><a href="#org3c31be1">创建分区</a></li>
+<li><a href="#org33c84d6">创建物理卷</a></li>
+<li><a href="#org9e232dc">创建卷组</a>
+<ul>
+<li><a href="#org1f0a958">一步创建卷组</a></li>
+</ul>
+</li>
+<li><a href="#org2b52f57">创建逻辑卷</a></li>
+<li><a href="#orgf275963">建立文件系统与挂载逻辑卷</a></li>
+<li><a href="#orgc1eebc6">配置 mkinitcpio.conf</a>
+<ul>
+<li><a href="#org2b8c3eb">busybox</a></li>
+<li><a href="#orgc6dbd45">systemd</a></li>
+</ul>
+</li>
+<li><a href="#orgb584a04">内核启动参数</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
@@ -370,6 +390,333 @@ LVM的基本组成部分如下：
 </div>
 <div id="outline-container-org275e16d" class="outline-2">
 <h2 id="org275e16d">准备</h2>
+<div class="outline-text-2" id="text-org275e16d">
+<p>
+确保已安装 <span class="underline">lvm2</span> 软件包 
+</p>
+</div>
+</div>
+<div id="outline-container-org3236fb7" class="outline-2">
+<h2 id="org3236fb7">在LVM上安装 Linux</h2>
+<div class="outline-text-2" id="text-org3236fb7">
+<p>
+应该在 linux安装过程 中的的分区和创建文件系统这一步中创建LVM卷。 <b>不要直接格式化</b> 一个分区作为根文件系统（/），而应将其 <b>创建</b> 在一个 <span class="underline">逻辑卷</span> （LV）中 。快速导览：
+</p>
+<ol class="org-ol">
+<li>创建物理卷（PV）所在的分区</li>
+<li>创建物理卷（PV）：
+<ul class="org-ul">
+<li>如果只有一个硬盘，那么最好只创建一个分区一个物理卷</li>
+<li>如果你有多个硬盘，可以创建多个分区，在每个分区上分别创建一个物理卷</li>
+</ul></li>
+<li>创建卷组（VG），并把所有物理卷加进卷组</li>
+<li>在卷组（VG）上创建逻辑卷（LV）</li>
+<li>继续格式化分区步骤</li>
+<li>当做到的“Initramfs”步骤时，把 lvm2加入到 <span class="underline">mkinitcpio.conf</span> 文件中（这一步只是Arch有效, 实际上要获得的效果是启动Linux的适合能找到编译好的 lvm2 模块）</li>
+</ol>
+
+<pre class="example">
+警告： 若使用不支持LVM的引导程序，/boot不能置于LVM中
+
+必须创建一个独立的/boot分区并直接格式化它，已知支持LVM的引导程序只有GRUB
+</pre>
+</div>
+<div id="outline-container-org3c31be1" class="outline-3">
+<h3 id="org3c31be1">创建分区</h3>
+<div class="outline-text-3" id="text-org3c31be1">
+<p>
+在继续配置LVM前，必须对设备进行分区。创建分区：
+</p>
+<ul class="org-ul">
+<li>若使用 <span class="underline">MBR</span> ,设置 分区类型为 <span class="underline">8e</span></li>
+</ul>
+<pre class="example">
+在"fdisk"中为Linux LVM
+</pre>
+<ul class="org-ul">
+<li>若使用 <span class="underline">GPT</span> , 设置分区类型为 <span class="underline">E6D6D379-F507-44C2-A23C-238F2A3DF928</span></li>
+</ul>
+<pre class="example">
+在"fdisk"中为Linux LVM
+
+在"gdisk"中为8e00
+</pre>
+</div>
+</div>
+<div id="outline-container-org33c84d6" class="outline-3">
+<h3 id="org33c84d6">创建物理卷</h3>
+<div class="outline-text-3" id="text-org33c84d6">
+<p>
+可通过以下命令列出可被用作物理卷的设备：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">$ lvmdiskscan
+</pre>
+</div>
+
+<pre class="example">
+警告： 请确认对正确的设备进行操作，否则会导致文件丢失！
+</pre>
+
+<p>
+在列出的设备上创建物理卷：
+</p>
+<pre class="example">
+# pvcreate DEVICE  
+</pre>
+
+<p>
+该命令在各个设备上创建LVM头。如#LVM基本组成所示, DEVICE可以是：
+</p>
+<ul class="org-ul">
+<li>磁盘（如/dev/sda）</li>
+<li>分区（如/dev/sda2）</li>
+<li>环回设备</li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ pvcreate /dev/sda2
+</pre>
+</div>
+
+<p>
+可以用以下命令查看已创建好的物理卷：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ pvdisplay
+</pre>
+</div>
+
+<pre class="example">
+注意： 如果用的是未格式化过且擦除块（erase block）大小 小于1M 的SSD，请采用以下命令pvcreate --dataalignment 1m /dev/sda来设置对齐（alignment）
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org9e232dc" class="outline-3">
+<h3 id="org9e232dc">创建卷组</h3>
+<div class="outline-text-3" id="text-org9e232dc">
+<p>
+创建完成物理卷（PV）之后，下一步就是在该物理卷创建卷组（VG）了。 首先必须先在其中一个物理卷（PV）创建一个卷组：
+</p>
+
+<pre class="example">
+# vgcreate &lt;volume_group&gt; &lt;physical_volume&gt;
+</pre>
+
+<p>
+可用作字符卷组的名称可在lvm(8)中查到。例如：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ vgcreate VolGroup00 /dev/sda2
+</pre>
+</div>
+
+<p>
+然后让该卷组扩大到其他所有的物理卷:
+</p>
+
+<pre class="example">
+# vgextend &lt;卷组名&gt; &lt;物理卷&gt;
+# vgextend &lt;卷组名&gt; &lt;其它物理卷&gt;
+# ...
+</pre>
+
+<p>
+例如：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">$ vgextend VolGroup00 /dev/sdb1
+$ vgextend VolGroup00 /dev/sdc
+</pre>
+</div>
+
+<p>
+其中，“VolGroup00”名字换成自己起的名字即可。 接下来可以用以下命令查看卷组：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ vgdisplay
+</pre>
+</div>
+
+<pre class="example">
+注意： 可以创建多个的卷组，但这将使你的硬盘空间分布在不同（逻辑）磁盘上
+</pre>
+</div>
+
+<div id="outline-container-org1f0a958" class="outline-4">
+<h4 id="org1f0a958">一步创建卷组</h4>
+<div class="outline-text-4" id="text-org1f0a958">
+<p>
+LVM支持将卷组与物理卷的创建聚合在一个命令中。例如，为了在前文提到的三个设备中创建名为VolGroup00的卷组，可以执行如下命令：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">$ vgcreate VolGroup00 /dev/sda2 /dev/sdb1 /dev/sdc
+</pre>
+</div>
+
+<p>
+该命令首先会在分区上创建物理卷（如果之前没有创建过），再创建一个包含三个物理卷的卷组
+</p>
+
+<pre class="example">
+如果设备上已经存在文件系统，命令会提出警告
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org2b52f57" class="outline-3">
+<h3 id="org2b52f57">创建逻辑卷</h3>
+<div class="outline-text-3" id="text-org2b52f57">
+<p>
+创建完卷组（VG）之后，就可以开始创建逻辑卷（LV）了。输入下面命令以指定新逻辑卷的名字、大小及其所在的卷组：
+</p>
+<pre class="example">
+# lvcreate -L &lt;卷大小&gt; &lt;"卷组名&gt; -n &lt;卷名&gt;
+</pre>
+<p>
+例如：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ lvcreate -L 10G VolGroup00 -n lvolhome
+</pre>
+</div>
+
+<p>
+该逻辑卷创建完后，就可以通过 <span class="underline">/dev/mapper/Volgroup00-lvolhome</span> 或 <span class="underline">/dev/VolGroup00/lvolhome</span> 来访问它
+</p>
+
+<pre class="example">
+与卷组命名类似，你可以按你的需要将逻辑卷命名
+</pre>
+
+<p>
+可以指定一个或多个物理卷来限制LVM分配数据空间的位置。比如希望在较小的SSD硬盘上创建根文件系统，并在较慢的机械硬盘上创建家目录卷，仅需把物理卷设备加入到命令中
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">$ lvcreate -L 10G VolGroup00 -n lvolhome /dev/sdc1
+</pre>
+</div>
+
+<p>
+如果想让要创建的逻辑卷拥有卷组（VG）的所有未使用空间，请使用以下命令：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">$ lvcreate -l +100%FREE  &lt;volume_group&gt; -n &lt;logical_volume&gt;
+</pre>
+</div>
+<p>
+可以通过以下命令来查看逻辑卷：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">$ lvdisplay
+</pre>
+</div>
+<pre class="example">
+提示： 一开始可以创建小一点的逻辑卷，在卷组里留下一部分未使用空间，以后就可以根据需要再作扩展了
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orgf275963" class="outline-3">
+<h3 id="orgf275963">建立文件系统与挂载逻辑卷</h3>
+<div class="outline-text-3" id="text-orgf275963">
+<p>
+现在的逻辑卷应该已经在 <span class="underline"><i>dev/mapper</i></span> 和 <span class="underline">/dev/YourVolumeGroupName</span> 中了。如果无法在以上位置找到它，请使用以下命令来加载模块、并扫描与激活卷组：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ modprobe dm-mod
+$ vgscan
+$ vgchange -ay
+</pre>
+</div>
+<p>
+现在可以在逻辑卷上创建文件系统并像普通分区一样挂载它了：
+</p>
+
+<pre class="example">
+# mkfs.&lt;类型&gt; /dev/mapper/&lt;卷组名&gt;-&lt;卷名&gt;
+# mount /dev/mapper/&lt;卷组名&gt;-&lt;卷名&gt; &lt;挂载点&gt;
+</pre>
+<p>
+例如：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ mkfs.ext4 /dev/mapper/VolGroup00-lvolhome
+$ mount /dev/mapper/VolGroup00-lvolhome /home
+</pre>
+</div>
+<pre class="example">
+警告： 挂载点请选择所新建的逻辑卷（例如：/dev/mapper/Volgroup00-lvolhome）
+
+不要使用逻辑卷所在的实际分区设备（即不要使用：/dev/sda2）
+</pre>
+</div>
+</div>
+<div id="outline-container-orgc1eebc6" class="outline-3">
+<h3 id="orgc1eebc6">配置 mkinitcpio.conf</h3>
+<div class="outline-text-3" id="text-orgc1eebc6">
+<p>
+如果根文件系统基于LVM，需要启用适当的mkinitcpio钩子，否则系统可能无法启动：
+</p>
+<ul class="org-ul">
+<li>若使用基于busybox的initramfs，请启用 <span class="underline">udev</span> 和 <span class="underline">lvm2</span></li>
+<li>若使用基于systemd的initramfs，请启用 <span class="underline">systemd</span> 和 <span class="underline">sd-lvm2</span></li>
+</ul>
+</div>
+
+<div id="outline-container-org2b8c3eb" class="outline-4">
+<h4 id="org2b8c3eb">busybox</h4>
+<div class="outline-text-4" id="text-org2b8c3eb">
+<p>
+udev默认已经预设好，不必手动启用了。只需要编辑/etc/mkinitcpio.conf文件，在block与filesystem这两项中间插入lvm2：
+</p>
+
+<p>
+基于busybox的initramfs: /etc/mkinitcpio.conf
+</p>
+<pre class="example">
+HOOKS="base udev ... block lvm2 filesystems"
+</pre>
+</div>
+</div>
+<div id="outline-container-orgc6dbd45" class="outline-4">
+<h4 id="orgc6dbd45">systemd</h4>
+<div class="outline-text-4" id="text-orgc6dbd45">
+<p>
+基于systemd的initramfs: /etc/mkinitcpio.conf
+</p>
+<pre class="example">
+HOOKS=(base systemd ... block sd-lvm2 filesystems)
+</pre>
+
+<pre class="example">
+提示：lvm2和sd-lvm2钩子被lvm2安装，而不是mkinitcpio
+
+如果你在"arch-chroot"中新安装的Arch Linux中运行"mkinitcpio"，必须在环境中安装lvm2以使mkinitcpio找到lvm2或sd-lvm2钩子
+
+如果lvm2未安装, mkinitcpio将报错：Error: Hook 'lvm2' cannot be found.
+
+若根文件系统在LVM + RAID上，请参见#为RAID配置mkinitcpioZ
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-orgb584a04" class="outline-3">
+<h3 id="orgb584a04">内核启动参数</h3>
+<div class="outline-text-3" id="text-orgb584a04">
+<p>
+如果根文件系统位于逻辑分卷，则root= 内核参数必须指向一个映射设备，比如/dev/mapper/vg-name-lv-name
+</p>
+</div>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">

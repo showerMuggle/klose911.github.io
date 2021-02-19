@@ -8,84 +8,282 @@
 LVM 是一种可用在 _Linux 内核_ 的 *逻辑分卷* 管理器，可用于管理磁盘驱动器或其他类似的大容量存储设备
 * LVM基本组成
 
-LVM利用Linux内核的 _device-mapper_ 功能来实现 *存储系统的虚拟化* （系统分区独立于底层硬件）
+  LVM利用Linux内核的 _device-mapper_ 功能来实现 *存储系统的虚拟化* （系统分区独立于底层硬件）
 
-#+begin_example
-  通过LVM：
+  #+begin_example
+    通过LVM：
 
-  可以实现存储空间的抽象化并在上面建立虚拟分区（virtual partitions）
-  可以更简便地扩大和缩小分区
-  可以增删分区时无需担心某个硬盘上没有足够的连续空间
+    可以实现存储空间的抽象化并在上面建立虚拟分区（virtual partitions）
+    可以更简便地扩大和缩小分区
+    可以增删分区时无需担心某个硬盘上没有足够的连续空间
 
-  避免为正在使用的磁盘重新分区的麻烦、为调整分区而不得不移动其他分区的不便
-#+end_example
+    避免为正在使用的磁盘重新分区的麻烦、为调整分区而不得不移动其他分区的不便
+  #+end_example
 
-LVM的基本组成部分如下：
-+ *物理卷*  ( _PV_ )：一个可供存储LVM的块设备，，它包含一个 *特殊的LVM头* 
-#+begin_example
-例如: 一块硬盘, 一个MBR或GPT分区, 一个回环文件, 一个被内核映射的设备 (例如 dm-crypt)
-#+end_example
-+ *卷组* ( _VG_ ) :   _物理卷_ 的一个 _组_ ，作为 *存放* _逻辑卷_ 的 *容器* 
-+ *逻辑卷* ( _LV_ ):  逻辑卷存放在一个 _卷组_ 中并由物理块组成
-#+begin_example
-  一个类似于物理设备的块设备
+  LVM的基本组成部分如下：
+  + *物理卷*  ( _PV_ )：一个可供存储LVM的块设备，，它包含一个 *特殊的LVM头* 
+  #+begin_example
+  例如: 一块硬盘, 一个MBR或GPT分区, 一个回环文件, 一个被内核映射的设备 (例如 dm-crypt)
+  #+end_example
+  + *卷组* ( _VG_ ) :   _物理卷_ 的一个 _组_ ，作为 *存放* _逻辑卷_ 的 *容器* 
+  + *逻辑卷* ( _LV_ ):  逻辑卷存放在一个 _卷组_ 中并由物理块组成
+  #+begin_example
+    一个类似于物理设备的块设备
 
-  例如，可以直接在它上面创建一个文件系统文件系统
-#+end_example
-+ *物理块* ( _PE_ )：一个 _卷组_ 中 *最小的连续区域* (默认为 _4 MiB_ )，多个物理块将被分配给一个逻辑卷
-#+begin_example
-  可以把它看成物理卷的一部分，这部分可以被分配给一个逻辑卷
-#+end_example
+    例如，可以直接在它上面创建一个文件系统文件系统
+  #+end_example
+  + *物理块* ( _PE_ )：一个 _卷组_ 中 *最小的连续区域* (默认为 _4 MiB_ )，多个物理块将被分配给一个逻辑卷
+  #+begin_example
+    可以把它看成物理卷的一部分，这部分可以被分配给一个逻辑卷
+  #+end_example
 
-示例:
+  示例:
 
-#+begin_example
-  '''物理硬盘'''
+  #+begin_example
+    '''物理硬盘'''
 
-    硬盘1 (/dev/sda):
-       _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
-      |分区1 50GB (物理卷)           |分区2 80GB (物理卷)            |
-      |/dev/sda1                    |/dev/sda2                     |
-      |_ _ _ _ _ _ _ _ _ _ _ _ _ _ _|_ _ _ _ _ _ _ _ _ _ _ _ _ _ __|
+      硬盘1 (/dev/sda):
+	 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+	|分区1 50GB (物理卷)           |分区2 80GB (物理卷)            |
+	|/dev/sda1                    |/dev/sda2                     |
+	|_ _ _ _ _ _ _ _ _ _ _ _ _ _ _|_ _ _ _ _ _ _ _ _ _ _ _ _ _ __|
 
-    硬盘2 (/dev/sdb):
-       _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
-      |分区1 120GB (物理卷)                         |
-      |/dev/sdb1                                         |
-      | _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _   |
+      硬盘2 (/dev/sdb):
+	 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+	|分区1 120GB (物理卷)                         |
+	|/dev/sdb1                                         |
+	| _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _   |
 
-   '''LVM逻辑卷'''
- 
-     卷组（Volume Group1） (/dev/MyVolGroup/ = /dev/sda1 + /dev/sda2 + /dev/sdb1):
-	_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ __ 
-       |逻辑卷1 15GB                  |逻辑卷2 35GB                        |逻辑卷3 200GB                         |
-       |/dev/MyVolGroup/rootvol        |/dev/MyVolGroup/homevol             |/dev/MyVolGroup/mediavol              |
-       |_ _ _ _ _ _ _ _ _ _ _ _ _ _ __|_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ __ |_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _|
-#+end_example
+     '''LVM逻辑卷'''
+
+       卷组（Volume Group1） (/dev/MyVolGroup/ = /dev/sda1 + /dev/sda2 + /dev/sdb1):
+	  _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ __ 
+	 |逻辑卷1 15GB                  |逻辑卷2 35GB                        |逻辑卷3 200GB                         |
+	 |/dev/MyVolGroup/rootvol        |/dev/MyVolGroup/homevol             |/dev/MyVolGroup/mediavol              |
+	 |_ _ _ _ _ _ _ _ _ _ _ _ _ _ __|_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ __ |_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _|
+  #+end_example
 * 优点
-比起普通的硬盘分区管理方式，LVM更富于灵活性：
-+ 将多块硬盘看作一块大硬盘
-+ 使用逻辑卷（LV），可以创建跨越众多硬盘空间的分区
-+ 可以创建小的逻辑卷（LV），在空间不足时再动态调整它的大小
-+ 在调整逻辑卷（LV）大小时可以不用考虑逻辑卷在硬盘上的位置，不用担心没有可用的连续空间
-+ 可以在线对逻辑卷（LV）和卷组（VG）进行创建、删除、调整大小等操作
-#+begin_example
-不过LVM上的文件系统也需要重新调整大小，好在某些文件系统（例如ext4）也支持在线操作
-#+end_example
-+ 无需重新启动服务，就可以将服务中用到的逻辑卷（LV）在线/动态迁移至别的硬盘上
-+ 允许创建快照，可以保存文件系统的备份，同时使服务的下线时间降低到最小
-+ 支持各种设备映射目标（device-mapper targets），包括透明文件系统加密和缓存常用数据
-#+begin_example
-  这将允许你创建一个包含一个或多个磁盘、并用LUKS加密的系统
+  比起普通的硬盘分区管理方式，LVM更富于灵活性：
+  + 将多块硬盘看作一块大硬盘
+  + 使用逻辑卷（LV），可以创建跨越众多硬盘空间的分区
+  + 可以创建小的逻辑卷（LV），在空间不足时再动态调整它的大小
+  + 在调整逻辑卷（LV）大小时可以不用考虑逻辑卷在硬盘上的位置，不用担心没有可用的连续空间
+  + 可以在线对逻辑卷（LV）和卷组（VG）进行创建、删除、调整大小等操作
+  #+begin_example
+  不过LVM上的文件系统也需要重新调整大小，好在某些文件系统（例如ext4）也支持在线操作
+  #+end_example
+  + 无需重新启动服务，就可以将服务中用到的逻辑卷（LV）在线/动态迁移至别的硬盘上
+  + 允许创建快照，可以保存文件系统的备份，同时使服务的下线时间降低到最小
+  + 支持各种设备映射目标（device-mapper targets），包括透明文件系统加密和缓存常用数据
+  #+begin_example
+    这将允许你创建一个包含一个或多个磁盘、并用LUKS加密的系统
 
-  使用LVM on top 可轻松地管理和调整这些独立的加密卷 （例如. /, /home, /backup等) 并免去开机时多次输入密钥的麻烦
-#+end_example
+    使用LVM on top 可轻松地管理和调整这些独立的加密卷 （例如. /, /home, /backup等) 并免去开机时多次输入密钥的麻烦
+  #+end_example
 * 缺点
-+ 在系统设置时需要更复杂的额外步骤
-+ Windows系统并不支持LVM，若使用双系统，将无法在Windows上访问LVM分区
+  + 在系统设置时需要更复杂的额外步骤
+  + Windows系统并不支持LVM，若使用双系统，将无法在Windows上访问LVM分区
 * 准备
-确保已安装 _lvm2_ 软件包 
+  确保已安装 _lvm2_ 软件包 
 * 在LVM上安装 Linux 
+  应该在 linux安装过程 中的的分区和创建文件系统这一步中创建LVM卷。 *不要直接格式化* 一个分区作为根文件系统（/），而应将其 *创建* 在一个 _逻辑卷_ （LV）中 。快速导览：
+  1. 创建物理卷（PV）所在的分区
+  2. 创建物理卷（PV）：
+     + 如果只有一个硬盘，那么最好只创建一个分区一个物理卷
+     + 如果你有多个硬盘，可以创建多个分区，在每个分区上分别创建一个物理卷 
+  3. 创建卷组（VG），并把所有物理卷加进卷组
+  4. 在卷组（VG）上创建逻辑卷（LV）
+  5. 继续格式化分区步骤
+  6. 当做到的“Initramfs”步骤时，把 lvm2加入到 _mkinitcpio.conf_ 文件中（这一步只是Arch有效, 实际上要获得的效果是启动Linux的适合能找到编译好的 lvm2 模块）
+
+  #+begin_example
+    警告： 若使用不支持LVM的引导程序，/boot不能置于LVM中
+
+    必须创建一个独立的/boot分区并直接格式化它，已知支持LVM的引导程序只有GRUB
+  #+end_example
+** 创建分区
+   在继续配置LVM前，必须对设备进行分区。创建分区：
+   + 若使用 _MBR_ ,设置 分区类型为 _8e_  
+   #+begin_example
+   在"fdisk"中为Linux LVM
+   #+end_example
+   + 若使用 _GPT_ , 设置分区类型为 _E6D6D379-F507-44C2-A23C-238F2A3DF928_ 
+   #+begin_example
+     在"fdisk"中为Linux LVM
+
+     在"gdisk"中为8e00
+   #+end_example
+** 创建物理卷
+   可通过以下命令列出可被用作物理卷的设备：
+   #+begin_src sh 
+  $ lvmdiskscan
+   #+end_src
+
+   #+begin_example
+   警告： 请确认对正确的设备进行操作，否则会导致文件丢失！
+   #+end_example
+
+   在列出的设备上创建物理卷：
+   #+begin_example
+   # pvcreate DEVICE  
+   #+end_example
+ 
+   该命令在各个设备上创建LVM头。如#LVM基本组成所示, DEVICE可以是：
+   + 磁盘（如/dev/sda）
+   + 分区（如/dev/sda2）
+   + 环回设备 
+
+   #+begin_src sh 
+  $ pvcreate /dev/sda2
+   #+end_src
+
+   可以用以下命令查看已创建好的物理卷：
+
+   #+begin_src sh 
+     $ pvdisplay
+   #+end_src
+
+   #+begin_example
+     注意： 如果用的是未格式化过且擦除块（erase block）大小 小于1M 的SSD，请采用以下命令pvcreate --dataalignment 1m /dev/sda来设置对齐（alignment）
+   #+end_example
+
+** 创建卷组
+   创建完成物理卷（PV）之后，下一步就是在该物理卷创建卷组（VG）了。 首先必须先在其中一个物理卷（PV）创建一个卷组：
+
+   #+begin_example
+     # vgcreate <volume_group> <physical_volume>
+   #+end_example
+
+   可用作字符卷组的名称可在lvm(8)中查到。例如：
+
+   #+begin_src sh 
+  $ vgcreate VolGroup00 /dev/sda2
+   #+end_src
+
+   然后让该卷组扩大到其他所有的物理卷:
+
+   #+begin_example
+     # vgextend <卷组名> <物理卷>
+     # vgextend <卷组名> <其它物理卷>
+     # ...
+   #+end_example
+
+   例如：
+   #+begin_src sh 
+  $ vgextend VolGroup00 /dev/sdb1
+  $ vgextend VolGroup00 /dev/sdc
+   #+end_src
+
+   其中，“VolGroup00”名字换成自己起的名字即可。 接下来可以用以下命令查看卷组：
+
+   #+begin_src sh 
+  $ vgdisplay
+   #+end_src
+
+   #+begin_example
+     注意： 可以创建多个的卷组，但这将使你的硬盘空间分布在不同（逻辑）磁盘上
+   #+end_example
+
+*** 一步创建卷组
+    LVM支持将卷组与物理卷的创建聚合在一个命令中。例如，为了在前文提到的三个设备中创建名为VolGroup00的卷组，可以执行如下命令：
+    #+begin_src sh 
+  $ vgcreate VolGroup00 /dev/sda2 /dev/sdb1 /dev/sdc
+    #+end_src
+
+    该命令首先会在分区上创建物理卷（如果之前没有创建过），再创建一个包含三个物理卷的卷组
+
+    #+begin_example
+    如果设备上已经存在文件系统，命令会提出警告
+    #+end_example
+
+** 创建逻辑卷
+   创建完卷组（VG）之后，就可以开始创建逻辑卷（LV）了。输入下面命令以指定新逻辑卷的名字、大小及其所在的卷组：
+   #+begin_example
+   # lvcreate -L <卷大小> <"卷组名> -n <卷名>
+   #+end_example
+   例如：
+
+   #+begin_src sh 
+$ lvcreate -L 10G VolGroup00 -n lvolhome
+   #+end_src
+
+   该逻辑卷创建完后，就可以通过 _/dev/mapper/Volgroup00-lvolhome_ 或 _/dev/VolGroup00/lvolhome_ 来访问它
+
+   #+begin_example
+   与卷组命名类似，你可以按你的需要将逻辑卷命名
+   #+end_example
+
+   可以指定一个或多个物理卷来限制LVM分配数据空间的位置。比如希望在较小的SSD硬盘上创建根文件系统，并在较慢的机械硬盘上创建家目录卷，仅需把物理卷设备加入到命令中
+   #+begin_src sh 
+$ lvcreate -L 10G VolGroup00 -n lvolhome /dev/sdc1
+   #+end_src
+
+   如果想让要创建的逻辑卷拥有卷组（VG）的所有未使用空间，请使用以下命令：
+   #+begin_src sh 
+  $ lvcreate -l +100%FREE  <volume_group> -n <logical_volume>
+   #+end_src
+   可以通过以下命令来查看逻辑卷：
+   #+begin_src sh 
+  $ lvdisplay
+   #+end_src
+   #+begin_example
+     提示： 一开始可以创建小一点的逻辑卷，在卷组里留下一部分未使用空间，以后就可以根据需要再作扩展了
+   #+end_example
+
+** 建立文件系统与挂载逻辑卷
+   现在的逻辑卷应该已经在 _/dev/mapper/_ 和 _/dev/YourVolumeGroupName_ 中了。如果无法在以上位置找到它，请使用以下命令来加载模块、并扫描与激活卷组：
+
+   #+begin_src sh 
+  $ modprobe dm-mod
+  $ vgscan
+  $ vgchange -ay
+   #+end_src
+   现在可以在逻辑卷上创建文件系统并像普通分区一样挂载它了：
+
+   #+begin_example
+     # mkfs.<类型> /dev/mapper/<卷组名>-<卷名>
+     # mount /dev/mapper/<卷组名>-<卷名> <挂载点>
+   #+end_example
+   例如：
+
+   #+begin_src sh 
+  $ mkfs.ext4 /dev/mapper/VolGroup00-lvolhome
+  $ mount /dev/mapper/VolGroup00-lvolhome /home
+   #+end_src
+   #+begin_example
+     警告： 挂载点请选择所新建的逻辑卷（例如：/dev/mapper/Volgroup00-lvolhome）
+
+     不要使用逻辑卷所在的实际分区设备（即不要使用：/dev/sda2）
+   #+end_example
+** 配置 mkinitcpio.conf 
+   如果根文件系统基于LVM，需要启用适当的mkinitcpio钩子，否则系统可能无法启动：
+   + 若使用基于busybox的initramfs，请启用 _udev_ 和 _lvm2_ 
+   + 若使用基于systemd的initramfs，请启用 _systemd_ 和 _sd-lvm2_ 
+
+*** busybox
+    udev默认已经预设好，不必手动启用了。只需要编辑/etc/mkinitcpio.conf文件，在block与filesystem这两项中间插入lvm2：
+
+    基于busybox的initramfs: /etc/mkinitcpio.conf
+    #+begin_example
+    HOOKS="base udev ... block lvm2 filesystems"
+    #+end_example
+*** systemd 
+    基于systemd的initramfs: /etc/mkinitcpio.conf
+    #+begin_example
+    HOOKS=(base systemd ... block sd-lvm2 filesystems)
+    #+end_example
+
+    #+begin_example
+      提示：lvm2和sd-lvm2钩子被lvm2安装，而不是mkinitcpio
+
+      如果你在"arch-chroot"中新安装的Arch Linux中运行"mkinitcpio"，必须在环境中安装lvm2以使mkinitcpio找到lvm2或sd-lvm2钩子
+
+      如果lvm2未安装, mkinitcpio将报错：Error: Hook 'lvm2' cannot be found.
+
+      若根文件系统在LVM + RAID上，请参见#为RAID配置mkinitcpioZ
+    #+end_example
+** 内核启动参数
+   如果根文件系统位于逻辑分卷，则root= 内核参数必须指向一个映射设备，比如/dev/mapper/vg-name-lv-name
 
 
 
