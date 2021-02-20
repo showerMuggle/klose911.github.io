@@ -271,7 +271,7 @@ for the JavaScript code in this tag.
 <li><a href="#org470fbd9">内核启动参数</a></li>
 </ul>
 </li>
-<li><a href="#org2f9e27e">配置</a>
+<li><a href="#orgcf1269d">配置</a>
 <ul>
 <li><a href="#org00be650">高级选项</a></li>
 <li><a href="#orge4e5390">调整卷</a>
@@ -302,7 +302,27 @@ for the JavaScript code in this tag.
 <li><a href="#org8256c47">停用卷组</a></li>
 </ul>
 </li>
-<li><a href="#org9cede50">逻辑卷类型</a></li>
+<li><a href="#org9cede50">逻辑卷类型</a>
+<ul>
+<li><a href="#orgbd48125">快照</a>
+<ul>
+<li><a href="#orgb198bf2">快照操作</a></li>
+</ul>
+</li>
+<li><a href="#orge2b76c6">LVM 缓存</a>
+<ul>
+<li><a href="#org7cbc5a1">创建缓存</a></li>
+<li><a href="#org9a01570">删除缓存</a></li>
+</ul>
+</li>
+<li><a href="#org00e0bb7">Raid</a>
+<ul>
+<li><a href="#org8664321">配置RAID</a></li>
+<li><a href="#org4ad70d1">为RAID配置mkinitcpio</a></li>
+</ul>
+</li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
@@ -750,9 +770,9 @@ HOOKS=(base systemd ... block sd-lvm2 filesystems)
 </div>
 </div>
 </div>
-<div id="outline-container-org2f9e27e" class="outline-2">
-<h2 id="org2f9e27e">配置</h2>
-<div class="outline-text-2" id="text-org2f9e27e">
+<div id="outline-container-orgcf1269d" class="outline-2">
+<h2 id="orgcf1269d">配置</h2>
+<div class="outline-text-2" id="text-orgcf1269d">
 </div>
 <div id="outline-container-org00be650" class="outline-3">
 <h3 id="org00be650">高级选项</h3>
@@ -1219,6 +1239,261 @@ $ vgextend VolGroup00 /dev/sdb1
 </div>
 <div id="outline-container-org9cede50" class="outline-2">
 <h2 id="org9cede50">逻辑卷类型</h2>
+<div class="outline-text-2" id="text-org9cede50">
+<p>
+除了普通的逻辑卷, LVM还支持： <span class="underline">快照</span> ,  <span class="underline">logical volume caching</span> ,  <span class="underline">thin provisioned逻辑卷</span> ，以及 <span class="underline">RAID</span> 
+</p>
+</div>
+<div id="outline-container-orgbd48125" class="outline-3">
+<h3 id="orgbd48125">快照</h3>
+<div class="outline-text-3" id="text-orgbd48125">
+<p>
+LVM可以给系统创建一个快照，由于使用了写入时复制(copy-on-write) 策略，相比传统的备份更有效率。 <b>初始的</b> 快照只有关联到 <span class="underline">实际数据的inode</span> 的 <span class="underline">实体链接</span> (hark-link)而已 
+</p>
+<ul class="org-ul">
+<li>只要实际的数据没有改变，快照就只会包含指向数据的inode的指针，而非数据本身</li>
+<li>一旦更改了快照对应的文件或目录，LVM就会自动 <b>拷贝</b> 相应的数据，包括快照所对应的 <span class="underline">旧数据的拷贝</span> 和当前系统所对应的 <span class="underline">新数据的拷贝</span></li>
+</ul>
+
+<pre class="example">
+这样的话，只要你修改的数据（包括原始的和快照的）不超过2G，就可以只使用2G的空间对一个有35G数据的系统创建快照
+</pre>
+
+<p>
+要创建快照，在卷组中必须有 <b>未被分配的空间</b> 
+</p>
+
+<pre class="example">
+和其他逻辑卷一样，快照也会占用卷组中的空间
+
+所以，如果计划使用快照来备份你的根（root）分区，不要将整个卷组的空间都分配给根（root）逻辑卷
+</pre>
+</div>
+
+<div id="outline-container-orgb198bf2" class="outline-4">
+<h4 id="orgb198bf2">快照操作</h4>
+<div class="outline-text-4" id="text-orgb198bf2">
+<p>
+可以像创建普通逻辑卷一样创建快照逻辑卷 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ lvcreate --size 100M --snapshot --name snap01 /dev/vg0/lv
+</pre>
+</div>
+
+<pre class="example">
+不过这只能修改少于100M的数据，否则该快照逻辑卷空间会不足
+</pre>
+
+<p>
+要将逻辑卷卷'lv' 恢复到创建快照'snap01'时的状态，请使用：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ lvconvert --merge /dev/vg0/snap01
+</pre>
+</div>
+
+<p>
+如果逻辑卷处于活动状态，则在下次重新启动时将进行合并（merging）
+</p>
+
+<pre class="example">
+合并 甚至可在LiveCD中进行。注意： 合并后快照将被删除
+
+也以拍摄多个快照，每个快照都可以任意与对应的逻辑卷合并 
+</pre>
+
+<p>
+快照也可以被挂载，并可用dd或者tar备份：
+</p>
+<ul class="org-ul">
+<li>使用dd备份的快照的大小为拍摄快照后对应逻辑卷中变更过文件的大小</li>
+<li>要使用备份，只需创建并挂载一个快照，并将备份写入或解压到其中0，再将快照合并到对应逻辑卷即可</li>
+</ul>
+
+
+<pre class="example">
+快照主要用于提供一个文件系统的拷贝，以用来备份
+
+比起直接备份分区，使用快照备份可以提供一个更符合原文件系统的镜像
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orge2b76c6" class="outline-3">
+<h3 id="orge2b76c6">LVM 缓存</h3>
+<div class="outline-text-3" id="text-orge2b76c6">
+<p>
+Cache逻辑卷将使用一个 <span class="underline">较小而快速</span> 的逻辑卷，来提高 <span class="underline">较大但慢速</span> 的逻辑卷的性能。它将大型逻辑卷中 <span class="underline">经常使用的块</span> <b>存储</b> 到 <span class="underline">较快的缓存卷</span> 中 
+</p>
+
+<pre class="example">
+LVM将这个小而快速的逻辑卷称为缓冲池逻辑卷（cache pool LV）
+
+大而慢的逻辑卷则被称为源逻辑卷（origin LV）
+</pre>
+
+<p>
+由于dm-cache（内核驱动）的要求，LVM进一步将缓存池逻辑卷分为两个设备：
+</p>
+<ul class="org-ul">
+<li>缓存数据逻辑卷：存放源逻辑卷中常用块的拷贝，以提升源逻辑卷的速度</li>
+<li>缓存元数据逻辑卷：存储记录信息，这些信息指定了源逻辑卷中的数据被存放到缓存逻辑卷中的位置</li>
+</ul>
+
+<pre class="example">
+这些元数据是用来确定“源逻辑卷”中的一个块是存储到自身空间还是缓存逻辑卷中
+
+要想创建最好、最稳定的缓存逻辑卷，必须熟悉这些信息，同时所有这些被提到的逻辑卷都必须存放在一个卷组中 
+</pre>
+</div>
+
+<div id="outline-container-org7cbc5a1" class="outline-4">
+<h4 id="org7cbc5a1">创建缓存</h4>
+<div class="outline-text-4" id="text-org7cbc5a1">
+<p>
+最快速的方法是直接在快速的设备上创建一个物理卷，并把它添加到一个卷组中：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ vgextend dataVG /dev/sdx
+</pre>
+</div>
+
+<p>
+只需一步，即可在sdb上创建一个缓存池，自动生成元数据，将逻辑卷dataLV缓存到sdb上：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ lvcreate --type cache --cachemode writethrough -L 20G -n dataLV_cachepool dataVG/dataLV /dev/sdx
+</pre>
+</div>
+
+<pre class="example">
+显然，如果想让缓存变得更大，可更改 -L参数。
+</pre>
+
+<p>
+Cachemode有两个可能的参数：
+</p>
+<ul class="org-ul">
+<li>writethrough： 确保任何数据写入都会被同时存储到缓存池逻辑卷和源逻辑卷中
+<ul class="org-ul">
+<li>在这种情况下，丢失与缓存池逻辑卷关联的设备不会丢失任何数据</li>
+</ul></li>
+<li>writeback： 可提供更好的性能
+<ul class="org-ul">
+<li>如果用于缓存的设备发生故障，数据丢失的风险会更高</li>
+</ul></li>
+</ul>
+
+<pre class="example">
+如果未指定--cachemode，将会自动选择writethrough
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org9a01570" class="outline-4">
+<h4 id="org9a01570">删除缓存</h4>
+<div class="outline-text-4" id="text-org9a01570">
+<p>
+如果需要撤消上面的创建操作：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ lvconvert --uncache dataVG/dataLV
+</pre>
+</div>
+
+<p>
+这会将缓存中挂起的写入操作提交到源逻辑卷， 然后删除缓存逻辑卷
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org00e0bb7" class="outline-3">
+<h3 id="org00e0bb7">Raid</h3>
+<div class="outline-text-3" id="text-org00e0bb7">
+<p>
+lvm(8) RAID是一种创建逻辑卷的方法，它使用多个物理设备来提高性能或容错能力 （镜像或读写分离等） 
+</p>
+
+<pre class="example">
+在LVM中，这些物理设备是单个卷组中的物理卷 
+
+LVM RAID支持RAID 0，RAID 1，RAID 4，RAID 5，RAID 6和RAID 10
+</pre>
+</div>
+
+<div id="outline-container-org8664321" class="outline-4">
+<h4 id="org8664321">配置RAID</h4>
+<div class="outline-text-4" id="text-org8664321">
+<p>
+创建物理卷：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ pvcreate /dev/sda2 /dev/sdb2
+</pre>
+</div>
+<p>
+创建卷组：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ vgcreate VolGroup00 /dev/sda2 /dev/sdb2
+</pre>
+</div>
+
+<p>
+使用 <span class="underline">lvcreate &#x2013;type raidlevel</span> 参数创建逻辑卷
+</p>
+
+<pre class="example">
+# lvcreate --type RaidLevel [OPTIONS] -n Name -L Size VG [PVs]
+</pre>
+<p>
+例如：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ lvcreate --type raid1 --mirrors 1 -L 20G -n myraid1vol VolGroup00 /dev/sda2 /dev/sdb2
+</pre>
+</div>
+
+<p>
+这将会在设备/dev/sda2、/dev/sdb2上和"VolGroup00"卷组中创建一个20GiB的镜像（mirrored）逻辑卷"myraid1vol" 
+</p>
+</div>
+</div>
+
+<div id="outline-container-org4ad70d1" class="outline-4">
+<h4 id="org4ad70d1">为RAID配置mkinitcpio</h4>
+<div class="outline-text-4" id="text-org4ad70d1">
+<p>
+如果的根文件系统在LVM RAID上，除了lvm2或sd-lvm2钩子，还需添加 <span class="underline">dm-raid</span> 以及恰当的 <span class="underline">RAID模块</span> (例如raid0，raid1，raid10或raid456)到mkinitcpio.conf中的MODULES数组中 
+</p>
+<ul class="org-ul">
+<li>对于基于busybox的initramfs：/etc/mkinitcpio.conf</li>
+</ul>
+<pre class="example">
+MODULES=(dm-raid raid0 raid1 raid10 raid456)
+HOOKS=(base udev ... block lvm2 filesystems)
+</pre>
+<ul class="org-ul">
+<li>对于基于systemd的initramfs：/etc/mkinitcpio.conf</li>
+</ul>
+<pre class="example">
+MODULES=(dm-raid raid0 raid1 raid10 raid456)
+HOOKS=(base systemd ... block sd-lvm2 filesystems)
+</pre>
+</div>
+</div>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">

@@ -572,4 +572,161 @@ $ pvmove /dev/sdb1 /dev/sdf1
    #+end_src
    这将停用此卷组，以便卸载存储它的容器
 * 逻辑卷类型
+  除了普通的逻辑卷, LVM还支持： _快照_ ,  _logical volume caching_ ,  _thin provisioned逻辑卷_ ，以及 _RAID_ 
+** 快照 
+   LVM可以给系统创建一个快照，由于使用了写入时复制(copy-on-write) 策略，相比传统的备份更有效率。 *初始的* 快照只有关联到 _实际数据的inode_ 的 _实体链接_ (hark-link)而已 
+   + 只要实际的数据没有改变，快照就只会包含指向数据的inode的指针，而非数据本身
+   + 一旦更改了快照对应的文件或目录，LVM就会自动 *拷贝* 相应的数据，包括快照所对应的 _旧数据的拷贝_ 和当前系统所对应的 _新数据的拷贝_ 
+
+   #+begin_example
+   这样的话，只要你修改的数据（包括原始的和快照的）不超过2G，就可以只使用2G的空间对一个有35G数据的系统创建快照
+   #+end_example
+
+   要创建快照，在卷组中必须有 *未被分配的空间* 
+
+   #+begin_example
+     和其他逻辑卷一样，快照也会占用卷组中的空间
+
+     所以，如果计划使用快照来备份你的根（root）分区，不要将整个卷组的空间都分配给根（root）逻辑卷
+   #+end_example
+
+*** 快照操作
+
+    可以像创建普通逻辑卷一样创建快照逻辑卷 
+
+    #+begin_src sh 
+  $ lvcreate --size 100M --snapshot --name snap01 /dev/vg0/lv
+    #+end_src
+
+    #+begin_example
+    不过这只能修改少于100M的数据，否则该快照逻辑卷空间会不足
+    #+end_example
+
+    要将逻辑卷卷'lv' 恢复到创建快照'snap01'时的状态，请使用：
+
+    #+begin_src sh 
+  $ lvconvert --merge /dev/vg0/snap01
+    #+end_src
+
+    如果逻辑卷处于活动状态，则在下次重新启动时将进行合并（merging）
+
+    #+begin_example
+      合并 甚至可在LiveCD中进行。注意： 合并后快照将被删除
+
+      也以拍摄多个快照，每个快照都可以任意与对应的逻辑卷合并 
+    #+end_example
+
+    快照也可以被挂载，并可用dd或者tar备份：
+    + 使用dd备份的快照的大小为拍摄快照后对应逻辑卷中变更过文件的大小
+    + 要使用备份，只需创建并挂载一个快照，并将备份写入或解压到其中0，再将快照合并到对应逻辑卷即可
+
+
+    #+begin_example
+      快照主要用于提供一个文件系统的拷贝，以用来备份
+
+      比起直接备份分区，使用快照备份可以提供一个更符合原文件系统的镜像
+    #+end_example
+
+** LVM 缓存
+
+   Cache逻辑卷将使用一个 _较小而快速_ 的逻辑卷，来提高 _较大但慢速_ 的逻辑卷的性能。它将大型逻辑卷中 _经常使用的块_ *存储* 到 _较快的缓存卷_ 中 
+
+   #+begin_example
+     LVM将这个小而快速的逻辑卷称为缓冲池逻辑卷（cache pool LV）
+
+     大而慢的逻辑卷则被称为源逻辑卷（origin LV）
+   #+end_example
+
+   由于dm-cache（内核驱动）的要求，LVM进一步将缓存池逻辑卷分为两个设备：
+   + 缓存数据逻辑卷：存放源逻辑卷中常用块的拷贝，以提升源逻辑卷的速度 
+   + 缓存元数据逻辑卷：存储记录信息，这些信息指定了源逻辑卷中的数据被存放到缓存逻辑卷中的位置
+
+   #+begin_example
+     这些元数据是用来确定“源逻辑卷”中的一个块是存储到自身空间还是缓存逻辑卷中
+
+     要想创建最好、最稳定的缓存逻辑卷，必须熟悉这些信息，同时所有这些被提到的逻辑卷都必须存放在一个卷组中 
+   #+end_example
+
+*** 创建缓存
+    最快速的方法是直接在快速的设备上创建一个物理卷，并把它添加到一个卷组中：
+
+    #+begin_src sh 
+  $ vgextend dataVG /dev/sdx
+    #+end_src
+
+    只需一步，即可在sdb上创建一个缓存池，自动生成元数据，将逻辑卷dataLV缓存到sdb上：
+
+    #+begin_src sh 
+  $ lvcreate --type cache --cachemode writethrough -L 20G -n dataLV_cachepool dataVG/dataLV /dev/sdx
+    #+end_src
+
+    #+begin_example
+    显然，如果想让缓存变得更大，可更改 -L参数。
+    #+end_example
+
+    Cachemode有两个可能的参数：
+    + writethrough： 确保任何数据写入都会被同时存储到缓存池逻辑卷和源逻辑卷中
+      + 在这种情况下，丢失与缓存池逻辑卷关联的设备不会丢失任何数据
+    + writeback： 可提供更好的性能
+      + 如果用于缓存的设备发生故障，数据丢失的风险会更高 
+
+    #+begin_example
+    如果未指定--cachemode，将会自动选择writethrough
+    #+end_example
+
+*** 删除缓存
+    如果需要撤消上面的创建操作：
+
+    #+begin_src sh 
+  $ lvconvert --uncache dataVG/dataLV
+    #+end_src
+
+    这会将缓存中挂起的写入操作提交到源逻辑卷， 然后删除缓存逻辑卷
+
+** Raid 
+   lvm(8) RAID是一种创建逻辑卷的方法，它使用多个物理设备来提高性能或容错能力 （镜像或读写分离等） 
+
+   #+begin_example
+     在LVM中，这些物理设备是单个卷组中的物理卷 
+
+     LVM RAID支持RAID 0，RAID 1，RAID 4，RAID 5，RAID 6和RAID 10
+   #+end_example
+
+*** 配置RAID
+    创建物理卷：
+
+    #+begin_src sh 
+  $ pvcreate /dev/sda2 /dev/sdb2
+    #+end_src
+    创建卷组：
+
+    #+begin_src sh 
+  $ vgcreate VolGroup00 /dev/sda2 /dev/sdb2
+    #+end_src
+
+    使用 _lvcreate --type raidlevel_ 参数创建逻辑卷
+
+    #+begin_example
+    # lvcreate --type RaidLevel [OPTIONS] -n Name -L Size VG [PVs]
+    #+end_example
+    例如：
+
+    #+begin_src sh 
+  $ lvcreate --type raid1 --mirrors 1 -L 20G -n myraid1vol VolGroup00 /dev/sda2 /dev/sdb2
+    #+end_src
+
+    这将会在设备/dev/sda2、/dev/sdb2上和"VolGroup00"卷组中创建一个20GiB的镜像（mirrored）逻辑卷"myraid1vol" 
+
+*** 为RAID配置mkinitcpio
+    如果的根文件系统在LVM RAID上，除了lvm2或sd-lvm2钩子，还需添加 _dm-raid_ 以及恰当的 _RAID模块_ (例如raid0，raid1，raid10或raid456)到mkinitcpio.conf中的MODULES数组中 
+    + 对于基于busybox的initramfs：/etc/mkinitcpio.conf 
+    #+begin_example
+    MODULES=(dm-raid raid0 raid1 raid10 raid456)
+    HOOKS=(base udev ... block lvm2 filesystems)
+    #+end_example
+    + 对于基于systemd的initramfs：/etc/mkinitcpio.conf
+    #+begin_example
+    MODULES=(dm-raid raid0 raid1 raid10 raid456)
+    HOOKS=(base systemd ... block sd-lvm2 filesystems)
+    #+end_example
 
