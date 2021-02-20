@@ -284,6 +284,292 @@ $ lvcreate -L 10G VolGroup00 -n lvolhome /dev/sdc1
     #+end_example
 ** 内核启动参数
    如果根文件系统位于逻辑分卷，则root= 内核参数必须指向一个映射设备，比如/dev/mapper/vg-name-lv-name
+* 配置
+** 高级选项
+   可以通过修改 _/etc/lvm/lvm.conf_ 文件中的 _auto_activation_volume_list_ 参数 *限制* _自动激活的卷_ 
 
+   #+begin_example
+   如果存在问题，可以将此选项注释掉 
+   #+end_example
+** 调整卷
+*** 物理卷
+    对于存在物理卷的设备，在扩增其容量之后或缩小其容量之前，必须使用 _pvresize_ 命令对应地增加或减少物理卷的大小 
+**** 扩增
+     增大分区 _/dev/sda1_ 的容量之后，需要执行以下命令扩展物理卷的大小：
 
+     #+begin_src sh 
+  $ pvresize /dev/sda1
+     #+end_src
+
+     命令将自动探测设备当前大小并将物理卷扩展到其最大容量
+
+     #+begin_example
+     注意： 该命令可在卷在线（on-line）时运行
+     #+end_example
+**** 缩小
+     在减少某个物理卷所在设备大小之前，需要通过指定 _--setphysicalvolumesize_ 大小参数缩小物理卷大小，例如：
+
+     #+begin_src sh 
+  $ pvresize --setphysicalvolumesize 40G /dev/sda1
+     #+end_src
+
+     该命令可能会提示以下错误：
+     #+begin_example
+       /dev/sda1: cannot resize to 25599 extents as later ones are allocated.
+	0 physical volume(s) resized / 1 physical volume(s) not resized
+     #+end_example
+     即该物理卷已分配物理区域超过了命令指定的新大小边界，pvresize会拒绝将物理卷缩小
+
+     #+begin_example
+       若磁盘空间足够，可通过pvmove将物理区域重新分配至别的卷组来解决这个问题
+     #+end_example
+***** 移动物理区域
+      在移动空闲的物理区域到卷尾部之前，需要先查看物理分段。如下例所示，仅有一个物理卷/dev/sdd1, 一个卷组vg1和一个逻辑卷backup：
+
+      #+begin_src sh 
+  $ pvdisplay -v -m
+
+    Finding all volume groups.
+      Using physical volume(s) on command line.
+    --- Physical volume ---
+    PV Name               /dev/sdd1
+    VG Name               vg1
+    PV Size               1.52 TiB / not usable 1.97 MiB
+    Allocatable           yes 
+    PE Size               4.00 MiB
+    Total PE              399669
+    Free PE               153600
+    Allocated PE          246069
+    PV UUID               MR9J0X-zQB4-wi3k-EnaV-5ksf-hN1P-Jkm5mW
+
+    --- Physical Segments ---
+    Physical extent 0 to 153600:
+      FREE
+    Physical extent 153601 to 307199:
+      Logical volume	/dev/vg1/backup
+      Logical extents	1 to 153599
+    Physical extent 307200 to 307200:
+      FREE
+    Physical extent 307201 to 399668:
+      Logical volume	/dev/vg1/backup
+      Logical extents	153601 to 246068
+      #+end_src
+
+      可用空间在卷中段。为了减小物理卷大小，首先必须把所有的已用分段移到前部
+
+      #+begin_example
+	此例中，第一个可用空间在第0至第153600分段共153601个可用区域。可以从最后的分段中移动相同数目的物理区域来填补这段空间
+      #+end_example
+
+      #+begin_src sh 
+  $ pvmove --alloc anywhere /dev/sdd1:307201-399668 /dev/sdd1:0-92466
+
+  /dev/sdd1: Moved: 0.1 %
+  /dev/sdd1: Moved: 0.2 %
+  ...
+  /dev/sdd1: Moved: 99.9 %
+  /dev/sdd1: Moved: 100,0%
+      #+end_src
+
+      + 命令将92467 (399668-307201)个物理区域从最后一个分段移动到第一个分段：由于第一个分段共有153600个空闲的物理区域，可以容纳92467个物理区域，命令可以成功执行
+
+      + 参数--alloc anywhere可以用于在同一个分区中移动物理区域的
+      #+begin_example
+      若要在不同分区中移动，命令形式应该是# pvmove /dev/sdb1:1000-1999 /dev/sdc1:0-999
+      #+end_example
+      + 当操作的数据较多时，移动操作将持续很久（一到两个小时）
+      #+begin_example
+	最好在Tmux或GNU Screen会话中执行此过程
+
+	任何形式的意外中断都可能会导致致命错误
+      #+end_example
+      + 当操作完成后，可运行Fsck保证文件系统完整性
+
+***** 调整物理卷大小
+      当所有空闲分段都移动到最后的物理区域时，运行$ vgdisplay查看。之后可以再次运行命令：
+      #+begin_src sh 
+  $ pvresize --setphysicalvolumesize size PhysicalVolume
+      #+end_src
+
+      结果类似：
+
+      #+begin_src sh 
+  $ pvs
+
+    PV         VG   Fmt  Attr PSize    PFree 
+    /dev/sdd1  vg1  lvm2 a--     1t     500g
+      #+end_src
+
+***** 调整分区大小
+      最后，可以用你喜欢的分区工具来缩小该分区
+
+*** 逻辑卷
+    lvresize(8)提供一些与lvextend(8)和lvreduce(8)相同的命令与选项，并同时允许两种类型的操作。然而，这几个命令都提供一个-r/--resizefs选项，使用fsadm(8)在调整逻辑卷时同时调整其中的文件系统（支持ext2, ext3, ext4, ReiserFS 和 XFS ）。 因此，对普通使用来说，使用 _lvresize_ 和 _--resizefs_ 将会更容易, 除非有特定的需求或希望完全控制流程
+
+    #+begin_example
+      警告： 尽管扩大一个文件系统可以“在线”(on-line)，也就是当它已挂载时完成，甚至对根分区
+
+      缩小一个文件系统却往往要求先卸载它，以避免丢失数据
+
+      请先确保你的文件系统支持相关操作
+    #+end_example
+
+**** 同时缩小逻辑卷和其文件系统
+
+     #+begin_example
+       注意： 只有ext2，ext3，ext4，ReiserFS和 XFS 文件系统支持以下操作
+     #+end_example
+
+     将MyVolGroup组中的逻辑卷mediavol扩大10GiB，并同时扩大其文件系统：
+     #+begin_src sh 
+  $ lvresize -L +10G --resizefs MyVolGroup/mediavol
+     #+end_src
+
+     将MyVolGroup组中的逻辑卷mediavol大小调整为15GiB，并同时调整其文件系统：
+
+     #+begin_src sh 
+  $ lvresize -L 15G --resizefs MyVolGroup/mediavol
+     #+end_src
+
+     将卷组中的所有剩余空间分配给mediavol：
+
+     #+begin_src sh 
+  $ lvresize -l +100%FREE --resizefs MyVolGroup/mediavol
+     #+end_src
+
+**** 单独设置文件系统大小
+
+     #+begin_example
+     对于不支持fsadm(8)的文件系统，请在缩小逻辑卷前或扩大逻辑卷后，使用适当的工具来调整文件系统的大小
+     #+end_example
+
+     先将MyVolGroup组中的逻辑卷mediavol扩大2 GiB，但不调整其文件系统：
+     #+begin_src sh 
+  $ lvresize -L +2G MyVolGroup/mediavol
+     #+end_src
+     然后在调整其文件系统，是其达到逻辑卷的大小：（以ext4为例）
+
+     #+begin_src sh 
+  $ resize2fs /dev/MyVolGroup/mediavol
+     #+end_src
+
+     要将逻辑卷mediavol缩小500 MiB，先计算调整后文件系统的大小并调整文件系统(以ext4为例)：
+
+     #+begin_src sh
+  $ resize2fs /dev/MyVolGroup/mediavol 调整后的大小
+     #+end_src
+
+     然后再缩小逻辑卷的大小：
+
+     #+begin_src sh 
+  $ lvresize -L -500M MyVolGroup/mediavol
+     #+end_src
+
+** 重命名卷
+*** 重命名卷组
+    要重命名一个卷组，请使用 _vgrename_ (8)命令。可使用下面的任意一条命令将卷组vg02重命名为my_volume_group
+
+    #+begin_src sh 
+  $ vgrename /dev/vg02 /dev/my_volume_group
+  $ vgrename vg02 my_volume_group
+    #+end_src
+*** 重命名逻辑卷
+    要重命名一个逻辑卷，请使用 _lvrename(8)_ 命令。可使用下面的任意一条命令将vg02组中的逻辑卷lvold重命名为lvnew.
+
+    #+begin_src sh 
+  $ lvrename /dev/vg02/lvold /dev/vg02/lvnew
+  $ lvrename vg02 lvold lvnew
+    #+end_src
+** 移除逻辑卷
+   #+begin_example
+   警告： 在移除逻辑卷之前，请先备份好数据以免丢失！
+   #+end_example
+   首先，找到所要移除的逻辑卷的名称。可以使用以下命令来查看系统的所有逻辑卷：
+
+   #+begin_src sh 
+  # lvs
+   #+end_src
+   接下来，找到所要移除的逻辑卷的挂载点
+
+   #+begin_src sh 
+  $ lsblk
+   #+end_src
+   并卸载它：
+
+   #+begin_src sh 
+  $ umount /<mountpoint>
+   #+end_src
+   最后，使用以下命令来移除逻辑卷：
+
+   #+begin_example
+   # lvremove <volume_group>/<logical_volume>
+   #+end_example
+   例如：
+
+   #+begin_src sh 
+  $ lvremove VolGroup00/lvolhome
+   #+end_src
+   请输入 _y_ 来确定你要执行移除逻辑卷操作 
+
+   #+begin_example
+   此外，请不要忘了更新/etc/fstab 
+   #+end_example
+
+   可以再次使用 _lvs_ 命令来确认逻辑卷已被移除
+** 添加物理卷到卷组中
+   首先创建一个新的物理卷，再把卷组扩充到该物理卷上：
+
+   #+begin_src sh 
+  $ pvcreate /dev/sdb1
+  $ vgextend VolGroup00 /dev/sdb1
+   #+end_src
+   这将增加你卷组中的物理区域总数，可以按需要将它们分配到逻辑卷中 
+
+   #+begin_example
+     注意： 将分区表保存在LVM所在媒体设备是个值得借鉴的方式
+
+     对于MBR可以使用类型8e，或GPT类型8e00
+   #+end_example
+** 从卷组中移除（物理）分区
+
+   #+begin_example
+   如果在这个物理分区上创建了一个逻辑卷，请先移除它 
+   #+end_example
+
+   首先，分区中的所有数据需要被转移到别的分区，幸而LVM提供了以下的简便方式：
+
+   #+begin_src sh 
+  $ pvmove /dev/sdb1
+   #+end_src
+
+   如果想指定所要转移的目标分区，那么可以把该分区作为pvmove的第二个参数：
+
+   #+begin_src sh 
+$ pvmove /dev/sdb1 /dev/sdf1
+   #+end_src
+
+   接着，从卷组（VG）中移除物理卷（PV）：
+
+   #+begin_src sh 
+  $ vgreduce myVg /dev/sdb1
+   #+end_src
+
+   或者把所有的空物理卷（PV）都移除掉：
+
+   #+begin_src sh 
+  $ vgreduce --all vg0
+   #+end_src
+   最后，如果仍然想要使用该分区，而且不想让LVM以为它是一个物理卷，那么可以执行以下命令：
+
+   #+begin_src sh 
+  $ pvremove /dev/sdb1
+   #+end_src
+** 停用卷组
+   只需执行：
+
+   #+begin_src sh 
+  $ vgchange -a n my_volume_group
+   #+end_src
+   这将停用此卷组，以便卸载存储它的容器
+* 逻辑卷类型
 
