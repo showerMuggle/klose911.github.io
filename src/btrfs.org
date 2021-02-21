@@ -10,9 +10,302 @@ Btrfs 是一种新型的 *写时复制* ( _Copy on Write_ ) Linux 文件系统�
   警告： Btrfs 有一些功能被认为是实验性的特性 
 #+end_example
 * 准备工作
-要使用一些用户空间工具的话，需要 安装 基础操作必须的 _btrfs-progs_ 软件包 
-#+begin_example
-  如果需要从 Btrfs 文件系统引导（比如说内核和内存盘在一个 Btrfs 的分区上），请检查 启动引导器 是否支持 Btrfs 
-#+end_example
+  要使用一些用户空间工具的话，需要 安装 基础操作必须的 _btrfs-progs_ 软件包 
+  #+begin_example
+    如果需要从 Btrfs 文件系统引导（比如说内核和内存盘在一个 Btrfs 的分区上），请检查 启动引导器 是否支持 Btrfs 
+  #+end_example
+* 创建文件系统
+  下文展示了如何创建一个新的 Btrfs 文件系统 
+** 单一设备上的文件系统
+   要在分区 /dev/partition 上创建一个 Btrfs 文件系统，执行：
+   #+begin_src sh 
+  $ mkfs.btrfs -L mylabel /dev/partition
+   #+end_src
+
+   Btrfs 用于元数据的 _默认节点大小_ (node size) 为 _16KB_ ，而用于数据的 _默认扇区大小_  (sector size) 等于 _页面大小_ (page size) 并会自动检测。 要对元数据使用较大的节点大小 (必须为扇区大小的倍数，最大允许 64KB)，请通过 _-n_ 开关为 node size 指定一个值。如下例所示，使用 32KB 块大小： 
+
+   #+begin_src sh 
+  $ mkfs.btrfs -L mylabel -n 32k /dev/partition
+   #+end_src
+
+   #+begin_example
+     根据 mkfs.btrfs(8) 手册页内容：
+
+     较小的节点大小会增加碎片，但也会让 B-trees 更高，进而使得锁定争用（locking contention）更少
+
+     较高的节点大小则能有更好的打包（packing）和更少的碎片，但代价是，更新元数据块时会使用更多的内存
+   #+end_example
+** 多设备文件系统
+   #+begin_example
+     警告： Btrfs 的 RAID 5 和 RAID 6 模式存在致命缺陷, 不应当用于任何场景，除非用来做丢失数据的测试
+   #+end_example
+   多个设备可以用来创建一组 _RAID_ 
+
+   #+begin_example
+     支持的 RAID 级别有 RAID 0, RAID 1, RAID 10, RAID 5 和 RAID 6
+
+     从 5.5 版本内核开始，也有了对 RAID1c3 和 RAID1c4 的支持，它们分别是 3 份冗余和 4 份冗余的 RAID 1
+   #+end_example
+
+   数据和元数据的 RAID 等级可以独立地用 _-d_ 和 _-m_ 参数指定：默认情况下 _元数据_ 使用镜像 ( _RAID1_ )，而 _数据_ 则会被 _条带化_ (RAID0)
+
+   #+begin_src sh 
+  $ mkfs.btrfs -d raid0 -m raid1 /dev/part1 /dev/part2 ...
+   #+end_src
+
+   可以使用 _-d single -m raid1_ 来创建一个 _JBOD 配置_ ，它会将磁盘视为一个文件系统，但是不会复制文件 
+
+   #+begin_example
+     要将多个 Btrfs 设备作为一个池使用的话，需要将 udev 钩子或者 btrfs 钩子加入到 /etc/mkinitcpio.conf 中 
+   #+end_example
+   注意：
+   + 可以稍后再将设备添加到多设备文件系统中
+   + 多个设备可以大小各异。但是，如果在一个 RAID 配置中一个硬盘的大小比其他的都大，那么它多出的空间将不会被使用
+   + 有些 引导加载程序 不支持多设备文件系统，比如 Syslinux
+   + Btrfs 不会自动从速度最快的设备读取，因此混合使用不同类型的磁盘会导致性能表现不一致
+* 配置文件系统
+** 写时复制 (CoW)
+   默认情况下 Btrfs 对所有文件使用 写时复制 (CoW)
+
+   #+begin_example
+     参阅 Btrfs 系统管理指南相关章节 以获取实现细节以及它的优点和缺点 
+   #+end_example
+*** 停用 CoW
+    要对某个子卷上的新文件停用写时复制，使用 _nodatacow_ *挂载* 选项：
+    + 这只会影响 *新创建的文件* ，写时复制仍然会在已存在的文件上生效
+    + nodatacow 参数同样会 *禁用压缩* 
+
+    #+begin_example
+      注意： 在单个文件系统中，无法使用 nodatacow 参数挂载某些子卷，而其他的使用 datacow 参数。第一个被挂载子卷的挂载参数将会应用于其他所有子卷 
+    #+end_example
+
+    要单文件或目录禁用写时复制特性，请使用下面的命令：
+    #+begin_src sh 
+  $ chattr +C [文件/目录的地址(path)]
+    #+end_src
+
+    这会为这个文件的单个引用停用写时复制，如果这个文件不只有一个引用(例如通过 cp --reflink=always 生成或者在文件系统快照中)，写时复制依然生效 
+
+    #+begin_example
+      注意： 在 Btrfs 上，'C' 标志应该被设置在新建的或者是空白的文件/目录，如果被设置在已有数据的文件，当块分配给该文件时，文件将不确定是否完全稳定
+
+      如果 'C' 标志被设置给一个目录，将不会影响目前的目录，但在该目录创建的新文件将具有 No_COW 属性
+    #+end_example
+    提示： 可以用下面的方法为已存在的文件或目录停用写时复制:
+    #+begin_src sh 
+  $ mv /path/to/dir /path/to/dir_old
+  $ mkdir /path/to/dir
+  $ chattr +C /path/to/dir
+  $ cp -a /path/to/dir_old/* /path/to/dir
+  $ rm -rf /path/to/dir_old
+    #+end_src
+
+    #+begin_example
+      需要保证这个过程中目标文件不会被使用，同时注意下面描述的 mv 或 cp --reflink 并不起作用 
+    #+end_example
+*** 创建轻量副本
+    默认情况下，使用 cp 复制 Btrfs 文件系统上的文件时，会创建 *实际副本* 。要 _创建_ *引用* _原始数据_ 的 *轻量级副本* ，请使用 _reflink_ 选项：
+
+    #+begin_src sh 
+  $ cp --reflink source dest 
+    #+end_src
+
+    #+begin_example
+      参阅 cp 的手册页获得关于 --reflink 标志的更多信息
+    #+end_example
+** 压缩
+   #+begin_example
+     只有在加入挂载选项后创建或修改的文件才会被压缩
+   #+end_example
+
+   Btrfs 支持 _透明_ 和 _自动_ *压缩* 。这不单减小了文件的大小，在某些特定的场景下 (比如单线程、重文件 I/O) 还 提高了性能
+
+   #+begin_example
+     尽管在其他的场景下（比如多线程和/或具有大文件 I/O 的 CPU 密集型任务）还是显著地影响了性能
+
+     使用更快的压缩算法，比如 zstd 和 lzo ，通常可以获得更好的性能，这个 性能测试 提供了详细的对比
+   #+end_example
+
+   _compress=alg_ 挂载选项可自动考虑评估为每个文件启用压缩，其中的 alg 处可以选填为 _zlib_ , _lzo_ ,  _zstd_ , 或者 _no_ (即不压缩)。通过此选项，Btrfs 将检查 _数据的第一部分_ 是否能将其 _压缩_ ：
+   + 如果是，则会压缩该文件的整个写入
+   + 否则将不会压缩任何内容
+
+   #+begin_example
+     由此，如果数据的第一部分没有被缩减，那么即使数据的其余部分将能大大缩减，写入时也不会被压缩
+
+     这样做是为了防止让磁盘一直等待着写入，直到所有要写入的数据传递给 Btrfs 并被压缩后为止 
+   #+end_example
+
+   另外可以改用 _compress-force_ =alg 挂载选项，这将让 Btrfs 跳过对 压缩是否可缩减数据的第一部分 的检查，并对每个文件启用自动压缩 
+   #+begin_example
+     最坏的情形下，这可 (稍微) 导致更多的空间被占用，并无故提高 CPU 占用率
+
+     不过，对多个混合使用系统的经验测试表明，与仅使用 compress=zstd (其也具有 10％ 磁盘压缩率) 相比，使用 compress-force=zstd 可以显著提高约 10％ 的磁盘压缩率，从而节省了 20％ 的总的有效磁盘空间
+   #+end_example
+
+   给现存文件启用压缩，可使用 _btrfs filesystem defragment -calg_ 命令，alg 处可选填为 zlib，lzo 或 zstd。举例来说，要用 zstd 方式给整个文件系统重新压缩，执行下列命令：
+   #+begin_src sh 
+  $ btrfs filesystem defragment -r -v -czstd /
+   #+end_src 
+
+   要在新的 Btrfs 分区上安装 Linux 时就启用压缩功能 请在 _挂载_ 文件系统时使用 compress 选项：
+
+   #+begin_src sh 
+  $ mount -o compress=zstd /dev/sdxY /mnt/
+   #+end_src
+
+   在配置过程中，请在 _fstab_ 文件中把 _compress=zstd_ 添加到 _根目录文件系统_ 的 _挂载选项_ 里 
+
+   #+begin_example
+     通过执行 chattr +c，也可以在不使用 compress 选项的情况下为每个单文件启用压缩属性。对目录执行会使这个目录下新文件自动被压缩。
+
+     如果使用 zstd 参数，使用较旧版本内核或者尚不支持 zstd 的 btrfs-progs 的系统可能不能读取或修复您的文件系统。
+
+     GRUB 在 2.04 版本中引入了对 zstd 的支持。使用此后版本时，请通过手动运行 grub-install (需添加适用于机器 BIOS/UEFI 设置的选项参数) 确保安装在 MBR/ESP 中的引导加载程序已确实升级，因为这些事情不会自动完成
+
+     rEFInd 在 0.11.4 以前的版本缺少对 zstd 的支持，可换用 refind-gitAUR，使用单独的没有启用 zstd 的引导分区，或者使用下例命令将引导文件的压缩方式重置为其它受支持的压缩方式：
+     $ btrfs filesystem defragment -v -clzo /boot/*
+   #+end_example
+*** 查看压缩类型和压缩比
+    _compsize_ 软件包能获取出一个文件列表 (或一整个 Btrfs 文件系统)，并测量出它们使用的压缩类型和其有效压缩比
+
+    #+begin_example
+      不过，其给出的未压缩时大小数值不一定能和其他程序 (比如 du) 给出的数值吻合
+
+      因为一个文件可能被多次引用或者即使文件的一部分不再被任何地方使用 (但其未被垃圾回收)，每一文件所占空间范围也只计数一次
+    #+end_example
+
+    -x 选项可让程序运行保持在单一个文件系统上，这在 compsize -x / (检查根目录) 之类的情况下很有用，可以避免程序去尝试访问非 Btrfs 子目录从而导致整个程序运行失败
+** 子卷
+   #+begin_example
+     btrfs 子卷不是 (也不能看作) 块设备,一个子卷可以看作 “POSIX 文件名字空间”，这个名字空间可以通过子卷上层访问，也可以独立挂载 
+   #+end_example
+   每个 btrfs 文件系统都有一个 _ID 为 5_ 的 *顶层子卷* 。它可以挂载为 _/_ （默认情况下），或者可以挂载为 _另一个子卷_ 
+
+   #+begin_example
+   子卷可以在文件系统中移动，它们通过其 ID 而不是路径来标识
+   #+end_example
+*** 创建子卷
+    要创建一个子卷:
+    #+begin_src sh 
+  $ btrfs subvolume create /path/to/subvolume
+    #+end_src
+*** 列出子卷列表
+    要列出 _当前路径_ (path) 下的子卷和它们的 ID:
+
+    #+begin_src sh 
+  $ btrfs subvolume list -p path
+    #+end_src
+*** 删除子卷
+    要删除一个子卷:
+
+    #+begin_src sh 
+  $ btrfs subvolume delete /path/to/subvolume
+    #+end_src
+
+    #+begin_example
+      自 Linux 4.18 起, 用户可以像移除常规目录一样删除一个子卷 (用 rm -r, rmdir 命令)
+    #+end_example
+*** 挂载子卷
+    可以使用 _subvol=/path/to/subvolume_ 或 _subvolid=objectid_ 挂载标志来安装子卷，就像文件系统分区一样
+
+    #+begin_example
+      例如，可以拥有一个名为 subvol_root 的子卷，并将其挂载为 /
+
+      通过在文件系统的顶层创建各种子卷，然后将它们挂载到适当的挂载点，可以模仿传统的文件系统分区
+
+      因此，可以使用 #快照 轻松地将文件系统（或其一部分）恢复到先前的状态
+    #+end_example
+
+    提示： 
+    + 不使用顶层子卷 (ID=5) 挂载为根目录，可以更方便地修改子卷的布局结构
+    + 相反，可考虑创建新的子卷，然后挂载为 / 
+
+    #+begin_example
+      注意： 大多数挂载选项适用于整个文件系统，并且只有要挂载的第一个子卷的选项才会生效，这是因为没有实现，未来可能会发生变化
+    #+end_example
+*** 以 root 用户身份挂载子卷
+    要使用一个子卷作为根挂载点，可以使用 _rootflags=subvol=/path/to/subvolume_ 一个 *内核启动参数* 指定子卷，并在 /etc/fstab 中编辑根挂载点并指定挂载选项 subvol=
+    #+begin_example
+      或者用 rootflags=subvolid=objectid 作为内核参数，并可以/etc/fstab 中用 ID 指定子卷 subvolid=objectid 作为挂载选项 
+    #+end_example
+
+*** 改变默认子卷
+    如果挂载时 _不指定 subvol= 选项_ 便会挂载默认子卷。要改变默认子卷，执行：
+
+    #+begin_src sh 
+  $ btrfs subvolume set-default subvolume-id /
+    #+end_src
+
+    subvolume-id 可以通过#列出子卷列表获得 
+
+    #+begin_example
+      注意： 在安装了 GRUB 的系统上，在改变默认子卷以后不要忘记运行 grub-install
+    #+end_example
+
+    通过 btrfs subvolume set-default 修改默认子卷将会导致文件系统的最顶层无法访问，除非使用 subvol=/ 或者 subvolid=5 挂载参数 
+
+** 配额
+   #+begin_example
+     警告： Qgroup 尚且不稳定且在有（过多）快照的子卷上应用配额可能会导致性能问题，比如在删除快照的时候
+   #+end_example
+
+   Btrfs中的配额支持是通过使用 _配额组_ 或 _Qgroup_ 在子卷级别实现的：默认情况下，每个子卷都以 _0/subvolume_id_ 的形式 *分配* _配额组_
+
+   #+begin_example
+   但是，如果需要的话，可以使用任意数字创建配额组 
+   #+end_example
+
+   要使用 Qgroup，首先需要启用它：
+
+   #+begin_src sh 
+  $ btrfs quota enable path
+   #+end_src
+
+   从此时开始，新创建的子卷将由这些配额组控制。为了能够为已创建的子卷启用配额：
+   1. 正常启用配额
+   2. 使用它们的 subvolume_id 为每个子卷创建一个配额组
+   3. 重新扫描它们：
+
+
+   #+begin_src sh 
+  $ btrfs subvolume list path | cut -d' ' -f2 | xargs -I{} -n1 btrfs qgroup create 0/{} path
+  $ btrfs quota rescan path
+   #+end_src
+   Btrfs 中的配额组形成 _树层次_ 结构，其中 Qgroup 附加到子卷。大小限制由每个 Qgroup 独立配置且在并在包含给定子卷的树中达到任何限制时应用。配额组的限制可以应用于 _总数据_ 使用， _非共享数据_ 使用， _压缩数据_ 使用或 _全部_ 
+
+   #+begin_example
+     文件复制和文件删除可能都会影响限制，因为如果删除原始卷的文件并且只剩下一个副本，则另一个 Qgroup 的非共享限制可能会更改
+
+     例如，新快照几乎与原始子卷共享所有块，对子卷的新写入将向专用限制提升，一个卷中的公共数据的删除将升高到另一个卷中的专用限制
+   #+end_example
+
+   要对 Qgroup 应用限制，请使用命令 _btrfs qgroup limit_ 。根据具体情况，使用 _总限制_ ， _非共享限制_ （-e）或 _压缩限制_ （-c）。显示文件系统使用中给定路径的使用情况和限制：
+
+   #+begin_src sh 
+  $ btrfs qgroup show -reF path
+   #+end_src
+
+** 提交间隔
+   将数据写入文件系统的频率由 Btrfs 本身和系统的设置决定。Btrfs 默认设置为 _30 秒_ 检查点间隔，新数据将在 30 秒内被提交到文件系统。 这可以通过在 _/etc/fstab_ 增加 _commit_ 挂载参数来修改：
+
+   #+begin_example
+   LABEL=arch64 / btrfs defaults,noatime,compress=lzo,commit=120 0 0
+   #+end_example
+
+   #+begin_example
+     系统范围的设置也会影响提交间隔，它们包括 /proc/sys/vm/* 下的文件，这超出了本文章的范围
+   #+end_example
+
+** SSD TRIM
+   Btrfs 文件系统能够从支持 TRIM 命令的 SSD 驱动器中 *释放* _未使用的块_ 
+
+   #+begin_example
+     内核从 5.6 版本开始提供了 异步丢弃 （asynchronous discard）支持，可使用挂载参数 discard=async 启用
+
+     已释放的空间范围不会被马上丢弃，它们会被集中起来并在稍后由一个单独的工作线程进行 TRIM，这将能改善提交延迟
+   #+end_example
+
+* 
 
 
