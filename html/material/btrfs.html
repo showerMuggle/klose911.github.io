@@ -282,7 +282,25 @@ for the JavaScript code in this tag.
 <li><a href="#org221daa9">SSD TRIM</a></li>
 </ul>
 </li>
-<li><a href="#orgb4b366f"></a></li>
+<li><a href="#orgf4fc81d">使用</a>
+<ul>
+<li><a href="#orgfe1169f">交换文件</a></li>
+<li><a href="#org2c44a0e">显示已使用的/空闲空间</a></li>
+<li><a href="#org0ec8e69">碎片整理</a></li>
+<li><a href="#orgf535803">RAID</a></li>
+<li><a href="#org36e67ac">检修 (Scrub)</a>
+<ul>
+<li><a href="#org66167fc">手动启动</a></li>
+<li><a href="#orgf6fc280">通过服务或者定时器启动</a></li>
+</ul>
+</li>
+<li><a href="#orgeecdfa1">数据平衡 (Balance)</a></li>
+<li><a href="#org8fdb5a3">快照</a></li>
+<li><a href="#org3300d6b">发送和接收</a></li>
+<li><a href="#org2bf495b">去重</a></li>
+</ul>
+</li>
+<li><a href="#orge5102cf">已知问题</a></li>
 </ul>
 </div>
 </div>
@@ -775,8 +793,237 @@ Btrfs 文件系统能够从支持 TRIM 命令的 SSD 驱动器中 <b>释放</b> 
 </div>
 </div>
 
-<div id="outline-container-orgb4b366f" class="outline-2">
-<h2 id="orgb4b366f"></h2>
+<div id="outline-container-orgf4fc81d" class="outline-2">
+<h2 id="orgf4fc81d">使用</h2>
+<div class="outline-text-2" id="text-orgf4fc81d">
+</div>
+<div id="outline-container-orgfe1169f" class="outline-3">
+<h3 id="orgfe1169f">交换文件</h3>
+<div class="outline-text-3" id="text-orgfe1169f">
+<p>
+自 Linux 内核版本 5.0 起 Btrfs 提供 <span class="underline">交换文件</span> 支持。对于内核版本 5.0+, Btfrs 有原生但带些许限制的交换文件支持：
+</p>
+<ul class="org-ul">
+<li>交换文件不可以放在快照子卷上，正确的过程是 <b>创建一个新子卷</b> 来存放交换文件</li>
+<li>Btrfs 不支持跨多设备文件系统上的交换文件</li>
+</ul>
+
+<pre class="example">
+警告： Linux 内核 5.0 之前的版本不支持交换文件
+
+在 5.0 之前的内核版本上搭配 Btrfs 使用交换文件可导致文件系统损坏
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org2c44a0e" class="outline-3">
+<h3 id="org2c44a0e">显示已使用的/空闲空间</h3>
+<div class="outline-text-3" id="text-org2c44a0e">
+<pre class="example">
+像 df 这样的用户空间工具可能不会准确的计算剩余空间，因为并没有分别计算文件和元数据的使用情况 
+</pre>
+<p>
+推荐使用 <span class="underline">btrfs filesystem usage</span> 来查看使用情况。比如说：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">$ btrfs filesystem usage /
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org0ec8e69" class="outline-3">
+<h3 id="org0ec8e69">碎片整理</h3>
+<div class="outline-text-3" id="text-org0ec8e69">
+<p>
+Btrfs 支持通过配置挂载参数 <span class="underline">autodefrag</span> 来实现在线的碎片整理。要手动整理根目录的话，可以使用：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ btrfs filesystem defragment -r /
+</pre>
+</div>
+
+<p>
+使用不带 -r 开关的上述命令将导致仅整理该目录的子卷所拥有的元数据，这允许通过简单地指定路径进行单个文件碎片整理
+</p>
+
+<pre class="example">
+对具有 CoW 副本（快照副本或使用cp --reflink或 bcp 创建的文件）进行碎片整理以及使用带压缩算法的 -c 开关进行碎片整理可能会导致生成两个不相关的文件从而增加磁盘使用量
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orgf535803" class="outline-3">
+<h3 id="orgf535803">RAID</h3>
+</div>
+
+<div id="outline-container-org36e67ac" class="outline-3">
+<h3 id="org36e67ac">检修 (Scrub)</h3>
+<div class="outline-text-3" id="text-org36e67ac">
+<p>
+Scrub 是一种 "在线文件系统检查工具"。它能读取文件系统中的文件和元数据，并使用校验值和 RAID 存储上的镜像区分并修复损坏的数据 
+</p>
+
+<pre class="example">
+警告： 运行 scrub 会阻止系统待机
+</pre>
+</div>
+
+<div id="outline-container-org66167fc" class="outline-4">
+<h4 id="org66167fc">手动启动</h4>
+<div class="outline-text-4" id="text-org66167fc">
+<p>
+启动一个（后台运行的）包含 / 目录的文件系统在线检查任务：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ btrfs scrub start /
+</pre>
+</div>
+<p>
+检查该任务的运行状态：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ btrfs scrub status /
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgf6fc280" class="outline-4">
+<h4 id="orgf6fc280">通过服务或者定时器启动</h4>
+<div class="outline-text-4" id="text-orgf6fc280">
+<ul class="org-ul">
+<li>btrfs-progs 软件包带有 <span class="underline">btrfs-scrub@.timer</span> 系统单元，用来每月运行 scrub 命令
+<ul class="org-ul">
+<li>通过添加挂载点的参数来启用它，例如btrfs-scrub@-.timer (/) 或者 btrfs-scrub@home.timer (/home).</li>
+</ul></li>
+<li>也可以通过启动 <span class="underline">btrfs-scrub@.service</span> 来手动运行 scrub (使用同样的挂载点参数)
+<ul class="org-ul">
+<li>相较 (以 root 用户身份运行) btrfs scrub，这么做的优点是会记录在 Systemd 日志中</li>
+</ul></li>
+</ul>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgeecdfa1" class="outline-3">
+<h3 id="orgeecdfa1">数据平衡 (Balance)</h3>
+<div class="outline-text-3" id="text-orgeecdfa1">
+<p>
+Balance 将会通过分配器再次传递文件系统中的所有数据。它主要用于在 <span class="underline">添加</span> 或 <span class="underline">删除</span> <b>设备</b> 时跨设备重新平衡文件系统中的数据
+</p>
+
+<pre class="example">
+如果设备出现故障，余额将为冗余 RAID 级别重新生成缺失的副本
+</pre>
+
+<p>
+在单设备文件系统上，余额对于（临时）减少分配但未使用（元）数据块的数量也是有用的。有时候这对于解决 "filesystem full" 故障 来说也是必须的：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ btrfs balance start /
+$ btrfs balance status /
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org8fdb5a3" class="outline-3">
+<h3 id="org8fdb5a3">快照</h3>
+<div class="outline-text-3" id="text-org8fdb5a3">
+<pre class="example">
+快照是和特定子卷共享文件和元数据的特殊子卷, 利用了 btrfs 的写时复制特性
+</pre>
+
+<p>
+要创建一个快照:
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ btrfs subvolume snapshot source [dest/]name
+</pre>
+</div>
+
+<ul class="org-ul">
+<li>source：要创建快照的对象</li>
+<li>[dest/]name：快照安放路径</li>
+<li>加入 <span class="underline">-r</span> 参数可以创建一个 <b>只读快照</b> 
+<ul class="org-ul">
+<li>为只读快照创建一个快照可以获得一个 <span class="underline">只读快照的可写入版本</span></li>
+</ul></li>
+</ul>
+
+<pre class="example">
+注意： 快照不是递归包含的，这意味着子卷内的子卷在快照里是空目录
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org3300d6b" class="outline-3">
+<h3 id="org3300d6b">发送和接收</h3>
+<div class="outline-text-3" id="text-org3300d6b">
+<p>
+可以通过 <span class="underline">send</span> 命令发送一个快照,通常会与 btrfs 中的 <span class="underline">receive</span> 组成管道。例如将快照 /root_backup (也许是/的备份) 发送到 /backup:
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ btrfs send /root_backup | btrfs receive /backup
+</pre>
+</div>
+
+<p>
+注意：只能发送 <span class="underline">只读快照</span> 
+</p>
+<pre class="example">
+上面的命令在将子卷复制到外部设备 (例如备份驱动器) 时会很有用 
+</pre>
+
+<p>
+也可以只发送两个快照间发生变化的部分,例如如果已经发送了快照 root_backup ,然后又建立了一个新的只读快照 root_backup_new ,可以这样完成增量发送:
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ btrfs send -p /root_backup /root_backup_new | btrfs receive /backup
+</pre>
+</div>
+
+<p>
+现在的 /backup 的快照会是 root_backup_new 
+</p>
+</div>
+</div>
+
+<div id="outline-container-org2bf495b" class="outline-3">
+<h3 id="org2bf495b">去重</h3>
+<div class="outline-text-3" id="text-org2bf495b">
+<p>
+使用写时复制，Btrfs 能够复制文件或整个子卷而无需实际复制数据
+</p>
+<pre class="example">
+但是，无论何时更改文件，都会创建一个新的“真正的”副本
+
+重复数据删除更进一步，通过主动识别共享公共序列的数据块并将它们组合到具有相同写时复制语义的范围内
+</pre>
+
+<p>
+专用于 Btrfs 分区去重的工具包括 <span class="underline">duperemove</span> ， <span class="underline">bedupAUR</span> 和 <span class="underline">btrfs-dedup</span> 。人们可能还希望仅使用基于文件的级别对数据进行重复数据删除，比如 <span class="underline">rmlint</span> 、 <span class="underline">jdupesAUR</span> 或者 <span class="underline">dduper-gitAUR</span> 
+</p>
+
+<pre class="example">
+此外，Btrfs开发人员正致力于带内（也称为同步或内联）重复数据删除，这意味着在将新数据写入文件系统时完成重复数据删除
+
+目前，它仍然是一个在 out-of-tree 开发的实验
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orge5102cf" class="outline-2">
+<h2 id="orge5102cf">已知问题</h2>
 </div>
 </div>
 <div id="postamble" class="status">

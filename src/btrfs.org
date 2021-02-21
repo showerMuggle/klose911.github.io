@@ -306,6 +306,137 @@ Btrfs 是一种新型的 *写时复制* ( _Copy on Write_ ) Linux 文件系统�
      已释放的空间范围不会被马上丢弃，它们会被集中起来并在稍后由一个单独的工作线程进行 TRIM，这将能改善提交延迟
    #+end_example
 
-* 
+* 使用
 
+** 交换文件
+   自 Linux 内核版本 5.0 起 Btrfs 提供 _交换文件_ 支持。对于内核版本 5.0+, Btfrs 有原生但带些许限制的交换文件支持：
+   + 交换文件不可以放在快照子卷上，正确的过程是 *创建一个新子卷* 来存放交换文件
+   + Btrfs 不支持跨多设备文件系统上的交换文件
+
+   #+begin_example
+     警告： Linux 内核 5.0 之前的版本不支持交换文件
+
+     在 5.0 之前的内核版本上搭配 Btrfs 使用交换文件可导致文件系统损坏
+   #+end_example
+
+** 显示已使用的/空闲空间
+   #+begin_example
+   像 df 这样的用户空间工具可能不会准确的计算剩余空间，因为并没有分别计算文件和元数据的使用情况 
+   #+end_example
+   推荐使用 _btrfs filesystem usage_ 来查看使用情况。比如说：
+   #+begin_src sh 
+  $ btrfs filesystem usage /
+   #+end_src
+
+** 碎片整理
+   Btrfs 支持通过配置挂载参数 _autodefrag_ 来实现在线的碎片整理。要手动整理根目录的话，可以使用：
+
+   #+begin_src sh 
+  $ btrfs filesystem defragment -r /
+   #+end_src
+
+   使用不带 -r 开关的上述命令将导致仅整理该目录的子卷所拥有的元数据，这允许通过简单地指定路径进行单个文件碎片整理
+
+   #+begin_example
+     对具有 CoW 副本（快照副本或使用cp --reflink或 bcp 创建的文件）进行碎片整理以及使用带压缩算法的 -c 开关进行碎片整理可能会导致生成两个不相关的文件从而增加磁盘使用量
+   #+end_example
+
+** RAID
+
+** 检修 (Scrub)
+   Scrub 是一种 "在线文件系统检查工具"。它能读取文件系统中的文件和元数据，并使用校验值和 RAID 存储上的镜像区分并修复损坏的数据 
+
+   #+begin_example
+   警告： 运行 scrub 会阻止系统待机
+   #+end_example
+
+*** 手动启动
+    启动一个（后台运行的）包含 / 目录的文件系统在线检查任务：
+
+    #+begin_src sh 
+  $ btrfs scrub start /
+    #+end_src
+    检查该任务的运行状态：
+
+    #+begin_src sh 
+  $ btrfs scrub status /
+    #+end_src
+
+*** 通过服务或者定时器启动
+    + btrfs-progs 软件包带有 _btrfs-scrub@.timer_ 系统单元，用来每月运行 scrub 命令
+      + 通过添加挂载点的参数来启用它，例如btrfs-scrub@-.timer (/) 或者 btrfs-scrub@home.timer (/home).
+    + 也可以通过启动 _btrfs-scrub@.service_ 来手动运行 scrub (使用同样的挂载点参数)
+      + 相较 (以 root 用户身份运行) btrfs scrub，这么做的优点是会记录在 Systemd 日志中
+
+**  数据平衡 (Balance)
+   Balance 将会通过分配器再次传递文件系统中的所有数据。它主要用于在 _添加_ 或 _删除_ *设备* 时跨设备重新平衡文件系统中的数据
+
+   #+begin_example
+     如果设备出现故障，余额将为冗余 RAID 级别重新生成缺失的副本
+   #+end_example
+
+   在单设备文件系统上，余额对于（临时）减少分配但未使用（元）数据块的数量也是有用的。有时候这对于解决 "filesystem full" 故障 来说也是必须的：
+
+   #+begin_src sh 
+  $ btrfs balance start /
+  $ btrfs balance status /
+   #+end_src
+
+** 快照
+   #+begin_example
+     快照是和特定子卷共享文件和元数据的特殊子卷, 利用了 btrfs 的写时复制特性
+   #+end_example
+
+   要创建一个快照:
+
+   #+begin_src sh 
+  $ btrfs subvolume snapshot source [dest/]name
+   #+end_src
+
+   + source：要创建快照的对象
+   + [dest/]name：快照安放路径
+   + 加入 _-r_ 参数可以创建一个 *只读快照* 
+     + 为只读快照创建一个快照可以获得一个 _只读快照的可写入版本_ 
+
+   #+begin_example
+     注意： 快照不是递归包含的，这意味着子卷内的子卷在快照里是空目录
+   #+end_example
+
+** 发送和接收
+   可以通过 _send_ 命令发送一个快照,通常会与 btrfs 中的 _receive_ 组成管道。例如将快照 /root_backup (也许是/的备份) 发送到 /backup:
+
+   #+begin_src sh 
+   $ btrfs send /root_backup | btrfs receive /backup
+   #+end_src
+
+   注意：只能发送 _只读快照_ 
+   #+begin_example
+     上面的命令在将子卷复制到外部设备 (例如备份驱动器) 时会很有用 
+   #+end_example
+
+   也可以只发送两个快照间发生变化的部分,例如如果已经发送了快照 root_backup ,然后又建立了一个新的只读快照 root_backup_new ,可以这样完成增量发送:
+
+   #+begin_src sh 
+  $ btrfs send -p /root_backup /root_backup_new | btrfs receive /backup
+   #+end_src
+
+   现在的 /backup 的快照会是 root_backup_new 
+
+** 去重
+   使用写时复制，Btrfs 能够复制文件或整个子卷而无需实际复制数据
+   #+begin_example
+     但是，无论何时更改文件，都会创建一个新的“真正的”副本
+
+     重复数据删除更进一步，通过主动识别共享公共序列的数据块并将它们组合到具有相同写时复制语义的范围内
+   #+end_example
+
+   专用于 Btrfs 分区去重的工具包括 _duperemove_ ， _bedupAUR_ 和 _btrfs-dedup_ 。人们可能还希望仅使用基于文件的级别对数据进行重复数据删除，比如 _rmlint_ 、 _jdupesAUR_ 或者 _dduper-gitAUR_ 
+
+   #+begin_example
+     此外，Btrfs开发人员正致力于带内（也称为同步或内联）重复数据删除，这意味着在将新数据写入文件系统时完成重复数据删除
+
+     目前，它仍然是一个在 out-of-tree 开发的实验
+   #+end_example
+
+* 已知问题
 
