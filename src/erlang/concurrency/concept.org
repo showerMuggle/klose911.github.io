@@ -2,7 +2,7 @@
 #+HTML_HEAD: <link rel="stylesheet" type="text/css" href="css/main.css" />
 #+HTML_LINK_UP: concurrency.html   
 #+HTML_LINK_HOME: concurrency.html
-#+OPTIONS: num:nil timestamp:nil ^:nil *:nil 
+#+OPTIONS: num:nil timestamp:nil ^:nil 
 
 
 #+begin_example
@@ -48,3 +48,142 @@ Erlang的并发是基于 *进程* ( _process_ )的。进程是一些独立的小
   但在Erlang里,进程编程是很简单的
 #+end_example
 * 基本并发函数
+  在顺序编程里学到的知识同样适用于并发编程。要做的只是加上下面这几个基本函数
+
+** 创建进程
+   #+begin_src erlang
+     Pid = spawn(Mod, Func, Args) 
+   #+end_src
+
+   *创建* 一个新的 _并发进程_ 来执行 apply(Mod, Func, Args) 
+   + 这个新进程和调用进程 *并发* 运行 
+   + spawn 返回一个 *进程标识符* _Pid_ (process identifier的简称) 
+     + 可以用 Pid 来给此进程发送消息
+   + 元数为 length(Args) 的 Func 函数 *必须从 Mod 模块导出* 
+
+   #+begin_example
+     注意： 当一个新进程被创建后，会使用最新版的代码定义模块 
+   #+end_example
+
+   另外一种形式的spawn调用：
+
+   #+begin_src erlang
+     Pid = spawn(Func)
+   #+end_src
+
+   创建一个新的并发进程来执行 Fun() ：这种形式的 spawn 总是使用 *被执行fun的当前值* ,而且这个fun *无需从模块里导出* 
+
+   #+begin_example
+     这两种 spawn 形式的本质区别与动态代码升级有关
+   #+end_example
+
+** 发送消息
+   #+begin_src erlang
+     Pid ! Message
+   #+end_src
+     
+   向标识符为 _Pid_ 的进程 *发送* 消息 _Message_ ：
+   + 消息发送是 _异步_ 的。 *发送方并不等待* ,而是会继续之前的工作
+   + _!_ 被称为 *发送操作符*
+   + Pid ! M 的返回值是 M 
+   #+begin_example
+     Pid1 ! Pid2 !...! Msg 的意思是把消息 Msg 发送给 Pid1 、Pid2 等所有进程
+   #+end_example
+
+** 接收消息
+   接收发送给某个进程的消息。它的语法如下:
+
+   #+begin_src erlang 
+  receive 
+      Pattern1 [when Guard1] ->
+	  Expression1;
+      Pattern2 [when Guard2] ->
+	  Expression2;
+      ...
+  end 
+   #+end_src
+
+   当某个消息到达进程后：
+   + 系统会尝试将它与 Pattern1 (以及可选的关卡 Guard1 )匹配，如果成功就执行 Expressions1
+   + 如果第一个模式不匹配,就会尝试 Pattern2
+   + 以此类推 
+   + 如果没有匹配的模式,消息就会被保存起来供以后处理,进程则会开始等待下一条消息
+
+** 实例
+   首先来看一个的计算面积的代码：
+
+   #+begin_src erlang 
+  -module(geometry).  
+  -export([area/1]). 
+
+  area({rectangle, Width, Height}) -> Width * Height;
+  area({square, Side})             -> Side * Side.
+   #+end_src
+
+   现在把这个函数改写成一个进程。为此从 area 函数的参数里取了两个模式，然后把它们重置为接收语句里的模式：
+
+   #+begin_src erlang 
+  -module(area_server0).  
+  -export([loop/0]). 
+
+  loop() ->
+      receive
+	  {rectangle, Width, Ht} -> 
+	      io:format("Area of rectangle is ~p~n",[Width * Ht]),
+	      loop();
+	  {square, Side} -> 
+	      io:format("Area of square is ~p~n", [Side * Side]),
+	      loop()
+      end.
+   #+end_src
+
+*** 测试
+    在eshell 里创建一个 _area_server0_ 模块 _loop_ 函数的并发进程，然后返回 Pid ,也就是打印出来的 <0.88.0> 
+    #+begin_src sh 
+  1> c (area_server0) . 
+  {ok,area_server0}
+  2> 
+  2> Pid = spawn(area_server0, loop, []) . 
+  <0.88.0>
+    #+end_src 
+
+    向这个进程发送了一个消息
+    #+begin_src sh 
+  3> Pid ! {rectangle, 6, 10} . 
+  Area of rectangle is 60
+  {rectangle,6,10}
+    #+end_src
+    这个消息匹配 loop/0 接收语句里的第一个模式: 
+
+    #+begin_src erlang 
+  receive
+      {rectangle, Width, Ht} -> 
+	  io:format("Area of rectangle is ~p~n",[Width * Ht]),
+	  loop();
+    #+end_src
+
+    收到消息之后,这个进程打印出矩形的面积。最后,shell打印出 {rectangle, 6, 10} 
+
+    #+begin_example
+      这是因为 Pid ! Msg 的值被定义为 Msg 
+    #+end_example
+
+    同样也可以用它来计算正方形：
+
+    #+begin_src sh 
+  4> Pid ! {square, 12} .       
+  Area of square is 144
+  {square,12}
+    #+end_src
+
+** 总结
+   到目前为止粗略介绍了 spawn 、 send 和 receive 的工作方式：
+   + 当 spawn 命令被执行时,系统会创建一个新的进程，每个进程都带有一个邮箱,这个邮箱是和进程同步创建的
+   + 给某个进程发送消息后,消息会被放入该进程的邮箱
+   + 只有当程序执行一条接收语句时才会读取邮箱 
+
+   #+begin_example
+     好了,就是这些。不需要线程、锁、信号和人工控制
+   #+end_example
+
+* 客户端-服务器 
