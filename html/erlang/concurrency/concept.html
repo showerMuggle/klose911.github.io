@@ -256,15 +256,27 @@ for the JavaScript code in this tag.
 <li><a href="#org228a393">创建进程</a></li>
 <li><a href="#org9ca9054">发送消息</a></li>
 <li><a href="#org6058d16">接收消息</a></li>
-<li><a href="#org19a2f2d">实例</a>
+<li><a href="#orge36c9d3">实例</a>
 <ul>
-<li><a href="#org53aa6a0">测试</a></li>
+<li><a href="#orgd4a7ecf">测试</a></li>
 </ul>
 </li>
 <li><a href="#org33ae3e1">总结</a></li>
 </ul>
 </li>
-<li><a href="#orgdd70aa2">客户端-服务器</a></li>
+<li><a href="#orgdd70aa2">客户端-服务器</a>
+<ul>
+<li><a href="#orgab6365d">实例</a>
+<ul>
+<li><a href="#org0e0da68">测试</a></li>
+<li><a href="#orgee60041">改进</a></li>
+<li><a href="#org3d38d7e">封装</a></li>
+<li><a href="#org8b8c62d">总结</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#org267a785">进程很轻巧</a></li>
 </ul>
 </div>
 </div>
@@ -425,9 +437,9 @@ Pid1 ! Pid2 !...! Msg 的意思是把消息 Msg 发送给 Pid1 、Pid2 等所有
 </div>
 </div>
 
-<div id="outline-container-org19a2f2d" class="outline-3">
-<h3 id="org19a2f2d">实例</h3>
-<div class="outline-text-3" id="text-org19a2f2d">
+<div id="outline-container-orge36c9d3" class="outline-3">
+<h3 id="orge36c9d3">实例</h3>
+<div class="outline-text-3" id="text-orge36c9d3">
 <p>
 首先来看一个的计算面积的代码：
 </p>
@@ -462,9 +474,9 @@ Pid1 ! Pid2 !...! Msg 的意思是把消息 Msg 发送给 Pid1 、Pid2 等所有
 </div>
 </div>
 
-<div id="outline-container-org53aa6a0" class="outline-4">
-<h4 id="org53aa6a0">测试</h4>
-<div class="outline-text-4" id="text-org53aa6a0">
+<div id="outline-container-orgd4a7ecf" class="outline-4">
+<h4 id="orgd4a7ecf">测试</h4>
+<div class="outline-text-4" id="text-orgd4a7ecf">
 <p>
 在eshell 里创建一个 <span class="underline">area_server0</span> 模块 <span class="underline">loop</span> 函数的并发进程，然后返回 Pid ,也就是打印出来的 &lt;0.88.0&gt; 
 </p>
@@ -541,6 +553,369 @@ Area of square is 144
 
 <div id="outline-container-orgdd70aa2" class="outline-2">
 <h2 id="orgdd70aa2">客户端-服务器</h2>
+<div class="outline-text-2" id="text-orgdd70aa2">
+<p>
+传统的客户端-服务器架构是指一个分隔客户端与服务器的网络：
+</p>
+<ul class="org-ul">
+<li>大多数情况下客户端会有多个实例,而服务器只有一个</li>
+<li><p>
+服务器这个词经常会让人联想到专业机器上运行重量级软件的画面 
+</p>
+
+<pre class="example">
+客户端-服务器架构是Erlang的中心
+</pre></li>
+</ul>
+
+<p>
+Erlang 的实现机制则要轻量得多。客户端-服务器架构里的 <span class="underline">客户端</span> 和 <span class="underline">服务器</span> 是不同的 <b>进程</b> ,它们之间的 <span class="underline">通信</span> 使用普通的Erlang <b>消息传递</b> 机制
+</p>
+
+<pre class="example">
+客户端和服务器可以运行在同一台机器上,也可以运行在不同的机器上
+</pre>
+
+<p>
+<span class="underline">客户端</span> 和 <span class="underline">服务器</span> 这两个词是指这两种进程所扮演的角色:
+</p>
+<ul class="org-ul">
+<li>客户端总是通过向服务器发送一个请求来发起计算</li>
+<li>服务器计算后生成回复,然后发送一个响应给客户端</li>
+</ul>
+</div>
+
+<div id="outline-container-orgab6365d" class="outline-3">
+<h3 id="orgab6365d">实例</h3>
+<div class="outline-text-3" id="text-orgab6365d">
+<p>
+下面来编写第一个客户端-服务器应用程序
+</p>
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #ffd700;">-module</span>(area_server1).  
+<span style="color: #ffd700;">-export</span>([<span style="color: #98f5ff;">loop/0</span>, <span style="color: #98f5ff;">rpc/2</span>]). 
+<span style="color: #daa520; font-weight: bold;">rpc</span>(<span style="color: #4eee94;">Pid</span>, <span style="color: #4eee94;">Request</span>) -&gt;
+    <span style="color: #4eee94;">Pid</span> ! {<span style="color: #f08080;">self</span>(), <span style="color: #4eee94;">Request</span>},
+    <span style="color: #00bfff; font-weight: bold;">receive</span>
+        <span style="color: #4eee94;">Response</span> -&gt;
+            <span style="color: #4eee94;">Response</span>
+    <span style="color: #00bfff; font-weight: bold;">end</span>.
+<span style="color: #daa520; font-weight: bold;">loop</span>() -&gt;
+    <span style="color: #00bfff; font-weight: bold;">receive</span>
+        {<span style="color: #4eee94;">From</span>, {rectangle, <span style="color: #4eee94;">Width</span>, <span style="color: #4eee94;">Ht</span>}} -&gt;<span style="color: #daa520; font-weight: bold;"> </span>
+            <span style="color: #4eee94;">From</span> ! <span style="color: #4eee94;">Width</span> * <span style="color: #4eee94;">Ht</span>,
+            <span style="color: #98f5ff;">loop</span>();
+        {<span style="color: #4eee94;">From</span>, {circle, <span style="color: #4eee94;">R</span>}} -&gt;<span style="color: #daa520; font-weight: bold;"> </span>
+            <span style="color: #4eee94;">From</span> !  3.14159 * <span style="color: #4eee94;">R</span> * <span style="color: #4eee94;">R</span>,
+            <span style="color: #98f5ff;">loop</span>();
+        {<span style="color: #4eee94;">From</span>, <span style="color: #4eee94;">Other</span>} -&gt;
+            <span style="color: #4eee94;">From</span> ! {error,<span style="color: #4eee94;">Other</span>},
+            <span style="color: #98f5ff;">loop</span>()
+    <span style="color: #00bfff; font-weight: bold;">end</span>.
+</pre>
+</div>
+
+<p>
+首先,对上一节里编写的程序做一些小的修改 
+</p>
+
+<pre class="example">
+在上一个程序里,我们只需要向某个进程发送请求,然后接收它并打印出来，现在要做的是向发送原请求的进程发送一个响应
+
+问题是,我们不知道该把响应发给谁。要发送一个响应,客户端必须加入一个服务器可以回复的地址
+
+这就像是给某人写信，如果你想得到回复,最好把你的地址写在信中!
+</pre>
+
+<p>
+因此,发送方必须加入一个回复地址。要做到这一点,可以把：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang">Pid ! {rectangle, 6, 10} . 
+</pre>
+</div>
+
+<p>
+修改成下面这样， <span class="underline">self()</span> 是 <span class="underline">客户端进程</span> 的 <span class="underline">标识符</span> ：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang">Pid ! {<span style="color: #f08080;">self</span>(), {rectangle, 6, 10}} . 
+</pre>
+</div>
+
+<p>
+因为消息发送格式变了，必须把接收请求的代码从:
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #daa520; font-weight: bold;">loop</span>() -&gt;
+    <span style="color: #00bfff; font-weight: bold;">receive</span>
+        {rectangle, <span style="color: #4eee94;">Width</span>, <span style="color: #4eee94;">Ht</span>} -&gt;<span style="color: #daa520; font-weight: bold;"> </span>
+            <span style="color: #98f5ff;">io</span>:<span style="color: #98f5ff;">format</span>(<span style="color: #deb887;">"Area of rectangle is ~p~n"</span>,[<span style="color: #4eee94;">Width</span> * <span style="color: #4eee94;">Ht</span>]),
+            <span style="color: #98f5ff;">loop</span>();
+         <span style="color: #5f9ea0; font-style: italic;">% </span><span style="color: #5f9ea0; font-style: italic;">......</span>
+</pre>
+</div>
+
+<p>
+改成为：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #daa520; font-weight: bold;">loop</span>() -&gt;
+    <span style="color: #00bfff; font-weight: bold;">receive</span>
+        {<span style="color: #4eee94;">From</span>, {rectangle, <span style="color: #4eee94;">Width</span>, <span style="color: #4eee94;">Ht</span>}} -&gt;<span style="color: #daa520; font-weight: bold;"> </span>
+            <span style="color: #4eee94;">From</span> ! <span style="color: #4eee94;">Width</span> * <span style="color: #4eee94;">Ht</span>,
+            <span style="color: #98f5ff;">loop</span>();
+        <span style="color: #5f9ea0; font-style: italic;">% </span><span style="color: #5f9ea0; font-style: italic;">.....</span>
+</pre>
+</div>
+
+<p>
+注意：如何把计算结果发回由 <span class="underline">From</span> 参数指定的进程的
+</p>
+
+<pre class="example">
+因为客户端把这个参数设置成它自己的ID，所以能收到结果
+</pre>
+
+<ul class="org-ul">
+<li><span class="underline">发送请求的进程</span> 通常称为 <span class="underline">客户端</span></li>
+<li><span class="underline">接收请求并回复客户端的进程</span> 称为 <span class="underline">服务器</span></li>
+</ul>
+
+<pre class="example">
+另外,最佳实践是确认发送给进程的每一个消息都已收到
+
+如果发送给进程的消息不匹配原始接收语句里的任何一个模式,这条消息就会遗留在进程邮箱里,永远无法接收
+
+为了解决这个问题,在接收语句的最后加了一个子句,让它能匹配所有发送给此进程的消息
+</pre>
+
+<p>
+最后添加一个名为 <span class="underline">rpc</span> (即远程过程调用)的实用小函数, 它封装了向服务器发送请求和等待响应的代码 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #daa520; font-weight: bold;">rpc</span>(<span style="color: #4eee94;">Pid</span>, <span style="color: #4eee94;">Request</span>) -&gt;
+    <span style="color: #4eee94;">Pid</span> ! {<span style="color: #f08080;">self</span>(), <span style="color: #4eee94;">Request</span>},
+    <span style="color: #00bfff; font-weight: bold;">receive</span>
+        <span style="color: #4eee94;">Response</span> -&gt;
+            <span style="color: #4eee94;">Response</span>
+    <span style="color: #00bfff; font-weight: bold;">end</span>.
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org0e0da68" class="outline-4">
+<h4 id="org0e0da68">测试</h4>
+<div class="outline-text-4" id="text-org0e0da68">
+<p>
+可以在shell里试验一下它：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">1&gt; c (area_server1) <span style="color: #f08080;">.</span> 
+{ok,area_server1}
+2&gt; 
+2&gt; Pid = spawn(area_server1, loop, []) <span style="color: #f08080;">.</span> 
+&lt;0.88.0&gt;
+3&gt; area_server1:rpc(Pid, {rectangle, 6, 8}) <span style="color: #f08080;">.</span>  
+48
+4&gt;  
+4&gt; area_server1:rpc(Pid, {circle, 6}) <span style="color: #f08080;">.</span>        
+113.09723999999999
+5&gt;   
+5&gt; area_server1:rpc(Pid, socks) <span style="color: #f08080;">.</span>         
+{error,socks}
+</pre>
+</div>
+
+<pre class="example">
+这段代码有个小问题：
+
+在 rpc/2 函数里,我们向服务器发送请求然后等待响应，但我们并不是等待来自服务器的响应,而是在等待任意消息
+
+如果其他某个进程在客户端等待来自服务器的消息时向它发送了一个消息,客户端就会将此消息错误解读为来自服务器的响应
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orgee60041" class="outline-4">
+<h4 id="orgee60041">改进</h4>
+<div class="outline-text-4" id="text-orgee60041">
+<p>
+要纠正这个问题,可以把接收语句的形式修改如下：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #daa520; font-weight: bold;">loop</span>() -&gt;
+    <span style="color: #00bfff; font-weight: bold;">receive</span> 
+        {<span style="color: #4eee94;">From</span>, ...} -&gt;
+            <span style="color: #4eee94;">From</span> ! {<span style="color: #f08080;">self</span>(), ...},
+            <span style="color: #98f5ff;">loop</span>();
+        <span style="color: #5f9ea0; font-style: italic;">%</span><span style="color: #5f9ea0; font-style: italic;">... -&gt;</span>
+    <span style="color: #00bfff; font-weight: bold;">end</span> .  
+</pre>
+</div>
+
+<p>
+再把 rpc 改成：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #daa520; font-weight: bold;">rpc</span>(<span style="color: #4eee94;">Pid</span>, <span style="color: #4eee94;">Request</span>) -&gt;
+    <span style="color: #4eee94;">Pid</span> ! {<span style="color: #f08080;">self</span>(), <span style="color: #4eee94;">Request</span>},
+    <span style="color: #00bfff; font-weight: bold;">receive</span>
+        {<span style="color: #4eee94;">Pid</span>, <span style="color: #4eee94;">Response</span>} -&gt;
+            <span style="color: #4eee94;">Response</span>
+    <span style="color: #00bfff; font-weight: bold;">end</span>.
+</pre>
+</div>
+
+<p>
+调用 rpc 函数时, Pid 会被绑定为某个值,因此 {Pid, Response} 这个模式里的 Pid 已绑定，而 Response 未绑定这个模式只会匹配包含一个双元素元组(第一个元素是 Pid )的消息。所有别的消息都会进入队列
+</p>
+
+<pre class="example">
+receive 提供了选择性接收的功能，会在后面介绍
+</pre>
+
+<p>
+改进后的代码：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #ffd700;">-module</span>(area_server1).  
+<span style="color: #ffd700;">-export</span>([<span style="color: #98f5ff;">loop/0</span>, <span style="color: #98f5ff;">rpc/2</span>]). 
+<span style="color: #daa520; font-weight: bold;">rpc</span>(<span style="color: #4eee94;">Pid</span>, <span style="color: #4eee94;">Request</span>) -&gt;
+    <span style="color: #4eee94;">Pid</span> ! {<span style="color: #f08080;">self</span>(), <span style="color: #4eee94;">Request</span>},
+    <span style="color: #00bfff; font-weight: bold;">receive</span>
+        <span style="color: #4eee94;">Response</span> -&gt;
+            <span style="color: #4eee94;">Response</span>
+    <span style="color: #00bfff; font-weight: bold;">end</span>.
+
+<span style="color: #daa520; font-weight: bold;">loop</span>() -&gt;
+    <span style="color: #00bfff; font-weight: bold;">receive</span>
+        {<span style="color: #4eee94;">From</span>, {rectangle, <span style="color: #4eee94;">Width</span>, <span style="color: #4eee94;">Ht</span>}} -&gt;<span style="color: #daa520; font-weight: bold;"> </span>
+            <span style="color: #4eee94;">From</span> ! <span style="color: #4eee94;">Width</span> * <span style="color: #4eee94;">Ht</span>,
+            <span style="color: #98f5ff;">loop</span>();
+        {<span style="color: #4eee94;">From</span>, {circle, <span style="color: #4eee94;">R</span>}} -&gt;<span style="color: #daa520; font-weight: bold;"> </span>
+            <span style="color: #4eee94;">From</span> !  3.14159 * <span style="color: #4eee94;">R</span> * <span style="color: #4eee94;">R</span>,
+            <span style="color: #98f5ff;">loop</span>();
+        {<span style="color: #4eee94;">From</span>, <span style="color: #4eee94;">Other</span>} -&gt;
+            <span style="color: #4eee94;">From</span> ! {error,<span style="color: #4eee94;">Other</span>},
+            <span style="color: #98f5ff;">loop</span>()
+    <span style="color: #00bfff; font-weight: bold;">end</span>.
+</pre>
+</div>
+
+<p>
+测试下：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">1&gt; Pid = spawn(area_server2, loop, []) <span style="color: #f08080;">.</span> 
+&lt;0.83.0&gt;
+2&gt; 
+2&gt; area_server2:rpc(Pid, {circle, 5}) <span style="color: #f08080;">.</span> 
+78.53975
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org3d38d7e" class="outline-4">
+<h4 id="org3d38d7e">封装</h4>
+<div class="outline-text-4" id="text-org3d38d7e">
+<p>
+最后一点可改进的地方。可以把 rpc 和 spawn 隐藏在模块内
+</p>
+<pre class="example">
+这是一种好的做法，因为它能让我们在不改变客户端代码的情况下修改服务器的内部细节
+</pre>
+
+<p>
+最终的代码如下:  
+</p>
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #ffd700;">-module</span>(area_server_final).  
+<span style="color: #ffd700;">-export</span>([<span style="color: #98f5ff;">start/0</span>, <span style="color: #98f5ff;">area/2</span>, <span style="color: #98f5ff;">loop/0</span>]). 
+
+<span style="color: #daa520; font-weight: bold;">start</span>() -&gt;<span style="color: #daa520; font-weight: bold;"> </span><span style="color: #f08080;">spawn</span>(area_server_final, loop, []).
+
+<span style="color: #daa520; font-weight: bold;">area</span>(<span style="color: #4eee94;">Pid</span>, <span style="color: #4eee94;">What</span>) -&gt;
+    <span style="color: #98f5ff;">rpc</span>(<span style="color: #4eee94;">Pid</span>, <span style="color: #4eee94;">What</span>).
+<span style="color: #daa520; font-weight: bold;">rpc</span>(<span style="color: #4eee94;">Pid</span>, <span style="color: #4eee94;">Request</span>) -&gt;
+    <span style="color: #4eee94;">Pid</span> ! {<span style="color: #f08080;">self</span>(), <span style="color: #4eee94;">Request</span>},
+    <span style="color: #00bfff; font-weight: bold;">receive</span>
+        {<span style="color: #4eee94;">Pid</span>, <span style="color: #4eee94;">Response</span>} -&gt;
+            <span style="color: #4eee94;">Response</span>
+    <span style="color: #00bfff; font-weight: bold;">end</span>.
+<span style="color: #daa520; font-weight: bold;">loop</span>() -&gt;
+    <span style="color: #00bfff; font-weight: bold;">receive</span>
+        {<span style="color: #4eee94;">From</span>, {rectangle, <span style="color: #4eee94;">Width</span>, <span style="color: #4eee94;">Ht</span>}} -&gt;<span style="color: #daa520; font-weight: bold;"> </span>
+            <span style="color: #4eee94;">From</span> ! {<span style="color: #f08080;">self</span>(), <span style="color: #4eee94;">Width</span> * <span style="color: #4eee94;">Ht</span>},
+            <span style="color: #98f5ff;">loop</span>();
+        {<span style="color: #4eee94;">From</span>, {circle, <span style="color: #4eee94;">R</span>}} -&gt;<span style="color: #daa520; font-weight: bold;"> </span>
+            <span style="color: #4eee94;">From</span> !  {<span style="color: #f08080;">self</span>(), 3.14159 * <span style="color: #4eee94;">R</span> * <span style="color: #4eee94;">R</span>},
+            <span style="color: #98f5ff;">loop</span>();
+        {<span style="color: #4eee94;">From</span>, <span style="color: #4eee94;">Other</span>} -&gt;
+            <span style="color: #4eee94;">From</span> ! {<span style="color: #f08080;">self</span>(), {error,<span style="color: #4eee94;">Other</span>}},
+            <span style="color: #98f5ff;">loop</span>()
+    <span style="color: #00bfff; font-weight: bold;">end</span>.
+</pre>
+</div>
+
+<pre class="example">
+注意：还需要把 spawn的参数(也就是 loop/0 )从模块中 导出 
+</pre>
+
+<p>
+调用函数 <span class="underline">start/0</span> 和 <span class="underline">area/2</span> (之前称为 spawn 和 rpc )来运行它：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">1&gt; Pid = area_server_final:start() <span style="color: #f08080;">.</span> 
+&lt;0.83.0&gt;
+2&gt; 
+2&gt; area_server_final:area(Pid, {rectangle, 10, 8}) <span style="color: #f08080;">.</span>  
+80
+3&gt;  
+3&gt; area_server_final:area(Pid, {circle, 4}) <span style="color: #f08080;">.</span>         
+50.26544
+4&gt;   
+4&gt; area_server_final:area(Pid, socks) <span style="color: #f08080;">.</span>         
+{error,socks}
+</pre>
+</div>
+
+<pre class="example">
+这些新名称更好一些，因为它们能更准确地描述服务器的行为
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org8b8c62d" class="outline-4">
+<h4 id="org8b8c62d">总结</h4>
+<div class="outline-text-4" id="text-org8b8c62d">
+<p>
+这样就完成了一个简单的客户端-服务器模块。所需要的就是三个基本函数: spawn 、 send 和receive 
+</p>
+
+<pre class="example">
+这种模式会以各类变种的形式不断重复出现,变化虽然可大可小,但基本的概念是不变的
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+
+<div id="outline-container-org267a785" class="outline-2">
+<h2 id="org267a785">进程很轻巧</h2>
 </div>
 </div>
 <div id="postamble" class="status">

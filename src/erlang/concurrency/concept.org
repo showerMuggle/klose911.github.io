@@ -187,3 +187,279 @@ Erlang的并发是基于 *进程* ( _process_ )的。进程是一些独立的小
    #+end_example
 
 * 客户端-服务器 
+  传统的客户端-服务器架构是指一个分隔客户端与服务器的网络：
+  + 大多数情况下客户端会有多个实例,而服务器只有一个
+  + 服务器这个词经常会让人联想到专业机器上运行重量级软件的画面 
+
+    #+begin_example
+    客户端-服务器架构是Erlang的中心
+    #+end_example
+
+  Erlang 的实现机制则要轻量得多。客户端-服务器架构里的 _客户端_ 和 _服务器_ 是不同的 *进程* ,它们之间的 _通信_ 使用普通的Erlang *消息传递* 机制
+
+  #+begin_example
+    客户端和服务器可以运行在同一台机器上,也可以运行在不同的机器上
+  #+end_example
+
+  _客户端_ 和 _服务器_ 这两个词是指这两种进程所扮演的角色:
+  + 客户端总是通过向服务器发送一个请求来发起计算
+  + 服务器计算后生成回复,然后发送一个响应给客户端
+  
+** 实例
+   下面来编写第一个客户端-服务器应用程序
+   #+begin_src erlang 
+  -module(area_server1).  
+  -export([loop/0, rpc/2]). 
+  rpc(Pid, Request) ->
+      Pid ! {self(), Request},
+      receive
+	  Response ->
+	      Response
+      end.
+  loop() ->
+      receive
+	  {From, {rectangle, Width, Ht}} -> 
+	      From ! Width * Ht,
+	      loop();
+	  {From, {circle, R}} -> 
+	      From !  3.14159 * R * R,
+	      loop();
+	  {From, Other} ->
+	      From ! {error,Other},
+	      loop()
+      end.
+   #+end_src
+
+   首先,对上一节里编写的程序做一些小的修改 
+
+   #+begin_example
+     在上一个程序里,我们只需要向某个进程发送请求,然后接收它并打印出来，现在要做的是向发送原请求的进程发送一个响应
+
+     问题是,我们不知道该把响应发给谁。要发送一个响应,客户端必须加入一个服务器可以回复的地址
+
+     这就像是给某人写信，如果你想得到回复,最好把你的地址写在信中!
+   #+end_example
+
+   因此,发送方必须加入一个回复地址。要做到这一点,可以把：
+
+   #+begin_src erlang 
+  Pid ! {rectangle, 6, 10} . 
+   #+end_src
+
+   修改成下面这样， _self()_ 是 _客户端进程_ 的 _标识符_ ：
+
+   #+begin_src erlang 
+  Pid ! {self(), {rectangle, 6, 10}} . 
+   #+end_src
+
+   因为消息发送格式变了，必须把接收请求的代码从:
+
+   #+begin_src erlang 
+  loop() ->
+      receive
+	  {rectangle, Width, Ht} -> 
+	      io:format("Area of rectangle is ~p~n",[Width * Ht]),
+	      loop();
+	   % ......
+   #+end_src
+
+   改成为：
+
+   #+begin_src erlang 
+  loop() ->
+      receive
+	  {From, {rectangle, Width, Ht}} -> 
+	      From ! Width * Ht,
+	      loop();
+	  % .....
+   #+end_src
+
+   注意：如何把计算结果发回由 _From_ 参数指定的进程的
+
+   #+begin_example
+   因为客户端把这个参数设置成它自己的ID，所以能收到结果
+   #+end_example
+
+   + _发送请求的进程_ 通常称为 _客户端_ 
+   + _接收请求并回复客户端的进程_ 称为 _服务器_ 
+
+   #+begin_example
+     另外,最佳实践是确认发送给进程的每一个消息都已收到
+
+     如果发送给进程的消息不匹配原始接收语句里的任何一个模式,这条消息就会遗留在进程邮箱里,永远无法接收
+
+     为了解决这个问题,在接收语句的最后加了一个子句,让它能匹配所有发送给此进程的消息
+   #+end_example
+
+   最后添加一个名为 _rpc_ (即远程过程调用)的实用小函数, 它封装了向服务器发送请求和等待响应的代码 
+
+   #+begin_src erlang 
+  rpc(Pid, Request) ->
+      Pid ! {self(), Request},
+      receive
+	  Response ->
+	      Response
+      end.
+   #+end_src
+
+*** 测试
+    可以在shell里试验一下它：
+
+    #+begin_src sh 
+  1> c (area_server1) . 
+  {ok,area_server1}
+  2> 
+  2> Pid = spawn(area_server1, loop, []) . 
+  <0.88.0>
+  3> area_server1:rpc(Pid, {rectangle, 6, 8}) .  
+  48
+  4>  
+  4> area_server1:rpc(Pid, {circle, 6}) .        
+  113.09723999999999
+  5>   
+  5> area_server1:rpc(Pid, socks) .         
+  {error,socks}
+    #+end_src
+
+    #+begin_example
+      这段代码有个小问题：
+
+      在 rpc/2 函数里,我们向服务器发送请求然后等待响应，但我们并不是等待来自服务器的响应,而是在等待任意消息
+
+      如果其他某个进程在客户端等待来自服务器的消息时向它发送了一个消息,客户端就会将此消息错误解读为来自服务器的响应
+    #+end_example
+
+*** 改进
+    要纠正这个问题,可以把接收语句的形式修改如下：
+
+    #+begin_src erlang 
+  loop() ->
+      receive 
+	  {From, ...} ->
+	      From ! {self(), ...},
+	      loop();
+	  %... ->
+      end .  
+    #+end_src
+
+    再把 rpc 改成：
+
+    #+begin_src erlang 
+  rpc(Pid, Request) ->
+      Pid ! {self(), Request},
+      receive
+	  {Pid, Response} ->
+	      Response
+      end.
+    #+end_src
+
+    调用 rpc 函数时, Pid 会被绑定为某个值,因此 {Pid, Response} 这个模式里的 Pid 已绑定，而 Response 未绑定这个模式只会匹配包含一个双元素元组(第一个元素是 Pid )的消息。所有别的消息都会进入队列
+
+    #+begin_example
+      receive 提供了选择性接收的功能，会在后面介绍
+    #+end_example
+
+    改进后的代码：
+
+    #+begin_src erlang 
+  -module(area_server1).  
+  -export([loop/0, rpc/2]). 
+  rpc(Pid, Request) ->
+      Pid ! {self(), Request},
+      receive
+	  Response ->
+	      Response
+      end.
+
+  loop() ->
+      receive
+	  {From, {rectangle, Width, Ht}} -> 
+	      From ! Width * Ht,
+	      loop();
+	  {From, {circle, R}} -> 
+	      From !  3.14159 * R * R,
+	      loop();
+	  {From, Other} ->
+	      From ! {error,Other},
+	      loop()
+      end.
+    #+end_src
+
+    测试下：
+
+    #+begin_src sh 
+  1> Pid = spawn(area_server2, loop, []) . 
+  <0.83.0>
+  2> 
+  2> area_server2:rpc(Pid, {circle, 5}) . 
+  78.53975
+    #+end_src
+
+*** 封装
+    最后一点可改进的地方。可以把 rpc 和 spawn 隐藏在模块内
+    #+begin_example
+      这是一种好的做法，因为它能让我们在不改变客户端代码的情况下修改服务器的内部细节
+    #+end_example
+
+    最终的代码如下:  
+    #+begin_src erlang 
+  -module(area_server_final).  
+  -export([start/0, area/2, loop/0]). 
+
+  start() -> spawn(area_server_final, loop, []).
+
+  area(Pid, What) ->
+      rpc(Pid, What).
+  rpc(Pid, Request) ->
+      Pid ! {self(), Request},
+      receive
+	  {Pid, Response} ->
+	      Response
+      end.
+  loop() ->
+      receive
+	  {From, {rectangle, Width, Ht}} -> 
+	      From ! {self(), Width * Ht},
+	      loop();
+	  {From, {circle, R}} -> 
+	      From !  {self(), 3.14159 * R * R},
+	      loop();
+	  {From, Other} ->
+	      From ! {self(), {error,Other}},
+	      loop()
+      end.
+    #+end_src
+
+    #+begin_example
+      注意：还需要把 spawn的参数(也就是 loop/0 )从模块中 导出 
+    #+end_example
+
+    调用函数 _start/0_ 和 _area/2_ (之前称为 spawn 和 rpc )来运行它：
+
+    #+begin_src sh 
+  1> Pid = area_server_final:start() . 
+  <0.83.0>
+  2> 
+  2> area_server_final:area(Pid, {rectangle, 10, 8}) .  
+  80
+  3>  
+  3> area_server_final:area(Pid, {circle, 4}) .         
+  50.26544
+  4>   
+  4> area_server_final:area(Pid, socks) .         
+  {error,socks}
+    #+end_src
+
+    #+begin_example
+      这些新名称更好一些，因为它们能更准确地描述服务器的行为
+    #+end_example
+
+*** 总结
+    这样就完成了一个简单的客户端-服务器模块。所需要的就是三个基本函数: spawn 、 send 和receive 
+
+    #+begin_example
+    这种模式会以各类变种的形式不断重复出现,变化虽然可大可小,但基本的概念是不变的
+    #+end_example
+
+
+* 进程很轻巧
