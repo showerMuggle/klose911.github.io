@@ -463,3 +463,123 @@ Erlang的并发是基于 *进程* ( _process_ )的。进程是一些独立的小
 
 
 * 进程很轻巧
+  #+BEGIN_EXAMPLE
+    在这个阶段,你可能会担心性能问题。毕竟,如果创建数百或者数千个Erlang进程,就必须付出一定的代价。让我们来看看代价有多大
+  #+END_EXAMPLE
+
+  现在将执行一些分裂操作,创建大量的进程,并计算要花费多长时间。下面是一个程序: 
+
+  #+BEGIN_SRC erlang 
+  -module(processes).
+
+  -export([max/1]).
+
+  %% max(N) 
+
+  %%   Create N processes then destroy them
+  %%   See how much time this takes
+
+  max(N) ->
+      Max = erlang:system_info(process_limit),
+      io:format("Maximum allowed processes:~p~n",[Max]),
+      statistics(runtime),
+      statistics(wall_clock),
+      L = for(1, N, fun() -> spawn(fun() -> wait() end) end),
+      {_, Time1} = statistics(runtime),
+      {_, Time2} = statistics(wall_clock),
+      lists:foreach(fun(Pid) -> Pid ! die end, L),
+      U1 = Time1 * 1000 / N,
+      U2 = Time2 * 1000 / N,
+      io:format("Process spawn time=~p (~p) microseconds~n",
+		[U1, U2]).
+
+  wait() ->
+      receive
+	  die -> void
+      end.
+
+  for(N, N, F) -> [F()];
+  for(I, N, F) -> [F()|for(I+1, N, F)].
+  #+END_SRC
+
+  #+BEGIN_EXAMPLE
+    请注意在这里用的是 spawn(Fun) ,并且被创建的函数并不需要从模块里导出
+  #+END_EXAMPLE
+
+  下面的结果源于我现在所用的计算机：
+
+  #+BEGIN_SRC sh 
+  2> processes:max(20000) . 
+  Maximum allowed processes:262144
+  Process spawn time=0.0 (1.95) microseconds
+  ok
+  3> processes:max(300000) . 
+  Maximum allowed processes:262144
+
+  =ERROR REPORT==== 8-Mar-2021::10:50:30 ===
+  Error in process <0.25.4648> with exit value:
+  {system_limit,[{erlang,spawn_link,
+			 [erlang,apply,[#Fun<shell.1.83096281>,[]]],
+			 []},
+		 {erlang,spawn_link,1,[]},
+		 {shell,get_command,5,[{file,"shell.erl"},{line,299}]},
+		 {shell,server_loop,7,[{file,"shell.erl"},{line,230}]}]}
+  Eshell V7.3  (abort with ^G)
+  ,*** ERROR: Shell process terminated! ***
+
+  =ERROR REPORT==== 8-Mar-2021::10:50:30 ===
+  Too many processes
+  #+END_SRC
+
+  创建 20000个进程平均消耗了0.0微秒/进程的CPU时间和1.95微秒/进程的实际运行时间
+
+  #+BEGIN_EXAMPLE
+    请注意使用了内置函数 erlang:system_info(process_limit) 来找出所允许的最大进程数量
+
+    其中有一些是系统保留的进程,所以你的程序实际上不能用那么多
+
+    当超出限制值时,系统会拒绝启动更多的进程并生成一个错误报告(见第2个命令)
+  #+END_EXAMPLE
+
+  系统内设的限制值是262 144个进程。要超越这一限制,必须用 _+P_ 标识启动Erlang仿真器如下: 
+
+  #+BEGIN_SRC sh 
+  $ erl +P 3000000 
+  Erlang/OTP 18 [erts-7.3] [source] [64-bit] [smp:6:6] [async-threads:10] [kernel-poll:false]
+
+  Eshell V7.3  (abort with ^G)
+  1> processes:max(500000) .  
+  Maximum allowed processes:4194304
+  Process spawn time=1.36 (4.388) microseconds
+  ok
+  2>  
+  2> processes:max(1000000) .  
+  Maximum allowed processes:4194304
+  Process spawn time=1.53 (4.811) microseconds
+  ok
+  3>  
+  3> processes:max(2000000) .  
+  Maximum allowed processes:4194304
+  Process spawn time=1.945 (3.928) microseconds
+  ok
+  4>  
+  4> processes:max(3000000) .  
+  Maximum allowed processes:4194304
+  Process spawn time=2.3833333333333333 (4.996666666666667) microseconds
+  ok
+  #+END_SRC
+  在前面的例子里,系统实际选择的值是恰好 _大于参数的2的幂_ 。这个实际值可以通过调用 _erlang:system_info(process_limit)_ 获得。可以看到,随着进程数量的增加,进程创建的时间也在增加。如果继续增加进程的数量,最终会耗尽物理内存,导致系统开始把物理内存交换到硬盘上,运行速度明显变慢
+
+
+  #+BEGIN_EXAMPLE
+    如果编写的程序需要使用大量进程,最好先搞清楚物理内存在交换到硬盘之前能容纳多少进程,并且确保程序运行在物理内存中
+  #+END_EXAMPLE
+  如你所见,创建大量进程的速度是很快的
+
+  #+BEGIN_EXAMPLE
+    如果你是一名C或Java程序员,也许会不敢使用大量的进程,而且必须负责管理它们
+
+    而在Erlang里,创建进程让编程变得更简单,而不是更复杂
+  #+END_EXAMPLE
+
+* 带超时的接收
