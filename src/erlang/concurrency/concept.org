@@ -583,3 +583,139 @@ Erlang的并发是基于 *进程* ( _process_ )的。进程是一些独立的小
   #+END_EXAMPLE
 
 * 带超时的接收
+  #+BEGIN_EXAMPLE
+    有时候一条接收语句会因为消息迟迟不来而一直等下去
+
+    发生这种情况的原因有很多,比如程序里可能有一处逻辑错误,或者准备发送消息的进程在消息发出前就崩溃了
+  #+END_EXAMPLE
+  要避免这个问题,可以给接收语句增加一个超时设置,设定进程 *等待* _接收消息的最长时间_ 。它的语法如下:
+
+  #+BEGIN_SRC erlang 
+  receive 
+      Pattern1 [when Guard1] ->
+	  Expressions1;
+      Pattern2 [when Guard2] ->
+	  Expressions2;
+      ...
+  after Time ->
+	  Expressions;
+  end .
+  #+END_SRC
+  如果在进入接收表达式的 Time 毫秒后还没有收到匹配的消息,进程就会停止等待消息,转而执行 Expressions  
+
+** 只带超时的接收
+   可以编写一个只有超时部分的 receive 。通过这种方法,可以定义一个 _sleep(T)_ 函数, 它会让当前的进程挂起 T 毫秒：
+
+   #+BEGIN_SRC erlang 
+  sleep(T) ->
+      receive
+      after T ->
+	 true
+      end.
+   #+END_SRC
+
+** 超时值为 0 的接收
+   超时值为0会让 _超时的主体部分_ *立即发生* 
+
+   #+BEGIN_EXAMPLE
+     但在这之前,系统会尝试对邮箱里的消息进行匹配
+   #+END_EXAMPLE
+
+   可以用它来定义一个 _flush_buffer_ 函数,它会清空进程邮箱里的所有消息：
+
+   #+BEGIN_SRC erlang 
+  flush_buffer() ->
+      receive
+	  _Any ->
+	      flush_buffer()
+      after 0 ->
+	  true
+      end.
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     注意：如果没有超时子句, flush_buffer 就会在邮箱为空时永远挂起且不返回
+   #+END_EXAMPLE
+
+   还可以使用零超时来实现某种形式的 _优先接收_ ,就像下面这样:
+
+   #+BEGIN_SRC erlang 
+  priority_receive() ->
+      receive
+	  {alarm, X} ->
+	      {alarm, X}
+      after 0 ->
+	  receive
+	      Any ->
+		  Any
+	  end
+      end.
+   #+END_SRC
+
+   + 如果邮箱里不存在匹配 {alarm, X} 的消息, priority_receive 就会接收邮箱里的第一个消息
+     + 如果没有任何消息,它就会在最里面的接收语句处挂起,并返回它收到的第一个消息
+   + 如果存在匹配 {alarm, X} 的消息,这个消息就会被立即返回
+
+   #+BEGIN_EXAMPLE
+     请记住,只有当邮箱里的所有条目都进行过模式匹配后,才会检查 after 部分。如果没有 after 0 语句,警告(alarm)消息就不会被首先匹配
+
+     因此对大的邮箱使用优先接收是相当低效的,所以如果打算使用这一技巧,请确保邮箱不要太满
+   #+END_EXAMPLE
+
+** 超时值为无穷大的接收
+   如果接收语句里的超时值是原子 _infinity_ (无穷大),就 *永远不会触发超时* 
+
+   #+BEGIN_EXAMPLE
+     这对那些在接收语句之外计算超时值的程序可能很有用
+
+     有时候计算的结果是返回一个实际的超时值,其他的时候则是让接收语句永远等待下去
+   #+END_EXAMPLE
+
+** 实现一个定时器
+   #+BEGIN_EXAMPLE
+     可以用接收超时来实现一个简单的定时器
+   #+END_EXAMPLE
+
+   函数 _stimer:start(Time, Fun)_ 会在 Time 毫秒之后执行 Fun (一个不带参数的函数)。它返回一个句柄(是一个PID),可以在需要时用来关闭定时器：
+
+   #+BEGIN_SRC erlang 
+  -module(stimer).
+  -export([start/2, cancel/1]).
+
+  start(Time, Fun) -> spawn(fun() -> timer(Time, Fun) end).
+  cancel(Pid) -> Pid ! cancel.
+  timer(Time, Fun) ->
+      receive
+	  cancel ->
+	      void
+      after Time ->
+	      Fun()
+      end.
+
+   #+END_SRC
+
+   启动一个超时器，等待的时间超过了5秒钟,定时器就会触发：
+
+   #+BEGIN_SRC sh 
+  2> Pid = stimer:start(5000, fun() -> io:format("time event~n") end) . 
+  <0.39.0>
+  3> 
+  time event
+   #+END_SRC
+
+   启动一个定时器，然后在到期前关闭它：
+   #+BEGIN_SRC sh 
+  3> Pid1 = stimer:start(50000, fun() -> io:format("time event~n") end) .  
+  <0.41.0>
+  4>  
+  4> stimer:cancel(Pid1) . 
+  cancel
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     超时和定时器是实现许多通信协议的关键
+
+     等待某个消息时并不想永远等下去,所以会像例子里那样增加一个超时设置
+   #+END_EXAMPLE
+
+* 选择性接收
