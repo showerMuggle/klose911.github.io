@@ -746,3 +746,103 @@ Erlang的并发是基于 *进程* ( _process_ )的。进程是一些独立的小
   6. 如果 _定时器_ 在我们 _等待消息时_ *到期* 了,系统就会 *执行* 表达式 _ExpressionsTimeout_ ,并把 _所有保存的消息_ 按照它们 _到达进程的顺序_ *重新* 放回 _邮箱_
 
 * 注册进程
+  #+BEGIN_EXAMPLE
+    如果想给一个进程发送消息,就需要知道它的PID,但是当进程创建时,只有父进程才知道它的PID。系统里没有其他进程知道它的存在
+
+    这通常很不方便,因为必须把PID发送给系统里所有想要和它通信的进程
+
+    另一方面,这也很安全。如果不透露某个进程的PID,其他进程就无法以任何方式与其交互
+  #+END_EXAMPLE
+
+  Erlang有一种 *公布* _进程标识符_ 的方法,它让系统里的任何进程都能与该进程通信。这样的进程被称为 *注册进程* ( _registered process_ )。管理注册进程的内置函数有四个：
+
+  +  用 AnAtom (一个原子)作为名称来注册进程 Pid 
+
+    #+BEGIN_SRC erlang 
+    register(AnAtom, Pid)
+    #+END_SRC
+
+    #+BEGIN_EXAMPLE
+      如果 AnAtom 已被用于注册某个进程,这次注册就会失败
+    #+END_EXAMPLE
+
+  +  移除与 AnAtom 关联的所有注册信息 
+
+    #+BEGIN_SRC erlang 
+    unregister(AnAtom) 
+    #+END_SRC
+
+    #+BEGIN_EXAMPLE
+      注意：如果某个注册进程崩溃了,就会自动取消注册
+    #+END_EXAMPLE
+
+  + 检查 AnAtom 是否已被注册：
+    + 如果是就返回进程标识符 Pid
+    + 如果没有找到与 AnAtom 关联的进程就返回原子 undefined 
+
+	#+BEGIN_SRC erlang 
+       whereis(AnAtom) -> Pid | undefined 
+	#+END_SRC
+
+  + 返回一个包含系统里所有注册进程的列表  
+
+	#+BEGIN_SRC erlang 
+       registered() ->
+	    [AnAtom::atom()]
+	#+END_SRC
+
+** 测试
+   可以用 register 来改写前面的代码示例,并尝试用创建的进程名称进行注册：
+
+   #+BEGIN_SRC sh 
+  3> Pid = spawn(area_server0, loop, []) . 
+  <0.41.0>
+  4> 
+  4> register(area, Pid) . 
+  true
+   #+END_SRC
+
+   一旦名称注册完成,就可以像这样给它发送消息: 
+
+   #+BEGIN_SRC sh 
+  5> area ! {rectangle, 4, 5} .  
+  Area of rectangle is 20
+  {rectangle,4,5}
+   #+END_SRC
+
+** 实例
+   可以用 register 来制作一个模拟时钟的注册进程：
+
+   #+BEGIN_SRC erlang 
+  -module(clock).
+  -export([start/2, stop/0]).
+
+  start(Time, Fun) -> 
+      register(clock, spawn(fun() -> tick(Time, Fun) end)).
+  stop() -> clock ! stop.
+  tick(Time, Fun) ->
+      receive
+	  stop ->
+	      void
+      after Time ->
+	      Fun(),
+	      tick(Time, Fun)
+      end.
+   #+END_SRC
+
+   这个时钟会不断滴答作响,直到你停止它
+
+   #+BEGIN_SRC sh 
+  1> clock:start(5000, fun() -> io:format("Tick~p~n",[erlang:now()]) end ) .  
+  true
+  2>  
+  Tick{1615,369367,86685}
+  Tick{1615,369372,90751}
+  Tick{1615,369377,94390}
+  Tick{1615,369382,98343}
+  Tick{1615,369387,102537}
+  2> clock:stop() . 
+  stop
+   #+END_SRC
+
+* 尾递归
