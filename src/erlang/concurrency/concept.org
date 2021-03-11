@@ -1,6 +1,6 @@
 #+TITLE: 并发原语
 #+HTML_HEAD: <link rel="stylesheet" type="text/css" href="css/main.css" />
-#+HTML_LINK_UP: concurrency.html   
+#+HTML_LINK_UP: introduction.html   
 #+HTML_LINK_HOME: concurrency.html
 #+OPTIONS: num:nil timestamp:nil ^:nil 
 
@@ -780,16 +780,16 @@ Erlang的并发是基于 *进程* ( _process_ )的。进程是一些独立的小
     + 如果是就返回进程标识符 Pid
     + 如果没有找到与 AnAtom 关联的进程就返回原子 undefined 
 
-	#+BEGIN_SRC erlang 
+      #+BEGIN_SRC erlang 
        whereis(AnAtom) -> Pid | undefined 
-	#+END_SRC
+      #+END_SRC
 
   + 返回一个包含系统里所有注册进程的列表  
 
-	#+BEGIN_SRC erlang 
+    #+BEGIN_SRC erlang 
        registered() ->
 	    [AnAtom::atom()]
-	#+END_SRC
+    #+END_SRC
 
 ** 测试
    可以用 register 来改写前面的代码示例,并尝试用创建的进程名称进行注册：
@@ -846,3 +846,112 @@ Erlang的并发是基于 *进程* ( _process_ )的。进程是一些独立的小
    #+END_SRC
 
 * 尾递归
+  再来看一下之前编写的面积计算服务器,它的接收循环如下:
+
+  #+BEGIN_SRC erlang 
+  loop() ->
+      receive
+	  {From, {rectangle, Width, Ht}} -> 
+	      From ! {self(), Width * Ht},
+	      loop();
+	  {From, {circle, R}} -> 
+	      From !  {self(), 3.14159 * R * R},
+	      loop();
+	  {From, Other} ->
+	      From ! {self(), {error,Other}},
+	      loop()
+      end.
+  #+END_SRC
+
+  #+BEGIN_EXAMPLE
+  仔细观察,就会发现每当收到消息时就会处理它并立即再次调用 loop() 
+  #+END_EXAMPLE
+
+  这一过程被称为 *尾递归* ( _tail-recursive_ )：对一个尾递归的函数可以进行特别编译，把语句序列里的 _最后一次函数调用_ 替换成 _跳至被调用函数的开头_ 
+
+  #+BEGIN_EXAMPLE
+    这就意味着尾递归的函数无需消耗栈空间也能一直循环下去
+  #+END_EXAMPLE
+
+  假设编写了以下(不正确的)代码：
+
+  #+BEGIN_SRC erlang 
+  loop() ->
+      receive
+	  {From, {rectangle, Width, Ht}} -> 
+	      From ! {self(), Width * Ht},
+	      loop(),
+	      someOtherFunc();
+	  {From, {circle, R}} -> 
+	      From !  {self(), 3.14159 * R * R},
+	      loop();
+	  %......
+      end.
+  #+END_SRC
+
+  在第5行里调用了 loop() ,但是编译器必然推断出“当调用 loop() 后必须返回这里,因为得调用第6行里的 someOtherFunc() ”。于是它把 someOtherFunc 的地址推入栈,然后跳到 loop 的开头
+
+  #+BEGIN_EXAMPLE
+    这么做的问题在于 loop() 是永不返回的,它会一直循环下去
+
+    所以,每次经过第5行,就会有一个返回地址被推入控制栈,最终系统的空间会消耗殆尽
+  #+END_EXAMPLE
+  避免这个问题的方法很简单，如果编写的函数 F 是 _永不返回_ 的(就像 loop() 一样),就要确保：
+  + 在调用 F 之后 *不再调用其他任何东西* 
+  + *别把* F 用在 _列表_ 或 _元组_ *构造器* 里
+
+** 模板
+   编写并发程序时,几乎总是从下面这样的代码起步:
+
+   #+BEGIN_SRC erlang 
+  -module(ctemplate).
+  -compile(export_all).
+
+  start() ->
+      spawn(?MODULE, loop, []).
+
+  rpc(Pid, Request) ->
+      Pid ! {self(), Request},
+      receive
+	  {Pid, Response} ->
+	      Response
+      end.
+
+  loop(X) ->
+      receive
+	  Any ->
+	      io:format("Received:~p~n",[Any]),
+	      loop(X)
+      end.
+   #+END_SRC
+   1. 接收循环仅仅是一个空循环，它会接收并打印出任何发给它的消息
+   2. 在开发程序的过程中，我会开始向一些进程发送消息
+      + 因为一开始没有给接收循环添加能匹配这些消息的模式，所以接收语句底部的代码就会把它们打印出来
+   3. 每到这个时候，我就会给接收循环添加一个匹配模式并重新运行程序
+
+   #+BEGIN_EXAMPLE
+     这一技巧在相当程度上决定了编写程序的顺序
+
+     从一个小程序开始，逐渐扩展它，并在开发过程中不断进行测试
+   #+END_EXAMPLE
+
+* 用 MFA 或 Fun 进行 spawn 
+  用显式的模块、函数名和参数列表(称为MFA)来创建一个进程是确保运行进程能够正确升级为新版模块代码(即使用中被再次编译)的恰当方式
+
+  #+BEGIN_EXAMPLE
+    动态代码升级机制不适用于fun的创建，只能用于带有显式名称的MFA上
+  #+END_EXAMPLE
+
+  + 如果不关心动态代码升级,或者确定程序不会在未来进行修改,就可以使用 spawn 的spawn(Fun) 形式
+  + 如果有疑问,就使用 spawn(MFA) 
+
+  #+BEGIN_EXAMPLE
+    接下来我们将关注错误恢复,了解如何运用三个新的概念(连接、信号和捕捉进程退出)来编写容错的并发程序
+  #+END_EXAMPLE
+
+  [[file:error_handle.org][Next：错误处理]]
+
+  [[file:introduction.org][Previous：并发介绍]]
+
+  [[file:concurrency.org][Home：目录]]
+
