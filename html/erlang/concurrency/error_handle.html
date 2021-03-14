@@ -160,6 +160,19 @@
   .footdef  { margin-bottom: 1em; }
   .figure { padding: 1em; }
   .figure p { text-align: center; }
+  .equation-container {
+    display: table;
+    text-align: center;
+    width: 100%;
+  }
+  .equation {
+    vertical-align: middle;
+  }
+  .equation-label {
+    display: table-cell;
+    text-align: right;
+    vertical-align: middle;
+  }
   .inlinetask {
     padding: 10px;
     border: 2px solid gray;
@@ -185,7 +198,7 @@
 @licstart  The following is the entire license notice for the
 JavaScript code in this tag.
 
-Copyright (C) 2012-2019 Free Software Foundation, Inc.
+Copyright (C) 2012-2020 Free Software Foundation, Inc.
 
 The JavaScript code in this tag is free software: you can
 redistribute it and/or modify it under the terms of the GNU
@@ -234,7 +247,184 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="concurrency.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">错误处理</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#orga84e715">错误处理</a>
+<ul>
+<li><a href="#org8ed6e06">让其他进程修复错误</a></li>
+<li><a href="#org704b4e0">任其崩溃</a>
+<ul>
+<li><a href="#org0825e22">为何要崩溃</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#orge5da521">术语</a></li>
+</ul>
+</div>
+</div>
+<pre class="example">
+设想一个只有单一顺序进程的系统。如果这个进程挂了，麻烦可能就大了，因为没有其他进程能够帮忙
 
+出于这个原因，顺序语言把重点放在故障预防上，强调进行防御式编程
+
+相对于顺序程序，处理并发程序里的错误涉及一种完全不同的思考方式
+</pre>
+
+<p>
+在本章：
+</p>
+<ol class="org-ol">
+<li>介绍错误处理的内在理念</li>
+<li>关于错误是如何在进程间传播和被其他进程捕捉的细节</li>
+<li>最后用一些小范例作为结尾，它们是编写容错式软件的起点</li>
+</ol>
+
+<pre class="example">
+在Erlang里，我们有大量的进程可供支配，因此任何单进程故障都不算特别重要
+
+通常只需编写少量的防御性代码，而把重点放在编写纠正性代码上
+
+我们采取各种措施检测错误，然后在错误发生后纠正它们
+</pre>
+<div id="outline-container-orga84e715" class="outline-2">
+<h2 id="orga84e715">错误处理</h2>
+<div class="outline-text-2" id="text-orga84e715">
+<p>
+并发Erlang程序里的错误处理建立在 <span class="underline">远程检测</span> 和 <span class="underline">处理错误</span> 的概念之上
+</p>
+
+<pre class="example">
+和在发生错误的进程里处理错误不同，我们选择让进程崩溃，然后在其他进程里纠正错误 
+</pre>
+
+<p>
+在设计 <span class="underline">容错式系统</span> 时就 <span class="underline">假设</span> <b>错误会发生，进程会崩溃，机器会出故障</b> 。我们的任务是：
+</p>
+<ul class="org-ul">
+<li>在错误发生后检测出来，可能的话还要纠正它们</li>
+<li>避免让系统的用户注意到任何的故障，或者在错误修复过程中遭受服务中断</li>
+</ul>
+
+<pre class="example">
+因为重点在补救而不是预防上，所以系统里几乎没有防御性代码，只有在错误发生后清理系统的代码
+</pre>
+
+<p>
+这就意味着我们将把注意力放在：
+</p>
+<ol class="org-ol">
+<li>如何 <b>检测错误</b> 和 <b>识别问题来源</b></li>
+<li>如何 <b>保持系统处于稳定状态</b> 上</li>
+</ol>
+
+<pre class="example">
+检测错误和找出故障原因内建于Erlang虚拟机底层的功能，也是Erlang编程语言的一部分
+
+标准OTP库提供了构建互相监视的进程组和在检测到错误时采取纠正措施的功能
+
+这里介绍的是语言层面的错误检测和恢复
+</pre>
+
+<p>
+Erlang关于构建容错式软件的理念可以总结成两个容易记忆的短句： <b>让其他进程修复错误</b> 和 <b>任其崩溃</b> 
+</p>
+</div>
+<div id="outline-container-org8ed6e06" class="outline-3">
+<h3 id="org8ed6e06">让其他进程修复错误</h3>
+<div class="outline-text-3" id="text-org8ed6e06">
+<pre class="example">
+让别人来修复某个错误而不是自己动手是个不错的主意，能够促进专业化。如果我需要做手术，就会去找大夫，而不是尝试自己操作
+
+如果我的汽车出了点小问题，车上的控制电脑就会尝试修复它。如果修复失败、问题变得更棘手了，就必须把车拉到修理厂，让其他人来修理它
+
+如果某个Erlang进程出了点小问题，可以尝试用 catch 或 try 语句来修复它。但如果修复失败，就应该直接崩溃，让其他进程来修复这个错误 
+</pre>
+
+<p>
+安排一些进程来互相监控各自的健康状况，如果一个进程挂了，其他某个进程就会注意到并采取纠正措施 
+</p>
+
+<pre class="example">
+这可以作为顺序代码错误处理的延伸：虽然可以捕捉顺序代码里的异常并尝试纠正错误，但如果失败了或者整台机器出了故障，就要让其他进程来修复错误
+</pre>
+
+<p>
+要让一个进程监控另一个，就必须在它们之间创建一个 <b>连接</b> （ <span class="underline">link</span> ）或 <b>监视</b> （ <span class="underline">monitor</span> ）：
+</p>
+<ul class="org-ul">
+<li>如果被连接或监视的进程挂了，监控进程就会得到通知</li>
+<li>监控进程必须实现 <span class="underline">跨机器</span> 的透明运作，因此运行在某一台机器上的进程可以监视运行在不同机器上进程的行为</li>
+</ul>
+
+<pre class="example">
+这是编写容错式系统的基础：
+
+不能在一台机器上构建容错式系统，因为崩溃的可能是整台机器，所以至少需要两台机器
+
+一台机器负责计算，其他的机器负责监控它，并在第一台机器崩溃时接管计算 
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org704b4e0" class="outline-3">
+<h3 id="org704b4e0">任其崩溃</h3>
+<div class="outline-text-3" id="text-org704b4e0">
+<pre class="example">
+如果来自C这样的语言，这听起来会非常奇怪。在C里，我们被教导要编写防御性代码，程序应当检查它们的参数以避免崩溃
+
+在C里这么做很有必要：编写多进程代码极其困难，而绝大多数应用程序只有一个进程，所以如果这个进程让整个应用程序崩溃，麻烦可就大了
+
+这意味着需要大量的错误检查代码，它们会和非错误检查代码交织在一起
+</pre>
+
+<p>
+在Erlang里，所做的恰恰相反。会把应用程序构建成两个部分：
+</p>
+<ul class="org-ul">
+<li>一部分负责 <span class="underline">解决问题</span> ：负责解决问题的部分会尽可能地少用防御性代码，并假设函数的所有参数都是正确的，程序也会正常运行</li>
+<li>另一部分负责在 <b>错误发生时纠正它们</b> ：纠正错误的部分往往是通用的，因此同一段错误纠正代码可以用在许多不同的应用程序里</li>
+</ul>
+
+<pre class="example">
+如果数据库的某个事务出了错，就简单地中止该事务，让系统把数据库恢复到出错之前的状态
+
+如果操作系统里的某个进程崩溃了，就让操作系统关闭所有打开的文件或套接字，然后让系统恢复到某个稳定状态
+</pre>
+
+<p>
+这么做让任务有了清楚的区分：编写解决问题的代码和修复错误的代码，但两者不会交织在一起。代码的体积可能会因此显著变小
+</p>
+</div>
+
+<div id="outline-container-org0825e22" class="outline-4">
+<h4 id="org0825e22">为何要崩溃</h4>
+<div class="outline-text-4" id="text-org0825e22">
+<p>
+让程序在出错时立即崩溃通常是一个很好的主意。事实上，它有不少优点：
+</p>
+<ul class="org-ul">
+<li>不必编写防御性代码来防止错误，直接崩溃就好</li>
+<li>不必思考应对措施，而是选择直接崩溃，别人会来修复这个错误</li>
+<li>不会使错误恶化，因为无需在知道出错后进行额外的计算</li>
+<li>如果在错误发生后第一时间举旗示意，就能得到非常好的错误诊断。在错误发生后继续运行经常会导致更多错误发生，让调试变得更加困难</li>
+<li>编写错误恢复代码时不用担心崩溃的原因，只需要把注意力放在事后清理上</li>
+<li>它简化了系统架构，这样就能把应用程序和错误恢复当成两个独立的问题来思考，而不是一个交叉的问题</li>
+</ul>
+
+<pre class="example">
+相关理念已经介绍得差不多了，接下来将深入其中的细节
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orge5da521" class="outline-2">
+<h2 id="orge5da521">术语</h2>
+</div>
 </div>
 <div id="postamble" class="status">
 
