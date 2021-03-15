@@ -160,19 +160,6 @@
   .footdef  { margin-bottom: 1em; }
   .figure { padding: 1em; }
   .figure p { text-align: center; }
-  .equation-container {
-    display: table;
-    text-align: center;
-    width: 100%;
-  }
-  .equation {
-    vertical-align: middle;
-  }
-  .equation-label {
-    display: table-cell;
-    text-align: right;
-    vertical-align: middle;
-  }
   .inlinetask {
     padding: 10px;
     border: 2px solid gray;
@@ -198,7 +185,7 @@
 @licstart  The following is the entire license notice for the
 JavaScript code in this tag.
 
-Copyright (C) 2012-2020 Free Software Foundation, Inc.
+Copyright (C) 2012-2019 Free Software Foundation, Inc.
 
 The JavaScript code in this tag is free software: you can
 redistribute it and/or modify it under the terms of the GNU
@@ -251,26 +238,44 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orga84e715">错误处理</a>
+<li><a href="#org11504de">错误处理</a>
 <ul>
-<li><a href="#org8ed6e06">让其他进程修复错误</a></li>
-<li><a href="#org704b4e0">任其崩溃</a>
+<li><a href="#org39b8800">让其他进程修复错误</a></li>
+<li><a href="#orga2ac6c7">任其崩溃</a>
 <ul>
-<li><a href="#org0825e22">为何要崩溃</a></li>
+<li><a href="#org41c62b7">为何要崩溃</a></li>
 </ul>
 </li>
 </ul>
 </li>
-<li><a href="#orge5da521">术语</a></li>
+<li><a href="#org5809612">术语</a>
+<ul>
+<li><a href="#orgc0ebacc">进程</a></li>
+<li><a href="#org73cc18c">连接</a>
+<ul>
+<li><a href="#orgdb77d21">连接组</a></li>
+</ul>
+</li>
+<li><a href="#org78598c1">监视</a></li>
+<li><a href="#org219e1fc">错误信号</a>
+<ul>
+<li><a href="#orgff59f7d">错误信号的接收</a></li>
+<li><a href="#org4b1395e">显式错误信号</a></li>
+<li><a href="#orgbe9a282">不可捕捉的退出信号</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#org723ec26">创建连接</a></li>
 </ul>
 </div>
 </div>
 <pre class="example">
-设想一个只有单一顺序进程的系统。如果这个进程挂了，麻烦可能就大了，因为没有其他进程能够帮忙
+  设想一个只有单一顺序进程的系统。如果这个进程挂了，麻烦可能就大了，因为没有其他进程能够帮忙
 
-出于这个原因，顺序语言把重点放在故障预防上，强调进行防御式编程
+  出于这个原因，顺序语言把重点放在故障预防上，强调进行防御式编程
 
-相对于顺序程序，处理并发程序里的错误涉及一种完全不同的思考方式
+  相对于顺序程序，处理并发程序里的错误涉及一种完全不同的思考方式
 </pre>
 
 <p>
@@ -283,21 +288,21 @@ for the JavaScript code in this tag.
 </ol>
 
 <pre class="example">
-在Erlang里，我们有大量的进程可供支配，因此任何单进程故障都不算特别重要
+  在Erlang里，我们有大量的进程可供支配，因此任何单进程故障都不算特别重要
 
-通常只需编写少量的防御性代码，而把重点放在编写纠正性代码上
+  通常只需编写少量的防御性代码，而把重点放在编写纠正性代码上
 
-我们采取各种措施检测错误，然后在错误发生后纠正它们
+  我们采取各种措施检测错误，然后在错误发生后纠正它们
 </pre>
-<div id="outline-container-orga84e715" class="outline-2">
-<h2 id="orga84e715">错误处理</h2>
-<div class="outline-text-2" id="text-orga84e715">
+<div id="outline-container-org11504de" class="outline-2">
+<h2 id="org11504de">错误处理</h2>
+<div class="outline-text-2" id="text-org11504de">
 <p>
 并发Erlang程序里的错误处理建立在 <span class="underline">远程检测</span> 和 <span class="underline">处理错误</span> 的概念之上
 </p>
 
 <pre class="example">
-和在发生错误的进程里处理错误不同，我们选择让进程崩溃，然后在其他进程里纠正错误 
+    和在发生错误的进程里处理错误不同，我们选择让进程崩溃，然后在其他进程里纠正错误 
 </pre>
 
 <p>
@@ -309,7 +314,7 @@ for the JavaScript code in this tag.
 </ul>
 
 <pre class="example">
-因为重点在补救而不是预防上，所以系统里几乎没有防御性代码，只有在错误发生后清理系统的代码
+    因为重点在补救而不是预防上，所以系统里几乎没有防御性代码，只有在错误发生后清理系统的代码
 </pre>
 
 <p>
@@ -321,26 +326,26 @@ for the JavaScript code in this tag.
 </ol>
 
 <pre class="example">
-检测错误和找出故障原因内建于Erlang虚拟机底层的功能，也是Erlang编程语言的一部分
+    检测错误和找出故障原因内建于Erlang虚拟机底层的功能，也是Erlang编程语言的一部分
 
-标准OTP库提供了构建互相监视的进程组和在检测到错误时采取纠正措施的功能
+    标准OTP库提供了构建互相监视的进程组和在检测到错误时采取纠正措施的功能
 
-这里介绍的是语言层面的错误检测和恢复
+    这里介绍的是语言层面的错误检测和恢复
 </pre>
 
 <p>
 Erlang关于构建容错式软件的理念可以总结成两个容易记忆的短句： <b>让其他进程修复错误</b> 和 <b>任其崩溃</b> 
 </p>
 </div>
-<div id="outline-container-org8ed6e06" class="outline-3">
-<h3 id="org8ed6e06">让其他进程修复错误</h3>
-<div class="outline-text-3" id="text-org8ed6e06">
+<div id="outline-container-org39b8800" class="outline-3">
+<h3 id="org39b8800">让其他进程修复错误</h3>
+<div class="outline-text-3" id="text-org39b8800">
 <pre class="example">
-让别人来修复某个错误而不是自己动手是个不错的主意，能够促进专业化。如果我需要做手术，就会去找大夫，而不是尝试自己操作
+     让别人来修复某个错误而不是自己动手是个不错的主意，能够促进专业化。如果我需要做手术，就会去找大夫，而不是尝试自己操作
 
-如果我的汽车出了点小问题，车上的控制电脑就会尝试修复它。如果修复失败、问题变得更棘手了，就必须把车拉到修理厂，让其他人来修理它
+     如果我的汽车出了点小问题，车上的控制电脑就会尝试修复它。如果修复失败、问题变得更棘手了，就必须把车拉到修理厂，让其他人来修理它
 
-如果某个Erlang进程出了点小问题，可以尝试用 catch 或 try 语句来修复它。但如果修复失败，就应该直接崩溃，让其他进程来修复这个错误 
+     如果某个Erlang进程出了点小问题，可以尝试用 catch 或 try 语句来修复它。但如果修复失败，就应该直接崩溃，让其他进程来修复这个错误 
 </pre>
 
 <p>
@@ -348,7 +353,7 @@ Erlang关于构建容错式软件的理念可以总结成两个容易记忆的�
 </p>
 
 <pre class="example">
-这可以作为顺序代码错误处理的延伸：虽然可以捕捉顺序代码里的异常并尝试纠正错误，但如果失败了或者整台机器出了故障，就要让其他进程来修复错误
+     这可以作为顺序代码错误处理的延伸：虽然可以捕捉顺序代码里的异常并尝试纠正错误，但如果失败了或者整台机器出了故障，就要让其他进程来修复错误
 </pre>
 
 <p>
@@ -360,24 +365,24 @@ Erlang关于构建容错式软件的理念可以总结成两个容易记忆的�
 </ul>
 
 <pre class="example">
-这是编写容错式系统的基础：
+     这是编写容错式系统的基础：
 
-不能在一台机器上构建容错式系统，因为崩溃的可能是整台机器，所以至少需要两台机器
+     不能在一台机器上构建容错式系统，因为崩溃的可能是整台机器，所以至少需要两台机器
 
-一台机器负责计算，其他的机器负责监控它，并在第一台机器崩溃时接管计算 
+     一台机器负责计算，其他的机器负责监控它，并在第一台机器崩溃时接管计算 
 </pre>
 </div>
 </div>
 
-<div id="outline-container-org704b4e0" class="outline-3">
-<h3 id="org704b4e0">任其崩溃</h3>
-<div class="outline-text-3" id="text-org704b4e0">
+<div id="outline-container-orga2ac6c7" class="outline-3">
+<h3 id="orga2ac6c7">任其崩溃</h3>
+<div class="outline-text-3" id="text-orga2ac6c7">
 <pre class="example">
-如果来自C这样的语言，这听起来会非常奇怪。在C里，我们被教导要编写防御性代码，程序应当检查它们的参数以避免崩溃
+     如果来自C这样的语言，这听起来会非常奇怪。在C里，我们被教导要编写防御性代码，程序应当检查它们的参数以避免崩溃
 
-在C里这么做很有必要：编写多进程代码极其困难，而绝大多数应用程序只有一个进程，所以如果这个进程让整个应用程序崩溃，麻烦可就大了
+     在C里这么做很有必要：编写多进程代码极其困难，而绝大多数应用程序只有一个进程，所以如果这个进程让整个应用程序崩溃，麻烦可就大了
 
-这意味着需要大量的错误检查代码，它们会和非错误检查代码交织在一起
+     这意味着需要大量的错误检查代码，它们会和非错误检查代码交织在一起
 </pre>
 
 <p>
@@ -389,9 +394,9 @@ Erlang关于构建容错式软件的理念可以总结成两个容易记忆的�
 </ul>
 
 <pre class="example">
-如果数据库的某个事务出了错，就简单地中止该事务，让系统把数据库恢复到出错之前的状态
+     如果数据库的某个事务出了错，就简单地中止该事务，让系统把数据库恢复到出错之前的状态
 
-如果操作系统里的某个进程崩溃了，就让操作系统关闭所有打开的文件或套接字，然后让系统恢复到某个稳定状态
+     如果操作系统里的某个进程崩溃了，就让操作系统关闭所有打开的文件或套接字，然后让系统恢复到某个稳定状态
 </pre>
 
 <p>
@@ -399,9 +404,9 @@ Erlang关于构建容错式软件的理念可以总结成两个容易记忆的�
 </p>
 </div>
 
-<div id="outline-container-org0825e22" class="outline-4">
-<h4 id="org0825e22">为何要崩溃</h4>
-<div class="outline-text-4" id="text-org0825e22">
+<div id="outline-container-org41c62b7" class="outline-4">
+<h4 id="org41c62b7">为何要崩溃</h4>
+<div class="outline-text-4" id="text-org41c62b7">
 <p>
 让程序在出错时立即崩溃通常是一个很好的主意。事实上，它有不少优点：
 </p>
@@ -415,15 +420,142 @@ Erlang关于构建容错式软件的理念可以总结成两个容易记忆的�
 </ul>
 
 <pre class="example">
-相关理念已经介绍得差不多了，接下来将深入其中的细节
+    相关理念已经介绍得差不多了，接下来将深入其中的细节
 </pre>
 </div>
 </div>
 </div>
 </div>
 
-<div id="outline-container-orge5da521" class="outline-2">
-<h2 id="orge5da521">术语</h2>
+<div id="outline-container-org5809612" class="outline-2">
+<h2 id="org5809612">术语</h2>
+<div class="outline-text-2" id="text-org5809612">
+<pre class="example">
+    在这一节里,将学到进程间错误处理的术语含义。你会看到一些新名词,在本章的后面还会再次遇到它们
+</pre>
+
+<p>
+理解错误处理的最佳方式是快速浏览这些名词的定义,然后跳到后面几节,通过更直观的方式理解相关的概念
+</p>
+</div>
+
+<div id="outline-container-orgc0ebacc" class="outline-3">
+<h3 id="orgc0ebacc">进程</h3>
+<div class="outline-text-3" id="text-orgc0ebacc">
+<p>
+进程有两种:
+</p>
+<ul class="org-ul">
+<li>普通进程：spawn 创建的是普通进程</li>
+<li><b>系统</b> 进程：普通进程可以通过执行内置函数 <span class="underline">process_flag(trap_exit, true)</span> 变成系统进程</li>
+</ul>
+</div>
+</div>
+<div id="outline-container-org73cc18c" class="outline-3">
+<h3 id="org73cc18c">连接</h3>
+<div class="outline-text-3" id="text-org73cc18c">
+<p>
+进程可以 <b>互相连接</b> 
+</p>
+<pre class="example">
+     如果 A 和 B 两个进程有连接,而 A 出于某种原因终止了,就会向 B 发送一个错误信号,反之亦然
+</pre>
+</div>
+<div id="outline-container-orgdb77d21" class="outline-4">
+<h4 id="orgdb77d21">连接组</h4>
+<div class="outline-text-4" id="text-orgdb77d21">
+<p>
+进程 P 的 <span class="underline">连接组</span> 是指 <b>与 P 相连的一组进程</b> 
+</p>
+</div>
+</div>
+</div>
+<div id="outline-container-org78598c1" class="outline-3">
+<h3 id="org78598c1">监视</h3>
+<div class="outline-text-3" id="text-org78598c1">
+<p>
+监视和连接很相似,但它是 <b>单向</b> 的
+</p>
+
+<pre class="example">
+     如果 A 监视 B ,而 B 出于某种原因终止了,就会向 A 发送一个“宕机”消息,但反过来就不行了
+</pre>
+</div>
+</div>
+<div id="outline-container-org219e1fc" class="outline-3">
+<h3 id="org219e1fc">错误信号</h3>
+<div class="outline-text-3" id="text-org219e1fc">
+<p>
+进程协作的方式是交换 <span class="underline">消息</span> 或 <span class="underline">错误信号</span> ：
+</p>
+<ul class="org-ul">
+<li>消息：通过基本函数 <span class="underline">send</span> 发送的</li>
+<li>错误信号： <span class="underline">进程崩溃</span> 或 <span class="underline">进程终止</span> 时自动发送的，错误信号会发送给 <span class="underline">终止进程的连接组</span></li>
+</ul>
+</div>
+<div id="outline-container-orgff59f7d" class="outline-4">
+<h4 id="orgff59f7d">错误信号的接收</h4>
+<div class="outline-text-4" id="text-orgff59f7d">
+<p>
+当系统进程收到错误信号时,该信号会被转换成 <span class="underline">{'EXIT', Pid, Why}</span> 形式的消息：
+</p>
+<ul class="org-ul">
+<li>Pid: <span class="underline">终止进程</span> 的标识</li>
+<li>Why: <span class="underline">终止原因</span> (有时候被称为退出原因)
+<ul class="org-ul">
+<li>如果进程是 <span class="underline">无错误终止</span> Why 就会是原子 <span class="underline">normal</span></li>
+<li>否则 Why 会是错误的描述</li>
+</ul></li>
+</ul>
+
+<p>
+当普通进程收到 <span class="underline">错误信号</span> 时,如果 <span class="underline">退出原因不是 normal</span> ,该进程就会终止
+</p>
+
+<pre class="example">
+      当它终止时,同样会向它的连接组广播一个退出信号
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org4b1395e" class="outline-4">
+<h4 id="org4b1395e">显式错误信号</h4>
+<div class="outline-text-4" id="text-org4b1395e">
+<ul class="org-ul">
+<li>任何执行 exit(Why) 的进程都会终止(如果代码不是在 catch 或 try 的范围内执行的话), 并向它的连接组广播一个带有原因 Why 的退出信号</li>
+<li>进程可以通过执行 <span class="underline">exit(Pid, Why)</span> 来发送一个 <b>虚假</b> 的 <span class="underline">错误信号</span> ：
+<ul class="org-ul">
+<li>在这种情况下, <span class="underline">Pid 进程</span> 会收到一个带有原因 <span class="underline">Why 的退出信号</span></li>
+<li>主动调用 exit/2 的进程则不会终止（这是有意如此的）</li>
+</ul></li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-orgbe9a282" class="outline-4">
+<h4 id="orgbe9a282">不可捕捉的退出信号</h4>
+<div class="outline-text-4" id="text-orgbe9a282">
+<p>
+<span class="underline">系统进程</span> 收到 <b>摧毁信号</b> ( <span class="underline">kill signal</span> )时会 <b>终止</b> ：
+</p>
+<ul class="org-ul">
+<li>摧毁信号是通过调用 <span class="underline">exit(Pid, kill)</span> 生成的</li>
+<li>这种信号会绕过常规的错误信号处理机制 <b>不会被转换成消息</b></li>
+<li>摧毁信号只应该用在 <span class="underline">其他错误处理机制无法终止</span> 的顽固进程上</li>
+</ul>
+
+<pre class="example">
+      这些定义可能看上去很复杂,但通常不必深入理解这些机制的工作原理也能编写出容错式代码
+
+      系统在错误处理方面的默认行为是尝试“做正确的事”
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org723ec26" class="outline-2">
+<h2 id="org723ec26">创建连接</h2>
 </div>
 </div>
 <div id="postamble" class="status">
