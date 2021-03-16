@@ -173,7 +173,7 @@
       系统在错误处理方面的默认行为是尝试“做正确的事”
     #+END_EXAMPLE
 
-* 创建连接
+* 连接
   假设有一组互不相关的进程,如下图所示，虚线代表了连接：
 
   #+ATTR_HTML: image :width 70% 
@@ -239,3 +239,85 @@
   #+END_EXAMPLE
 
 * 基本错误处理函数
+  下列基本函数被用来操作连接和监视,以及捕捉和发送退出信号
+** 创建连接
+   #+BEGIN_SRC erlang 
+  link(Pid) -> true
+   #+END_SRC
+
+   它会创建一个与进程 Pid 的连接：
+   + 连接是双向的：如果进程 A 执行了 link(B) ,就会与 B 相连，实际效果就和 B 执行 link(A) 一样
+   + 如果进程 Pid 不存在,就会抛出一个 _noproc 退出异常_
+   + 如果执行 link(B) 时 A 已经连接了 B (或者相反),这个调用就会被忽略
+*** 创建进程并同时连接
+
+    #+BEGIN_SRC erlang 
+  spawn_link(Func) ->
+      Pid. 
+  spawn_link(Mod, Func, Args) ->
+      Pid. 
+    #+END_SRC
+
+    它们的行为类似于 spawn(Fun) 和 spawn(Mod,Func,Args) ,同时还会在父子进程之间创建连接
+** 移除连接
+   #+BEGIN_SRC erlang 
+  unlink(Pid) ->
+      true. 
+   #+END_SRC
+
+   移除当前进程和进程 Pid 之间的所有连接 
+** 设立监视
+   #+BEGIN_SRC erlang 
+  monitor(process, Item) ->
+      Ref. 
+   #+END_SRC
+   它会设立一个监视：
+   + Item 可以是进程的 _Pid_ ,也可以是它的 _注册名称_     
+   + Ref: 该 _进程的引用_ 
+
+   如果这个进程因为 Why 的原因终止了,消息 _{'DOWN',Ref,process,Pid,Why}_ 就会被发往 _父进程_ 
+
+*** 创建进程并同时设立监视
+    #+BEGIN_SRC erlang 
+  spawn_monitor(Func) ->
+      {Pid, Ref}. 
+
+  spawn_monitor(Mod, Func, Args) ->
+      {Pid, Ref}. 
+    #+END_SRC
+
+    它与 spawn_link 相似,但创建的是监视而非连接
+** 移除监视
+   #+BEGIN_SRC erlang 
+  demonitor(Ref) ->
+      true. 
+   #+END_SRC
+
+   移除以 Ref 作为引用的监视 
+** 转变成系统进程
+   #+BEGIN_SRC erlang 
+  process_flag(trap_exit, true). 
+   #+END_SRC
+
+   它会把当前进程转变成系统进程，系统进程是一种能 *接收* 和 *处理* _错误信号_ 的进程
+** 终止进程
+   #+BEGIN_SRC erlang 
+  exit(Why) ->
+      none(). 
+   #+END_SRC
+
+   它会使当前进程因为 Why 的原因终止，如果执行这一语句的子句不在 catch 语句的范围内：
+   + 此进程就会向当前 _连接的所有进程_ *广播* 一个 带有参数 _Why_ 的 _退出信号_
+   + 它还会向所有 _监视它的进程_ *广播* 一个 _DOWN 消息_ 
+** 发送退出信号
+   #+BEGIN_SRC erlang 
+  exit(Pid, Why) ->
+      true. 
+   #+END_SRC
+
+   它会向进程 _Pid_ 发送一个带有原因 _Why 的退出信号_ 。执行这个内置函数的进程本身不会终止，它只是被用于模拟一个退出信号
+
+   #+BEGIN_EXAMPLE
+     可以用这些基本函数来设立互相监视的进程网络，并把它作为构建容错式软件的起点
+   #+END_EXAMPLE
+* 容错式编程

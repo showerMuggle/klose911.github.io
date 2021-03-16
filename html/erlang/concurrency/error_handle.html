@@ -251,12 +251,12 @@ for the JavaScript code in this tag.
 <li><a href="#org5809612">术语</a>
 <ul>
 <li><a href="#orgc0ebacc">进程</a></li>
-<li><a href="#org73cc18c">连接</a>
+<li><a href="#org6903967">连接</a>
 <ul>
 <li><a href="#orgdb77d21">连接组</a></li>
 </ul>
 </li>
-<li><a href="#org7736e3e">监视</a></li>
+<li><a href="#org4b4c5aa">监视</a></li>
 <li><a href="#org219e1fc">错误信号</a>
 <ul>
 <li><a href="#orgff59f7d">错误信号的接收</a></li>
@@ -266,14 +266,33 @@ for the JavaScript code in this tag.
 </li>
 </ul>
 </li>
-<li><a href="#org723ec26">创建连接</a>
+<li><a href="#org50183a6">连接</a>
 <ul>
 <li><a href="#org71a54b5">同步终止的进程组</a></li>
 <li><a href="#org39acf64">设立防火墙</a></li>
 </ul>
 </li>
-<li><a href="#org4ee8f79">监视</a></li>
-<li><a href="#org3d933aa">基本错误处理函数</a></li>
+<li><a href="#org8cd1ea1">监视</a></li>
+<li><a href="#org3d933aa">基本错误处理函数</a>
+<ul>
+<li><a href="#org723ec26">创建连接</a>
+<ul>
+<li><a href="#org92bdf5d">创建进程并同时连接</a></li>
+</ul>
+</li>
+<li><a href="#org01a06a6">移除连接</a></li>
+<li><a href="#orge4a2ad0">设立监视</a>
+<ul>
+<li><a href="#orga2fb4f4">创建进程并同时设立监视</a></li>
+</ul>
+</li>
+<li><a href="#orge1256bb">移除监视</a></li>
+<li><a href="#org54eb62f">转变成系统进程</a></li>
+<li><a href="#orga8ebf45">终止进程</a></li>
+<li><a href="#org4bb27bd">发送退出信号</a></li>
+</ul>
+</li>
+<li><a href="#orgbf4b3e5">容错式编程</a></li>
 </ul>
 </div>
 </div>
@@ -458,9 +477,9 @@ Erlang关于构建容错式软件的理念可以总结成两个容易记忆的�
 </ul>
 </div>
 </div>
-<div id="outline-container-org73cc18c" class="outline-3">
-<h3 id="org73cc18c">连接</h3>
-<div class="outline-text-3" id="text-org73cc18c">
+<div id="outline-container-org6903967" class="outline-3">
+<h3 id="org6903967">连接</h3>
+<div class="outline-text-3" id="text-org6903967">
 <p>
 进程可以 <b>互相连接</b> 
 </p>
@@ -477,9 +496,9 @@ Erlang关于构建容错式软件的理念可以总结成两个容易记忆的�
 </div>
 </div>
 </div>
-<div id="outline-container-org7736e3e" class="outline-3">
-<h3 id="org7736e3e">监视</h3>
-<div class="outline-text-3" id="text-org7736e3e">
+<div id="outline-container-org4b4c5aa" class="outline-3">
+<h3 id="org4b4c5aa">监视</h3>
+<div class="outline-text-3" id="text-org4b4c5aa">
 <p>
 监视和连接很相似,但它是 <b>单向</b> 的
 </p>
@@ -561,9 +580,9 @@ Erlang关于构建容错式软件的理念可以总结成两个容易记忆的�
 </div>
 </div>
 
-<div id="outline-container-org723ec26" class="outline-2">
-<h2 id="org723ec26">创建连接</h2>
-<div class="outline-text-2" id="text-org723ec26">
+<div id="outline-container-org50183a6" class="outline-2">
+<h2 id="org50183a6">连接</h2>
+<div class="outline-text-2" id="text-org50183a6">
 <p>
 假设有一组互不相关的进程,如下图所示，虚线代表了连接：
 </p>
@@ -653,9 +672,9 @@ P3 充当了一个防火墙,阻止错误扩散到系统里的其他进程中
 </div>
 </div>
 
-<div id="outline-container-org4ee8f79" class="outline-2">
-<h2 id="org4ee8f79">监视</h2>
-<div class="outline-text-2" id="text-org4ee8f79">
+<div id="outline-container-org8cd1ea1" class="outline-2">
+<h2 id="org8cd1ea1">监视</h2>
+<div class="outline-text-2" id="text-org8cd1ea1">
 <p>
 监视与连接类似,但是有几处明显的区别：
 </p>
@@ -677,6 +696,164 @@ P3 充当了一个防火墙,阻止错误扩散到系统里的其他进程中
 
 <div id="outline-container-org3d933aa" class="outline-2">
 <h2 id="org3d933aa">基本错误处理函数</h2>
+<div class="outline-text-2" id="text-org3d933aa">
+<p>
+下列基本函数被用来操作连接和监视,以及捕捉和发送退出信号
+</p>
+</div>
+<div id="outline-container-org723ec26" class="outline-3">
+<h3 id="org723ec26">创建连接</h3>
+<div class="outline-text-3" id="text-org723ec26">
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #87cefa;">link</span>(<span style="color: #eedd82;">Pid</span>) -&gt;<span style="color: #87cefa;"> </span>true
+</pre>
+</div>
+
+<p>
+它会创建一个与进程 Pid 的连接：
+</p>
+<ul class="org-ul">
+<li>连接是双向的：如果进程 A 执行了 link(B) ,就会与 B 相连，实际效果就和 B 执行 link(A) 一样</li>
+<li>如果进程 Pid 不存在,就会抛出一个 <span class="underline">noproc 退出异常</span></li>
+<li>如果执行 link(B) 时 A 已经连接了 B (或者相反),这个调用就会被忽略</li>
+</ul>
+</div>
+<div id="outline-container-org92bdf5d" class="outline-4">
+<h4 id="org92bdf5d">创建进程并同时连接</h4>
+<div class="outline-text-4" id="text-org92bdf5d">
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #87cefa;">spawn_link</span>(<span style="color: #eedd82;">Func</span>) -&gt;
+    <span style="color: #eedd82;">Pid</span>. 
+<span style="color: #87cefa;">spawn_link</span>(<span style="color: #eedd82;">Mod</span>, <span style="color: #eedd82;">Func</span>, <span style="color: #eedd82;">Args</span>) -&gt;
+    <span style="color: #eedd82;">Pid</span>. 
+</pre>
+</div>
+
+<p>
+它们的行为类似于 spawn(Fun) 和 spawn(Mod,Func,Args) ,同时还会在父子进程之间创建连接
+</p>
+</div>
+</div>
+</div>
+<div id="outline-container-org01a06a6" class="outline-3">
+<h3 id="org01a06a6">移除连接</h3>
+<div class="outline-text-3" id="text-org01a06a6">
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #87cefa;">unlink</span>(<span style="color: #eedd82;">Pid</span>) -&gt;
+    true. 
+</pre>
+</div>
+
+<p>
+移除当前进程和进程 Pid 之间的所有连接 
+</p>
+</div>
+</div>
+<div id="outline-container-orge4a2ad0" class="outline-3">
+<h3 id="orge4a2ad0">设立监视</h3>
+<div class="outline-text-3" id="text-orge4a2ad0">
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #87cefa;">monitor</span>(process, <span style="color: #eedd82;">Item</span>) -&gt;
+    <span style="color: #eedd82;">Ref</span>. 
+</pre>
+</div>
+<p>
+它会设立一个监视：
+</p>
+<ul class="org-ul">
+<li>Item 可以是进程的 <span class="underline">Pid</span> ,也可以是它的 <span class="underline">注册名称</span></li>
+<li>Ref: 该 <span class="underline">进程的引用</span></li>
+</ul>
+
+<p>
+如果这个进程因为 Why 的原因终止了,消息 <span class="underline">{'DOWN',Ref,process,Pid,Why}</span> 就会被发往 <span class="underline">父进程</span> 
+</p>
+</div>
+
+<div id="outline-container-orga2fb4f4" class="outline-4">
+<h4 id="orga2fb4f4">创建进程并同时设立监视</h4>
+<div class="outline-text-4" id="text-orga2fb4f4">
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #87cefa;">spawn_monitor</span>(<span style="color: #eedd82;">Func</span>) -&gt;
+    {<span style="color: #eedd82;">Pid</span>, <span style="color: #eedd82;">Ref</span>}. 
+
+<span style="color: #87cefa;">spawn_monitor</span>(<span style="color: #eedd82;">Mod</span>, <span style="color: #eedd82;">Func</span>, <span style="color: #eedd82;">Args</span>) -&gt;
+    {<span style="color: #eedd82;">Pid</span>, <span style="color: #eedd82;">Ref</span>}. 
+</pre>
+</div>
+
+<p>
+它与 spawn_link 相似,但创建的是监视而非连接
+</p>
+</div>
+</div>
+</div>
+<div id="outline-container-orge1256bb" class="outline-3">
+<h3 id="orge1256bb">移除监视</h3>
+<div class="outline-text-3" id="text-orge1256bb">
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #87cefa;">demonitor</span>(<span style="color: #eedd82;">Ref</span>) -&gt;
+    true. 
+</pre>
+</div>
+
+<p>
+移除以 Ref 作为引用的监视 
+</p>
+</div>
+</div>
+<div id="outline-container-org54eb62f" class="outline-3">
+<h3 id="org54eb62f">转变成系统进程</h3>
+<div class="outline-text-3" id="text-org54eb62f">
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #87cefa;">process_flag</span>(trap_exit, true). 
+</pre>
+</div>
+
+<p>
+它会把当前进程转变成系统进程，系统进程是一种能 <b>接收</b> 和 <b>处理</b> <span class="underline">错误信号</span> 的进程
+</p>
+</div>
+</div>
+<div id="outline-container-orga8ebf45" class="outline-3">
+<h3 id="orga8ebf45">终止进程</h3>
+<div class="outline-text-3" id="text-orga8ebf45">
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #87cefa;">exit</span>(<span style="color: #eedd82;">Why</span>) -&gt;
+    <span style="color: #b0c4de;">none</span>(). 
+</pre>
+</div>
+
+<p>
+它会使当前进程因为 Why 的原因终止，如果执行这一语句的子句不在 catch 语句的范围内：
+</p>
+<ul class="org-ul">
+<li>此进程就会向当前 <span class="underline">连接的所有进程</span> <b>广播</b> 一个 带有参数 <span class="underline">Why</span> 的 <span class="underline">退出信号</span></li>
+<li>它还会向所有 <span class="underline">监视它的进程</span> <b>广播</b> 一个 <span class="underline">DOWN 消息</span></li>
+</ul>
+</div>
+</div>
+<div id="outline-container-org4bb27bd" class="outline-3">
+<h3 id="org4bb27bd">发送退出信号</h3>
+<div class="outline-text-3" id="text-org4bb27bd">
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #87cefa;">exit</span>(<span style="color: #eedd82;">Pid</span>, <span style="color: #eedd82;">Why</span>) -&gt;
+    true. 
+</pre>
+</div>
+
+<p>
+它会向进程 <span class="underline">Pid</span> 发送一个带有原因 <span class="underline">Why 的退出信号</span> 。执行这个内置函数的进程本身不会终止，它只是被用于模拟一个退出信号
+</p>
+
+<pre class="example">
+     可以用这些基本函数来设立互相监视的进程网络，并把它作为构建容错式软件的起点
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-orgbf4b3e5" class="outline-2">
+<h2 id="orgbf4b3e5">容错式编程</h2>
 </div>
 </div>
 <div id="postamble" class="status">
