@@ -256,7 +256,7 @@ for the JavaScript code in this tag.
 <li><a href="#orgdb77d21">连接组</a></li>
 </ul>
 </li>
-<li><a href="#org78598c1">监视</a></li>
+<li><a href="#org7736e3e">监视</a></li>
 <li><a href="#org219e1fc">错误信号</a>
 <ul>
 <li><a href="#orgff59f7d">错误信号的接收</a></li>
@@ -266,7 +266,14 @@ for the JavaScript code in this tag.
 </li>
 </ul>
 </li>
-<li><a href="#org723ec26">创建连接</a></li>
+<li><a href="#org723ec26">创建连接</a>
+<ul>
+<li><a href="#org71a54b5">同步终止的进程组</a></li>
+<li><a href="#org39acf64">设立防火墙</a></li>
+</ul>
+</li>
+<li><a href="#org4ee8f79">监视</a></li>
+<li><a href="#org3d933aa">基本错误处理函数</a></li>
 </ul>
 </div>
 </div>
@@ -470,9 +477,9 @@ Erlang关于构建容错式软件的理念可以总结成两个容易记忆的�
 </div>
 </div>
 </div>
-<div id="outline-container-org78598c1" class="outline-3">
-<h3 id="org78598c1">监视</h3>
-<div class="outline-text-3" id="text-org78598c1">
+<div id="outline-container-org7736e3e" class="outline-3">
+<h3 id="org7736e3e">监视</h3>
+<div class="outline-text-3" id="text-org7736e3e">
 <p>
 监视和连接很相似,但它是 <b>单向</b> 的
 </p>
@@ -556,6 +563,120 @@ Erlang关于构建容错式软件的理念可以总结成两个容易记忆的�
 
 <div id="outline-container-org723ec26" class="outline-2">
 <h2 id="org723ec26">创建连接</h2>
+<div class="outline-text-2" id="text-org723ec26">
+<p>
+假设有一组互不相关的进程,如下图所示，虚线代表了连接：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/linkage.png" alt="linkage.png" width="70%" /> 
+</p>
+</div>
+
+<p>
+为了创建连接,会调用基本函数 <span class="underline">link(Pid)</span> ,它会在 <span class="underline">调用进程</span> 和 <span class="underline">Pid</span> 之间 <b>创建</b> 一个 <span class="underline">连接</span> 
+</p>
+
+<pre class="example">
+因此,如果 P1 调用 link(P3) , P1 和 P3 之间就会建立连接
+
+P1 调用了 link(P3) , P3 又调用了 link(P10)，以此类推，最终得到了图中所展示的情形
+
+请注意, P1 的连接组只有一个元素(P3)，而 P3 的连接组有两个元素(P1 和 P10)
+</pre>
+</div>
+
+<div id="outline-container-org71a54b5" class="outline-3">
+<h3 id="org71a54b5">同步终止的进程组</h3>
+<div class="outline-text-3" id="text-org71a54b5">
+<p>
+通常,我们希望创建能够 <b>同步终止</b> 的 <span class="underline">进程组</span> 。在论证系统行为的时候,这是一个非常有用的不变法则：
+</p>
+<ul class="org-ul">
+<li>当多个进程合作解决问题而某处出现问题时,有时候我们能进行恢复</li>
+<li>但如果无法恢复,就会希望之前所做的一切事情都停止下来</li>
+</ul>
+
+<pre class="example">
+     它和事务(transaction)这个概念很像:进程要么做它们该做的事,要么全部被杀死
+</pre>
+
+<p>
+假设我们有一些相互连接的进程而其中的某个进程挂了,比如下图中的 P9 。图a展示了 P9终止前各个进程是如何连接的，图b展示了 P9 崩溃且所有错误信号都处理完成后还剩下哪些进程：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/linkage-exit.png" alt="linkage-exit.png" width="70%" /> 
+</p>
+</div>
+
+<p>
+当 P9 终止时：
+</p>
+<ol class="org-ol">
+<li>一个错误信号被发送给进程 P4 和 P10 。因为 P4 和 P10 不是系统进程,所以也一起终止了</li>
+<li>随后,错误信号被发送给与它们相连的所有进程</li>
+<li>最后,错误信号扩散到了所有相连的进程,整个互连进程组都终止了</li>
+</ol>
+
+<pre class="example">
+     事实上：如果 P1 、 P3 、 P4 、 P9 或 P10 里的任意进程终止,它们就会全部终止
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org39acf64" class="outline-3">
+<h3 id="org39acf64">设立防火墙</h3>
+<div class="outline-text-3" id="text-org39acf64">
+<p>
+有时候我们不希望相连的进程全部终止,而是想让系统里的错误停止扩散。下图对此进行了演示,里面所有的相连进程都会终止,一直到 P3 为止：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/firewall.png" alt="firewall.png" width="70%" /> 
+</p>
+</div>
+
+<p>
+要实现这一点, P3 可以执行 <span class="underline">process_flag(trap_exit, true)</span> 并转变成一个系统进程(意思是它可以捕捉退出信号)。如图b所示,它用双圆来表示
+</p>
+
+<pre class="example">
+P9 崩溃之后,错误的扩散会在 P3 处停止,因此 P1 和 P3 不会终止
+
+P3 充当了一个防火墙,阻止错误扩散到系统里的其他进程中
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org4ee8f79" class="outline-2">
+<h2 id="org4ee8f79">监视</h2>
+<div class="outline-text-2" id="text-org4ee8f79">
+<p>
+监视与连接类似,但是有几处明显的区别：
+</p>
+<ul class="org-ul">
+<li>监视是 <b>单向</b> 的：如果 A 监视 B 而 B 挂了,就会向 A 发送一个退出消息,反过来则不会如此(别忘了连接是双向的,因此如果 A 与 B 相连,其任何一个进程的终止都会导致另一个进程收到通知)</li>
+<li>如果被监视的进程挂了,就会向监视进程发送一个 <span class="underline">宕机</span> 消息,而不是退出信号。这就意味着 <b>监视进程即使不是系统进程也能够处理错误</b></li>
+</ul>
+
+
+<p>
+因此当想要不对称的错误处理时,可以使用监视,对称的错误处理则适合使用连接
+</p>
+
+<pre class="example">
+    监视通常会被服务器用来监视客户端的行为
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org3d933aa" class="outline-2">
+<h2 id="org3d933aa">基本错误处理函数</h2>
 </div>
 </div>
 <div id="postamble" class="status">
