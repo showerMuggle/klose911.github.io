@@ -321,3 +321,177 @@
      可以用这些基本函数来设立互相监视的进程网络，并把它作为构建容错式软件的起点
    #+END_EXAMPLE
 * 容错式编程
+  在这一节里,将学到一些编写容错式代码的简单技巧
+
+  #+BEGIN_EXAMPLE
+    这并不是编写容错式系统的完整教程,而是一个起点
+  #+END_EXAMPLE
+** 在进程终止时执行操作
+   函数 _on_exit(Pid, Fun)_ 会监视进程 Pid ,如果它因为原因 Why 退出了,就会执行 Fun(Why) ：
+
+   #+BEGIN_SRC erlang 
+  on_exit(Pid, Fun) ->
+      spawn(fun() -> 
+		    Ref = monitor(process, Pid), 
+		    receive
+			{'DOWN', Ref, process, Pid, Why} -> 
+			    Fun(Why) 
+		    end
+	    end).
+   #+END_SRC
+
+   + monitor(process, Pid) ：对 Pid 创建了一个监视
+   + 当这个进程终止时,监视进程就会接收一个 DOWN 消息并调用 Fun(Why) 
+
+** 测试
+   为了测试它,现在来定义一个 F 函数,让它等待一个消息 X 然后计算 list_to_atom(X) :
+
+   #+BEGIN_SRC erlang 
+  F = fun() ->
+	      receive 
+		      X -> list_to_atom(X)
+		      end 
+      end.
+   #+END_SRC
+
+   现在创建一个运行F的进程：
+
+   #+BEGIN_SRC sh 
+  2> F = fun() -> receive X -> list_to_atom(X) end end.  
+  #Fun<erl_eval.20.50752066>
+  3>  
+  3> Pid = spawn(F) . 
+  <0.44.0>
+   #+END_SRC
+
+   设立一个 on_exit 处理进程来监视它：
+
+   #+BEGIN_SRC sh 
+  4> lib_misc:on_exit(Pid, fun(Why) -> io_format(" ~p died with ~p~n", [Pid, Why]) end) . 
+  <0.46.0>
+   #+END_SRC
+
+   如果向 Pid 发送一个原子,这个进程就会挂掉(因为它试图对非列表类型执行 list_to_atom )，同时 on_exit 处理进程则会得到通知：
+
+   #+BEGIN_SRC sh 
+  5> Pid ! hello . 
+  hello
+  6> 
+  6> 
+  =ERROR REPORT==== 18-Mar-2021::10:14:51 ===
+  Error in process <0.44.0> with exit value:
+  {badarg,[{erlang,list_to_atom,[hello],[]}]}
+
+  =ERROR REPORT==== 18-Mar-2021::10:14:51 ===
+  Error in process <0.46.0> with exit value:
+  {{shell_undef,io_format,2,[]},
+   [{shell,shell_undef,2,[{file,"shell.erl"},{line,1059}]},
+    {erl_eval,local_func,6,[{file,"erl_eval.erl"},{line,562}]}]}
+   #+END_SRC
+
+   进程挂掉时触发的函数可以执行任何它喜欢的计算:它可以忽略错误,记录错误或者重启应用程序
+
+   #+BEGIN_EXAMPLE
+     这个选择完全取决于程序员
+   #+END_EXAMPLE
+*** 原子操作
+    以前,Erlang有两个基本函数: spawn 和 link ,而spawn_link(Mod, Func, Args) 的定义是下面这样的:
+
+    #+BEGIN_SRC erlang 
+  spawn_link(Mod, Func, Args) ->
+      Pid = spawn(Mod, Fun, Args),
+      link(Pid),
+      Pid.
+    #+END_SRC
+
+    后来出现了一个诡异的bug：创建出的进程在连接语句被调用前就挂了，因此进程的退出并没有生成错误信号
+    #+BEGIN_EXAMPLE
+      这个bug花了好长时间才找到，为了修复这个问题,添加了原子操作 1 的 spawn_link
+
+      只要涉及并发,看似简单的程序也可能会变得很棘手
+    #+END_EXAMPLE
+** 让一组进程共同终止
+   假设要创建若干工作进程来解决某个问题,它们分别执行函数 F1, F2... 。如果任何一个进程挂了,我们希望它们能全体终止。可以调用 start([F1,F2, ...]) 来实现这一点：
+
+   #+BEGIN_SRC erlang 
+  start(Fs) ->
+      spawn(fun() ->
+		    [spwan_link(F) || F <- Fs], 
+		    receive 
+		    after
+			infinity->
+			    true
+		    end
+	    end).
+   #+END_SRC
+
+   start(Fs): 会创建出一个进程，后者随即创建并连接各个工作进程，然后无限期等待
+
+   #+BEGIN_EXAMPLE
+   如果任何一个工作进程挂了,它们就都会终止
+   #+END_EXAMPLE
+
+   如果想知道这些进程是否都已终止,可以给启动进程添加一个 on_exit 处理进程：
+
+   #+BEGIN_SRC erlang 
+  Pid = start([F1, F2, ...]),
+  on_exit(Pid, fun(Why) ->
+						  %... 如果任何一个工作进程挂了
+						  %... 就执行这里的代码
+		       true
+	       end) 
+   #+END_SRC
+
+** 生成一个永不终止的进程
+   将生成一个持久运行的进程。具体做法是生成一个始终活动的注册进程,如果它出于任何原因挂了,就会立即重启
+
+   #+BEGIN_SRC erlang 
+  keep_alive(Name, Fun) ->
+      register(Name, Pid = spawn(Fun)),
+      on_exit(Pid, fun(_Why) -> keep_alive(Name, Fun) end).
+   #+END_SRC
+
+   这段代码生成一个名为 Name 的注册进程,并让它执行 spawn(Fun) ，如果这个进程出于任何原因挂了,就会被重启
+
+*** 思考
+    on_exit 和 keep_alive 里有一个相当微妙的错误。如果仔细查看下面这两行代码:
+
+    #+BEGIN_SRC erlang 
+  Pid = regist(...), 
+  on_exit(Pid, fun(X) -> ...) 
+		     
+    #+END_SRC
+
+    程序有可能会在这两个语句之间挂掉，如果进程在 on_exit 被执行之前终止,就不会创建连接, on_exit 进程的行为就会和预计的不同
+
+    #+BEGIN_EXAMPLE
+      如果有两个程序同时尝试用相同的一段代码（同一个 Name 值并执行 keep_alive）,这个错误就会发生
+    #+END_EXAMPLE
+
+    两段代码(都是这段)和 on_exit 里执行连接操作的代码片段正在互相竞争，这被称为 _竞争条件_ (race condition)
+
+    #+BEGIN_EXAMPLE
+      组合使用 spawn 、spawn_monitor 和 register 等Erlang基本函数时,必须仔细考虑潜在的竞争条件,确保代码不会让这些状况发生
+
+      如果这里出了错,程序就可能会表现出你预料之外的行为
+    #+END_EXAMPLE
+
+* 总结
+  现在已经了解了下所有错误处理的知识：
+  + 顺序代码无法捕捉的错误会从发生错误的进程中流出,沿着连接到达其他进程,而后者可以根据设定来处理这些错误
+  + 描述过的所有机制(连接过程等)都可以实现跨机器的透明运作
+
+  #+BEGIN_EXAMPLE
+    跨机器运作带领我们进入了分布式编程的领域
+
+    Erlang进程可以在网络上的其他物理机器中创建出新的进程，这让编写分布式程序变得简单了
+
+    而这正是下一章的主题
+  #+END_EXAMPLE
+
+  [[file:distributed_programming.org][Next：分布式编程]]
+
+  [[file:concept.org][Previous：并发原语]]
+
+  [[file:concurrency.org][Home：目录]]
+
