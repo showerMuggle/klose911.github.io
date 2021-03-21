@@ -264,7 +264,25 @@ for the JavaScript code in this tag.
 </li>
 </ul>
 </li>
-<li><a href="#org2896f3d">分布式编程的库和内置函数</a></li>
+<li><a href="#org2896f3d">分布式编程的库和内置函数</a>
+<ul>
+<li><a href="#org16ae035">rpc 模块</a>
+<ul>
+<li><a href="#orgdac13cb">远程创建进程</a></li>
+<li><a href="#org4013660">远程连接</a></li>
+<li><a href="#org0da13b3">断开连接</a></li>
+<li><a href="#org818d2c3">远程监视</a></li>
+<li><a href="#orge052c9c">节点管理</a></li>
+<li><a href="#orgfd11a5b">远程消息</a></li>
+</ul>
+</li>
+<li><a href="#org433f985">实例</a>
+<ul>
+<li><a href="#org6ee4430">文件操作</a></li>
+</ul>
+</li>
+</ul>
+</li>
 <li><a href="#org551f21a">cookie 保护系统</a></li>
 </ul>
 </div>
@@ -601,17 +619,17 @@ true
 要实现这一切，我们的操作会比在同一台机器上运行两个节点时略微复杂一些。必须分4步走：
 </p>
 <ol class="org-ol">
-<li>用 -name 参数启动Erlang：
+<li>用 <span class="underline">-name</span> 参数启动Erlang：
 <ul class="org-ul">
 <li>在同一台机器上运行两个节点时使用了“短”名称（通过 -sname 标识体现），当两台机器位于同一个子网时也可以使用 -sname</li>
 <li>但如果它们属于不同的网络，就要使用 -name，如果没有DNS服务， -sname 就是唯一可行的方式</li>
 </ul></li>
-<li>确保两个节点拥有相同的 cookie 。这正是启动两个节点时都使用命令行参数 -setcookie abc 的原因</li>
-<li>确保相关节点的完全限定主机名（fully qualified hostname）可以被DNS解析
+<li>确保两个节点拥有 <b>相同的 cookie</b> ：这正是启动两个节点时都使用命令行参数 -setcookie abc 的原因</li>
+<li>确保相关节点的 <span class="underline">完全限定主机名</span> （fully qualified hostname）可以 <b>被DNS解析</b> 
 <ul class="org-ul">
-<li>对于我来说，域名 myerl.example.com 完全属于我的家庭网络，通过在 /etc/hosts 里添加一个条目来实现本地解析</li>
+<li>对于我来说，域名 klose.com 完全属于我的家庭网络，通过在 /etc/hosts 里添加一个条目来实现本地解析</li>
 </ul></li>
-<li>确保两个系统拥有相同版本的代码和相同版本的Erlang</li>
+<li>确保两个系统拥有 <b>相同版本的代码</b> 和 <b>相同版本的Erlang</b></li>
 </ol>
 
 <pre class="example">
@@ -666,7 +684,325 @@ true
 
 <div id="outline-container-org2896f3d" class="outline-2">
 <h2 id="org2896f3d">分布式编程的库和内置函数</h2>
+<div class="outline-text-2" id="text-org2896f3d">
+<pre class="example">
+编写分布式程序时很少从头开始。标准库里有许多模块可以用于编写分布式程序
+
+虽然这些模块是用内置分布式函数编写的，但是它们能对程序员隐藏大量繁琐的细节
+</pre>
+<p>
+标准分发套装里的两个模块能够满足大多数需求。
+</p>
+<ul class="org-ul">
+<li><span class="underline">rpc</span> : 提供了许多 <b>远程过程调用</b> 服务</li>
+<li><span class="underline">global</span> : 里的函数可以用来在分布式系统里 <span class="underline">注册名称</span> 和 <span class="underline">加锁</span> ，以及维护一个全连接网络</li>
+</ul>
 </div>
+
+<div id="outline-container-org16ae035" class="outline-3">
+<h3 id="org16ae035">rpc 模块</h3>
+<div class="outline-text-3" id="text-org16ae035">
+<p>
+rpc 模块里最重要的函数就是下面这个。
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #ffd700;">-spec</span> <span style="color: #98f5ff;">call</span>(<span style="color: #4eee94;">Node</span>, <span style="color: #4eee94;">Mod</span>, <span style="color: #4eee94;">Func</span>, <span style="color: #4eee94;">Args</span>) -&gt;<span style="color: #daa520; font-weight: bold;"> </span><span style="color: #4eee94;">Result</span> | {badrpc, <span style="color: #4eee94;">Reason</span>}
+</pre>
+</div>
+<p>
+它会在 Node 上执行 apply(Mod, Func, Args) ，然后：
+</p>
+<ul class="org-ul">
+<li>如果调用成功返回结果 Result</li>
+<li>如果调用失败则返回 {badrpc, Reason}</li>
+</ul>
+
+
+<p>
+以下是编写分布式程序的基本函数：
+</p>
+</div>
+<div id="outline-container-orgdac13cb" class="outline-4">
+<h4 id="orgdac13cb">远程创建进程</h4>
+<div class="outline-text-4" id="text-orgdac13cb">
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #ffd700;">-spec</span> <span style="color: #f08080;">spawn</span>(<span style="color: #4eee94;">Node</span>, <span style="color: #4eee94;">Func</span>) -&gt;<span style="color: #daa520; font-weight: bold;"> </span><span style="color: #4eee94;">Pid</span> 
+</pre>
+</div>
+
+<p>
+它的工作方式和 spawn(Func) 完全一致，只是新进程是在 Node 上创建的
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #ffd700;">-spec</span> <span style="color: #f08080;">spawn</span>(<span style="color: #4eee94;">Node</span>, <span style="color: #4eee94;">Mod</span>, <span style="color: #4eee94;">Func</span>, <span style="color: #4eee94;">Args</span>) -&gt;<span style="color: #daa520; font-weight: bold;"> </span><span style="color: #4eee94;">Pid</span>
+</pre>
+</div>
+
+<p>
+它的工作方式和 spawn(Mod, Func, Args) 完全一致，只是新进程是在 Node 上创建的 
+</p>
+
+<pre class="example">
+这种形式的 spawn 比 spawn(Node, Func) 更加健壮
+
+如果运行在多个分布式节点上的特定模块不是完全相同的版本， spawn(Node, Func) 就可能会出错
+</pre>
+</div>
+</div>
+<div id="outline-container-org4013660" class="outline-4">
+<h4 id="org4013660">远程连接</h4>
+<div class="outline-text-4" id="text-org4013660">
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #ffd700;">-spec</span> <span style="color: #f08080;">spawn_link</span>(<span style="color: #4eee94;">Node</span>, <span style="color: #4eee94;">Fun</span>) -&gt;<span style="color: #daa520; font-weight: bold;"> </span>true 
+</pre>
+</div>
+
+<p>
+它的工作方式和 spawn_link(Fun) 完全一致，只是新进程是在 Node 上创建的 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #ffd700;">-spec</span> <span style="color: #f08080;">spawn_link</span>(<span style="color: #4eee94;">Node</span>, <span style="color: #4eee94;">Mod</span>, <span style="color: #4eee94;">Fun</span>, <span style="color: #4eee94;">Args</span>) -&gt;<span style="color: #daa520; font-weight: bold;"> </span>true
+</pre>
+</div>
+<p>
+它的工作方式类似 spawn(Node, Mod, Fun, Args) ，但是新进程会与当前进程相连 
+</p>
+</div>
+</div>
+
+<div id="outline-container-org0da13b3" class="outline-4">
+<h4 id="org0da13b3">断开连接</h4>
+<div class="outline-text-4" id="text-org0da13b3">
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #ffd700;">-spec</span> <span style="color: #f08080;">disconnect_node</span>(<span style="color: #4eee94;">Node</span>) -&gt;<span style="color: #daa520; font-weight: bold;"> </span><span style="color: #98f5ff;">bool</span>() | ignored 
+</pre>
+</div>
+
+<p>
+它会强制断开与某个节点的连接 
+</p>
+</div>
+</div>
+
+<div id="outline-container-org818d2c3" class="outline-4">
+<h4 id="org818d2c3">远程监视</h4>
+<div class="outline-text-4" id="text-org818d2c3">
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #ffd700;">-spec</span> <span style="color: #f08080;">monitor_node</span>(<span style="color: #4eee94;">Node</span>, <span style="color: #4eee94;">Flag</span>) -&gt;<span style="color: #daa520; font-weight: bold;"> </span>true
+</pre>
+</div>
+
+<ul class="org-ul">
+<li>如果 Flag 是 <span class="underline">true</span> 就会 <b>开启监视</b> 
+<ul class="org-ul">
+<li>如果开启了监视，那么当Node 加入或离开Erlang互连节点组时，执行这个内置函数的进程就会收到 <span class="underline">{nodeup, Node}</span> 或 <span class="underline">{nodedown, Node}</span> 的消息</li>
+</ul></li>
+<li>如果 Flag 是 <span class="underline">false</span> 就会 <b>关闭监视</b></li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-orge052c9c" class="outline-4">
+<h4 id="orge052c9c">节点管理</h4>
+<div class="outline-text-4" id="text-orge052c9c">
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #ffd700;">-spec</span> <span style="color: #f08080;">node</span>() -&gt;<span style="color: #daa520; font-weight: bold;"> </span><span style="color: #4eee94;">Node</span> 
+</pre>
+</div>
+<p>
+它会返回本地节点的名称：
+</p>
+<ul class="org-ul">
+<li>如果节点不是分布式的则会返回 <span class="underline">nonode@nohost</span></li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #ffd700;">-spec</span> <span style="color: #f08080;">node</span>(<span style="color: #4eee94;">Arg</span>) -&gt;<span style="color: #daa520; font-weight: bold;"> </span><span style="color: #4eee94;">Node</span> 
+</pre>
+</div>
+
+<p>
+它会返回 Arg 所在的节点：
+</p>
+<ul class="org-ul">
+<li>Arg 可以是 <span class="underline">PID</span> 、 <span class="underline">引用</span> 或者 <span class="underline">端口</span></li>
+<li>如果本地节点不是分布式的，则会返回 nonode@nohost</li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #ffd700;">-spec</span> <span style="color: #f08080;">nodes</span>() -&gt;<span style="color: #daa520; font-weight: bold;"> </span>[<span style="color: #4eee94;">Nodes</span>] 
+</pre>
+</div>
+
+<p>
+它会返回一个列表，内含网络里其他所有与我们相连的节点 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #ffd700;">-spec</span> <span style="color: #f08080;">is_alive</span>() -&gt;<span style="color: #daa520; font-weight: bold;"> </span><span style="color: #98f5ff;">bool</span>() 
+</pre>
+</div>
+
+<p>
+如果本地节点是活动的，并且可以成为分布式系统的一部分，就返回 true ，否则返回 false 
+</p>
+</div>
+</div>
+
+<div id="outline-container-orgfd11a5b" class="outline-4">
+<h4 id="orgfd11a5b">远程消息</h4>
+<div class="outline-text-4" id="text-orgfd11a5b">
+<p>
+send 可以用来向一组分布式Erlang节点里的某个本地注册进程发送消息：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang">{<span style="color: #4eee94;">Regname</span>, <span style="color: #4eee94;">Node</span>} ! <span style="color: #4eee94;">Msg</span> 
+</pre>
+</div>
+<p>
+把消息 Msg 发送给节点 Node 上的注册进程 RegName  
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org433f985" class="outline-3">
+<h3 id="org433f985">实例</h3>
+<div class="outline-text-3" id="text-org433f985">
+<pre class="example">
+作为一个简单的示例，将展示如何在某个远程节点上创建进程
+</pre>
+<p>
+从下面这个程序开始：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #ffd700;">-module</span>(dist_demo).
+
+<span style="color: #ffd700;">-export</span>([<span style="color: #98f5ff;">rpc/4</span>, <span style="color: #98f5ff;">start/1</span>]).
+
+<span style="color: #daa520; font-weight: bold;">start</span>(<span style="color: #4eee94;">Node</span>) -&gt;
+    <span style="color: #f08080;">spawn</span>(<span style="color: #4eee94;">Node</span>, <span style="color: #00bfff; font-weight: bold;">fun</span>() -&gt;<span style="color: #daa520; font-weight: bold;"> </span><span style="color: #98f5ff;">loop</span>() <span style="color: #00bfff; font-weight: bold;">end</span>).
+
+<span style="color: #daa520; font-weight: bold;">rpc</span>(<span style="color: #4eee94;">Pid</span>, <span style="color: #4eee94;">M</span>, <span style="color: #4eee94;">F</span>, <span style="color: #4eee94;">A</span>) -&gt;
+    <span style="color: #4eee94;">Pid</span> ! {rpc, <span style="color: #f08080;">self</span>(), <span style="color: #4eee94;">M</span>, <span style="color: #4eee94;">F</span>, <span style="color: #4eee94;">A</span>},
+    <span style="color: #00bfff; font-weight: bold;">receive</span>
+        {<span style="color: #4eee94;">Pid</span>, <span style="color: #4eee94;">Response</span>} -&gt;
+            <span style="color: #4eee94;">Response</span>
+    <span style="color: #00bfff; font-weight: bold;">end</span>.
+
+<span style="color: #daa520; font-weight: bold;">loop</span>() -&gt;
+    <span style="color: #00bfff; font-weight: bold;">receive</span>
+        {rpc, <span style="color: #4eee94;">Pid</span>, <span style="color: #4eee94;">M</span>, <span style="color: #4eee94;">F</span>, <span style="color: #4eee94;">A</span>} -&gt;
+            <span style="color: #4eee94;">Pid</span> ! {<span style="color: #f08080;">self</span>(), (<span style="color: #00bfff; font-weight: bold;">catch</span> <span style="color: #f08080;">apply</span>(<span style="color: #4eee94;">M</span>, <span style="color: #4eee94;">F</span>, <span style="color: #4eee94;">A</span>))},
+            <span style="color: #98f5ff;">loop</span>()
+    <span style="color: #00bfff; font-weight: bold;">end</span>.
+</pre>
+</div>
+<p>
+然后启动两个节点，它们都必须能够载入这段代码
+</p>
+
+<pre class="example">
+如果这两个节点在同一台主机上，这就不成问题。只需从同一个目录里启动两个Erlang节点就可以了
+
+如果节点分别属于两台物理隔离且文件系统不同的主机，这个程序就必须被复制到所有节点上，编译之后才能启动节点（或者也可以把 .beam 文件复制到所有节点上）
+
+在这个例子里，我假定这一切都已完成
+</pre>
+
+<p>
+在主机 gentoo 上，启动一个名为 gandalf 的节点：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ erl -name gandalf@gentoo.klose.com -setcookie abc 
+Erlang/OTP 23 [erts-11.1.7] [source] [64-bit] [smp:4:4] [ds:4:4:10] [async-threads:1] [hipe]
+
+Eshell V11.1.7  (abort with ^G)
+(gandalf@gentoo.klose.com)1&gt; 
+</pre>
+</div>
+
+<p>
+在主机 raspberrypi 上，启动一个名为 bilbo 的节点，要记得使用同一个cookie：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ erl -name bilbo@raspberrypi.klose.com -setcookie abc 
+Erlang/OTP 21 [erts-10.2.4] [source] [smp:4:4] [ds:4:4:10] [async-threads:1]
+
+Eshell V10.2.4  (abort with ^G)
+</pre>
+</div>
+
+<p>
+现在（在 bilbo 上），让远程节点（ gandalf ）创建一个进程：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">(bilbo@raspberrypi.klose.com)1&gt; Pid = dist_demo:start(<span style="color: #deb887;">'gandalf@gentoo.klose.com'</span>) <span style="color: #f08080;">.</span> 
+&lt;8209.92.0&gt;
+</pre>
+</div>
+
+<p>
+Pid 是这个 <span class="underline">远程节点</span> 进程的标识符，接着再调用 dist_demo:rpc/4 ，在远程节点(gandalf)上执行一次 <span class="underline">远程过程</span> 调用：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">(bilbo@raspberrypi.klose.com)2&gt; dist_demo:rpc(Pid, erlang, node, []) <span style="color: #f08080;">.</span> 
+<span style="color: #deb887;">'gandalf@gentoo.klose.com'</span>
+</pre>
+</div>
+
+<p>
+它在远程节点上执行 erlang:node() 并返回一个值 
+</p>
+</div>
+
+<div id="outline-container-org6ee4430" class="outline-4">
+<h4 id="org6ee4430">文件操作</h4>
+<div class="outline-text-4" id="text-org6ee4430">
+<p>
+下面这些操作是上一个示例的延续：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">(bilbo@raspberrypi.klose.com)4&gt; dist_demo:rpc(Pid, file, get_cwd, []) <span style="color: #f08080;">.</span>  
+{ok,<span style="color: #deb887;">"/home/klose/tmp"</span>}
+
+(bilbo@raspberrypi.klose.com)6&gt; dist_demo:rpc(Pid, file, list_dir, [<span style="color: #deb887;">"."</span>]) <span style="color: #f08080;">.</span>    
+{ok,[<span style="color: #deb887;">"dist_demo.erl"</span>,<span style="color: #deb887;">"dist_demo.beam"</span>,<span style="color: #deb887;">"hello.txt"</span>]}
+
+(bilbo@raspberrypi.klose.com)9&gt; dist_demo:rpc(Pid, file, read_file, [<span style="color: #deb887;">"dist_demo.erl"</span>]) <span style="color: #f08080;">.</span>     
+{ok,&lt;&lt;<span style="color: #deb887;">"%% ---\n%%  Excerpted from \"Programming Erlang, Second Edition\",\n%%  published by The Pragmatic Bookshelf.\n%%"</span>...&gt;&gt;}
+</pre>
+</div>
+
+<p>
+在 bilbo 上发起的一些请求形成了对 gandalf 上标准库的远程过程调用。使用 file 模块里的三个函数来访问 gandalf 的文件系统 ：
+</p>
+<ul class="org-ul">
+<li><a href="get_cwd">get_cwd</a>(): 返回文件服务器的当前工作目录</li>
+<li><a href="list_dir(Dir)">list_dir(Dir)</a>: 返回 Dir 里所有文件的列表</li>
+<li><a href="read_file(File)">read_file(File)</a>: 读取文件 File</li>
+</ul>
+
+<pre class="example">
+仔细回味一下，你会意识到刚才所做的相当神奇
+
+没有编写任何代码就创建了一个文件服务器，只是重用了 file 模块里的库代码，并使它可以通过一个简单的远程过程调用接口访问
+</pre>
+</div>
+</div>
+</div>
+</div>
+
 <div id="outline-container-org551f21a" class="outline-2">
 <h2 id="org551f21a">cookie 保护系统</h2>
 </div>

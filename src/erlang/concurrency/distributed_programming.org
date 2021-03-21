@@ -281,4 +281,205 @@ _分布式_ 程序是那些被设计运行在 _计算机网络_ 上的程序,并
     #+end_example
 
 * 分布式编程的库和内置函数
+  #+begin_example
+    编写分布式程序时很少从头开始。标准库里有许多模块可以用于编写分布式程序
+
+    虽然这些模块是用内置分布式函数编写的，但是它们能对程序员隐藏大量繁琐的细节
+  #+end_example
+  标准分发套装里的两个模块能够满足大多数需求。
+  + _rpc_ : 提供了许多 *远程过程调用* 服务
+  + _global_ : 里的函数可以用来在分布式系统里 _注册名称_ 和 _加锁_ ，以及维护一个全连接网络  
+
+** rpc 模块
+   rpc 模块里最重要的函数就是下面这个。
+
+   #+begin_src erlang 
+  -spec call(Node, Mod, Func, Args) -> Result | {badrpc, Reason}
+   #+end_src
+   它会在 Node 上执行 apply(Mod, Func, Args) ，然后：
+   + 如果调用成功返回结果 Result
+   + 如果调用失败则返回 {badrpc, Reason}  
+
+
+   以下是编写分布式程序的基本函数：
+*** 远程创建进程 
+    #+begin_src erlang 
+  -spec spawn(Node, Func) -> Pid 
+    #+end_src
+
+    它的工作方式和 spawn(Func) 完全一致，只是新进程是在 Node 上创建的
+
+    #+begin_src erlang 
+  -spec spawn(Node, Mod, Func, Args) -> Pid
+    #+end_src
+
+    它的工作方式和 spawn(Mod, Func, Args) 完全一致，只是新进程是在 Node 上创建的 
+
+    #+begin_example
+      这种形式的 spawn 比 spawn(Node, Func) 更加健壮
+
+      如果运行在多个分布式节点上的特定模块不是完全相同的版本， spawn(Node, Func) 就可能会出错
+    #+end_example
+*** 远程连接
+
+    #+begin_src erlang 
+      -spec spawn_link(Node, Fun) -> true 
+    #+end_src
+
+    它的工作方式和 spawn_link(Fun) 完全一致，只是新进程是在 Node 上创建的 
+
+    #+begin_src erlang 
+  -spec spawn_link(Node, Mod, Fun, Args) -> true
+    #+end_src
+    它的工作方式类似 spawn(Node, Mod, Fun, Args) ，但是新进程会与当前进程相连 
+
+*** 断开连接
+    #+begin_src erlang 
+  -spec disconnect_node(Node) -> bool() | ignored 
+    #+end_src
+
+    它会强制断开与某个节点的连接 
+
+*** 远程监视
+    #+begin_src erlang 
+  -spec monitor_node(Node, Flag) -> true
+    #+end_src
+
+    + 如果 Flag 是 _true_ 就会 *开启监视* 
+      + 如果开启了监视，那么当Node 加入或离开Erlang互连节点组时，执行这个内置函数的进程就会收到 _{nodeup, Node}_ 或 _{nodedown, Node}_ 的消息 
+    + 如果 Flag 是 _false_ 就会 *关闭监视* 
+
+*** 节点管理
+    #+begin_src erlang 
+      -spec node() -> Node 
+    #+end_src
+    它会返回本地节点的名称：
+    + 如果节点不是分布式的则会返回 _nonode@nohost_ 
+
+    #+begin_src erlang 
+  -spec node(Arg) -> Node 
+    #+end_src
+
+    它会返回 Arg 所在的节点：
+    + Arg 可以是 _PID_ 、 _引用_ 或者 _端口_
+    + 如果本地节点不是分布式的，则会返回 nonode@nohost  
+
+    #+begin_src erlang 
+  -spec nodes() -> [Nodes] 
+    #+end_src
+
+    它会返回一个列表，内含网络里其他所有与我们相连的节点 
+
+    #+begin_src erlang 
+  -spec is_alive() -> bool() 
+    #+end_src
+
+    如果本地节点是活动的，并且可以成为分布式系统的一部分，就返回 true ，否则返回 false 
+
+*** 远程消息
+    send 可以用来向一组分布式Erlang节点里的某个本地注册进程发送消息：
+
+    #+begin_src erlang 
+  {Regname, Node} ! Msg 
+    #+end_src
+    把消息 Msg 发送给节点 Node 上的注册进程 RegName  
+
+** 实例
+   #+begin_example
+     作为一个简单的示例，将展示如何在某个远程节点上创建进程
+   #+end_example
+   从下面这个程序开始：
+
+   #+begin_src erlang 
+  -module(dist_demo).
+
+  -export([rpc/4, start/1]).
+
+  start(Node) ->
+      spawn(Node, fun() -> loop() end).
+
+  rpc(Pid, M, F, A) ->
+      Pid ! {rpc, self(), M, F, A},
+      receive
+	  {Pid, Response} ->
+	      Response
+      end.
+
+  loop() ->
+      receive
+	  {rpc, Pid, M, F, A} ->
+	      Pid ! {self(), (catch apply(M, F, A))},
+	      loop()
+      end.
+   #+end_src
+   然后启动两个节点，它们都必须能够载入这段代码
+
+   #+begin_example
+     如果这两个节点在同一台主机上，这就不成问题。只需从同一个目录里启动两个Erlang节点就可以了
+
+     如果节点分别属于两台物理隔离且文件系统不同的主机，这个程序就必须被复制到所有节点上，编译之后才能启动节点（或者也可以把 .beam 文件复制到所有节点上）
+
+     在这个例子里，我假定这一切都已完成
+   #+end_example
+
+   在主机 gentoo 上，启动一个名为 gandalf 的节点：
+
+   #+begin_src sh 
+  $ erl -name gandalf@gentoo.klose.com -setcookie abc 
+  Erlang/OTP 23 [erts-11.1.7] [source] [64-bit] [smp:4:4] [ds:4:4:10] [async-threads:1] [hipe]
+
+  Eshell V11.1.7  (abort with ^G)
+  (gandalf@gentoo.klose.com)1> 
+   #+end_src
+
+   在主机 raspberrypi 上，启动一个名为 bilbo 的节点，要记得使用同一个cookie：
+
+   #+begin_src sh 
+  $ erl -name bilbo@raspberrypi.klose.com -setcookie abc 
+  Erlang/OTP 21 [erts-10.2.4] [source] [smp:4:4] [ds:4:4:10] [async-threads:1]
+
+  Eshell V10.2.4  (abort with ^G)
+   #+end_src
+
+   现在（在 bilbo 上），让远程节点（ gandalf ）创建一个进程：
+
+   #+begin_src sh 
+  (bilbo@raspberrypi.klose.com)1> Pid = dist_demo:start('gandalf@gentoo.klose.com') . 
+  <8209.92.0>
+   #+end_src
+
+   Pid 是这个 _远程节点_ 进程的标识符，接着再调用 dist_demo:rpc/4 ，在远程节点(gandalf)上执行一次 _远程过程_ 调用：
+
+   #+begin_src sh 
+  (bilbo@raspberrypi.klose.com)2> dist_demo:rpc(Pid, erlang, node, []) . 
+  'gandalf@gentoo.klose.com'
+   #+end_src
+
+   它在远程节点上执行 erlang:node() 并返回一个值 
+
+*** 文件操作
+    下面这些操作是上一个示例的延续：
+
+    #+begin_src sh 
+  (bilbo@raspberrypi.klose.com)4> dist_demo:rpc(Pid, file, get_cwd, []) .  
+  {ok,"/home/klose/tmp"}
+
+  (bilbo@raspberrypi.klose.com)6> dist_demo:rpc(Pid, file, list_dir, ["."]) .    
+  {ok,["dist_demo.erl","dist_demo.beam","hello.txt"]}
+
+  (bilbo@raspberrypi.klose.com)9> dist_demo:rpc(Pid, file, read_file, ["dist_demo.erl"]) .     
+  {ok,<<"%% ---\n%%  Excerpted from \"Programming Erlang, Second Edition\",\n%%  published by The Pragmatic Bookshelf.\n%%"...>>}
+    #+end_src
+
+    在 bilbo 上发起的一些请求形成了对 gandalf 上标准库的远程过程调用。使用 file 模块里的三个函数来访问 gandalf 的文件系统 ：
+    + file:get_cwd(): 返回文件服务器的当前工作目录
+    + file:list_dir(Dir): 返回 Dir 里所有文件的列表
+    + file:read_file(File): 读取文件 File  
+
+    #+begin_example
+      仔细回味一下，你会意识到刚才所做的相当神奇
+
+      没有编写任何代码就创建了一个文件服务器，只是重用了 file 模块里的库代码，并使它可以通过一个简单的远程过程调用接口访问
+    #+end_example
+
 * cookie 保护系统
