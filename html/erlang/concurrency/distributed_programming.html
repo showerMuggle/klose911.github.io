@@ -283,7 +283,18 @@ for the JavaScript code in this tag.
 </li>
 </ul>
 </li>
-<li><a href="#org551f21a">cookie 保护系统</a></li>
+<li><a href="#org551f21a">cookie 保护系统</a>
+<ul>
+<li><a href="#orgcf3a3e3">设置 Cookie</a>
+<ul>
+<li><a href="#org9e054c1">文件系统</a></li>
+<li><a href="#org1759f47">启动参数</a></li>
+<li><a href="#orgfea7791">内置函数</a></li>
+</ul>
+</li>
+<li><a href="#org67a7a6e">安全性</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
@@ -988,9 +999,9 @@ Pid 是这个 <span class="underline">远程节点</span> 进程的标识符，�
 在 bilbo 上发起的一些请求形成了对 gandalf 上标准库的远程过程调用。使用 file 模块里的三个函数来访问 gandalf 的文件系统 ：
 </p>
 <ul class="org-ul">
-<li><a href="get_cwd">get_cwd</a>(): 返回文件服务器的当前工作目录</li>
-<li><a href="list_dir(Dir)">list_dir(Dir)</a>: 返回 Dir 里所有文件的列表</li>
-<li><a href="read_file(File)">read_file(File)</a>: 读取文件 File</li>
+<li>get_cwd(): 返回文件服务器的当前工作目录</li>
+<li>list_dir(Dir): 返回 Dir 里所有文件的列表</li>
+<li>read_file(File): 读取文件 File</li>
 </ul>
 
 <pre class="example">
@@ -1005,6 +1016,86 @@ Pid 是这个 <span class="underline">远程节点</span> 进程的标识符，�
 
 <div id="outline-container-org551f21a" class="outline-2">
 <h2 id="org551f21a">cookie 保护系统</h2>
+<div class="outline-text-2" id="text-org551f21a">
+<p>
+<span class="underline">cookie</span> 系统让访问单个或一组节点变得更安全。每个节点都有一个cookie，如果它想与其他任何节点通信，它的cookie就必须和对方节点的cookie相同
+</p>
+
+<pre class="example">
+为了确保cookie相同，分布式Erlang系统里的所有节点都必须以相同的“神奇”（magic）cookie启动，或者通过执行 erlang:set_cookie 把它们的cookie修改成相同的值 
+
+Erlang集群的定义就是一组带有相同cookie的互连节点
+</pre>
+</div>
+
+<div id="outline-container-orgcf3a3e3" class="outline-3">
+<h3 id="orgcf3a3e3">设置 Cookie</h3>
+<div class="outline-text-3" id="text-orgcf3a3e3">
+<p>
+可以用以下三种方法设置cookie
+</p>
+</div>
+
+<div id="outline-container-org9e054c1" class="outline-4">
+<h4 id="org9e054c1">文件系统</h4>
+<div class="outline-text-4" id="text-org9e054c1">
+<p>
+在文件 <span class="underline">$HOME/.erlang.cookie</span> 里存放相同的cookie。这个文件包含一个随机字符串，是Erlang第一次在你的机器上运行时自动创建的：
+</p>
+<ul class="org-ul">
+<li>这个文件可以被复制到所有想要参与分布式Erlang会话的机器上</li>
+<li>也可以显式设置它的值</li>
+</ul>
+
+<pre class="example">
+注意：.erlang.cookie 文件只能被它的所有者访问，它的权限必须设置为 400 
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org1759f47" class="outline-4">
+<h4 id="org1759f47">启动参数</h4>
+<div class="outline-text-4" id="text-org1759f47">
+<p>
+当Erlang启动时，可以用命令行参数 <span class="underline">-setcookie C</span> 
+</p>
+</div>
+</div>
+
+<div id="outline-container-orgfea7791" class="outline-4">
+<h4 id="orgfea7791">内置函数</h4>
+<div class="outline-text-4" id="text-orgfea7791">
+<p>
+<span class="underline">erlang:set_cookie(node(), C)</span> 能把本地节点的cookie设成原子 C 
+</p>
+
+<pre class="example">
+如果你的环境不够安全，那么方法1和3要优于方法2
+
+因为Unix系统里的任何用户都可以用 ps 命令来查看你的cookie，启动参数只适用于测试
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org67a7a6e" class="outline-3">
+<h3 id="org67a7a6e">安全性</h3>
+<div class="outline-text-3" id="text-org67a7a6e">
+<pre class="example">
+cookie保护系统被设计用来创建运行在局域网（LAN）上的分布式系统，LAN本身应该受防火墙保护，与互联网隔开
+
+跨互联网运行的分布式Erlang应用程序应该先在主机之间建立安全连接，然后再使用cookie保护系统
+</pre>
+
+<p>
+cookie从不会在网络中明文传输，它只用来对某次会话进行初始认证
+</p>
+
+<pre class="example">
+此外，分布式Erlang会话不是加密的，但可以被设置成在加密通道中运行
+</pre>
+</div>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">

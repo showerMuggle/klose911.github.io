@@ -472,9 +472,9 @@ _分布式_ 程序是那些被设计运行在 _计算机网络_ 上的程序,并
     #+end_src
 
     在 bilbo 上发起的一些请求形成了对 gandalf 上标准库的远程过程调用。使用 file 模块里的三个函数来访问 gandalf 的文件系统 ：
-    + file:get_cwd(): 返回文件服务器的当前工作目录
-    + file:list_dir(Dir): 返回 Dir 里所有文件的列表
-    + file:read_file(File): 读取文件 File  
+    + get_cwd(): 返回文件服务器的当前工作目录
+    + list_dir(Dir): 返回 Dir 里所有文件的列表
+    + read_file(File): 读取文件 File  
 
     #+begin_example
       仔细回味一下，你会意识到刚才所做的相当神奇
@@ -483,3 +483,48 @@ _分布式_ 程序是那些被设计运行在 _计算机网络_ 上的程序,并
     #+end_example
 
 * cookie 保护系统
+  _cookie_ 系统让访问单个或一组节点变得更安全。每个节点都有一个cookie，如果它想与其他任何节点通信，它的cookie就必须和对方节点的cookie相同
+
+  #+begin_example
+    为了确保cookie相同，分布式Erlang系统里的所有节点都必须以相同的“神奇”（magic）cookie启动，或者通过执行 erlang:set_cookie 把它们的cookie修改成相同的值 
+
+    Erlang集群的定义就是一组带有相同cookie的互连节点
+  #+end_example
+
+** 设置 Cookie 
+   可以用以下三种方法设置cookie
+
+*** 文件系统
+    在文件 _$HOME/.erlang.cookie_ 里存放相同的cookie。这个文件包含一个随机字符串，是Erlang第一次在你的机器上运行时自动创建的：
+    + 这个文件可以被复制到所有想要参与分布式Erlang会话的机器上
+    + 也可以显式设置它的值
+
+    #+begin_example
+      注意：.erlang.cookie 文件只能被它的所有者访问，它的权限必须设置为 400 
+    #+end_example
+
+*** 启动参数
+    当Erlang启动时，可以用命令行参数 _-setcookie C_ 
+
+*** 内置函数 
+    _erlang:set_cookie(node(), C)_ 能把本地节点的cookie设成原子 C 
+
+    #+begin_example
+      如果你的环境不够安全，那么方法1和3要优于方法2
+
+      因为Unix系统里的任何用户都可以用 ps 命令来查看你的cookie，启动参数只适用于测试
+    #+end_example
+
+** 安全性
+   #+begin_example
+     cookie保护系统被设计用来创建运行在局域网（LAN）上的分布式系统，LAN本身应该受防火墙保护，与互联网隔开
+
+     跨互联网运行的分布式Erlang应用程序应该先在主机之间建立安全连接，然后再使用cookie保护系统
+   #+end_example
+
+   cookie从不会在网络中明文传输，它只用来对某次会话进行初始认证
+
+   #+begin_example
+     此外，分布式Erlang会话不是加密的，但可以被设置成在加密通道中运行
+   #+end_example
+
