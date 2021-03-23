@@ -160,19 +160,6 @@
   .footdef  { margin-bottom: 1em; }
   .figure { padding: 1em; }
   .figure p { text-align: center; }
-  .equation-container {
-    display: table;
-    text-align: center;
-    width: 100%;
-  }
-  .equation {
-    vertical-align: middle;
-  }
-  .equation-label {
-    display: table-cell;
-    text-align: right;
-    vertical-align: middle;
-  }
   .inlinetask {
     padding: 10px;
     border: 2px solid gray;
@@ -198,7 +185,7 @@
 @licstart  The following is the entire license notice for the
 JavaScript code in this tag.
 
-Copyright (C) 2012-2020 Free Software Foundation, Inc.
+Copyright (C) 2012-2019 Free Software Foundation, Inc.
 
 The JavaScript code in this tag is free software: you can
 redistribute it and/or modify it under the terms of the GNU
@@ -247,7 +234,621 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="concurrency.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">OTP库</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#org40db942">通用服务器之路</a>
+<ul>
+<li><a href="#orgbb5c300">基本的服务器</a></li>
+<li><a href="#org9d5c35c">实现事务</a></li>
+<li><a href="#org138ec7a">热代码交换</a></li>
+<li><a href="#org79adf5a">事务与热代码交换</a></li>
+<li><a href="#orge89402d">更多乐趣</a>
+<ul>
+<li><a href="#orge0ee7cd">思考</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#org4fc5bbf">gen_server 入门</a></li>
+</ul>
+</div>
+</div>
+<p>
+OTP代表 <span class="underline">Open Telecom Platform</span> (开放电信平台)。这个名字其实有一些误导性,因为OTP比你想象的要通用得多。它是一个 <b>应用程序操作系统</b> ,包含了一组 <span class="underline">库</span> 和 <span class="underline">实现</span> 方式,可以构建 <span class="underline">大规模</span> 、 <span class="underline">容错</span> 和 <span class="underline">分布式</span> 的应用程序
+</p>
 
+<pre class="example">
+  它由瑞典电信公司爱立信开发,在爱立信内部用于构建容错式系统
+
+  标准的Erlang分发套装包含OTP库
+</pre>
+
+<p>
+OTP包含了许多强大的工具,例如一个完整的Web服务器,一个FTP服务器和一个 CORBA ORB 等,它们全都是用Erlang编写的
+</p>
+
+<pre class="example">
+OTP还包含了构建电信应用程序的最先进工具,能够实现 H248、SNMP和ASN.1/Erlang交叉编译器(这些是电信行业里常用的协议)
+
+不会在这里讨论它们,你可以在Erlang网站 上找到和这些主题相关的大量信息
+</pre>
+
+<p>
+如果想用OTP编写自己的应用程序,你会发现一个很有用的核心概念是 <span class="underline">OTP行为</span> 。 行为封装了常见的行为模式,可以把它看作是一个用 <b>回调函数</b> 作为 <span class="underline">参数</span> 的 <b>应用程序框架</b> 。OTP的优势来自于 <b>行为本身就能提供 <span class="underline">容错性</span> 、 <span class="underline">可扩展性</span> 和 <span class="underline">动态代码升级</span> 等</b> 属性
+</p>
+
+<pre class="example">
+  换句话说，回调函数的编写者不必担心容错之类的事情,因为行为已经提供了它们
+
+  熟悉Java的读者可以把行为看作是一个J2EE容器
+</pre>
+
+<p>
+简单地说,行为负责解决问题的非业务部分,而回调函数负责解决业务部分
+</p>
+
+<pre class="example">
+  问题的非业务部分(比如如何进行实时代码升级)对所有应用程序都是一样的，而业务部分(由回调函数提供)在每个问题里都是不同的
+</pre>
+
+<p>
+接下来将非常详细地介绍其中一种行为: <span class="underline">gen_server</span> 模块。但是,在深入gen_server 工作方式的核心细节之前：
+</p>
+<ol class="org-ol">
+<li>从一个简单的服务器(能想象的最简单的服务器)入手</li>
+<li>一步步改进它，直到实现 gen_server 模块的完整功能</li>
+<li>能切实理解 gen_server 是如何工作的,并为深入探索做好准备</li>
+</ol>
+<div id="outline-container-org40db942" class="outline-2">
+<h2 id="org40db942">通用服务器之路</h2>
+<div class="outline-text-2" id="text-org40db942">
+<pre class="example">
+  这是里最重要的一节,所以请读一遍,再读两遍,甚至读一百遍,确保能完全理解里面的内容
+</pre>
+
+<p>
+这一节是关于 <b>构建抽象</b> 的,将看到一个名为 <span class="underline">gen_server.erl</span> 的服务器
+</p>
+
+<pre class="example">
+gen server(通用服务器)是OTP系统里最常用的抽象,但很多人从来没有深入探寻过 gen_server.erl 是如何工作的
+
+一旦理解了gen server是如何构建的,就能重复这个抽象过程来构建自己的抽象
+</pre>
+
+<p>
+接下来将编写四个小小的服务器: server1 、 server2 、 server3 和 server4 ,每一个服务器都与上一个稍有不同。 server4 会类似于Erlang分发套装里的gen server
+</p>
+
+<pre class="example">
+  我们的目标是把问题的非业务部分与业务部分完全分开
+
+  这句话现在也许对你没有什么意义,但是请别担心,很快就会有了。深呼吸!
+</pre>
+</div>
+<div id="outline-container-orgbb5c300" class="outline-3">
+<h3 id="orgbb5c300">基本的服务器</h3>
+<div class="outline-text-3" id="text-orgbb5c300">
+<p>
+以下代码是我们的首次尝试。它是一个小小的服务器,可以用 <b>回调模块</b> 作为它的 <span class="underline">参数</span> 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #7fffd4;">-module</span>(server1).
+<span style="color: #7fffd4;">-export</span>([<span style="color: #98fb98;">start/2</span>, <span style="color: #98fb98;">rpc/2</span>]).
+
+
+<span style="color: #87cefa;">start</span>(<span style="color: #eedd82;">ServerProcessName</span>, <span style="color: #eedd82;">Mod</span>) -&gt;
+    <span style="color: #b0c4de;">register</span>(<span style="color: #eedd82;">ServerProcessName</span>, <span style="color: #b0c4de;">spawn</span>(<span style="color: #00ffff;">fun</span>() -&gt;<span style="color: #87cefa;"> </span><span style="color: #98fb98;">loop</span>(<span style="color: #eedd82;">ServerProcessName</span>, <span style="color: #eedd82;">Mod</span>, <span style="color: #eedd82;">Mod</span>:<span style="color: #98fb98;">init</span>()) <span style="color: #00ffff;">end</span>)).
+
+<span style="color: #87cefa;">rpc</span>(<span style="color: #eedd82;">ServerProcessName</span>, <span style="color: #eedd82;">Request</span>) -&gt;
+    <span style="color: #eedd82;">ServerProcessName</span> ! {<span style="color: #b0c4de;">self</span>(), <span style="color: #eedd82;">Request</span>},
+    <span style="color: #00ffff;">receive</span>
+        {<span style="color: #eedd82;">ServerProcessName</span>, <span style="color: #eedd82;">Response</span>} -&gt;<span style="color: #87cefa;"> </span><span style="color: #eedd82;">Response</span>
+    <span style="color: #00ffff;">end</span>.
+
+<span style="color: #87cefa;">loop</span>(<span style="color: #eedd82;">ServerProcessName</span>, <span style="color: #eedd82;">Mod</span>, <span style="color: #eedd82;">State</span>) -&gt;
+    <span style="color: #00ffff;">receive</span>
+        {<span style="color: #eedd82;">FromProcess</span>, <span style="color: #eedd82;">Request</span>} -&gt;
+            {<span style="color: #eedd82;">Response</span>, <span style="color: #eedd82;">State1</span>} = <span style="color: #eedd82;">Mod</span>:<span style="color: #98fb98;">handle</span>(<span style="color: #eedd82;">Request</span>, <span style="color: #eedd82;">State</span>),
+            <span style="color: #eedd82;">FromProcess</span> ! {<span style="color: #eedd82;">ServerProcessName</span>, <span style="color: #eedd82;">Response</span>},
+            <span style="color: #98fb98;">loop</span>(<span style="color: #eedd82;">ServerProcessName</span>, <span style="color: #eedd82;">Mod</span>, <span style="color: #eedd82;">State1</span>)
+    <span style="color: #00ffff;">end</span>.
+</pre>
+</div>
+
+<p>
+这一小段代码凝聚了服务器的精华。下面给 server1 编写一个回调模块,它是一个 <span class="underline">名称服务器</span> 回调模块:
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #7fffd4;">-module</span>(name_server).
+<span style="color: #7fffd4;">-export</span>([<span style="color: #98fb98;">init/0</span>, <span style="color: #98fb98;">add/2</span>, <span style="color: #98fb98;">find/1</span>, <span style="color: #98fb98;">handle/2</span>]).
+<span style="color: #7fffd4;">-import</span>(server1, [<span style="color: #98fb98;">rpc/2</span>]).
+
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">client routines</span>
+<span style="color: #87cefa;">add</span>(<span style="color: #eedd82;">Key</span>, <span style="color: #eedd82;">Value</span>) -&gt;<span style="color: #87cefa;"> </span><span style="color: #98fb98;">rpc</span>(name_server, {add, <span style="color: #eedd82;">Key</span>, <span style="color: #eedd82;">Value</span>}).
+<span style="color: #87cefa;">find</span>(<span style="color: #eedd82;">Key</span>)       -&gt;<span style="color: #87cefa;"> </span><span style="color: #98fb98;">rpc</span>(name_server, {find, <span style="color: #eedd82;">Key</span>}).
+
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">callback routines</span>
+<span style="color: #87cefa;">init</span>() -&gt;<span style="color: #87cefa;"> </span><span style="color: #98fb98;">dict</span>:<span style="color: #98fb98;">new</span>().
+<span style="color: #87cefa;">handle</span>({add, <span style="color: #eedd82;">Key</span>, <span style="color: #eedd82;">Value</span>}, <span style="color: #eedd82;">Dict</span>) -&gt;<span style="color: #87cefa;"> </span>{ok, <span style="color: #98fb98;">dict</span>:<span style="color: #98fb98;">store</span>(<span style="color: #eedd82;">Key</span>, <span style="color: #eedd82;">Value</span>, <span style="color: #eedd82;">Dict</span>)};
+<span style="color: #87cefa;">handle</span>({find, <span style="color: #eedd82;">Key</span>}, <span style="color: #eedd82;">Dict</span>)       -&gt;<span style="color: #87cefa;"> </span>{<span style="color: #98fb98;">dict</span>:<span style="color: #98fb98;">find</span>(<span style="color: #eedd82;">Key</span>, <span style="color: #eedd82;">Dict</span>), <span style="color: #eedd82;">Dict</span>}.
+</pre>
+</div>
+
+<p>
+这段代码实际上执行两个任务：
+</p>
+<ul class="org-ul">
+<li>首先充当被 <span class="underline">服务器框架代码</span> <b>调用</b> 的 <span class="underline">回调模块</span> ： init 和 handle 函数</li>
+<li>它还包含了将被 <span class="underline">客户端</span> <b>调用</b> 的 <span class="underline">接口方法</span> ： add 和 find 函数</li>
+</ul>
+
+<pre class="example">
+OTP的惯例是把这两类函数放在同一个模块里
+</pre>
+
+<p>
+为了证明它能工作,可以这么做:
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">5&gt; server1:start(name_server, name_server) <span style="color: #b0c4de;">.</span>  
+true
+
+7&gt; name_server:add(joe, <span style="color: #ffa07a;">"at_home"</span>) <span style="color: #b0c4de;">.</span>  
+ok
+
+8&gt; name_server:find(joe) <span style="color: #b0c4de;">.</span>             
+{ok,<span style="color: #ffa07a;">"at_home"</span>}
+</pre>
+</div>
+
+<pre class="example">
+  现在停下来想一想。这个回调模块没有用于并发的代码,没有创建进程,没有发送消息,没有接收消息,也没有注册进程
+
+  它是纯粹的顺序代码,别无其他。这就意味着我们可以在完全不了解底层并发模型的情况下编写客户端，服务器模型
+
+  这就是所有服务器的基本模式，一旦理解了基本的结构,就可以轻轻松松地“自主研发”了
+</pre>
+</div>
+</div>
+<div id="outline-container-org9d5c35c" class="outline-3">
+<h3 id="org9d5c35c">实现事务</h3>
+<div class="outline-text-3" id="text-org9d5c35c">
+<p>
+下面的代码在查询产生异常错误时会让客户端崩溃：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #7fffd4;">-module</span>(server2).
+<span style="color: #7fffd4;">-export</span>([<span style="color: #98fb98;">start/2</span>, <span style="color: #98fb98;">rpc/2</span>]).
+
+<span style="color: #87cefa;">start</span>(<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Mod</span>) -&gt;
+    <span style="color: #b0c4de;">register</span>(<span style="color: #eedd82;">Name</span>, <span style="color: #b0c4de;">spawn</span>(<span style="color: #00ffff;">fun</span>() -&gt;<span style="color: #87cefa;"> </span><span style="color: #98fb98;">loop</span>(<span style="color: #eedd82;">Name</span>,<span style="color: #eedd82;">Mod</span>,<span style="color: #eedd82;">Mod</span>:<span style="color: #98fb98;">init</span>()) <span style="color: #00ffff;">end</span>)).
+
+<span style="color: #87cefa;">rpc</span>(<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Request</span>) -&gt;
+    <span style="color: #eedd82;">Name</span> ! {<span style="color: #b0c4de;">self</span>(), <span style="color: #eedd82;">Request</span>},
+    <span style="color: #00ffff;">receive</span>
+        {<span style="color: #eedd82;">Name</span>, crash} -&gt;<span style="color: #87cefa;"> </span><span style="color: #b0c4de;">exit</span>(rpc);
+        {<span style="color: #eedd82;">Name</span>, ok, <span style="color: #eedd82;">Response</span>} -&gt;<span style="color: #87cefa;"> </span><span style="color: #eedd82;">Response</span>
+    <span style="color: #00ffff;">end</span>.
+
+<span style="color: #87cefa;">loop</span>(<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Mod</span>, <span style="color: #eedd82;">OldState</span>) -&gt;
+    <span style="color: #00ffff;">receive</span>
+        {<span style="color: #eedd82;">From</span>, <span style="color: #eedd82;">Request</span>} -&gt;
+            <span style="color: #00ffff;">try</span> <span style="color: #eedd82;">Mod</span>:<span style="color: #98fb98;">handle</span>(<span style="color: #eedd82;">Request</span>, <span style="color: #eedd82;">OldState</span>) <span style="color: #00ffff;">of</span>
+                {<span style="color: #eedd82;">Response</span>, <span style="color: #eedd82;">NewState</span>} -&gt;
+                    <span style="color: #eedd82;">From</span> ! {<span style="color: #eedd82;">Name</span>, ok, <span style="color: #eedd82;">Response</span>},
+                    <span style="color: #98fb98;">loop</span>(<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Mod</span>, <span style="color: #eedd82;">NewState</span>)
+            <span style="color: #00ffff;">catch</span>
+                <span style="color: #eedd82;">_</span>:<span style="color: #eedd82;">Why</span> -&gt;
+                    <span style="color: #98fb98;">log_the_error</span>(<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Request</span>, <span style="color: #eedd82;">Why</span>),
+                    <span style="color: #ff4500;">%% </span><span style="color: #ff4500;">send a message to cause the client to crash</span>
+                    <span style="color: #eedd82;">From</span> ! {<span style="color: #eedd82;">Name</span>, crash},
+                    <span style="color: #ff4500;">%% </span><span style="color: #ff4500;">loop with the *original* state</span>
+                    <span style="color: #98fb98;">loop</span>(<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Mod</span>, <span style="color: #eedd82;">OldState</span>)
+            <span style="color: #00ffff;">end</span>
+    <span style="color: #00ffff;">end</span>.
+
+<span style="color: #87cefa;">log_the_error</span>(<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Request</span>, <span style="color: #eedd82;">Why</span>) -&gt;
+    <span style="color: #98fb98;">io</span>:<span style="color: #98fb98;">format</span>(<span style="color: #ffa07a;">"Server ~p request ~p ~n"</span>
+              <span style="color: #ffa07a;">"caused exception ~p~n"</span>, 
+              [<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Request</span>, <span style="color: #eedd82;">Why</span>]).
+</pre>
+</div>
+
+<p>
+这段代码在服务器里实现了 <span class="underline">事务语义</span> ：
+</p>
+<ul class="org-ul">
+<li>在处理函数抛出异常错误时用 State (状态)的初始值继续循环
+<ul class="org-ul">
+<li>当处理函数失败时,服务器会给发送问题消息的客户端发送一个消息,让它崩溃
+<ul class="org-ul">
+<li>这个客户端不能继续工作,因为它发送给服务器的请求导致了处理函数的崩溃</li>
+<li>其他想要使用服务器的客户端不会受到影响</li>
+</ul></li>
+</ul></li>
+<li>如果处理函数成功了,它就会用处理函数提供的 NewState 值继续循环</li>
+</ul>
+
+<p>
+请注意,这个服务器使用的回调模块和用于 server1 的回调模块一模一样。通过 <span class="underline">修改服务器</span> 并 <b>保持</b> <span class="underline">回调模块不变</span> ,就能 <b>修改回调模块的非业务行为</b> 
+</p>
+
+<pre class="example">
+  从 server1 转到 server2 时,必须对回调模块做一点小小的改动
+
+  也就是把 -import 声明里的 server1 改成 server2 。除此之外并无其他改动
+</pre>
+
+
+<p>
+为了测试把name_server修改如下：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #7fffd4;">-module</span>(name_server).
+<span style="color: #7fffd4;">-export</span>([<span style="color: #98fb98;">init/0</span>, <span style="color: #98fb98;">add/2</span>, <span style="color: #98fb98;">find/1</span>, <span style="color: #98fb98;">handle/2</span>]).
+<span style="color: #7fffd4;">-import</span>(server2, [<span style="color: #98fb98;">rpc/2</span>]).
+
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">client routines</span>
+<span style="color: #87cefa;">add</span>(<span style="color: #eedd82;">Key</span>, <span style="color: #eedd82;">Value</span>) -&gt;<span style="color: #87cefa;"> </span><span style="color: #98fb98;">rpc</span>(name_server, {add, <span style="color: #eedd82;">Key</span>, <span style="color: #eedd82;">Value</span>}).
+<span style="color: #87cefa;">find</span>(<span style="color: #eedd82;">Key</span>)       -&gt;<span style="color: #87cefa;"> </span><span style="color: #98fb98;">rpc</span>(name_server, {find, <span style="color: #eedd82;">Key</span>}).
+
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">callback routines</span>
+<span style="color: #87cefa;">init</span>() -&gt;<span style="color: #87cefa;"> </span><span style="color: #98fb98;">dict</span>:<span style="color: #98fb98;">new</span>().
+<span style="color: #87cefa;">handle</span>({add, <span style="color: #eedd82;">Key</span>, <span style="color: #eedd82;">Value</span>}, <span style="color: #eedd82;">Dict</span>) -&gt;<span style="color: #87cefa;"> </span>{ok, <span style="color: #98fb98;">dict</span>:<span style="color: #98fb98;">store</span>(<span style="color: #eedd82;">Key</span>, <span style="color: #eedd82;">Value</span>, <span style="color: #eedd82;">Dict</span>)};
+<span style="color: #87cefa;">handle</span>({find, <span style="color: #eedd82;">Key</span>}, <span style="color: #eedd82;">Dict</span>)       -&gt;<span style="color: #87cefa;"> </span>{<span style="color: #98fb98;">undefined</span>:<span style="color: #98fb98;">find</span>(<span style="color: #eedd82;">Key</span>, <span style="color: #eedd82;">Dict</span>), <span style="color: #eedd82;">Dict</span>}.
+</pre>
+</div>
+
+<p>
+测试下：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">1&gt; server2:start(name_server, name_server) <span style="color: #b0c4de;">.</span>   
+true
+2&gt;   
+2&gt; name_server:find(abc) <span style="color: #b0c4de;">.</span> 
+Server name_server request {find,abc} 
+caused exception undef
+** exception exit: rpc
+     <span style="color: #00ffff;">in</span> <span style="color: #00ffff;">function</span>  <span style="color: #87cefa;">server2</span>:rpc/2 (server2.erl, line 18)
+3&gt; 
+3&gt; name_server:add(abc, 1) <span style="color: #b0c4de;">.</span> 
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org138ec7a" class="outline-3">
+<h3 id="org138ec7a">热代码交换</h3>
+<div class="outline-text-3" id="text-org138ec7a">
+<pre class="example">
+  现在将添加热代码交换(hot code swapping)功能
+
+  大多数服务器都执行一个固定的程序,如果要修改服务器的行为,就必须先停止服务器,再用修改后的代码重启它
+</pre>
+<p>
+而要修改这个服务器的行为,不用停止它,只需要发送一个包含新代码的消息,它就会提取新代码,然后用新代码和老的会话数据继续工作。这一过程被称为 <span class="underline">热代码交换</span> ：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #7fffd4;">-module</span>(server3).
+<span style="color: #7fffd4;">-export</span>([<span style="color: #98fb98;">start/2</span>, <span style="color: #98fb98;">rpc/2</span>, <span style="color: #98fb98;">swap_code/2</span>]).
+
+<span style="color: #87cefa;">start</span>(<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Mod</span>) -&gt;
+    <span style="color: #b0c4de;">register</span>(<span style="color: #eedd82;">Name</span>, 
+             <span style="color: #b0c4de;">spawn</span>(<span style="color: #00ffff;">fun</span>() -&gt;<span style="color: #87cefa;"> </span><span style="color: #98fb98;">loop</span>(<span style="color: #eedd82;">Name</span>,<span style="color: #eedd82;">Mod</span>,<span style="color: #eedd82;">Mod</span>:<span style="color: #98fb98;">init</span>()) <span style="color: #00ffff;">end</span>)).
+
+<span style="color: #87cefa;">swap_code</span>(<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Mod</span>) -&gt;<span style="color: #87cefa;"> </span><span style="color: #98fb98;">rpc</span>(<span style="color: #eedd82;">Name</span>, {swap_code, <span style="color: #eedd82;">Mod</span>}).
+
+<span style="color: #87cefa;">rpc</span>(<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Request</span>) -&gt;
+    <span style="color: #eedd82;">Name</span> ! {<span style="color: #b0c4de;">self</span>(), <span style="color: #eedd82;">Request</span>},
+    <span style="color: #00ffff;">receive</span>
+        {<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Response</span>} -&gt;<span style="color: #87cefa;"> </span><span style="color: #eedd82;">Response</span>
+    <span style="color: #00ffff;">end</span>.
+
+<span style="color: #87cefa;">loop</span>(<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Mod</span>, <span style="color: #eedd82;">OldState</span>) -&gt;
+    <span style="color: #00ffff;">receive</span>
+        {<span style="color: #eedd82;">From</span>, {swap_code, <span style="color: #eedd82;">NewCallBackMod</span>}} -&gt;
+            <span style="color: #eedd82;">From</span> ! {<span style="color: #eedd82;">Name</span>, ack},
+            <span style="color: #98fb98;">loop</span>(<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">NewCallBackMod</span>, <span style="color: #eedd82;">OldState</span>);
+        {<span style="color: #eedd82;">From</span>, <span style="color: #eedd82;">Request</span>} -&gt;
+            {<span style="color: #eedd82;">Response</span>, <span style="color: #eedd82;">NewState</span>} = <span style="color: #eedd82;">Mod</span>:<span style="color: #98fb98;">handle</span>(<span style="color: #eedd82;">Request</span>, <span style="color: #eedd82;">OldState</span>),
+            <span style="color: #eedd82;">From</span> ! {<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Response</span>},
+            <span style="color: #98fb98;">loop</span>(<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Mod</span>, <span style="color: #eedd82;">NewState</span>)
+    <span style="color: #00ffff;">end</span>.
+</pre>
+</div>
+
+<p>
+如果向服务器发送一个交换代码消息,它就会把 <span class="underline">回调模块</span> 改为 <span class="underline">消息里包含的新模块</span>  
+</p>
+
+<pre class="example">
+  可以演示这一点,做法是用某个回调模块启动 server3 ,然后动态交换这个回调模块
+
+  但不能用 name_server 作为回调模块,因为服务器名已经被硬编译进这个模块里了
+</pre>
+
+<p>
+因此,将制作一个名为 <span class="underline">name_server1</span> 的副本,然后在里面修改服务器的名称：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #7fffd4;">-module</span>(name_server1).
+<span style="color: #7fffd4;">-export</span>([<span style="color: #98fb98;">init/0</span>, <span style="color: #98fb98;">add/2</span>, <span style="color: #98fb98;">find/1</span>, <span style="color: #98fb98;">handle/2</span>]).
+<span style="color: #7fffd4;">-import</span>(server3, [<span style="color: #98fb98;">rpc/2</span>]).
+
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">client routines</span>
+<span style="color: #87cefa;">add</span>(<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Place</span>) -&gt;<span style="color: #87cefa;"> </span><span style="color: #98fb98;">rpc</span>(name_server, {add, <span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Place</span>}).
+<span style="color: #87cefa;">find</span>(<span style="color: #eedd82;">Name</span>)       -&gt;<span style="color: #87cefa;"> </span><span style="color: #98fb98;">rpc</span>(name_server, {find, <span style="color: #eedd82;">Name</span>}).
+
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">callback routines</span>
+<span style="color: #87cefa;">init</span>() -&gt;<span style="color: #87cefa;"> </span><span style="color: #98fb98;">dict</span>:<span style="color: #98fb98;">new</span>().
+
+<span style="color: #87cefa;">handle</span>({add, <span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Place</span>}, <span style="color: #eedd82;">Dict</span>) -&gt;<span style="color: #87cefa;"> </span>{ok, <span style="color: #98fb98;">dict</span>:<span style="color: #98fb98;">store</span>(<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Place</span>, <span style="color: #eedd82;">Dict</span>)};
+<span style="color: #87cefa;">handle</span>({find, <span style="color: #eedd82;">Name</span>}, <span style="color: #eedd82;">Dict</span>)       -&gt;<span style="color: #87cefa;"> </span>{<span style="color: #98fb98;">dict</span>:<span style="color: #98fb98;">find</span>(<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Dict</span>), <span style="color: #eedd82;">Dict</span>}.
+</pre>
+</div>
+
+<pre class="example">
+现在假设想要找出这个名称服务器能提供的所有名称
+
+API里没有函数能做到这一点,因为 name_server_1 模块只包含访问函数 add 和 find 
+</pre>
+<p>
+于是我们以闪电般的速度打开文本编辑器并编写一个新的回调模块：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #7fffd4;">-module</span>(new_name_server).
+<span style="color: #7fffd4;">-export</span>([<span style="color: #98fb98;">init/0</span>, <span style="color: #98fb98;">add/2</span>, <span style="color: #98fb98;">all_names/0</span>, <span style="color: #98fb98;">delete/1</span>, <span style="color: #98fb98;">find/1</span>, <span style="color: #98fb98;">handle/2</span>]).
+<span style="color: #7fffd4;">-import</span>(server3, [<span style="color: #98fb98;">rpc/2</span>]).
+
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">interface</span>
+<span style="color: #87cefa;">all_names</span>()      -&gt;<span style="color: #87cefa;"> </span><span style="color: #98fb98;">rpc</span>(name_server, allNames).
+<span style="color: #87cefa;">add</span>(<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Place</span>) -&gt;<span style="color: #87cefa;"> </span><span style="color: #98fb98;">rpc</span>(name_server, {add, <span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Place</span>}).
+<span style="color: #87cefa;">delete</span>(<span style="color: #eedd82;">Name</span>)     -&gt;<span style="color: #87cefa;"> </span><span style="color: #98fb98;">rpc</span>(name_server, {delete, <span style="color: #eedd82;">Name</span>}).
+<span style="color: #87cefa;">find</span>(<span style="color: #eedd82;">Name</span>)       -&gt;<span style="color: #87cefa;"> </span><span style="color: #98fb98;">rpc</span>(name_server, {find, <span style="color: #eedd82;">Name</span>}).
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">callback routines</span>
+<span style="color: #87cefa;">init</span>() -&gt;<span style="color: #87cefa;"> </span><span style="color: #98fb98;">dict</span>:<span style="color: #98fb98;">new</span>().
+
+<span style="color: #87cefa;">handle</span>({add, <span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Place</span>}, <span style="color: #eedd82;">Dict</span>) -&gt;<span style="color: #87cefa;"> </span>{ok, <span style="color: #98fb98;">dict</span>:<span style="color: #98fb98;">store</span>(<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Place</span>, <span style="color: #eedd82;">Dict</span>)};
+<span style="color: #87cefa;">handle</span>(allNames, <span style="color: #eedd82;">Dict</span>)           -&gt;<span style="color: #87cefa;"> </span>{<span style="color: #98fb98;">dict</span>:<span style="color: #98fb98;">fetch_keys</span>(<span style="color: #eedd82;">Dict</span>), <span style="color: #eedd82;">Dict</span>};
+<span style="color: #87cefa;">handle</span>({delete, <span style="color: #eedd82;">Name</span>}, <span style="color: #eedd82;">Dict</span>)     -&gt;<span style="color: #87cefa;"> </span>{ok, <span style="color: #98fb98;">dict</span>:<span style="color: #b0c4de;">erase</span>(<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Dict</span>)};
+<span style="color: #87cefa;">handle</span>({find, <span style="color: #eedd82;">Name</span>}, <span style="color: #eedd82;">Dict</span>)       -&gt;<span style="color: #87cefa;"> </span>{<span style="color: #98fb98;">dict</span>:<span style="color: #98fb98;">find</span>(<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Dict</span>), <span style="color: #eedd82;">Dict</span>}.
+</pre>
+</div>
+
+<p>
+编译这个模块并告知服务器交换它的回调模块：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">4&gt; c (new_name_server) <span style="color: #b0c4de;">.</span> 
+{ok,new_name_server}
+5&gt; 
+5&gt; server3:swap_code(name_server, new_name_server) <span style="color: #b0c4de;">.</span>  
+ack
+</pre>
+</div>
+
+<p>
+现在就可以运行服务器里的新函数了：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">6&gt; new_name_server:all_names() <span style="color: #b0c4de;">.</span> 
+[joe,helen]
+</pre>
+</div>
+
+<p>
+在这里实时更换了 <span class="underline">回调模块</span> ,这就是 <b>动态代码升级</b> ,就发生在你的眼前,没有什么黑魔法
+</p>
+
+<pre class="example">
+  现在再停下来想一想。之前完成的两个任务通常都被认为很有难度,事实的确如此
+
+  编写能实现“事务语义”的服务器很困难,编写能实现动态代码升级的服务器也很困难,但这个方法让它们变得简单了
+</pre>
+
+<p>
+这个方法极其强大。传统上我们认为服务器是有状态的程序,当我们向它发送消息时会改变它的状态。服务器里的代码在首次调用时就固定了,如果想要修改服务器里的代码,就必须停止服务器并修改代码,然后重启服务器
+</p>
+
+<pre class="example">
+  在前面的例子中,修改服务器的代码就像修改服务器的状态那样简单
+
+  我们用这个方法编写了许多产品,它们从来不会因为软件维护升级而停止服务
+</pre>
+</div>
+</div>
+<div id="outline-container-org79adf5a" class="outline-3">
+<h3 id="org79adf5a">事务与热代码交换</h3>
+<div class="outline-text-3" id="text-org79adf5a">
+<pre class="example">
+  在前两个服务器里,代码升级和事务语义是分开的
+</pre>
+<p>
+现在要把它们组合到一个服务器里：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #7fffd4;">-module</span>(server4).
+<span style="color: #7fffd4;">-export</span>([<span style="color: #98fb98;">start/2</span>, <span style="color: #98fb98;">rpc/2</span>, <span style="color: #98fb98;">swap_code/2</span>]).
+
+<span style="color: #87cefa;">start</span>(<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Mod</span>) -&gt;
+    <span style="color: #b0c4de;">register</span>(<span style="color: #eedd82;">Name</span>, <span style="color: #b0c4de;">spawn</span>(<span style="color: #00ffff;">fun</span>() -&gt;<span style="color: #87cefa;"> </span><span style="color: #98fb98;">loop</span>(<span style="color: #eedd82;">Name</span>,<span style="color: #eedd82;">Mod</span>,<span style="color: #eedd82;">Mod</span>:<span style="color: #98fb98;">init</span>()) <span style="color: #00ffff;">end</span>)).
+
+<span style="color: #87cefa;">swap_code</span>(<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Mod</span>) -&gt;<span style="color: #87cefa;"> </span><span style="color: #98fb98;">rpc</span>(<span style="color: #eedd82;">Name</span>, {swap_code, <span style="color: #eedd82;">Mod</span>}).
+
+<span style="color: #87cefa;">rpc</span>(<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Request</span>) -&gt;
+    <span style="color: #eedd82;">Name</span> ! {<span style="color: #b0c4de;">self</span>(), <span style="color: #eedd82;">Request</span>},
+    <span style="color: #00ffff;">receive</span>
+        {<span style="color: #eedd82;">Name</span>, crash} -&gt;<span style="color: #87cefa;"> </span><span style="color: #b0c4de;">exit</span>(rpc);
+        {<span style="color: #eedd82;">Name</span>, ok, <span style="color: #eedd82;">Response</span>} -&gt;<span style="color: #87cefa;"> </span><span style="color: #eedd82;">Response</span>
+    <span style="color: #00ffff;">end</span>.
+
+<span style="color: #87cefa;">loop</span>(<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Mod</span>, <span style="color: #eedd82;">OldState</span>) -&gt;
+    <span style="color: #00ffff;">receive</span>
+        {<span style="color: #eedd82;">From</span>, {swap_code, <span style="color: #eedd82;">NewCallbackMod</span>}} -&gt;
+            <span style="color: #eedd82;">From</span> ! {<span style="color: #eedd82;">Name</span>, ok, ack},
+            <span style="color: #98fb98;">loop</span>(<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">NewCallbackMod</span>, <span style="color: #eedd82;">OldState</span>);
+        {<span style="color: #eedd82;">From</span>, <span style="color: #eedd82;">Request</span>} -&gt;
+            <span style="color: #00ffff;">try</span> <span style="color: #eedd82;">Mod</span>:<span style="color: #98fb98;">handle</span>(<span style="color: #eedd82;">Request</span>, <span style="color: #eedd82;">OldState</span>) <span style="color: #00ffff;">of</span>
+                {<span style="color: #eedd82;">Response</span>, <span style="color: #eedd82;">NewState</span>} -&gt;
+                    <span style="color: #eedd82;">From</span> ! {<span style="color: #eedd82;">Name</span>, ok, <span style="color: #eedd82;">Response</span>},
+                    <span style="color: #98fb98;">loop</span>(<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Mod</span>, <span style="color: #eedd82;">NewState</span>)
+            <span style="color: #00ffff;">catch</span>
+                <span style="color: #eedd82;">_</span>: <span style="color: #eedd82;">Why</span> -&gt;
+                    <span style="color: #98fb98;">log_the_error</span>(<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Request</span>, <span style="color: #eedd82;">Why</span>),
+                    <span style="color: #eedd82;">From</span> ! {<span style="color: #eedd82;">Name</span>, crash},
+                    <span style="color: #98fb98;">loop</span>(<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Mod</span>, <span style="color: #eedd82;">OldState</span>)
+            <span style="color: #00ffff;">end</span>
+    <span style="color: #00ffff;">end</span>.
+
+<span style="color: #87cefa;">log_the_error</span>(<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Request</span>, <span style="color: #eedd82;">Why</span>) -&gt;
+    <span style="color: #98fb98;">io</span>:<span style="color: #98fb98;">format</span>(<span style="color: #ffa07a;">"Server ~p request ~p ~n"</span>
+              <span style="color: #ffa07a;">"caused exception ~p~n"</span>, 
+              [<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Request</span>, <span style="color: #eedd82;">Why</span>]).
+</pre>
+</div>
+
+<p>
+这个服务器同时提供了热代码交换和事务语义,干净利落!
+</p>
+</div>
+</div>
+<div id="outline-container-orge89402d" class="outline-3">
+<h3 id="orge89402d">更多乐趣</h3>
+<div class="outline-text-3" id="text-orge89402d">
+<p>
+理解动态代码变换的概念之后,就能找到更多乐趣。这里有一个服务器,它不会做任何事,直到你 <b>通知</b> 它变成 <span class="underline">某一种类型</span> 的服务器:
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #7fffd4;">-module</span>(server5).
+<span style="color: #7fffd4;">-export</span>([<span style="color: #98fb98;">start/0</span>, <span style="color: #98fb98;">rpc/2</span>]).
+<span style="color: #87cefa;">start</span>() -&gt;<span style="color: #87cefa;"> </span><span style="color: #b0c4de;">spawn</span>(<span style="color: #00ffff;">fun</span>() -&gt;<span style="color: #87cefa;"> </span><span style="color: #98fb98;">wait</span>() <span style="color: #00ffff;">end</span>).
+<span style="color: #87cefa;">wait</span>() -&gt;
+    <span style="color: #00ffff;">receive</span>
+        {become, <span style="color: #eedd82;">F</span>} -&gt;<span style="color: #87cefa;"> </span><span style="color: #eedd82;">F</span>()
+    <span style="color: #00ffff;">end</span>.
+<span style="color: #87cefa;">rpc</span>(<span style="color: #eedd82;">Pid</span>, <span style="color: #eedd82;">Q</span>) -&gt;
+    <span style="color: #eedd82;">Pid</span> ! {<span style="color: #b0c4de;">self</span>(), <span style="color: #eedd82;">Q</span>},
+    <span style="color: #00ffff;">receive</span>
+        {<span style="color: #eedd82;">Pid</span>, <span style="color: #eedd82;">Reply</span>} -&gt;<span style="color: #87cefa;"> </span><span style="color: #eedd82;">Reply</span>
+    <span style="color: #00ffff;">end</span>.
+</pre>
+</div>
+
+<p>
+如果启动它并向它 <b>发送</b> 一个 <span class="underline">{become, F}</span> 消息,它就会变成一个 <b>执行</b> <span class="underline">F() 函数</span> 的 <span class="underline">F 服务器</span> 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">4&gt; Pid = server5:start() <span style="color: #b0c4de;">.</span> 
+&lt;0.50.0&gt;
+</pre>
+</div>
+
+<pre class="example">
+  现在这个服务器不做任何事,只是在等待一个 become 消息
+</pre>
+
+<p>
+现在来定义一个服务器函数。没什么复杂的,只是计算阶乘而已：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #7fffd4;">-module</span>(my_fac_server).
+<span style="color: #7fffd4;">-export</span>([<span style="color: #98fb98;">loop/0</span>]).
+
+<span style="color: #87cefa;">loop</span>() -&gt;
+    <span style="color: #00ffff;">receive</span>
+        {<span style="color: #eedd82;">From</span>, {fac, <span style="color: #eedd82;">N</span>}} -&gt;
+            <span style="color: #eedd82;">From</span> ! {<span style="color: #b0c4de;">self</span>(), <span style="color: #98fb98;">fac</span>(<span style="color: #eedd82;">N</span>)},
+            <span style="color: #98fb98;">loop</span>();
+        {become, <span style="color: #eedd82;">Something</span>} -&gt;
+            <span style="color: #eedd82;">Something</span>()
+    <span style="color: #00ffff;">end</span>.
+
+<span style="color: #87cefa;">fac</span>(0) -&gt;<span style="color: #87cefa;"> </span>1;
+<span style="color: #87cefa;">fac</span>(<span style="color: #eedd82;">N</span>) -&gt;<span style="color: #87cefa;"> </span><span style="color: #eedd82;">N</span> * <span style="color: #98fb98;">fac</span>(<span style="color: #eedd82;">N</span>-1).
+</pre>
+</div>
+<p>
+确保它成功编译之后,就可以通知进程 &lt;0.50.0&gt; 变成一个阶乘服务器了。
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">5&gt; Pid ! {become, fun my_fac_server:loop/0} <span style="color: #b0c4de;">.</span> 
+{become,#Fun&lt;my_fac_server.loop.0&gt;}
+</pre>
+</div>
+
+<p>
+现在这个进程已经变成一个阶乘服务器了,试着来调用它：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">6&gt; server5:rpc(Pid, {fac, 30}) <span style="color: #b0c4de;">.</span> 
+265252859812191058636308480000000
+</pre>
+</div>
+<p>
+这个进程会一直扮演阶乘服务器的角色,直到向它发送一个 <span class="underline">{become, Something}</span> 消息来告诉它做点别的什么 
+</p>
+
+<pre class="example">
+  几年前,当我还在做研究的时候,曾经与PlanetLab一起共事。我能访问PlanetLab网络(它是一个全球范围的研究网络:http://www.planet-lab.org),所以我在PlanetLab的所有(大约450台)机器上都安装了“空白”的Erlang服务器。当时我并不知道要拿这些机器来做什么,因此只是设立了服务器架构以供将来使用
+
+  让这层架构运行起来之后,我很容易就能向这些空白服务器发送消息来让它们变成真正的服务器
+
+  举个例子,通常的做法是启用一个Web服务器,然后安装Web服务器插件。我的做法是后退一步,先安装一个空白服务器,以后再让插件把它转变成Web服务器。当我们不再需要Web服务器时,就可以把它变成别的东西
+</pre>
+</div>
+
+<div id="outline-container-orge0ee7cd" class="outline-4">
+<h4 id="orge0ee7cd">思考</h4>
+<div class="outline-text-4" id="text-orge0ee7cd">
+<pre class="example">
+  正如在前面这些例子中所看见的,可以制作各种不同类型的服务器,让它们具有不同的语义和一些相当惊人的属性
+
+  这个方法实在是太过强大,如果彻底发挥它的潜力,就能生成拥有惊人威力和美感的小程序
+
+  如果我们的项目是工业规模的,涉及成百上千个程序员,或许并不想让事情过于动态，既要兼顾通用性和威力,又要满足商业产品的需要
+
+  让代码能在运行时更换新版这一点很美好,但之后如果出了错则会成为调试者的噩梦。如果数十次动态改动代码,而它随后崩溃了,那么找出准确的错误原因可不是一件容易的事
+</pre>
+
+<p>
+Erlang的 gen_server 模块是不断强化的服务器(就像在本章里编写的那些)逐渐形成的逻辑成果
+</p>
+
+<pre class="example">
+  它从1998年起就被用于工业产品。一个产品可以包含数百个服务器,这些服务器正是程序员使用普通的顺序代码编写的
+
+  所有的错误处理和非业务行为都被排除在服务器的通用部分之外
+</pre>
+
+<p>
+现在将跨越想象,来看看真正的 gen_server 
+</p>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org4fc5bbf" class="outline-2">
+<h2 id="org4fc5bbf">gen_server 入门</h2>
+</div>
 </div>
 <div id="postamble" class="status">
 
