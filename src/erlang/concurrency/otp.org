@@ -658,4 +658,173 @@ OTP包含了许多强大的工具,例如一个完整的Web服务器,一个FTP服
    #+END_SRC
 
 * gen_server 的回调结构
+理解了相关概念之后,来详细了解一下 gen_server 的回调结构 
 
+** 启动服务器
+_gen_server:start_link(Name, Mod, InitArgs, Opts)_ 这个调用是所有事物的起点：
++ 它会创建一个名为 _Name_ 的通用服务器
++ 回调模块是 _Mod_
++ _Opts_ 则控制通用服务器的行为：在这里可以指定 _消息记录_ 、 _函数调试_ 和 _其他行为_ 
++ 通用服务器通过调用 _Mod:init(InitArgs)_ 启动
+
+#+BEGIN_SRC erlang 
+  %%--------------------------------------------------------------------
+  %% @private
+  %% @doc
+  %% Initializes the server
+  %%
+  %% @spec init(Args) -> {ok, State} |
+  %%                     {ok, State, Timeout} |
+  %%                     ignore |
+  %%                     {stop, Reason}
+  %% @end
+  %%--------------------------------------------------------------------
+  init([]) ->
+      {ok, #state{}}.
+#+END_SRC
+
+在通常的操作里,只会返回 _{ok, State}_ ：如果返回 {ok, State} ,就说明 *成功启动* 了服务器,它的 *初始状态* 是 _State_
+
+#+BEGIN_EXAMPLE
+要了解其他参数的含义,请参考 gen_server 的手册页
+#+END_EXAMPLE
+
+** 调用服务器
+要调用服务器,客户端程序需要执行 _gen_server:call(Name, Request)_ 。它最终调用的是回调模块里的 _handle_call/3_ : 
+
+#+BEGIN_SRC erlang 
+  %%--------------------------------------------------------------------
+  %% @private
+  %% @doc
+  %% Handling call messages
+  %%
+  %% @spec handle_call(Request, From, State) ->
+  %%                                   {reply, Reply, State} |
+  %%                                   {reply, Reply, State, Timeout} |
+  %%                                   {noreply, State} |
+  %%                                   {noreply, State, Timeout} |
+  %%                                   {stop, Reason, Reply, State} |
+  %%                                   {stop, Reason, State}
+  %% @end
+  %%--------------------------------------------------------------------
+  handle_call(_Request, _From, State) ->
+      Reply = ok,
+      {reply, Reply, State}.
+#+END_SRC
+
+handle_call 函数：
++ 参数：
+  + _Request 其实是 gen_server:call/2 的第二个参数Request
+  + _From 是发送请求的客户端进程的PID
+  + _State 则是客户端的当前状态。
++ 返回值：
+  + 通常会返回 _{reply, Reply, NewState}_ 
+    + Reply 会返回客户端,成为 _gen_server:call_ 的返回值
+    + NewState 则是服务器接下来的状态。
+  + 其他的返回值( _{noreply, ..}_ 和 _{stop, ..}_ )相对不太常用
+    + no reply: 会让服务器继续工作,但客户端会等待一个回复,所以服务器必须把回复的任务委派给其他进程。用适当的参数调用
+    + stop 会停止服务器 
+
+*** 播发
+#+BEGIN_EXAMPLE
+刚才已经见过了 gen_server:call 和 handle_call 之间的交互,它的作用是实现远程过程调用
+#+END_EXAMPLE
+_gen_server:cast(Name, Msg)_ 则实现了一个 *播发* (cast),也就是 _没有返回值的调用_ 
+
+#+BEGIN_EXAMPLE
+  实际上就是一个消息转发,但习惯上称它为播发来与远程过程调用相区分
+#+END_EXAMPLE
+
+#+BEGIN_SRC erlang 
+  %%--------------------------------------------------------------------
+  %% @private
+  %% @doc
+  %% Handling cast messages
+  %%
+  %% @spec handle_cast(Msg, State) -> {noreply, State} |
+  %%                                  {noreply, State, Timeout} |
+  %%                                  {stop, Reason, State}
+  %% @end
+  %%--------------------------------------------------------------------
+  handle_cast(_Msg, State) ->
+      {noreply, State}.
+#+END_SRC
+
+这个处理函数通常只返回 _{noreply, NewState}_ 或 _{stop, ...}_ ：
++ noreply： *改变* 服务器的状态
++ stop： *停止* 服务器
+
+*** 发给服务器的自发性消息
+回调函数 _handle_info(Info, State)_ 被用来处理发给服务器的 *自发性消息* 。自发性消息是一切 *未经显式调用* _gen_server:call_ 或 _gen_server:cast_ 而到达服务器的消息
+
+#+BEGIN_EXAMPLE
+  举个例子,如果服务器连接到另一个进程并捕捉退出信号,就可能会突然收到一个预料之外的 {'EXIT', Pid,What} 消息
+
+  除此之外,系统里任何知道通用服务器PID的进程都可以向它发送消息
+#+END_EXAMPLE
+
+这样的消息在服务器里表现为 _info 值_ ： 
+
+#+BEGIN_SRC erlang 
+  %%--------------------------------------------------------------------
+  %% @private
+  %% @doc
+  %% Handling all non call/cast messages
+  %%
+  %% @spec handle_info(Info, State) -> {noreply, State} |
+  %%                                   {noreply, State, Timeout} |
+  %%                                   {stop, Reason, State}
+  %% @end
+  %%--------------------------------------------------------------------
+  handle_info(_Info, State) ->
+      {noreply, State}.
+#+END_SRC
+
+** 终止
+服务器会因为许多原因而终止：
++ 某个以 handle_ 开头的函数也许会返回一个 _{stop, Reason, NewState}_ 
++ 服务器也可能崩溃并生成 _{'EXIT', reason}_ 
+
+在所有这些情况下,无论它们是怎样发生的,都会调用 _terminate(Reason, NewState)_  。它的模板项如下：
+
+#+BEGIN_SRC erlang 
+  %%--------------------------------------------------------------------
+  %% @private
+  %% @doc
+  %% This function is called by a gen_server when it is about to
+  %% terminate. It should be the opposite of Module:init/1 and do any
+  %% necessary cleaning up. When it returns, the gen_server terminates
+  %% with Reason. The return value is ignored.
+  %%
+  %% @spec terminate(Reason, State) -> void()
+  %% @end
+  %%--------------------------------------------------------------------
+  terminate(_Reason, _State) ->
+      ok.
+#+END_SRC
+这段代码不能返回一个新状态,因为已经终止了，但是了解服务器在终止时的状态非常有用：
++ 可以把状态保存到磁盘
++ 把它放入消息发送给别的进程
++ 根据应用程序的意愿丢弃它
+
+#+BEGIN_EXAMPLE
+  如果想让服务器过后重启,就必须编写一个“我胡汉三又回来了”的函数,由 terminate/2 触发  
+#+END_EXAMPLE
+
+** 代码更改
+可以在服务器运行时动态更改它的状态。这个 _回调函数_ 会在 _系统执行软件升级_ 时由 _版本处理子系统_ 调用：
+
+#+BEGIN_SRC erlang 
+  %%--------------------------------------------------------------------
+  %% @private
+  %% @doc
+  %% Convert process state when code is changed
+  %%
+  %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
+  %% @end
+  %%--------------------------------------------------------------------
+  code_change(_OldVsn, State, _Extra) ->
+      {ok, State}.
+#+END_SRC
+
+* 填写 gen_server 模板

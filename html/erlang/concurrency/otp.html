@@ -259,7 +259,20 @@ for the JavaScript code in this tag.
 <li><a href="#orgc5d234b">测试</a></li>
 </ul>
 </li>
-<li><a href="#orgb83d8bb">gen_server 的回调结构</a></li>
+<li><a href="#orgb83d8bb">gen_server 的回调结构</a>
+<ul>
+<li><a href="#org357bf5e">启动服务器</a></li>
+<li><a href="#org32db777">调用服务器</a>
+<ul>
+<li><a href="#org720dbfc">播发</a></li>
+<li><a href="#orgfdddab7">发给服务器的自发性消息</a></li>
+</ul>
+</li>
+<li><a href="#orgff84f4d">终止</a></li>
+<li><a href="#org40deb59">代码更改</a></li>
+</ul>
+</li>
+<li><a href="#org282cc56">填写 gen_server 模板</a></li>
 </ul>
 </div>
 </div>
@@ -1113,6 +1126,254 @@ handle_call/3 函数最为重要。必须编写代码,让它匹配接口方法�
 
 <div id="outline-container-orgb83d8bb" class="outline-2">
 <h2 id="orgb83d8bb">gen_server 的回调结构</h2>
+<div class="outline-text-2" id="text-orgb83d8bb">
+<p>
+理解了相关概念之后,来详细了解一下 gen_server 的回调结构 
+</p>
+</div>
+
+<div id="outline-container-org357bf5e" class="outline-3">
+<h3 id="org357bf5e">启动服务器</h3>
+<div class="outline-text-3" id="text-org357bf5e">
+<p>
+<span class="underline">gen_server:start_link(Name, Mod, InitArgs, Opts)</span> 这个调用是所有事物的起点：
+</p>
+<ul class="org-ul">
+<li>它会创建一个名为 <span class="underline">Name</span> 的通用服务器</li>
+<li>回调模块是 <span class="underline">Mod</span></li>
+<li><span class="underline">Opts</span> 则控制通用服务器的行为：在这里可以指定 <span class="underline">消息记录</span> 、 <span class="underline">函数调试</span> 和 <span class="underline">其他行为</span></li>
+<li>通用服务器通过调用 <span class="underline">Mod:init(InitArgs)</span> 启动</li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #ff4500;">%%</span><span style="color: #ff4500;">--------------------------------------------------------------------</span>
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">@private</span>
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">@doc</span>
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">Initializes the server</span>
+<span style="color: #ff4500;">%%</span>
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">@spec init(Args) -&gt; {ok, State} |</span>
+<span style="color: #ff4500;">%%                     </span><span style="color: #ff4500;">{ok, State, Timeout} |</span>
+<span style="color: #ff4500;">%%                     </span><span style="color: #ff4500;">ignore |</span>
+<span style="color: #ff4500;">%%                     </span><span style="color: #ff4500;">{stop, Reason}</span>
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">@end</span>
+<span style="color: #ff4500;">%%</span><span style="color: #ff4500;">--------------------------------------------------------------------</span>
+<span style="color: #87cefa;">init</span>([]) -&gt;
+    {ok, #<span style="color: #98fb98;">state</span>{}}.
+</pre>
+</div>
+
+<p>
+在通常的操作里,只会返回 <span class="underline">{ok, State}</span> ：如果返回 {ok, State} ,就说明 <b>成功启动</b> 了服务器,它的 <b>初始状态</b> 是 <span class="underline">State</span>
+</p>
+
+<pre class="example">
+要了解其他参数的含义,请参考 gen_server 的手册页
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org32db777" class="outline-3">
+<h3 id="org32db777">调用服务器</h3>
+<div class="outline-text-3" id="text-org32db777">
+<p>
+要调用服务器,客户端程序需要执行 <span class="underline">gen_server:call(Name, Request)</span> 。它最终调用的是回调模块里的 <span class="underline">handle_call/3</span> : 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #ff4500;">%%</span><span style="color: #ff4500;">--------------------------------------------------------------------</span>
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">@private</span>
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">@doc</span>
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">Handling call messages</span>
+<span style="color: #ff4500;">%%</span>
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">@spec handle_call(Request, From, State) -&gt;</span>
+<span style="color: #ff4500;">%%                                   </span><span style="color: #ff4500;">{reply, Reply, State} |</span>
+<span style="color: #ff4500;">%%                                   </span><span style="color: #ff4500;">{reply, Reply, State, Timeout} |</span>
+<span style="color: #ff4500;">%%                                   </span><span style="color: #ff4500;">{noreply, State} |</span>
+<span style="color: #ff4500;">%%                                   </span><span style="color: #ff4500;">{noreply, State, Timeout} |</span>
+<span style="color: #ff4500;">%%                                   </span><span style="color: #ff4500;">{stop, Reason, Reply, State} |</span>
+<span style="color: #ff4500;">%%                                   </span><span style="color: #ff4500;">{stop, Reason, State}</span>
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">@end</span>
+<span style="color: #ff4500;">%%</span><span style="color: #ff4500;">--------------------------------------------------------------------</span>
+<span style="color: #87cefa;">handle_call</span>(<span style="color: #eedd82;">_Request</span>, <span style="color: #eedd82;">_From</span>, <span style="color: #eedd82;">State</span>) -&gt;
+    <span style="color: #eedd82;">Reply</span> = ok,
+    {reply, <span style="color: #eedd82;">Reply</span>, <span style="color: #eedd82;">State</span>}.
+</pre>
+</div>
+
+<p>
+handle_call 函数：
+</p>
+<ul class="org-ul">
+<li>参数：
+<ul class="org-ul">
+<li>_Request 其实是 gen_server:call/2 的第二个参数Request</li>
+<li>_From 是发送请求的客户端进程的PID</li>
+<li>_State 则是客户端的当前状态。</li>
+</ul></li>
+<li>返回值：
+<ul class="org-ul">
+<li>通常会返回 <span class="underline">{reply, Reply, NewState}</span> 
+<ul class="org-ul">
+<li>Reply 会返回客户端,成为 <span class="underline">gen_server:call</span> 的返回值</li>
+<li>NewState 则是服务器接下来的状态。</li>
+</ul></li>
+<li>其他的返回值( <span class="underline">{noreply, ..}</span> 和 <span class="underline">{stop, ..}</span> )相对不太常用
+<ul class="org-ul">
+<li>no reply: 会让服务器继续工作,但客户端会等待一个回复,所以服务器必须把回复的任务委派给其他进程。用适当的参数调用</li>
+<li>stop 会停止服务器</li>
+</ul></li>
+</ul></li>
+</ul>
+</div>
+
+<div id="outline-container-org720dbfc" class="outline-4">
+<h4 id="org720dbfc">播发</h4>
+<div class="outline-text-4" id="text-org720dbfc">
+<pre class="example">
+刚才已经见过了 gen_server:call 和 handle_call 之间的交互,它的作用是实现远程过程调用
+</pre>
+<p>
+<span class="underline">gen_server:cast(Name, Msg)</span> 则实现了一个 <b>播发</b> (cast),也就是 <span class="underline">没有返回值的调用</span> 
+</p>
+
+<pre class="example">
+  实际上就是一个消息转发,但习惯上称它为播发来与远程过程调用相区分
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #ff4500;">%%</span><span style="color: #ff4500;">--------------------------------------------------------------------</span>
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">@private</span>
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">@doc</span>
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">Handling cast messages</span>
+<span style="color: #ff4500;">%%</span>
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">@spec handle_cast(Msg, State) -&gt; {noreply, State} |</span>
+<span style="color: #ff4500;">%%                                  </span><span style="color: #ff4500;">{noreply, State, Timeout} |</span>
+<span style="color: #ff4500;">%%                                  </span><span style="color: #ff4500;">{stop, Reason, State}</span>
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">@end</span>
+<span style="color: #ff4500;">%%</span><span style="color: #ff4500;">--------------------------------------------------------------------</span>
+<span style="color: #87cefa;">handle_cast</span>(<span style="color: #eedd82;">_Msg</span>, <span style="color: #eedd82;">State</span>) -&gt;
+    {noreply, <span style="color: #eedd82;">State</span>}.
+</pre>
+</div>
+
+<p>
+这个处理函数通常只返回 <span class="underline">{noreply, NewState}</span> 或 <span class="underline">{stop, &#x2026;}</span> ：
+</p>
+<ul class="org-ul">
+<li>noreply： <b>改变</b> 服务器的状态</li>
+<li>stop： <b>停止</b> 服务器</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-orgfdddab7" class="outline-4">
+<h4 id="orgfdddab7">发给服务器的自发性消息</h4>
+<div class="outline-text-4" id="text-orgfdddab7">
+<p>
+回调函数 <span class="underline">handle_info(Info, State)</span> 被用来处理发给服务器的 <b>自发性消息</b> 。自发性消息是一切 <b>未经显式调用</b> <span class="underline">gen_server:call</span> 或 <span class="underline">gen_server:cast</span> 而到达服务器的消息
+</p>
+
+<pre class="example">
+  举个例子,如果服务器连接到另一个进程并捕捉退出信号,就可能会突然收到一个预料之外的 {'EXIT', Pid,What} 消息
+
+  除此之外,系统里任何知道通用服务器PID的进程都可以向它发送消息
+</pre>
+
+<p>
+这样的消息在服务器里表现为 <span class="underline">info 值</span> ： 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #ff4500;">%%</span><span style="color: #ff4500;">--------------------------------------------------------------------</span>
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">@private</span>
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">@doc</span>
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">Handling all non call/cast messages</span>
+<span style="color: #ff4500;">%%</span>
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">@spec handle_info(Info, State) -&gt; {noreply, State} |</span>
+<span style="color: #ff4500;">%%                                   </span><span style="color: #ff4500;">{noreply, State, Timeout} |</span>
+<span style="color: #ff4500;">%%                                   </span><span style="color: #ff4500;">{stop, Reason, State}</span>
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">@end</span>
+<span style="color: #ff4500;">%%</span><span style="color: #ff4500;">--------------------------------------------------------------------</span>
+<span style="color: #87cefa;">handle_info</span>(<span style="color: #eedd82;">_Info</span>, <span style="color: #eedd82;">State</span>) -&gt;
+    {noreply, <span style="color: #eedd82;">State</span>}.
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgff84f4d" class="outline-3">
+<h3 id="orgff84f4d">终止</h3>
+<div class="outline-text-3" id="text-orgff84f4d">
+<p>
+服务器会因为许多原因而终止：
+</p>
+<ul class="org-ul">
+<li>某个以 handle_ 开头的函数也许会返回一个 <span class="underline">{stop, Reason, NewState}</span></li>
+<li>服务器也可能崩溃并生成 <span class="underline">{'EXIT', reason}</span></li>
+</ul>
+
+<p>
+在所有这些情况下,无论它们是怎样发生的,都会调用 <span class="underline">terminate(Reason, NewState)</span>  。它的模板项如下：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #ff4500;">%%</span><span style="color: #ff4500;">--------------------------------------------------------------------</span>
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">@private</span>
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">@doc</span>
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">This function is called by a gen_server when it is about to</span>
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">terminate. It should be the opposite of Module:init/1 and do any</span>
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">necessary cleaning up. When it returns, the gen_server terminates</span>
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">with Reason. The return value is ignored.</span>
+<span style="color: #ff4500;">%%</span>
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">@spec terminate(Reason, State) -&gt; void()</span>
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">@end</span>
+<span style="color: #ff4500;">%%</span><span style="color: #ff4500;">--------------------------------------------------------------------</span>
+<span style="color: #87cefa;">terminate</span>(<span style="color: #eedd82;">_Reason</span>, <span style="color: #eedd82;">_State</span>) -&gt;
+    ok.
+</pre>
+</div>
+<p>
+这段代码不能返回一个新状态,因为已经终止了，但是了解服务器在终止时的状态非常有用：
+</p>
+<ul class="org-ul">
+<li>可以把状态保存到磁盘</li>
+<li>把它放入消息发送给别的进程</li>
+<li>根据应用程序的意愿丢弃它</li>
+</ul>
+
+<pre class="example">
+  如果想让服务器过后重启,就必须编写一个“我胡汉三又回来了”的函数,由 terminate/2 触发  
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org40deb59" class="outline-3">
+<h3 id="org40deb59">代码更改</h3>
+<div class="outline-text-3" id="text-org40deb59">
+<p>
+可以在服务器运行时动态更改它的状态。这个 <span class="underline">回调函数</span> 会在 <span class="underline">系统执行软件升级</span> 时由 <span class="underline">版本处理子系统</span> 调用：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #ff4500;">%%</span><span style="color: #ff4500;">--------------------------------------------------------------------</span>
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">@private</span>
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">@doc</span>
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">Convert process state when code is changed</span>
+<span style="color: #ff4500;">%%</span>
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">@spec code_change(OldVsn, State, Extra) -&gt; {ok, NewState}</span>
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">@end</span>
+<span style="color: #ff4500;">%%</span><span style="color: #ff4500;">--------------------------------------------------------------------</span>
+<span style="color: #87cefa;">code_change</span>(<span style="color: #eedd82;">_OldVsn</span>, <span style="color: #eedd82;">State</span>, <span style="color: #eedd82;">_Extra</span>) -&gt;
+    {ok, <span style="color: #eedd82;">State</span>}.
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org282cc56" class="outline-2">
+<h2 id="org282cc56">填写 gen_server 模板</h2>
 </div>
 </div>
 <div id="postamble" class="status">
