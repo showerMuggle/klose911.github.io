@@ -273,6 +273,7 @@ for the JavaScript code in this tag.
 </ul>
 </li>
 <li><a href="#org282cc56">填写 gen_server 模板</a></li>
+<li><a href="#orge99efcc">OTP 总结</a></li>
 </ul>
 </div>
 </div>
@@ -1167,7 +1168,7 @@ handle_call/3 函数最为重要。必须编写代码,让它匹配接口方法�
 </p>
 
 <pre class="example">
-要了解其他参数的含义,请参考 gen_server 的手册页
+   要了解其他参数的含义,请参考 gen_server 的手册页
 </pre>
 </div>
 </div>
@@ -1230,14 +1231,14 @@ handle_call 函数：
 <h4 id="org720dbfc">播发</h4>
 <div class="outline-text-4" id="text-org720dbfc">
 <pre class="example">
-刚才已经见过了 gen_server:call 和 handle_call 之间的交互,它的作用是实现远程过程调用
+    刚才已经见过了 gen_server:call 和 handle_call 之间的交互,它的作用是实现远程过程调用
 </pre>
 <p>
 <span class="underline">gen_server:cast(Name, Msg)</span> 则实现了一个 <b>播发</b> (cast),也就是 <span class="underline">没有返回值的调用</span> 
 </p>
 
 <pre class="example">
-  实际上就是一个消息转发,但习惯上称它为播发来与远程过程调用相区分
+      实际上就是一个消息转发,但习惯上称它为播发来与远程过程调用相区分
 </pre>
 
 <div class="org-src-container">
@@ -1274,9 +1275,9 @@ handle_call 函数：
 </p>
 
 <pre class="example">
-  举个例子,如果服务器连接到另一个进程并捕捉退出信号,就可能会突然收到一个预料之外的 {'EXIT', Pid,What} 消息
+      举个例子,如果服务器连接到另一个进程并捕捉退出信号,就可能会突然收到一个预料之外的 {'EXIT', Pid,What} 消息
 
-  除此之外,系统里任何知道通用服务器PID的进程都可以向它发送消息
+      除此之外,系统里任何知道通用服务器PID的进程都可以向它发送消息
 </pre>
 
 <p>
@@ -1343,7 +1344,7 @@ handle_call 函数：
 </ul>
 
 <pre class="example">
-  如果想让服务器过后重启,就必须编写一个“我胡汉三又回来了”的函数,由 terminate/2 触发  
+     如果想让服务器过后重启,就必须编写一个“我胡汉三又回来了”的函数,由 terminate/2 触发  
 </pre>
 </div>
 </div>
@@ -1374,6 +1375,134 @@ handle_call 函数：
 
 <div id="outline-container-org282cc56" class="outline-2">
 <h2 id="org282cc56">填写 gen_server 模板</h2>
+<div class="outline-text-2" id="text-org282cc56">
+<p>
+编写 OTP gen_server 大致上就是用你的代码填充一个预制模板,下面是一个例子。前一节分别列出了 gen_server 的各个区块，通过填充模板生成了一个名为 my_bank 的银行模块: 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #7fffd4;">-module</span>(my_bank).
+
+<span style="color: #7fffd4;">-behaviour</span>(gen_server).
+<span style="color: #7fffd4;">-export</span>([<span style="color: #98fb98;">start/0</span>]).
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">gen_server callbacks</span>
+<span style="color: #7fffd4;">-export</span>([<span style="color: #98fb98;">init/1</span>, <span style="color: #98fb98;">handle_call/3</span>, <span style="color: #98fb98;">handle_cast/2</span>, <span style="color: #98fb98;">handle_info/2</span>,
+         <span style="color: #98fb98;">terminate/2</span>, <span style="color: #98fb98;">code_change/3</span>]).
+<span style="color: #7fffd4;">-compile</span>(export_all).
+<span style="color: #7fffd4;">-define</span>(<span style="color: #eedd82;">SERVER</span>, ?<span style="color: #7fffd4;">MODULE</span>). 
+
+<span style="color: #87cefa;">start</span>() -&gt;<span style="color: #87cefa;"> </span><span style="color: #98fb98;">gen_server</span>:<span style="color: #98fb98;">start_link</span>({local, ?<span style="color: #7fffd4;">SERVER</span>}, ?<span style="color: #7fffd4;">MODULE</span>, [], []).
+<span style="color: #87cefa;">stop</span>()  -&gt;<span style="color: #87cefa;"> </span><span style="color: #98fb98;">gen_server</span>:<span style="color: #98fb98;">call</span>(?<span style="color: #7fffd4;">MODULE</span>, stop).
+
+<span style="color: #87cefa;">new_account</span>(<span style="color: #eedd82;">Who</span>)      -&gt;<span style="color: #87cefa;"> </span><span style="color: #98fb98;">gen_server</span>:<span style="color: #98fb98;">call</span>(?<span style="color: #7fffd4;">MODULE</span>, {new, <span style="color: #eedd82;">Who</span>}).
+<span style="color: #87cefa;">deposit</span>(<span style="color: #eedd82;">Who</span>, <span style="color: #eedd82;">Amount</span>)  -&gt;<span style="color: #87cefa;"> </span><span style="color: #98fb98;">gen_server</span>:<span style="color: #98fb98;">call</span>(?<span style="color: #7fffd4;">MODULE</span>, {add, <span style="color: #eedd82;">Who</span>, <span style="color: #eedd82;">Amount</span>}).
+<span style="color: #87cefa;">withdraw</span>(<span style="color: #eedd82;">Who</span>, <span style="color: #eedd82;">Amount</span>) -&gt;<span style="color: #87cefa;"> </span><span style="color: #98fb98;">gen_server</span>:<span style="color: #98fb98;">call</span>(?<span style="color: #7fffd4;">MODULE</span>, {remove, <span style="color: #eedd82;">Who</span>, <span style="color: #eedd82;">Amount</span>}).
+
+<span style="color: #87cefa;">init</span>([]) -&gt;<span style="color: #87cefa;"> </span>{ok, <span style="color: #98fb98;">ets</span>:<span style="color: #98fb98;">new</span>(?<span style="color: #7fffd4;">MODULE</span>,[])}.
+
+<span style="color: #87cefa;">handle_call</span>({new,<span style="color: #eedd82;">Who</span>}, <span style="color: #eedd82;">_From</span>, <span style="color: #eedd82;">Tab</span>) -&gt;
+    <span style="color: #eedd82;">Reply</span> = <span style="color: #00ffff;">case</span> <span style="color: #98fb98;">ets</span>:<span style="color: #98fb98;">lookup</span>(<span style="color: #eedd82;">Tab</span>, <span style="color: #eedd82;">Who</span>) <span style="color: #00ffff;">of</span>
+                []  -&gt;<span style="color: #87cefa;"> </span><span style="color: #98fb98;">ets</span>:<span style="color: #98fb98;">insert</span>(<span style="color: #eedd82;">Tab</span>, {<span style="color: #eedd82;">Who</span>,0}), 
+                       {welcome, <span style="color: #eedd82;">Who</span>};
+                [<span style="color: #eedd82;">_</span>] -&gt;<span style="color: #87cefa;"> </span>{<span style="color: #eedd82;">Who</span>, you_already_are_a_customer}
+            <span style="color: #00ffff;">end</span>,
+    {reply, <span style="color: #eedd82;">Reply</span>, <span style="color: #eedd82;">Tab</span>};
+
+<span style="color: #87cefa;">handle_call</span>({add,<span style="color: #eedd82;">Who</span>,<span style="color: #eedd82;">X</span>}, <span style="color: #eedd82;">_From</span>, <span style="color: #eedd82;">Tab</span>) -&gt;
+    <span style="color: #eedd82;">Reply</span> = <span style="color: #00ffff;">case</span> <span style="color: #98fb98;">ets</span>:<span style="color: #98fb98;">lookup</span>(<span style="color: #eedd82;">Tab</span>, <span style="color: #eedd82;">Who</span>) <span style="color: #00ffff;">of</span>
+                []  -&gt;<span style="color: #87cefa;"> </span>not_a_customer;
+                [{<span style="color: #eedd82;">Who</span>,<span style="color: #eedd82;">Balance</span>}] -&gt;
+                    <span style="color: #eedd82;">NewBalance</span> = <span style="color: #eedd82;">Balance</span> + <span style="color: #eedd82;">X</span>,
+                    <span style="color: #98fb98;">ets</span>:<span style="color: #98fb98;">insert</span>(<span style="color: #eedd82;">Tab</span>, {<span style="color: #eedd82;">Who</span>, <span style="color: #eedd82;">NewBalance</span>}),
+                    {thanks, <span style="color: #eedd82;">Who</span>, your_balance_is,  <span style="color: #eedd82;">NewBalance</span>} 
+            <span style="color: #00ffff;">end</span>,
+    {reply, <span style="color: #eedd82;">Reply</span>, <span style="color: #eedd82;">Tab</span>};
+
+<span style="color: #87cefa;">handle_call</span>({remove,<span style="color: #eedd82;">Who</span>, <span style="color: #eedd82;">X</span>}, <span style="color: #eedd82;">_From</span>, <span style="color: #eedd82;">Tab</span>) -&gt;
+    <span style="color: #eedd82;">Reply</span> = <span style="color: #00ffff;">case</span> <span style="color: #98fb98;">ets</span>:<span style="color: #98fb98;">lookup</span>(<span style="color: #eedd82;">Tab</span>, <span style="color: #eedd82;">Who</span>) <span style="color: #00ffff;">of</span>
+                []  -&gt;<span style="color: #87cefa;"> </span>not_a_customer;
+                [{<span style="color: #eedd82;">Who</span>,<span style="color: #eedd82;">Balance</span>}] <span style="color: #00ffff;">when</span> <span style="color: #eedd82;">X</span> =&lt; <span style="color: #eedd82;">Balance</span> -&gt;
+                    <span style="color: #eedd82;">NewBalance</span> = <span style="color: #eedd82;">Balance</span> - <span style="color: #eedd82;">X</span>,
+                    <span style="color: #98fb98;">ets</span>:<span style="color: #98fb98;">insert</span>(<span style="color: #eedd82;">Tab</span>, {<span style="color: #eedd82;">Who</span>, <span style="color: #eedd82;">NewBalance</span>}),
+                    {thanks, <span style="color: #eedd82;">Who</span>, your_balance_is,  <span style="color: #eedd82;">NewBalance</span>};        
+                [{<span style="color: #eedd82;">Who</span>,<span style="color: #eedd82;">Balance</span>}] -&gt;
+                    {sorry,<span style="color: #eedd82;">Who</span>,you_only_have,<span style="color: #eedd82;">Balance</span>,in_the_bank}
+            <span style="color: #00ffff;">end</span>,
+    {reply, <span style="color: #eedd82;">Reply</span>, <span style="color: #eedd82;">Tab</span>};
+
+<span style="color: #87cefa;">handle_call</span>(stop, <span style="color: #eedd82;">_From</span>, <span style="color: #eedd82;">Tab</span>) -&gt;
+    {stop, normal, stopped, <span style="color: #eedd82;">Tab</span>}.
+<span style="color: #87cefa;">handle_cast</span>(<span style="color: #eedd82;">_Msg</span>, <span style="color: #eedd82;">State</span>) -&gt;<span style="color: #87cefa;"> </span>{noreply, <span style="color: #eedd82;">State</span>}.
+<span style="color: #87cefa;">handle_info</span>(<span style="color: #eedd82;">_Info</span>, <span style="color: #eedd82;">State</span>) -&gt;<span style="color: #87cefa;"> </span>{noreply, <span style="color: #eedd82;">State</span>}.
+<span style="color: #87cefa;">terminate</span>(<span style="color: #eedd82;">_Reason</span>, <span style="color: #eedd82;">_State</span>) -&gt;<span style="color: #87cefa;"> </span>ok.
+<span style="color: #87cefa;">code_change</span>(<span style="color: #eedd82;">_OldVsn</span>, <span style="color: #eedd82;">State</span>, <span style="color: #eedd82;">_Extra</span>) -&gt;<span style="color: #87cefa;"> </span>{ok, <span style="color: #eedd82;">State</span>}.
+</pre>
+</div>
+
+<pre class="example">
+    这段代码取自模板，移除了模板里的所有注释,这样就能清楚地看到代码的结构
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orge99efcc" class="outline-2">
+<h2 id="orge99efcc">OTP 总结</h2>
+<div class="outline-text-2" id="text-orge99efcc">
+<p>
+gen_server 其实相当简单
+</p>
+<pre class="example">
+    并未全面介绍 gen_server 里的接口函数,也没有解释这些函数的全部变量
+
+    一旦理解了基本的概念,就可以去 gen_server 的手册页里查找更多细节
+</pre>
+<p>
+这里只介绍了最简单的 gen_server 使用方式,但它应该足以应付大多数需求了。复杂程度更高的应用程序经常会让 gen_server 回复一个 noreply 返回值,并把真正的回复任务委派给另一个进程
+</p>
+
+<pre class="example">
+    要了解更多这方面的信息,请阅读“Design Principles” 1 (设计原则) 文档,以及 sys 和 proc_lib 模块的手册页
+</pre>
+
+<p>
+还介绍了把服务器行为抽象成两个部分这一概念: 
+</p>
+<ul class="org-ul">
+<li>通用部分可以用于所有服务器,</li>
+<li>特有部分(处理模块)可以用来对通用部分进行定制</li>
+</ul>
+
+<pre class="example">
+    这么做的主要优点是代码能整齐地一分为二
+
+    通用部分解决众多并发和错误处理问题,而处理模块只包含顺序代码
+</pre>
+
+<p>
+在此之后,介绍了OTP系统里的第一种主要行为: gen_server ,并展示了如何从一个相当简单且容易理解的服务器入手,通过逐步的转变来实现它。
+</p>
+<pre class="example">
+gen_server 的用途很广,但它并不能包治百病，gen_server 的客户端-服务器交互模式有时候会让人感觉别扭,与你的问题不能良好兼容
+
+如果是这样,就需要重新思考制作 gen_server 所需要的转变步骤,根据问题的特殊需要来修改它们
+</pre>
+
+<p>
+从单个服务器转向系统时,就会用到很多服务器。希望能以一致的方式监视它们、重启退出的服务器以及记录错误。这就是下面的主题
+</p>
+
+<p>
+<a href="application.html">Next：OTP应用系统</a>
+</p>
+
+<p>
+<a href="distributed_programming.html">Previous：分布式编程</a>
+</p>
+
+<p>
+<a href="concurrency.html">Home：目录</a>
+</p>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
