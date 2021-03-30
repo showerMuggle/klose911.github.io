@@ -3,3 +3,179 @@
 #+HTML_LINK_UP: otp.html   
 #+HTML_LINK_HOME: concurrency.html
 #+OPTIONS: num:nil timestamp:nil ^:nil 
+
+#+BEGIN_EXAMPLE
+    这一章将构建一个系统,把它作为一家网络公司的后端,这家公司销售两种商品:质数和面积
+
+    顾客可以从这里购买质数,也可以请我们计算某个几何对象的面积
+#+END_EXAMPLE
+
+将编写两个服务器:一个生成质数,另一个计算面积。并使用上一章讨论的 gen_server 框架来实现它们 
+
+#+BEGIN_EXAMPLE
+  在构建系统时必须考虑到错误，即使彻底测试了软件,也不一定能捕获所有的bug
+
+  假设其中一个服务器带有会导致服务器崩溃的致命错误，确切地说,故意引入一个错误来使其中一个服务器崩溃
+#+END_EXAMPLE
+
+当服务器崩溃时,需要一种机制来检测这种情况并重启它,为此将用到 _监控树_ (supervision tree)这个概念。创建一个监控器来管理服务器,如果服务器崩溃就重启它们
+
+#+BEGIN_EXAMPLE
+  当然,如果服务器确实崩溃了,希望知道它崩溃的原因,这样就能在未来修复这个问题
+#+END_EXAMPLE
+
+为了记录所有错误,可以使用OTP的 _错误记录器_ 。会展示如何配置错误记录器,以及如何根据错误日志生成错误报告 
+
+#+BEGIN_EXAMPLE
+  计算质数(特别是大质数)时,CPU可能会过热,这就需要开启一个强力风扇来避免这种情况
+#+END_EXAMPLE
+
+要做到这一点,需要考虑 _警报_ 。我们会用 _OTP事件处理框架_ 来生成和处理警报
+
+#+BEGIN_EXAMPLE
+  所有这些主题(创建服务器、监控服务器、记录错误和检测警报)是一切生产系统都必须解决的典型问题
+
+  因此,虽然公司前途未卜,却可以在许多系统里重复使用这种架构。事实上,许多在商业上获得成功的公司都在使用这种架构
+#+END_EXAMPLE
+
+最后,当一切都能正常工作时,所有代码都会被打包到一个 _OTP应用程序_ 里。这是一种把围绕某个问题的事物组合到一起的专用方法,让OTP系统自身来启动、停止和管理它
+
+#+BEGIN_EXAMPLE
+  要决定按什么顺序呈现这些材料并不容易,因为许多领域之间存在循环依赖关系
+
+  错误记录只是事件管理的一个特例，警报就是一种消息,错误记录器是一个被监控进程,但是进程监控器可以调用错误记录器
+#+END_EXAMPLE
+
+会尝试理出某种顺序,把这些主题相对有条理地呈现出来。将做下面这些事
+1. 熟悉通用事件处理器里用到的概念
+2. 了解错误记录器的工作方式
+3. 添加警报管理功能
+4. 编写两个应用程序服务器
+5. 制作一个监控树,并给它添加服务器
+6. 把这一切打包成一个应用程序
+* 通用事件处理
+  #+BEGIN_EXAMPLE
+    事件就是已发生的事情:它是值得注意的,程序员认为有人应该对它做些什么
+  #+END_EXAMPLE
+  如果在编程的时候发生了一件值得注意的事,就会发送一个 _event 消息_ 给某个 _注册进程_ ,就像这样:
+
+  #+BEGIN_SRC erlang 
+  RegProcName ! {event, E}
+  #+END_SRC
+
+  + E: 是 *事件* (可以是任意Erlang数据类型)
+  + RegProcName: 是 _注册进程名_  
+
+  #+BEGIN_EXAMPLE
+    发送消息后我们不知道(也不关心)它的命运
+
+    只是完成自己的任务,告诉其他人有什么事发生
+  #+END_EXAMPLE
+
+  现在把注意力转向 *接收事件消息* 的 _进程_ ,它被称为 _事件处理器_ 。最简单的事件处理器就是一个“什么都不做”的处理器。当它收到一个 {event, X} 消息时不会对它做任何处理,只会把它丢弃。下面是对通用事件处理程序的首次尝试：
+
+  #+BEGIN_SRC erlang 
+  -module(event_handler).
+  -export([make/1, add_handler/2, event/2]).
+  %% make a new event handler called Name
+  %% the handler function is no_op -- so we do nothing with the event
+  make(Name) ->
+      register(Name, spawn(fun() -> my_handler(fun no_op/1) end)).
+  add_handler(Name, Fun) -> Name ! {add, Fun}.
+
+  %% generate an event
+  event(Name, X) -> Name ! {event, X}.
+
+  my_handler(Fun) ->
+      receive
+	  {add, Fun1} ->
+	      my_handler(Fun1);
+	  {event, Any} ->
+	      (catch Fun(Any)),
+	      my_handler(Fun)
+      end.
+  no_op(_) -> void.
+  #+END_SRC
+
+  这个事件处理器的API如下：
+
+  #+BEGIN_SRC erlang 
+  event_handler:make(Name)
+  #+END_SRC
+
+  产生一个“什么都不干”的事件处理器 Name (一个原子)。这样消息就有地方发送了 
+
+  #+BEGIN_SRC erlang 
+  event_handler:event(Name, X)
+  #+END_SRC
+
+  发送消息 X 到名为 Name 的事件处理器 
+
+  #+BEGIN_SRC erlang 
+  event_handler:add_handler(Name, Fun)
+  #+END_SRC
+
+  给名为 Name 的事件处理器添加一个处理函数 Fun 。这样当事件 X 发生时,事件处理器就会执行 Fun(X) 
+
+  现在创建一个事件处理器并生成一个错误：
+
+  #+BEGIN_SRC sh 
+  2> event_handler:make(errors) . 
+  true
+   
+  3> event_handler:event(errors, hi) . 
+  {event,hi}
+  #+END_SRC
+
+  #+BEGIN_EXAMPLE
+    没什么特别的事发生,因为还没有给事件处理器安装回调模块
+  #+END_EXAMPLE
+
+  要让事件处理器能做点什么,必须编写一个 _回调模块_ 并把它 *安装* 到 _事件处理器_ 里。这是一个事件处理器回调模块的代码:
+
+  #+BEGIN_SRC erlang 
+  -module(motor_controller).
+  -export([add_event_handler/0]).
+
+  add_event_handler() ->
+      event_handler:add_handler(errors, fun controller/1).
+  controller(too_hot) ->
+      io:format("Turn off the motor~n");
+  controller(X) ->
+      io:format("~w ignored event: ~p~n",[?MODULE, X]).
+  #+END_SRC
+
+  编译之后就可以安装它了 
+
+  #+BEGIN_SRC sh 
+  4> c (motor_controller) . 
+  {ok,motor_controller}
+   
+  5> motor_controller:add_event_handler() . 
+  {add,#Fun<motor_controller.0.125151531>}
+  #+END_SRC
+
+  现在再发送事件消息给处理器时,函数 _motor_controller:controller/1_ 会处理这些消息：
+
+  #+BEGIN_SRC sh 
+  6> event_handler:event(errors, cool) . 
+  motor_controller ignored event: cool
+  {event,cool}
+ 
+  7> event_handler:event(errors, too_hot) .  
+  Turn off the motor
+  {event,too_hot}
+  #+END_SRC
+  这个实例有两个目的：
+  + 提供一个名称来作为消息发送的目的地,也就是名为 errors 的注册进程，定义一个协议来发送事件给这个注册进程,但并没有说明消息到达后会发生什么
+    + 事实上,唯一发生的事就是执行了 no_Op(X)
+  + 安装一个自定义的事件处理器
+
+  这么做本质上是把 _事件生成_ 和 _事件处理_ *分开* 进行,这样就能暂不决定如何处理事件,同时又不影响事件生成。这里的要点在于 *事件处理器提供了一种架构,可以安装自定义的处理器* 
+
+  #+BEGIN_EXAMPLE
+    错误记录器的架构遵循事件处理器的模式，可以在错误记录器里安装不同的处理器来让它做不同的事情
+
+    警报处理架构同样遵循这一模式
+  #+END_EXAMPLE
+* 错误记录器

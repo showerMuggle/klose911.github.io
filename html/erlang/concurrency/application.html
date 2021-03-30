@@ -234,6 +234,249 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="concurrency.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">OTP应用系统</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#orgfc1cba8">通用事件处理</a></li>
+<li><a href="#orgcb20f3e">错误记录器</a></li>
+</ul>
+</div>
+</div>
+<pre class="example">
+    这一章将构建一个系统,把它作为一家网络公司的后端,这家公司销售两种商品:质数和面积
+
+    顾客可以从这里购买质数,也可以请我们计算某个几何对象的面积
+</pre>
+
+<p>
+将编写两个服务器:一个生成质数,另一个计算面积。并使用上一章讨论的 gen_server 框架来实现它们 
+</p>
+
+<pre class="example">
+  在构建系统时必须考虑到错误，即使彻底测试了软件,也不一定能捕获所有的bug
+
+  假设其中一个服务器带有会导致服务器崩溃的致命错误，确切地说,故意引入一个错误来使其中一个服务器崩溃
+</pre>
+
+<p>
+当服务器崩溃时,需要一种机制来检测这种情况并重启它,为此将用到 <span class="underline">监控树</span> (supervision tree)这个概念。创建一个监控器来管理服务器,如果服务器崩溃就重启它们
+</p>
+
+<pre class="example">
+  当然,如果服务器确实崩溃了,希望知道它崩溃的原因,这样就能在未来修复这个问题
+</pre>
+
+<p>
+为了记录所有错误,可以使用OTP的 <span class="underline">错误记录器</span> 。会展示如何配置错误记录器,以及如何根据错误日志生成错误报告 
+</p>
+
+<pre class="example">
+  计算质数(特别是大质数)时,CPU可能会过热,这就需要开启一个强力风扇来避免这种情况
+</pre>
+
+<p>
+要做到这一点,需要考虑 <span class="underline">警报</span> 。我们会用 <span class="underline">OTP事件处理框架</span> 来生成和处理警报
+</p>
+
+<pre class="example">
+  所有这些主题(创建服务器、监控服务器、记录错误和检测警报)是一切生产系统都必须解决的典型问题
+
+  因此,虽然公司前途未卜,却可以在许多系统里重复使用这种架构。事实上,许多在商业上获得成功的公司都在使用这种架构
+</pre>
+
+<p>
+最后,当一切都能正常工作时,所有代码都会被打包到一个 <span class="underline">OTP应用程序</span> 里。这是一种把围绕某个问题的事物组合到一起的专用方法,让OTP系统自身来启动、停止和管理它
+</p>
+
+<pre class="example">
+  要决定按什么顺序呈现这些材料并不容易,因为许多领域之间存在循环依赖关系
+
+  错误记录只是事件管理的一个特例，警报就是一种消息,错误记录器是一个被监控进程,但是进程监控器可以调用错误记录器
+</pre>
+
+<p>
+会尝试理出某种顺序,把这些主题相对有条理地呈现出来。将做下面这些事
+</p>
+<ol class="org-ol">
+<li>熟悉通用事件处理器里用到的概念</li>
+<li>了解错误记录器的工作方式</li>
+<li>添加警报管理功能</li>
+<li>编写两个应用程序服务器</li>
+<li>制作一个监控树,并给它添加服务器</li>
+<li>把这一切打包成一个应用程序</li>
+</ol>
+<div id="outline-container-orgfc1cba8" class="outline-2">
+<h2 id="orgfc1cba8">通用事件处理</h2>
+<div class="outline-text-2" id="text-orgfc1cba8">
+<pre class="example">
+    事件就是已发生的事情:它是值得注意的,程序员认为有人应该对它做些什么
+</pre>
+<p>
+如果在编程的时候发生了一件值得注意的事,就会发送一个 <span class="underline">event 消息</span> 给某个 <span class="underline">注册进程</span> ,就像这样:
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang">RegProcName ! {event, <span style="color: #eedd82;">E</span>}
+</pre>
+</div>
+
+<ul class="org-ul">
+<li>E: 是 <b>事件</b> (可以是任意Erlang数据类型)</li>
+<li>RegProcName: 是 <span class="underline">注册进程名</span></li>
+</ul>
+
+<pre class="example">
+    发送消息后我们不知道(也不关心)它的命运
+
+    只是完成自己的任务,告诉其他人有什么事发生
+</pre>
+
+<p>
+现在把注意力转向 <b>接收事件消息</b> 的 <span class="underline">进程</span> ,它被称为 <span class="underline">事件处理器</span> 。最简单的事件处理器就是一个“什么都不做”的处理器。当它收到一个 {event, X} 消息时不会对它做任何处理,只会把它丢弃。下面是对通用事件处理程序的首次尝试：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #7fffd4;">-module</span>(event_handler).
+<span style="color: #7fffd4;">-export</span>([<span style="color: #98fb98;">make/1</span>, <span style="color: #98fb98;">add_handler/2</span>, <span style="color: #98fb98;">event/2</span>]).
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">make a new event handler called Name</span>
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">the handler function is no_op -- so we do nothing with the event</span>
+<span style="color: #87cefa;">make</span>(<span style="color: #eedd82;">Name</span>) -&gt;
+    <span style="color: #b0c4de;">register</span>(<span style="color: #eedd82;">Name</span>, <span style="color: #b0c4de;">spawn</span>(<span style="color: #00ffff;">fun</span>() -&gt;<span style="color: #87cefa;"> </span><span style="color: #98fb98;">my_handler</span>(<span style="color: #00ffff;">fun</span> <span style="color: #98fb98;">no_op/1</span>) <span style="color: #00ffff;">end</span>)).
+<span style="color: #87cefa;">add_handler</span>(<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Fun</span>) -&gt;<span style="color: #87cefa;"> </span><span style="color: #eedd82;">Name</span> ! {add, <span style="color: #eedd82;">Fun</span>}.
+
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">generate an event</span>
+<span style="color: #87cefa;">event</span>(<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">X</span>) -&gt;<span style="color: #87cefa;"> </span><span style="color: #eedd82;">Name</span> ! {event, <span style="color: #eedd82;">X</span>}.
+
+<span style="color: #87cefa;">my_handler</span>(<span style="color: #eedd82;">Fun</span>) -&gt;
+    <span style="color: #00ffff;">receive</span>
+        {add, <span style="color: #eedd82;">Fun1</span>} -&gt;
+            <span style="color: #98fb98;">my_handler</span>(<span style="color: #eedd82;">Fun1</span>);
+        {event, <span style="color: #eedd82;">Any</span>} -&gt;
+            (<span style="color: #00ffff;">catch</span> <span style="color: #eedd82;">Fun</span>(<span style="color: #eedd82;">Any</span>)),
+            <span style="color: #98fb98;">my_handler</span>(<span style="color: #eedd82;">Fun</span>)
+    <span style="color: #00ffff;">end</span>.
+<span style="color: #87cefa;">no_op</span>(<span style="color: #eedd82;">_</span>) -&gt;<span style="color: #87cefa;"> </span>void.
+</pre>
+</div>
+
+<p>
+这个事件处理器的API如下：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #98fb98;">event_handler</span>:<span style="color: #98fb98;">make</span>(<span style="color: #eedd82;">Name</span>)
+</pre>
+</div>
+
+<p>
+产生一个“什么都不干”的事件处理器 Name (一个原子)。这样消息就有地方发送了 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #98fb98;">event_handler</span>:<span style="color: #98fb98;">event</span>(<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">X</span>)
+</pre>
+</div>
+
+<p>
+发送消息 X 到名为 Name 的事件处理器 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #98fb98;">event_handler</span>:<span style="color: #98fb98;">add_handler</span>(<span style="color: #eedd82;">Name</span>, <span style="color: #eedd82;">Fun</span>)
+</pre>
+</div>
+
+<p>
+给名为 Name 的事件处理器添加一个处理函数 Fun 。这样当事件 X 发生时,事件处理器就会执行 Fun(X) 
+</p>
+
+<p>
+现在创建一个事件处理器并生成一个错误：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">2&gt; event_handler:make(errors) <span style="color: #b0c4de;">.</span> 
+true
+
+3&gt; event_handler:event(errors, hi) <span style="color: #b0c4de;">.</span> 
+{event,hi}
+</pre>
+</div>
+
+<pre class="example">
+    没什么特别的事发生,因为还没有给事件处理器安装回调模块
+</pre>
+
+<p>
+要让事件处理器能做点什么,必须编写一个 <span class="underline">回调模块</span> 并把它 <b>安装</b> 到 <span class="underline">事件处理器</span> 里。这是一个事件处理器回调模块的代码:
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #7fffd4;">-module</span>(motor_controller).
+<span style="color: #7fffd4;">-export</span>([<span style="color: #98fb98;">add_event_handler/0</span>]).
+
+<span style="color: #87cefa;">add_event_handler</span>() -&gt;
+    <span style="color: #98fb98;">event_handler</span>:<span style="color: #98fb98;">add_handler</span>(errors, <span style="color: #00ffff;">fun</span> <span style="color: #98fb98;">controller/1</span>).
+<span style="color: #87cefa;">controller</span>(too_hot) -&gt;
+    <span style="color: #98fb98;">io</span>:<span style="color: #98fb98;">format</span>(<span style="color: #ffa07a;">"Turn off the motor~n"</span>);
+<span style="color: #87cefa;">controller</span>(<span style="color: #eedd82;">X</span>) -&gt;
+    <span style="color: #98fb98;">io</span>:<span style="color: #98fb98;">format</span>(<span style="color: #ffa07a;">"~w ignored event: ~p~n"</span>,[?<span style="color: #7fffd4;">MODULE</span>, <span style="color: #eedd82;">X</span>]).
+</pre>
+</div>
+
+<p>
+编译之后就可以安装它了 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">4&gt; c (motor_controller) <span style="color: #b0c4de;">.</span> 
+{ok,motor_controller}
+
+5&gt; motor_controller:add_event_handler() <span style="color: #b0c4de;">.</span> 
+{add,#Fun&lt;motor_controller.0.125151531&gt;}
+</pre>
+</div>
+
+<p>
+现在再发送事件消息给处理器时,函数 <span class="underline">motor_controller:controller/1</span> 会处理这些消息：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">6&gt; event_handler:event(errors, cool) <span style="color: #b0c4de;">.</span> 
+motor_controller ignored event: cool
+{event,cool}
+
+7&gt; event_handler:event(errors, too_hot) <span style="color: #b0c4de;">.</span>  
+Turn off the motor
+{event,too_hot}
+</pre>
+</div>
+<p>
+这个实例有两个目的：
+</p>
+<ul class="org-ul">
+<li>提供一个名称来作为消息发送的目的地,也就是名为 errors 的注册进程，定义一个协议来发送事件给这个注册进程,但并没有说明消息到达后会发生什么
+<ul class="org-ul">
+<li>事实上,唯一发生的事就是执行了 no_Op(X)</li>
+</ul></li>
+<li>安装一个自定义的事件处理器</li>
+</ul>
+
+<p>
+这么做本质上是把 <span class="underline">事件生成</span> 和 <span class="underline">事件处理</span> <b>分开</b> 进行,这样就能暂不决定如何处理事件,同时又不影响事件生成。这里的要点在于 <b>事件处理器提供了一种架构,可以安装自定义的处理器</b> 
+</p>
+
+<pre class="example">
+    错误记录器的架构遵循事件处理器的模式，可以在错误记录器里安装不同的处理器来让它做不同的事情
+
+    警报处理架构同样遵循这一模式
+</pre>
+</div>
+</div>
+<div id="outline-container-orgcb20f3e" class="outline-2">
+<h2 id="orgcb20f3e">错误记录器</h2>
+</div>
 </div>
 <div id="postamble" class="status">
 
