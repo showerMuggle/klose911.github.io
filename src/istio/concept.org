@@ -313,6 +313,65 @@
     #+end_example
 
 ** 目标规则
+与虚拟服务一样， _目标规则_ 也是 Istio 流量路由功能的关键部分，可以将虚拟服务视为将流量如何路由到给定目标地址，然后使用目标规则来 *配置该目标的流量* 。在评估虚拟服务路由规则之后，目标规则将应用于流量的“真实”目标地址 
+  + 可以使用目标规则来 _指定命名的服务子集_ 
+#+BEGIN_EXAMPLE
+  例如按版本为所有给定服务的实例分组，然后可以在虚拟服务的路由规则中使用这些服务子集来控制到服务不同实例的流量
+#+END_EXAMPLE
+  + 还允许在调用整个目的地服务或特定服务子集时 _定制 Envoy 的流量策略_ 
+#+BEGIN_EXAMPLE
+  比如您喜欢的负载均衡模型、TLS 安全模式或熔断器设置 
+#+END_EXAMPLE
+
+*** 负载均衡选项
+默认情况下，Istio 使用 _轮询的负载均衡_ 策略，实例池中的每个实例依次获取请求。Istio 同时支持如下的负载均衡模型，可以在 DestinationRule 中为流向某个特定服务或服务子集的流量指定这些模型：
++ _随机_ ：请求以随机的方式转到池中的实例
++ _权重_ ：请求根据指定的百分比转到实例
++ _最少请求_ ：请求被转到最少被访问的实例 
+
+*** 目标规则示例
+在下面的示例中，目标规则为 my-svc 目标服务配置了 3 个具有不同负载均衡策略的子集：
+
+#+BEGIN_SRC yaml 
+  apiVersion: networking.istio.io/v1alpha3
+  kind: DestinationRule
+  metadata:
+    name: my-destination-rule
+  spec:
+    host: my-svc
+    trafficPolicy:
+      loadBalancer:
+	simple: RANDOM
+    subsets:
+    - name: v1
+      labels:
+	version: v1
+    - name: v2
+      labels:
+	version: v2
+      trafficPolicy:
+	loadBalancer:
+	  simple: ROUND_ROBIN
+    - name: v3
+      labels:
+	version: v3
+#+END_SRC
+
+每个子集都是基于一个或多个 _labels_ 定义的
+
+#+BEGIN_EXAMPLE
+  在 Kubernetes 中它是附加到像 Pod 这种对象上的键/值对
+
+  这些标签应用于 Kubernetes 服务的 Deployment 并作为 metadata 来识别不同的版本
+#+END_EXAMPLE
+
+除了定义子集之外，目标规则对于所有子集都有默认的流量策略，而对于该子集，则有特定于子集的策略覆盖它
+
+#+BEGIN_EXAMPLE
+  定义在 subsets 上的默认策略，为 v1 和 v3 子集设置了一个简单的随机负载均衡器
+
+  在 v2 策略中，轮询负载均衡器被指定在相应的子集字段上
+#+END_EXAMPLE
 
 ** 网关
 
