@@ -244,7 +244,7 @@ for the JavaScript code in this tag.
 <li><a href="#org9f7399d">为什么使用 Istio？</a></li>
 <li><a href="#orgc510aea">核心特性</a>
 <ul>
-<li><a href="#org1b488db">流量管理</a></li>
+<li><a href="#org057ac98">流量管理</a></li>
 <li><a href="#orgf12071b">安全</a></li>
 <li><a href="#org404ad8e">可观察性</a></li>
 <li><a href="#org3125273">平台支持</a></li>
@@ -252,7 +252,7 @@ for the JavaScript code in this tag.
 </li>
 </ul>
 </li>
-<li><a href="#org057ac98">流量管理</a>
+<li><a href="#orge0d7892">流量管理</a>
 <ul>
 <li><a href="#org6ccb038">介绍</a></li>
 <li><a href="#org201b2c4">虚拟服务</a>
@@ -274,8 +274,16 @@ for the JavaScript code in this tag.
 <li><a href="#org9c7bcb3">目标规则示例</a></li>
 </ul>
 </li>
-<li><a href="#org1794566">网关</a></li>
-<li><a href="#orgcc9c1f8">服务入口</a></li>
+<li><a href="#org1794566">网关</a>
+<ul>
+<li><a href="#org87f7bf8">Gateway 示例</a></li>
+</ul>
+</li>
+<li><a href="#orgcc9c1f8">服务入口</a>
+<ul>
+<li><a href="#org1359c0f">服务入口实例</a></li>
+</ul>
+</li>
 <li><a href="#orge5bfea4">Sidecar</a></li>
 <li><a href="#org4dabbd0">网络弹性和测试</a></li>
 </ul>
@@ -342,9 +350,9 @@ Istio 为可扩展性而设计，可以满足不同的部署需求
 Istio 以统一的方式提供了许多跨服务网络的关键功能
 </p>
 </div>
-<div id="outline-container-org1b488db" class="outline-4">
-<h4 id="org1b488db">流量管理</h4>
-<div class="outline-text-4" id="text-org1b488db">
+<div id="outline-container-org057ac98" class="outline-4">
+<h4 id="org057ac98">流量管理</h4>
+<div class="outline-text-4" id="text-org057ac98">
 <p>
 Istio 简单的 <span class="underline">规则配置</span> 和 <span class="underline">流量路由</span> 允许您控制服务之间的流量和 API 调用过程。Istio 简化了 <b>服务级属性</b> （如 <span class="underline">熔断器</span> 、 <span class="underline">超时</span> 和 <span class="underline">重试</span> ）的配置，并且让它轻而易举的执行重要的任务（如 <span class="underline">A/B 测试</span> 、 <span class="underline">金丝雀发布</span> 和 <span class="underline">按流量百分比</span> 划分的分阶段发布） 
 </p>
@@ -402,9 +410,9 @@ Istio 独立于平台，被设计为可以在各种环境中运行，包括跨�
 </div>
 </div>
 </div>
-<div id="outline-container-org057ac98" class="outline-2">
-<h2 id="org057ac98">流量管理</h2>
-<div class="outline-text-2" id="text-org057ac98">
+<div id="outline-container-orge0d7892" class="outline-2">
+<h2 id="orge0d7892">流量管理</h2>
+<div class="outline-text-2" id="text-orge0d7892">
 <pre class="example">
 Istio 的 流量路由规则可以让您很容易的控制服务之间的流量和 API 调用
 
@@ -842,14 +850,206 @@ destination 片段还指定了 <span class="underline">Kubernetes 服务的子�
 
 <div id="outline-container-org1794566" class="outline-3">
 <h3 id="org1794566">网关</h3>
+<div class="outline-text-3" id="text-org1794566">
+<p>
+使用网关为网格来管理入站和出站流量，可以让您指定要进入或离开网格的流量：
+</p>
+<ul class="org-ul">
+<li>网关配置被用于运行在 <span class="underline">网格边界</span> 的 <span class="underline">独立 Envoy 代理</span></li>
+<li>不是服务工作负载的 sidecar 代理</li>
+</ul>
+
+<pre class="example">
+  与 Kubernetes Ingress API 这种控制进入系统流量的其他机制不同，Istio 网关充分利用流量路由的强大能力和灵活性
+
+  可以这么做的原因是 Istio 的网关资源可以配置 4-6 层的负载均衡属性，如对外暴露的端口、TLS 设置等
+
+  作为替代应用层流量路由（L7）到相同的 API 资源，绑定了一个常规的 Istio 虚拟服务到网关，这可以像管理网格中其他数据平面的流量一样去管理网关流量
+</pre>
+<p>
+网关主要用于管理进入的流量，但也可以配置出口网关。出口网关让您为 <span class="underline">离开网格的流量</span> <b>配置</b> 一个 <span class="underline">专用的出口节点</span> ：
+</p>
+<ul class="org-ul">
+<li>可以限制哪些服务可以或应该访问外部网络</li>
+<li>启用出口流量安全控制为您的网格添加安全性</li>
+<li>可以使用网关配置一个纯粹的内部代理</li>
+</ul>
+
+<pre class="example">
+Istio 提供了一些预先配置好的网关代理部署（istio-ingressgateway 和 istio-egressgateway）供使用
+
+如果使用演示安装它们都已经部署好了；如果使用默认或 sds 配置文件则只部署了入口网关
+
+可以将您自己的网关配置应用到这些部署或配置您自己的网关代理
+</pre>
+</div>
+<div id="outline-container-org87f7bf8" class="outline-4">
+<h4 id="org87f7bf8">Gateway 示例</h4>
+<div class="outline-text-4" id="text-org87f7bf8">
+<p>
+下面的示例展示了一个外部 HTTPS 入口流量的网关配置：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #eedd82;">apiVersion</span>: networking.istio.io/v1alpha3
+<span style="color: #eedd82;">kind</span>: Gateway
+<span style="color: #eedd82;">metadata</span>:
+  <span style="color: #eedd82;">name</span>: ext-host-gwy
+<span style="color: #eedd82;">spec</span>:
+  <span style="color: #eedd82;">selector</span>:
+    <span style="color: #eedd82;">app</span>: my-gateway-controller
+  <span style="color: #eedd82;">servers</span>:
+  - <span style="color: #eedd82;">port</span>:
+      <span style="color: #eedd82;">number</span>: 443
+      <span style="color: #eedd82;">name</span>: https
+      <span style="color: #eedd82;">protocol</span>: HTTPS
+    <span style="color: #eedd82;">hosts</span>:
+    - ext-host.example.com
+    <span style="color: #eedd82;">tls</span>:
+      <span style="color: #eedd82;">mode</span>: SIMPLE
+      <span style="color: #eedd82;">serverCertificate</span>: /tmp/tls.crt
+      <span style="color: #eedd82;">privateKey</span>: /tmp/tls.key
+</pre>
+</div>
+
+<pre class="example">
+  这个网关配置让 HTTPS 流量从 ext-host.example.com 通过 443 端口流入网格，但没有为请求指定任何路由规则
+</pre>
+<p>
+为想要工作的网关指定路由，您必须把网关绑定到虚拟服务上。正如下面的示例所示，使用虚拟服务的 gateways 字段进行设置：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #eedd82;">apiVersion</span>: networking.istio.io/v1alpha3
+<span style="color: #eedd82;">kind</span>: VirtualService
+<span style="color: #eedd82;">metadata</span>:
+  <span style="color: #eedd82;">name</span>: virtual-svc
+<span style="color: #eedd82;">spec</span>:
+  <span style="color: #eedd82;">hosts</span>:
+  - ext-host.example.com
+  <span style="color: #eedd82;">gateways</span>:
+    - ext-host-gwy
+</pre>
+</div>
+
+<p>
+然后就可以为出口流量配置带有路由规则的虚拟服务 
+</p>
+</div>
+</div>
 </div>
 
 <div id="outline-container-orgcc9c1f8" class="outline-3">
 <h3 id="orgcc9c1f8">服务入口</h3>
+<div class="outline-text-3" id="text-orgcc9c1f8">
+<p>
+使用 <span class="underline">服务入口</span> （Service Entry） 来添加一个 <span class="underline">入口</span> 到 Istio 内部维护的 <span class="underline">服务注册中心</span> 。添加了服务入口后，Envoy 代理可以向服务发送流量，就好像它是网格内部的服务一样。配置服务入口允许管理运行在 <span class="underline">网格外的服务的流量</span> ，它包括以下几种能力：
+</p>
+<ul class="org-ul">
+<li>为外部目标 redirect 和转发请求，例如来自 web 端的 API 调用，或者流向遗留老系统的服务</li>
+<li>为外部目标定义重试、超时和故障注入策略</li>
+<li>添加一个运行在虚拟机的服务来扩展您的网格</li>
+<li>从逻辑上添加来自不同集群的服务到网格，在 Kubernetes 上实现一个多集群 Istio 网格</li>
+</ul>
+
+<pre class="example">
+  不需要为网格服务要使用的每个外部服务都添加服务入口，默认情况下，Istio 配置 Envoy 代理将请求传递给未知服务
+
+  但是，您不能使用 Istio 的特性来控制没有在网格中注册的目标流量 
+</pre>
+</div>
+
+<div id="outline-container-org1359c0f" class="outline-4">
+<h4 id="org1359c0f">服务入口实例</h4>
+<div class="outline-text-4" id="text-org1359c0f">
+<p>
+下面示例的 mesh-external 服务入口将 ext-resource 外部依赖项添加到 Istio 的服务注册中心：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #eedd82;">apiVersion</span>: networking.istio.io/v1alpha3
+<span style="color: #eedd82;">kind</span>: ServiceEntry
+<span style="color: #eedd82;">metadata</span>:
+  <span style="color: #eedd82;">name</span>: svc-entry
+<span style="color: #eedd82;">spec</span>:
+  <span style="color: #eedd82;">hosts</span>:
+  - ext-svc.example.com
+  <span style="color: #eedd82;">ports</span>:
+  - <span style="color: #eedd82;">number</span>: 443
+    <span style="color: #eedd82;">name</span>: https
+    <span style="color: #eedd82;">protocol</span>: HTTPS
+  <span style="color: #eedd82;">location</span>: MESH_EXTERNAL
+  <span style="color: #eedd82;">resolution</span>: DNS
+</pre>
+</div>
+
+<pre class="example">
+  您指定的外部资源使用 hosts 字段，可以使用完全限定名或通配符作为前缀域名
+</pre>
+
+<p>
+可以配置虚拟服务和目标规则，以更细粒度的方式控制到服务入口的流量，这与网格中的任何其他服务配置流量的方式相同
+</p>
+
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #eedd82;">apiVersion</span>: networking.istio.io/v1alpha3
+<span style="color: #eedd82;">kind</span>: DestinationRule
+<span style="color: #eedd82;">metadata</span>:
+  <span style="color: #eedd82;">name</span>: ext-res-dr
+<span style="color: #eedd82;">spec</span>:
+  <span style="color: #eedd82;">host</span>: ext-svc.example.com
+  <span style="color: #eedd82;">trafficPolicy</span>:
+    <span style="color: #eedd82;">tls</span>:
+      <span style="color: #eedd82;">mode</span>: MUTUAL
+      <span style="color: #eedd82;">clientCertificate</span>: /etc/certs/myclientcert.pem
+      <span style="color: #eedd82;">privateKey</span>: /etc/certs/client_private_key.pem
+      <span style="color: #eedd82;">caCertificates</span>: /etc/certs/rootcacerts.pem
+</pre>
+</div>
+
+<pre class="example">
+  例如，目标规则配置流量路由以使用双向 TLS 来保护到 ext-svc.example.com 外部服务的连接，使用服务入口配置了该外部服务
+</pre>
+</div>
+</div>
 </div>
 
 <div id="outline-container-orge5bfea4" class="outline-3">
 <h3 id="orge5bfea4">Sidecar</h3>
+<div class="outline-text-3" id="text-orge5bfea4">
+<p>
+默认情况下，Istio 让每个 Envoy 代理都可以访问来自和它关联的工作负载的所有端口的请求，然后转发到对应的工作负载。可以使用 sidecar 配置去做下面的事情：
+</p>
+<ul class="org-ul">
+<li><b>微调</b> Envoy 代理 <b>接受的</b> <span class="underline">端口</span> 和 <span class="underline">协议集</span></li>
+<li><b>限制</b> Envoy 代理 <b>可以访问</b> 的 <span class="underline">服务集合</span></li>
+</ul>
+
+<pre class="example">
+  可能希望在较庞大的应用程序中限制这样的 sidecar 可达性，配置每个代理能访问网格中的任意服务可能会因为高内存使用量而影响网格的性能
+</pre>
+
+<p>
+可以指定将 sidecar 配置应用于特定命名空间中的所有工作负载，或者使用 workloadSelector 选择特定的工作负载
+</p>
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #eedd82;">apiVersion</span>: networking.istio.io/v1alpha3
+<span style="color: #eedd82;">kind</span>: Sidecar
+<span style="color: #eedd82;">metadata</span>:
+  <span style="color: #eedd82;">name</span>: default
+  <span style="color: #eedd82;">namespace</span>: bookinfo
+<span style="color: #eedd82;">spec</span>:
+  <span style="color: #eedd82;">egress</span>:
+  - <span style="color: #eedd82;">hosts</span>:
+    - <span style="color: #ffa07a;">"./*"</span>
+    - <span style="color: #ffa07a;">"istio-system/*"</span>
+</pre>
+</div>
+
+<pre class="example">
+sidecar 配置将 bookinfo 命名空间中的所有服务配置为仅能访问运行在相同命名空间和 Istio 控制平面中的服务（目前需要使用 Istio 的策略和遥测功能）
+</pre>
+</div>
 </div>
 
 <div id="outline-container-org4dabbd0" class="outline-3">

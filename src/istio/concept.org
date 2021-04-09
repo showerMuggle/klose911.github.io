@@ -374,10 +374,155 @@
 #+END_EXAMPLE
 
 ** 网关
+使用网关为网格来管理入站和出站流量，可以让您指定要进入或离开网格的流量：
++ 网关配置被用于运行在 _网格边界_ 的 _独立 Envoy 代理_ 
++ 不是服务工作负载的 sidecar 代理 
+
+#+BEGIN_EXAMPLE
+  与 Kubernetes Ingress API 这种控制进入系统流量的其他机制不同，Istio 网关充分利用流量路由的强大能力和灵活性
+
+  可以这么做的原因是 Istio 的网关资源可以配置 4-6 层的负载均衡属性，如对外暴露的端口、TLS 设置等
+
+  作为替代应用层流量路由（L7）到相同的 API 资源，绑定了一个常规的 Istio 虚拟服务到网关，这可以像管理网格中其他数据平面的流量一样去管理网关流量
+#+END_EXAMPLE
+网关主要用于管理进入的流量，但也可以配置出口网关。出口网关让您为 _离开网格的流量_ *配置* 一个 _专用的出口节点_ ：
++ 可以限制哪些服务可以或应该访问外部网络
++ 启用出口流量安全控制为您的网格添加安全性
++ 可以使用网关配置一个纯粹的内部代理 
+
+#+BEGIN_EXAMPLE
+  Istio 提供了一些预先配置好的网关代理部署（istio-ingressgateway 和 istio-egressgateway）供使用
+
+  如果使用演示安装它们都已经部署好了；如果使用默认或 sds 配置文件则只部署了入口网关
+
+  可以将您自己的网关配置应用到这些部署或配置您自己的网关代理
+#+END_EXAMPLE
+*** Gateway 示例
+下面的示例展示了一个外部 HTTPS 入口流量的网关配置：
+
+#+BEGIN_SRC yaml 
+  apiVersion: networking.istio.io/v1alpha3
+  kind: Gateway
+  metadata:
+    name: ext-host-gwy
+  spec:
+    selector:
+      app: my-gateway-controller
+    servers:
+    - port:
+	number: 443
+	name: https
+	protocol: HTTPS
+      hosts:
+      - ext-host.example.com
+      tls:
+	mode: SIMPLE
+	serverCertificate: /tmp/tls.crt
+	privateKey: /tmp/tls.key
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  这个网关配置让 HTTPS 流量从 ext-host.example.com 通过 443 端口流入网格，但没有为请求指定任何路由规则
+#+END_EXAMPLE
+为想要工作的网关指定路由，您必须把网关绑定到虚拟服务上。正如下面的示例所示，使用虚拟服务的 gateways 字段进行设置：
+
+#+BEGIN_SRC yaml 
+  apiVersion: networking.istio.io/v1alpha3
+  kind: VirtualService
+  metadata:
+    name: virtual-svc
+  spec:
+    hosts:
+    - ext-host.example.com
+    gateways:
+      - ext-host-gwy
+#+END_SRC 
+
+然后就可以为出口流量配置带有路由规则的虚拟服务 
 
 ** 服务入口
+使用 _服务入口_ （Service Entry） 来添加一个 _入口_ 到 Istio 内部维护的 _服务注册中心_ 。添加了服务入口后，Envoy 代理可以向服务发送流量，就好像它是网格内部的服务一样。配置服务入口允许管理运行在 _网格外的服务的流量_ ，它包括以下几种能力：
++ 为外部目标 redirect 和转发请求，例如来自 web 端的 API 调用，或者流向遗留老系统的服务
++ 为外部目标定义重试、超时和故障注入策略
++ 添加一个运行在虚拟机的服务来扩展您的网格
++ 从逻辑上添加来自不同集群的服务到网格，在 Kubernetes 上实现一个多集群 Istio 网格 
+
+#+BEGIN_EXAMPLE
+  不需要为网格服务要使用的每个外部服务都添加服务入口，默认情况下，Istio 配置 Envoy 代理将请求传递给未知服务
+
+  但是，您不能使用 Istio 的特性来控制没有在网格中注册的目标流量 
+#+END_EXAMPLE
+
+*** 服务入口实例
+下面示例的 mesh-external 服务入口将 ext-resource 外部依赖项添加到 Istio 的服务注册中心：
+
+#+BEGIN_SRC yaml 
+  apiVersion: networking.istio.io/v1alpha3
+  kind: ServiceEntry
+  metadata:
+    name: svc-entry
+  spec:
+    hosts:
+    - ext-svc.example.com
+    ports:
+    - number: 443
+      name: https
+      protocol: HTTPS
+    location: MESH_EXTERNAL
+    resolution: DNS
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  您指定的外部资源使用 hosts 字段，可以使用完全限定名或通配符作为前缀域名
+#+END_EXAMPLE
+
+可以配置虚拟服务和目标规则，以更细粒度的方式控制到服务入口的流量，这与网格中的任何其他服务配置流量的方式相同
+
+#+BEGIN_SRC yaml 
+  apiVersion: networking.istio.io/v1alpha3
+  kind: DestinationRule
+  metadata:
+    name: ext-res-dr
+  spec:
+    host: ext-svc.example.com
+    trafficPolicy:
+      tls:
+	mode: MUTUAL
+	clientCertificate: /etc/certs/myclientcert.pem
+	privateKey: /etc/certs/client_private_key.pem
+	caCertificates: /etc/certs/rootcacerts.pem
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  例如，目标规则配置流量路由以使用双向 TLS 来保护到 ext-svc.example.com 外部服务的连接，使用服务入口配置了该外部服务
+#+END_EXAMPLE
 
 ** Sidecar 
+默认情况下，Istio 让每个 Envoy 代理都可以访问来自和它关联的工作负载的所有端口的请求，然后转发到对应的工作负载。可以使用 sidecar 配置去做下面的事情：
++ *微调* Envoy 代理 *接受的* _端口_ 和 _协议集_ 
++ *限制* Envoy 代理 *可以访问* 的 _服务集合_ 
+
+#+BEGIN_EXAMPLE
+  可能希望在较庞大的应用程序中限制这样的 sidecar 可达性，配置每个代理能访问网格中的任意服务可能会因为高内存使用量而影响网格的性能
+#+END_EXAMPLE
+
+可以指定将 sidecar 配置应用于特定命名空间中的所有工作负载，或者使用 workloadSelector 选择特定的工作负载
+#+BEGIN_SRC yaml 
+  apiVersion: networking.istio.io/v1alpha3
+  kind: Sidecar
+  metadata:
+    name: default
+    namespace: bookinfo
+  spec:
+    egress:
+    - hosts:
+      - "./*"
+      - "istio-system/*"
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+  sidecar 配置将 bookinfo 命名空间中的所有服务配置为仅能访问运行在相同命名空间和 Istio 控制平面中的服务（目前需要使用 Istio 的策略和遥测功能）
+#+END_EXAMPLE
 
 ** 网络弹性和测试
 
