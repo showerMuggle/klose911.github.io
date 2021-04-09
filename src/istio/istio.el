@@ -31,7 +31,7 @@
 	;; picture
         ("istio-pic"
          :base-directory "~/Documents/programming/html/klose911.github.io/src/istio/pic"  ;; Change this to your local dir
-         :base-extension "png\\|jpg\\|gif"
+         :base-extension "png\\|jpg\\|gif\\|svg"
          :publishing-directory "~/Documents/programming/html/klose911.github.io/html/istio/pic"
          :recursive t
          :publishing-function org-publish-attachment
