@@ -179,3 +179,402 @@
     警报处理架构同样遵循这一模式
   #+END_EXAMPLE
 * 错误记录器
+  OTP系统自带一个可定制的错误记录器。可以从三个角度看待错误记录器:
+  + 程序员视角：关心程序员为了记录错误而在代码里中做的函数调用
+  + 配置视角：关心错误记录器在何处以及如何保存数据
+  + 报告视角：关心对已发生错误的分析
+
+  #+BEGIN_EXAMPLE
+    假设编写一个对程序员隐藏 event_handler:event 方法的函数,例如下面这个:
+       too_hot() ->
+	   event_handler:event(errors, too_hot).
+
+    然后告诉程序员在出问题时要调用代码里的 lib_misc:too_hot()
+
+    在大多数编程语言里,对函数 too_hot 的调用会被静态或动态链接到调用该函数的代码上。一旦链接完成,它就会根据代码要求执行固定任务
+
+    如果后来改变主意要做其他的事,就没有什么简单的办法能改变系统行为了
+  #+END_EXAMPLE
+
+  Erlang处理事件的方法则完全不一样。它允许把 _事件生成_ 和 _事件处理_ 分开进行。任何时候都可以修改处理方法,只需向事件处理器发送一个新的处理函数即可。不存在什么静态链接,只要愿意,事件处理函数可以随时更换
+
+  #+BEGIN_EXAMPLE
+    通过这种机制,可以构建与时俱进的系统,永远不需要停止它们来升级代码
+
+    注意:这不是“后期绑定”,而是“超后期绑定,以后还可以改主意”
+  #+END_EXAMPLE
+** 记录错误
+   对程序员来说,这个错误记录器的API很简单。以下是一个简单的API子集: 
+   + 向错误记录器发送一个错误消息
+   #+BEGIN_SRC erlang 
+  -spec error_logger:error_msg(String) -> ok 
+   #+END_SRC
+
+   #+BEGIN_SRC sh 
+  1> error_logger:error_msg("An error has occured\n") . 
+  ok
+
+  =ERROR REPORT==== 13-Apr-2021::10:52:05 ===
+  An error has occured
+   #+END_SRC
+   + 向错误记录器发送一个错误消息。它的参数和 _io:format(Format, Data)_ 相同 
+   #+BEGIN_SRC erlang 
+  -spec error_logger:error_msg(Format, Data) -> ok 
+   #+END_SRC
+
+   #+BEGIN_SRC sh 
+  2> error_logger:error_msg("~s, An error has occured\n", ["joe"]) .  
+
+  =ERROR REPORT==== 13-Apr-2021::10:53:45 ===
+  joe, An error has occured
+  ok
+   #+END_SRC
+   + 向错误记录器发送一个标准错误报告
+   #+BEGIN_SRC erlang 
+  -spec error_logger:error_report(Report) -> ok 
+
+  -type Report = [{Tag, Data} | term() | string() ].
+  -type Tag = term().
+  -type Data = term().
+   #+END_SRC
+
+   #+BEGIN_SRC sh 
+  3> error_logger:error_report([{tag1, data}, a_term, {tag2, data}]) . 
+
+  =ERROR REPORT==== 13-Apr-2021::10:59:25 ===
+      tag1: data
+      a_term
+      tag2: data
+  ok
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     这只是全部可用API的一个子集
+   #+END_EXAMPLE
+** 配置错误记录器
+   有多种方式可用来配置错误记录器：
+   + 可以让Erlang shell显示所有错误(如果没有特别设置的话就是默认值)
+   + 可以把shell里报告的所有错误写入一个格式化文本文件
+   + 可以创建一个滚动日志(rotating log)：把滚动日志看作是一个大型循环缓冲区,内含错误记录器生成的消息。新消息进来后会被附加到日志的末尾,如果日志满了,最早的条目就会被删除
+
+
+   #+BEGIN_EXAMPLE
+     滚动日志极其有用：
+
+     用户决定日志应当占据多少个文件,以及每个日志文件能有多大,然后系统负责在一个大型循环缓冲区里删除旧日志文件和创建新文件
+
+     可以调整日志的大小来保存最近几天的操作记录,这通常足以应付大多数用途了
+   #+END_EXAMPLE
+
+*** 标准错误记录器
+    在启动Erlang时可以给系统提供一个启动参数：
+
+    #+BEGIN_SRC sh 
+  $ erl -boot start_clean
+    #+END_SRC
+
+    它会创建一个适合进行程序开发的环境,只提供一种简单的错误记录形式 
+
+    #+BEGIN_EXAMPLE
+      不带启动参数的 erl 命令就等于 erl -boot start_clean 
+    #+END_EXAMPLE
+
+    #+BEGIN_SRC sh 
+  $ erl -boot start_sasl
+    #+END_SRC
+    它会创建一个适合运行生产系统的环境。系统架构支持库(System Architecture SupportLibraries,简称SASL)将负责错误记录和过载保护等工作
+
+    #+BEGIN_EXAMPLE
+      日志文件的配置最好通过配置文件实现,因为没人能记住记录器的全部参数
+
+      接下来将看看默认系统的工作方式,以及改变错误记录器工作方式的四种特定配置
+    #+END_EXAMPLE
+
+*** 无配置SASL
+    不带配置文件启动SASL时会发生下面这些事:
+    #+BEGIN_SRC sh 
+$ erl -boot start_sasl 
+  Erlang/OTP 18 [erts-7.3] [source] [64-bit] [smp:6:6] [async-threads:10] [kernel-poll:false]
+
+
+  =PROGRESS REPORT==== 13-Apr-2021::11:06:58 ===
+	    supervisor: {local,sasl_safe_sup}
+	       started: [{pid,<0.35.0>},
+			 {id,alarm_handler},
+			 {mfargs,{alarm_handler,start_link,[]}},
+			 {restart_type,permanent},
+			 {shutdown,2000},
+			 {child_type,worker}]
+
+  =PROGRESS REPORT==== 13-Apr-2021::11:06:58 ===
+	    supervisor: {local,sasl_safe_sup}
+	       started: [{pid,<0.36.0>},
+			 {id,overload},
+			 {mfargs,{overload,start_link,[]}},
+			 {restart_type,permanent},
+			 {shutdown,2000},
+			 {child_type,worker}]
+
+  =PROGRESS REPORT==== 13-Apr-2021::11:06:58 ===
+	    supervisor: {local,sasl_sup}
+	       started: [{pid,<0.34.0>},
+			 {id,sasl_safe_sup},
+			 {mfargs,
+			     {supervisor,start_link,
+				 [{local,sasl_safe_sup},sasl,safe]}},
+			 {restart_type,permanent},
+			 {shutdown,infinity},
+			 {child_type,supervisor}]
+
+  =PROGRESS REPORT==== 13-Apr-2021::11:06:59 ===
+	    supervisor: {local,sasl_sup}
+	       started: [{pid,<0.37.0>},
+			 {id,release_handler},
+			 {mfargs,{release_handler,start_link,[]}},
+			 {restart_type,permanent},
+			 {shutdown,2000},
+			 {child_type,worker}]
+
+  =PROGRESS REPORT==== 13-Apr-2021::11:06:59 ===
+	   application: sasl
+	    started_at: nonode@nohost
+  Eshell V7.3  (abort with ^G)
+    #+END_SRC
+
+    现在调用 error_logger 里的某个方法来报告一个错误：
+
+    #+BEGIN_SRC sh 
+  1> error_logger:error_msg("An error has occured\n") . 
+
+  =ERROR REPORT==== 13-Apr-2021::11:08:17 ===
+  An error has occured
+  ok
+    #+END_SRC
+
+    #+BEGIN_EXAMPLE
+      请注意,错误是在Erlang shell里报告的，错误的报告位置由错误记录器配置决定
+    #+END_EXAMPLE
+
+*** 控制记录内容
+    错误记录器会生成多种报告类型：
+    + 监控器报告：这些报告会在OTP监控器启动或停止被监控进程时生成
+    + 进度报告：这些报告会在OTP监控器启动或停止时生成
+    + 崩溃报告：如果某个被OTP行为启动的进程因为 normal 或 shutdown 以外的原因终止,这些报告就会生成
+
+    #+BEGIN_EXAMPLE
+    这三种报告会自动生成,程序员无须做任何事
+    #+END_EXAMPLE
+    可以显式调用 error_logger 模块里的方法来生成三种类型的日志报告。这能够记录错误、警告和信息消息
+
+    #+BEGIN_EXAMPLE
+      这三个名词没什么语义含义,只是一些标签,程序员用它们来提示错误日志条目的性质
+
+      后面分析错误日志时,可以用这些标签来帮助决定该调查哪些日志条目
+
+      在配置错误记录器时可以选择只保存错误,丢弃其他所有类型的条目
+    #+END_EXAMPLE
+
+    现在,编写配置文件 elog1.config 来配置错误记录器：
+
+    #+BEGIN_SRC erlang 
+  %% no tty 
+  [{sasl, [
+	   {sasl_error_logger, false}
+	  ]}].
+    #+END_SRC
+
+    #+BEGIN_EXAMPLE
+      如果用这个配置文件启动系统,就只会得到错误报告,不会有进度和其他报告
+
+      所有这些错误报告只会出现在shell里
+    #+END_EXAMPLE
+
+    #+BEGIN_SRC sh 
+  $ erl -boot start_sasl -config elog1 
+  Erlang/OTP 18 [erts-7.3] [source] [64-bit] [smp:6:6] [async-threads:10] [kernel-poll:false]
+
+  Eshell V7.3  (abort with ^G)
+  1> error_logger:error_msg("An error has occured\n") .
+  ok
+
+  =ERROR REPORT==== 13-Apr-2021::11:16:30 ===
+  An error has occured
+    #+END_SRC
+
+*** 文本文件和shell
+    接下来的配置文件会在shell里列出错误报告,所有的进度报告则会保存在一个文件里：
+
+    #+BEGIN_SRC erlang 
+  %% single text file - minimal tty
+
+  [{sasl, [
+	   %% All reports go to this file
+	   {sasl_error_logger, {file, "/tmp/THELOG"}}
+	  ]}].
+    #+END_SRC
+
+    要测试它,可以启动Erlang,生成一个错误消息,然后查看日志文件：
+
+    #+BEGIN_SRC sh 
+  $ erl -boot start_sasl -config elog2 
+  Erlang/OTP 18 [erts-7.3] [source] [64-bit] [smp:6:6] [async-threads:10] [kernel-poll:false]
+
+  Eshell V7.3  (abort with ^G)
+  1> error_logger:error_msg("An error has occured\n") . 
+
+  =ERROR REPORT==== 13-Apr-2021::11:22:26 ===
+  An error has occured
+  ok
+    #+END_SRC 
+
+    现在查看 /tmp/THELOG: 
+
+    #+BEGIN_SRC sh 
+  $ cat /tmp/THELOG  
+
+    =PROGRESS REPORT==== 13-Apr-2021::11:22:19 ===
+	      supervisor: {local,sasl_safe_sup}
+		 started: [{pid,<0.36.0>},
+			   {id,alarm_handler},
+			   {mfargs,{alarm_handler,start_link,[]}},
+			   {restart_type,permanent},
+			   {shutdown,2000},
+			   {child_type,worker}]
+
+    ......
+    #+END_SRC
+    这里只列出了进度报告,而它们原本应该出现在shell里。进度报告是关于大事件的,比如启动和停止应用程序
+
+    #+BEGIN_EXAMPLE
+      但是 error_logger:error_msg/1 报告的错误没有保存在日志里,为此必须配置一个滚动日志
+    #+END_EXAMPLE
+
+*** 滚动日志和shell
+    下面的配置既能提供shell输出,又能把写入shell的所有信息复制到一个滚动日志文件里：
+
+    #+BEGIN_SRC erlang 
+  %% rotating log and minimal tty
+  [{sasl, [
+	   {sasl_error_logger, false},	
+	   %% define the parameters of the rotating log
+	   %% the log file directory
+	   {error_logger_mf_dir,"/tmp/error_logs"},	
+	   %% # bytes per logfile
+	   {error_logger_mf_maxbytes,10485760}, % 10 MB
+	   %% maximum number of logfiles
+	   {error_logger_mf_maxfiles, 10}
+	  ]}].
+    #+END_SRC
+
+    #+BEGIN_SRC sh 
+  $ erl -boot start_sasl -config elog3  
+  Erlang/OTP 18 [erts-7.3] [source] [64-bit] [smp:6:6] [async-threads:10] [kernel-poll:false]
+
+  Eshell V7.3  (abort with ^G)
+  1> error_logger:error_msg("An error has occured\n") .  
+  ok
+
+  =ERROR REPORT==== 13-Apr-2021::11:29:26 ===
+  An error has occured
+    #+END_SRC
+
+    这个日志的最大文件大小是10MB,达到10MB时会回滚 
+
+    #+BEGIN_EXAMPLE
+      这是一个非常有用的配置，运行系统时,所有的错误都会写入一个滚动错误日志
+    #+END_EXAMPLE
+
+*** 生产环境
+    在生产环境里,我们真正感兴趣的只有错误,而非进度或信息报告,所以只让错误记录器报告错误。如果没有这个设置,系统也许就会被信息和进度报告所淹没
+
+    #+BEGIN_SRC erlang 
+  %% rotating log and errors
+  [{sasl, [	 
+	   %% minimise shell error logging
+	   {sasl_error_logger, false},
+	   %% only report errors
+	   {errlog_type, error},
+	   %% define the parameters of the rotating log
+	   %% the log file directory
+	   {error_logger_mf_dir,"/Users/joe/error_logs"},	
+	   %% # bytes per logfile
+	   {error_logger_mf_maxbytes,10485760}, % 10 MB
+	   %% maximum number of
+	   {error_logger_mf_maxfiles, 10}
+	  ]}].
+    #+END_SRC
+
+    运行它会产生与之前例子类似的输出,区别在于错误日志里只会有错误报告
+
+** 分析错误
+   阅读错误日志是 rb 模块的责任,它的接口极其简单：
+
+   #+BEGIN_SRC sh 
+  $ erl -boot start_sasl -config elog3
+  ......
+
+  1> rb:help() .  
+  Report Browser Tool - usage
+  ===========================
+  2> rb:start() . 
+  rb: reading report...done.
+  rb: reading report...done.
+  {ok,<0.44.0>}
+   #+END_SRC
+
+   首先必须用正确的配置文件启动Erlang,这样才能定位错误日志;然后启动报告浏览器,告诉它要读取多少日志条目(在这个案例里是最后20条)
+
+   #+BEGIN_SRC sh 
+  1> rb:start([{max,20}]) .  
+  rb: reading report...done.
+  rb: reading report...done.
+  rb: reading report...done.
+  {ok,<0.43.0>}
+   #+END_SRC
+   现在列出日志里的条目：
+
+   #+BEGIN_SRC sh 
+     2> rb:list() . 
+       No                Type   Process       Date     Time
+       ==                ====   =======       ====     ====
+       17            progress  <0.31.0> 2021-04-13 11:29:18
+       16            progress  <0.31.0> 2021-04-13 11:29:18
+       15            progress  <0.31.0> 2021-04-13 11:29:18
+       14            progress  <0.31.0> 2021-04-13 11:29:18
+       13            progress  <0.24.0> 2021-04-13 11:29:18
+       12               error  <0.25.0> 2021-04-13 11:29:26
+       11            progress  <0.31.0> 2021-04-13 11:34:30
+       10            progress  <0.31.0> 2021-04-13 11:34:30
+	9            progress  <0.31.0> 2021-04-13 11:34:30
+	8            progress  <0.31.0> 2021-04-13 11:34:30
+	7            progress  <0.24.0> 2021-04-13 11:34:30
+	6            progress  <0.31.0> 2021-04-13 11:37:09
+	5            progress  <0.31.0> 2021-04-13 11:39:21
+	4            progress  <0.31.0> 2021-04-13 11:39:21
+	3            progress  <0.31.0> 2021-04-13 11:39:21
+	2            progress  <0.31.0> 2021-04-13 11:39:21
+	1            progress  <0.24.0> 2021-04-13 11:39:21
+     ok
+   #+END_SRC
+
+   调用 error_logger:error_msg/1 产生的错误日志条目消息最终成为日志里的第12条。可以像这样检查它:
+
+   #+BEGIN_SRC sh 
+  3> rb:show(12) . 
+
+  ERROR REPORT  <0.41.0>                                      2021-04-13 11:29:26
+  ===============================================================================
+
+  An error has occured
+  ok
+   #+END_SRC
+   要分离出某个错误,可以使用 _rb:grep(RegExp)_ 这样的命令,它会找出所有匹配正则表达式 RegExp 的报告
+
+   #+BEGIN_EXAMPLE
+     不想详尽介绍如何分析错误日志,最好的做法是花一点时间与 rb 交互来看看它能做什么
+
+     请注意,实际上永远不需要删除任何一个错误报告,因为滚动机制最终会删除那些老的错误报告
+
+     如果想保留所有的错误日志,就必须定期轮询错误报告并移除你感兴趣的信息
+   #+END_EXAMPLE
+
