@@ -255,6 +255,12 @@ for the JavaScript code in this tag.
 <li><a href="#org47fe1b1">分析错误</a></li>
 </ul>
 </li>
+<li><a href="#orgfa3c311">警报管理</a>
+<ul>
+<li><a href="#orgbf82e5f">读取日志</a></li>
+</ul>
+</li>
+<li><a href="#org53e623a">应用程序服务器</a></li>
 </ul>
 </div>
 </div>
@@ -1011,6 +1017,172 @@ ok
 </pre>
 </div>
 </div>
+</div>
+
+<div id="outline-container-orgfa3c311" class="outline-2">
+<h2 id="orgfa3c311">警报管理</h2>
+<div class="outline-text-2" id="text-orgfa3c311">
+<pre class="example">
+  我们编写的应用程序只需要一个警报,这个警报会在CPU因为计算超大质数而温度过热时抛出(别忘了我们正在建设一家销售质数的公司)
+
+  这次将使用真正的OTP警报处理器
+</pre>
+
+<p>
+这个警报处理器是OTP <span class="underline">gen_event</span> 行为的回调模块,它的代码如下：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #7fffd4;">-module</span>(my_alarm_handler).
+<span style="color: #7fffd4;">-behaviour</span>(gen_event).
+
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">gen_event callbacks</span>
+<span style="color: #7fffd4;">-export</span>([<span style="color: #98fb98;">init/1</span>, <span style="color: #98fb98;">code_change/3</span>, <span style="color: #98fb98;">handle_event/2</span>, <span style="color: #98fb98;">handle_call/2</span>, 
+         <span style="color: #98fb98;">handle_info/2</span>, <span style="color: #98fb98;">terminate/2</span>]).
+
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">init(Args) must return {ok, State}</span>
+<span style="color: #87cefa;">init</span>(<span style="color: #eedd82;">Args</span>) -&gt;
+    <span style="color: #98fb98;">io</span>:<span style="color: #98fb98;">format</span>(<span style="color: #ffa07a;">"*** my_alarm_handler init:~p~n"</span>,[<span style="color: #eedd82;">Args</span>]),
+    {ok, 0}.
+
+<span style="color: #87cefa;">handle_event</span>({set_alarm, tooHot}, <span style="color: #eedd82;">N</span>) -&gt;
+    <span style="color: #98fb98;">error_logger</span>:<span style="color: #98fb98;">error_msg</span>(<span style="color: #ffa07a;">"*** Tell the Engineer to turn on the fan~n"</span>),
+    {ok, <span style="color: #eedd82;">N</span>+1};
+<span style="color: #87cefa;">handle_event</span>({clear_alarm, tooHot}, <span style="color: #eedd82;">N</span>) -&gt;
+    <span style="color: #98fb98;">error_logger</span>:<span style="color: #98fb98;">error_msg</span>(<span style="color: #ffa07a;">"*** Danger over. Turn off the fan~n"</span>),
+    {ok, <span style="color: #eedd82;">N</span>};
+<span style="color: #87cefa;">handle_event</span>(<span style="color: #eedd82;">Event</span>, <span style="color: #eedd82;">N</span>) -&gt;
+    <span style="color: #98fb98;">io</span>:<span style="color: #98fb98;">format</span>(<span style="color: #ffa07a;">"*** unmatched event:~p~n"</span>,[<span style="color: #eedd82;">Event</span>]),
+    {ok, <span style="color: #eedd82;">N</span>}.
+
+<span style="color: #87cefa;">handle_call</span>(<span style="color: #eedd82;">_Request</span>, <span style="color: #eedd82;">N</span>) -&gt;<span style="color: #87cefa;"> </span><span style="color: #eedd82;">Reply</span> = <span style="color: #eedd82;">N</span>, {ok, <span style="color: #eedd82;">Reply</span>,  <span style="color: #eedd82;">N</span>}.
+<span style="color: #87cefa;">handle_info</span>(<span style="color: #eedd82;">_Info</span>, <span style="color: #eedd82;">N</span>)    -&gt;<span style="color: #87cefa;"> </span>{ok, <span style="color: #eedd82;">N</span>}.
+
+<span style="color: #87cefa;">terminate</span>(<span style="color: #eedd82;">_Reason</span>, <span style="color: #eedd82;">_N</span>)   -&gt;<span style="color: #87cefa;"> </span>ok.
+<span style="color: #87cefa;">code_change</span>(<span style="color: #eedd82;">_OldVsn</span>, <span style="color: #eedd82;">State</span>, <span style="color: #eedd82;">_Extra</span>) -&gt;<span style="color: #87cefa;"> </span>{ok, <span style="color: #eedd82;">State</span>}.
+</pre>
+</div>
+
+<pre class="example">
+这段代码非常像之前看到的 gen_server 回调代码
+</pre>
+<p>
+其中值得注意的方法是 <span class="underline">handle_event(Event, State)</span> : 
+</p>
+<ul class="org-ul">
+<li>它应当返回 <span class="underline">{ok, NewState}</span></li>
+<li><span class="underline">Event</span> : 一个 <span class="underline">{EventType, Event-Arg}</span> 形式的元组
+<ul class="org-ul">
+<li><span class="underline">EventType</span> : <span class="underline">set_event</span> 或 <span class="underline">clear_event</span></li>
+<li><span class="underline">EventArg</span> : 一个用户提供的参数</li>
+</ul></li>
+</ul>
+
+<p>
+现在来启动系统,生成一个警报,安装警报处理器,再生成一个警报&#x2026;&#x2026;
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ erl -boot start_sasl -config elog3 
+1&gt; alarm_handler:set_alarm(tooHot) <span style="color: #b0c4de;">.</span> 
+ok
+
+=INFO <span style="color: #eedd82;">REPORT</span>==== 14-Apr-2021::09:39:29 ===
+    alarm_handler: {<span style="color: #b0c4de;">set</span>,tooHot}
+2&gt; 
+2&gt; gen_event:swap_handler(alarm_handler, {alarm_handler, swap}, {my_alarm_handler, xyz}) <span style="color: #b0c4de;">.</span> 
+*** my_alarm_handler init:{xyz,{alarm_handler,[tooHot]}}
+ok
+3&gt; 
+3&gt; alarm_handler:set_alarm(tooHot) <span style="color: #b0c4de;">.</span>                                                       
+=ERROR <span style="color: #eedd82;">REPORT</span>==== 14-Apr-2021::09:41:46 ===
+*** Tell the Engineer to turn on the fan
+ok
+4&gt; 
+4&gt; alarm_handler:clear_alarm(tooHot) <span style="color: #b0c4de;">.</span> 
+
+=ERROR <span style="color: #eedd82;">REPORT</span>==== 14-Apr-2021::09:42:08 ===
+*** Danger over. Turn off the fan
+ok
+</pre>
+</div>
+
+<p>
+刚才发生了以下这些事情：
+</p>
+<ol class="org-ol">
+<li>用 -boot start_sasl 启动了Erlang。这么做就得到了一个标准警报处理器。当设置或清除警报时,什么事都不会发生。这就类似于之前讨论过的“什么都不干”的事件处理器</li>
+<li>设置警报(第1行)后只得到了一个信息报告。这个警报没有得到特别处理</li>
+<li>安装了一个自定义警报处理器(第2行)
+<ul class="org-ul">
+<li>my_alarm_handler 的参数 <span class="underline">xyz</span> 没什么特殊含义,只不过语法要求这里有一个值。但因为我们没有用值而是用了原子 xyz ,所以能在参数打印出来时识别它</li>
+<li>** my_alarm_handler_init: &#x2026; 这段打印输出来自我们的回调模块</li>
+</ul></li>
+<li>设置并清除了一个 tooHot 警报(第3和第4行) 
+<ul class="org-ul">
+<li>自定义警报处理器对其进行了处理,shell打印输出能证明这一点</li>
+</ul></li>
+</ol>
+</div>
+
+<div id="outline-container-orgbf82e5f" class="outline-3">
+<h3 id="orgbf82e5f">读取日志</h3>
+<div class="outline-text-3" id="text-orgbf82e5f">
+<p>
+回到错误记录器里去看看发生了什么 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">5&gt; rb:start([{max, 20}]) <span style="color: #b0c4de;">.</span> 
+rb: reading report...done.
+{ok,&lt;0.47.0&gt;}
+
+
+6&gt; rb:list() <span style="color: #b0c4de;">.</span> 
+  No                Type   Process       Date     Time
+  ==                ====   =======       ====     ====
+   8            progress  &lt;0.31.0&gt; 2021-04-14 09:49:53
+   7            progress  &lt;0.31.0&gt; 2021-04-14 09:49:53
+   6            progress  &lt;0.31.0&gt; 2021-04-14 09:49:53
+   5            progress  &lt;0.31.0&gt; 2021-04-14 09:49:53
+   4            progress  &lt;0.24.0&gt; 2021-04-14 09:49:53
+   3         info_report  &lt;0.31.0&gt; 2021-04-14 09:56:41
+   2               error  &lt;0.31.0&gt; 2021-04-14 09:57:11
+   1               error  &lt;0.31.0&gt; 2021-04-14 09:57:25
+ok
+
+7&gt; rb:show(1) <span style="color: #b0c4de;">.</span> 
+
+ERROR REPORT  &lt;0.35.0&gt;                                      2021-04-14 09:57:25
+===============================================================================
+
+*** Danger over. Turn off the fan
+ok
+
+8&gt; rb:show(2) <span style="color: #b0c4de;">.</span> 
+
+ERROR REPORT  &lt;0.35.0&gt;                                      2021-04-14 09:57:11
+===============================================================================
+
+*** Tell the Engineer to turn on the fan
+ok
+</pre>
+</div>
+<p>
+可以看到错误记录机制运行正常
+</p>
+
+<pre class="example">
+在实践中,会确保错误日志大到足够支持几天或几周的运作。每隔几天(或几周)就会检查错误日志并调查所有错误
+
+rb 模块里有一些函数能选择特定类型的错误或把它们提取到文件里。因此,分析错误日志的过程可以实现完全自动化
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org53e623a" class="outline-2">
+<h2 id="org53e623a">应用程序服务器</h2>
 </div>
 </div>
 <div id="postamble" class="status">

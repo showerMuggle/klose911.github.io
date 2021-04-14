@@ -578,3 +578,134 @@ $ erl -boot start_sasl
      如果想保留所有的错误日志,就必须定期轮询错误报告并移除你感兴趣的信息
    #+END_EXAMPLE
 
+* 警报管理
+#+BEGIN_EXAMPLE
+  我们编写的应用程序只需要一个警报,这个警报会在CPU因为计算超大质数而温度过热时抛出(别忘了我们正在建设一家销售质数的公司)
+
+  这次将使用真正的OTP警报处理器
+#+END_EXAMPLE
+
+这个警报处理器是OTP _gen_event_ 行为的回调模块,它的代码如下：
+
+#+BEGIN_SRC erlang 
+  -module(my_alarm_handler).
+  -behaviour(gen_event).
+
+  %% gen_event callbacks
+  -export([init/1, code_change/3, handle_event/2, handle_call/2, 
+	   handle_info/2, terminate/2]).
+
+  %% init(Args) must return {ok, State}
+  init(Args) ->
+      io:format("*** my_alarm_handler init:~p~n",[Args]),
+      {ok, 0}.
+
+  handle_event({set_alarm, tooHot}, N) ->
+      error_logger:error_msg("*** Tell the Engineer to turn on the fan~n"),
+      {ok, N+1};
+  handle_event({clear_alarm, tooHot}, N) ->
+      error_logger:error_msg("*** Danger over. Turn off the fan~n"),
+      {ok, N};
+  handle_event(Event, N) ->
+      io:format("*** unmatched event:~p~n",[Event]),
+      {ok, N}.
+    
+  handle_call(_Request, N) -> Reply = N, {ok, Reply,  N}.
+  handle_info(_Info, N)    -> {ok, N}.
+
+  terminate(_Reason, _N)   -> ok.
+  code_change(_OldVsn, State, _Extra) -> {ok, State}.
+#+END_SRC
+
+#+BEGIN_EXAMPLE
+这段代码非常像之前看到的 gen_server 回调代码
+#+END_EXAMPLE
+其中值得注意的方法是 _handle_event(Event, State)_ : 
++ 它应当返回 _{ok, NewState}_
++ _Event_ : 一个 _{EventType, Event-Arg}_ 形式的元组
+  + _EventType_ : _set_event_ 或 _clear_event_
+  + _EventArg_ : 一个用户提供的参数
+
+现在来启动系统,生成一个警报,安装警报处理器,再生成一个警报......
+
+#+BEGIN_SRC sh 
+  $ erl -boot start_sasl -config elog3 
+  1> alarm_handler:set_alarm(tooHot) . 
+  ok
+
+  =INFO REPORT==== 14-Apr-2021::09:39:29 ===
+      alarm_handler: {set,tooHot}
+  2> 
+  2> gen_event:swap_handler(alarm_handler, {alarm_handler, swap}, {my_alarm_handler, xyz}) . 
+  ,*** my_alarm_handler init:{xyz,{alarm_handler,[tooHot]}}
+  ok
+  3> 
+  3> alarm_handler:set_alarm(tooHot) .                                                       
+  =ERROR REPORT==== 14-Apr-2021::09:41:46 ===
+  ,*** Tell the Engineer to turn on the fan
+  ok
+  4> 
+  4> alarm_handler:clear_alarm(tooHot) . 
+
+  =ERROR REPORT==== 14-Apr-2021::09:42:08 ===
+  ,*** Danger over. Turn off the fan
+  ok
+#+END_SRC
+
+刚才发生了以下这些事情：
+1. 用 -boot start_sasl 启动了Erlang。这么做就得到了一个标准警报处理器。当设置或清除警报时,什么事都不会发生。这就类似于之前讨论过的“什么都不干”的事件处理器
+2. 设置警报(第1行)后只得到了一个信息报告。这个警报没有得到特别处理
+3. 安装了一个自定义警报处理器(第2行)
+   + my_alarm_handler 的参数 _xyz_ 没什么特殊含义,只不过语法要求这里有一个值。但因为我们没有用值而是用了原子 xyz ,所以能在参数打印出来时识别它
+   + ** my_alarm_handler_init: ... 这段打印输出来自我们的回调模块
+4. 设置并清除了一个 tooHot 警报(第3和第4行) 
+   + 自定义警报处理器对其进行了处理,shell打印输出能证明这一点 
+
+** 读取日志
+回到错误记录器里去看看发生了什么 
+
+#+BEGIN_SRC sh 
+  5> rb:start([{max, 20}]) . 
+  rb: reading report...done.
+  {ok,<0.47.0>}
+
+
+  6> rb:list() . 
+    No                Type   Process       Date     Time
+    ==                ====   =======       ====     ====
+     8            progress  <0.31.0> 2021-04-14 09:49:53
+     7            progress  <0.31.0> 2021-04-14 09:49:53
+     6            progress  <0.31.0> 2021-04-14 09:49:53
+     5            progress  <0.31.0> 2021-04-14 09:49:53
+     4            progress  <0.24.0> 2021-04-14 09:49:53
+     3         info_report  <0.31.0> 2021-04-14 09:56:41
+     2               error  <0.31.0> 2021-04-14 09:57:11
+     1               error  <0.31.0> 2021-04-14 09:57:25
+  ok
+
+  7> rb:show(1) . 
+
+  ERROR REPORT  <0.35.0>                                      2021-04-14 09:57:25
+  ===============================================================================
+
+  ,*** Danger over. Turn off the fan
+  ok
+
+  8> rb:show(2) . 
+
+  ERROR REPORT  <0.35.0>                                      2021-04-14 09:57:11
+  ===============================================================================
+
+  ,*** Tell the Engineer to turn on the fan
+  ok
+#+END_SRC
+可以看到错误记录机制运行正常
+
+#+BEGIN_EXAMPLE
+  在实践中,会确保错误日志大到足够支持几天或几周的运作。每隔几天(或几周)就会检查错误日志并调查所有错误
+
+  rb 模块里有一些函数能选择特定类型的错误或把它们提取到文件里。因此,分析错误日志的过程可以实现完全自动化
+#+END_EXAMPLE
+
+* 应用程序服务器
+
