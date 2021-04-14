@@ -579,15 +579,15 @@ $ erl -boot start_sasl
    #+END_EXAMPLE
 
 * 警报管理
-#+BEGIN_EXAMPLE
-  我们编写的应用程序只需要一个警报,这个警报会在CPU因为计算超大质数而温度过热时抛出(别忘了我们正在建设一家销售质数的公司)
+  #+BEGIN_EXAMPLE
+    我们编写的应用程序只需要一个警报,这个警报会在CPU因为计算超大质数而温度过热时抛出(别忘了我们正在建设一家销售质数的公司)
 
-  这次将使用真正的OTP警报处理器
-#+END_EXAMPLE
+    这次将使用真正的OTP警报处理器
+  #+END_EXAMPLE
 
-这个警报处理器是OTP _gen_event_ 行为的回调模块,它的代码如下：
+  这个警报处理器是OTP _gen_event_ 行为的回调模块,它的代码如下：
 
-#+BEGIN_SRC erlang 
+  #+BEGIN_SRC erlang 
   -module(my_alarm_handler).
   -behaviour(gen_event).
 
@@ -615,20 +615,20 @@ $ erl -boot start_sasl
 
   terminate(_Reason, _N)   -> ok.
   code_change(_OldVsn, State, _Extra) -> {ok, State}.
-#+END_SRC
+  #+END_SRC
 
-#+BEGIN_EXAMPLE
-这段代码非常像之前看到的 gen_server 回调代码
-#+END_EXAMPLE
-其中值得注意的方法是 _handle_event(Event, State)_ : 
-+ 它应当返回 _{ok, NewState}_
-+ _Event_ : 一个 _{EventType, Event-Arg}_ 形式的元组
-  + _EventType_ : _set_event_ 或 _clear_event_
-  + _EventArg_ : 一个用户提供的参数
+  #+BEGIN_EXAMPLE
+  这段代码非常像之前看到的 gen_server 回调代码
+  #+END_EXAMPLE
+  其中值得注意的方法是 _handle_event(Event, State)_ : 
+  + 它应当返回 _{ok, NewState}_
+  + _Event_ : 一个 _{EventType, Event-Arg}_ 形式的元组
+    + _EventType_ : _set_event_ 或 _clear_event_
+    + _EventArg_ : 一个用户提供的参数
 
-现在来启动系统,生成一个警报,安装警报处理器,再生成一个警报......
+  现在来启动系统,生成一个警报,安装警报处理器,再生成一个警报......
 
-#+BEGIN_SRC sh 
+  #+BEGIN_SRC sh 
   $ erl -boot start_sasl -config elog3 
   1> alarm_handler:set_alarm(tooHot) . 
   ok
@@ -650,21 +650,21 @@ $ erl -boot start_sasl
   =ERROR REPORT==== 14-Apr-2021::09:42:08 ===
   ,*** Danger over. Turn off the fan
   ok
-#+END_SRC
+  #+END_SRC
 
-刚才发生了以下这些事情：
-1. 用 -boot start_sasl 启动了Erlang。这么做就得到了一个标准警报处理器。当设置或清除警报时,什么事都不会发生。这就类似于之前讨论过的“什么都不干”的事件处理器
-2. 设置警报(第1行)后只得到了一个信息报告。这个警报没有得到特别处理
-3. 安装了一个自定义警报处理器(第2行)
-   + my_alarm_handler 的参数 _xyz_ 没什么特殊含义,只不过语法要求这里有一个值。但因为我们没有用值而是用了原子 xyz ,所以能在参数打印出来时识别它
-   + ** my_alarm_handler_init: ... 这段打印输出来自我们的回调模块
-4. 设置并清除了一个 tooHot 警报(第3和第4行) 
-   + 自定义警报处理器对其进行了处理,shell打印输出能证明这一点 
+  刚才发生了以下这些事情：
+  1. 用 -boot start_sasl 启动了Erlang。这么做就得到了一个标准警报处理器。当设置或清除警报时,什么事都不会发生。这就类似于之前讨论过的“什么都不干”的事件处理器
+  2. 设置警报(第1行)后只得到了一个信息报告。这个警报没有得到特别处理
+  3. 安装了一个自定义警报处理器(第2行)
+     + my_alarm_handler 的参数 _xyz_ 没什么特殊含义,只不过语法要求这里有一个值。但因为我们没有用值而是用了原子 xyz ,所以能在参数打印出来时识别它
+     + ** my_alarm_handler_init: ... 这段打印输出来自我们的回调模块
+  4. 设置并清除了一个 tooHot 警报(第3和第4行) 
+     + 自定义警报处理器对其进行了处理,shell打印输出能证明这一点 
 
 ** 读取日志
-回到错误记录器里去看看发生了什么 
+   回到错误记录器里去看看发生了什么 
 
-#+BEGIN_SRC sh 
+   #+BEGIN_SRC sh 
   5> rb:start([{max, 20}]) . 
   rb: reading report...done.
   {ok,<0.47.0>}
@@ -698,14 +698,131 @@ $ erl -boot start_sasl
 
   ,*** Tell the Engineer to turn on the fan
   ok
-#+END_SRC
-可以看到错误记录机制运行正常
+   #+END_SRC
+   可以看到错误记录机制运行正常
 
-#+BEGIN_EXAMPLE
-  在实践中,会确保错误日志大到足够支持几天或几周的运作。每隔几天(或几周)就会检查错误日志并调查所有错误
+   #+BEGIN_EXAMPLE
+     在实践中,会确保错误日志大到足够支持几天或几周的运作。每隔几天(或几周)就会检查错误日志并调查所有错误
 
-  rb 模块里有一些函数能选择特定类型的错误或把它们提取到文件里。因此,分析错误日志的过程可以实现完全自动化
-#+END_EXAMPLE
+     rb 模块里有一些函数能选择特定类型的错误或把它们提取到文件里。因此,分析错误日志的过程可以实现完全自动化
+   #+END_EXAMPLE
 
 * 应用程序服务器
 
+  #+BEGIN_EXAMPLE
+    我们的应用程序有两个服务器:一个质数服务器和一个面积服务器
+  #+END_EXAMPLE
+
+** 质数服务器
+   这里是质数服务器的代码,它是用 gen_server 行为编写的
+
+   #+BEGIN_SRC erlang 
+  -module(prime_server).
+  -behaviour(gen_server).
+  -export([new_prime/1, start_link/0]).
+
+  %% gen_server callbacks
+  -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
+	   terminate/2, code_change/3]).
+
+  start_link() ->
+      gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+
+  new_prime(N) ->
+      %% 20000 is a timeout (ms)
+      gen_server:call(?MODULE, {prime, N}, 20000).
+
+  init([]) ->
+      %% Note we must set trap_exit = true if we 
+      %% want terminate/2 to be called when the application
+      %% is stopped
+	
+      process_flag(trap_exit, true),
+      io:format("~p starting~n",[?MODULE]),
+      {ok, 0}.
+
+  handle_call({prime, K}, _From, N) -> 
+      {reply, make_new_prime(K), N+1}.
+
+  handle_cast(_Msg, N)  -> {noreply, N}.
+
+  handle_info(_Info, N)  -> {noreply, N}.
+
+  terminate(_Reason, _N) -> 
+      io:format("~p stopping~n",[?MODULE]),
+      ok.
+
+  code_change(_OldVsn, N, _Extra) -> {ok, N}.
+
+  make_new_prime(K) ->
+      if
+	  K > 100 ->
+	      alarm_handler:set_alarm(tooHot),
+	      N = lib_primes:make_prime(K),
+	      alarm_handler:clear_alarm(tooHot),
+	      N;
+	  true ->
+	      lib_primes:make_prime(K)
+      end.
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     请注意它是如何纳入在前一节中开发的警报处理函数的
+   #+END_EXAMPLE
+** 面积服务器
+   现在轮到面积服务器了,它也是用 gen_server 行为编写的
+
+   #+BEGIN_EXAMPLE
+     请注意,用这种方式编写服务器速度极快。在编写这个示例时剪切粘贴了质数服务器里的代码,然后把它转变成面积服务器。这只用了几分钟时间
+
+     这个面积服务器不是全世界最有才的程序,而且它还包含一个故意设置的错误,就是为了让服务器崩溃然后被监控器重启
+
+     此外还会在错误日志里获得关于这一切的报告
+   #+END_EXAMPLE
+
+   #+BEGIN_SRC erlang 
+  -module(area_server).
+  -behaviour(gen_server).
+
+  -export([area/1, start_link/0]).
+
+  %% gen_server callbacks
+  -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
+	   terminate/2, code_change/3]).
+
+  start_link() ->
+      gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+
+  area(Thing) ->
+      gen_server:call(?MODULE, {area, Thing}).
+
+  init([]) ->
+      %% Note we must set trap_exit = true if we 
+      %% want terminate/2 to be called when the application
+      %% is stopped
+      process_flag(trap_exit, true),
+      io:format("~p starting~n",[?MODULE]),
+      {ok, 0}.
+
+  handle_call({area, Thing}, _From, N) -> {reply, compute_area(Thing), N+1}.
+
+  handle_cast(_Msg, N)  -> {noreply, N}.
+
+  handle_info(_Info, N)  -> {noreply, N}.
+
+  terminate(_Reason, _N) -> 
+      io:format("~p stopping~n",[?MODULE]),
+      ok.
+
+  code_change(_OldVsn, N, _Extra) -> {ok, N}.
+
+  compute_area({square, X})       -> X*X;
+  compute_area({rectongle, X, Y}) -> X*Y.
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     已经编写完了应用程序代码,还加了一个小错误
+
+     现在必须设立一个监控结构来检测和纠正所有可能在运行时发生的错误
+   #+END_EXAMPLE
+* 监控树

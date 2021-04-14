@@ -260,7 +260,13 @@ for the JavaScript code in this tag.
 <li><a href="#orgbf82e5f">读取日志</a></li>
 </ul>
 </li>
-<li><a href="#org53e623a">应用程序服务器</a></li>
+<li><a href="#org53e623a">应用程序服务器</a>
+<ul>
+<li><a href="#orga09134a">质数服务器</a></li>
+<li><a href="#orgf573389">面积服务器</a></li>
+</ul>
+</li>
+<li><a href="#org20c3171">监控树</a></li>
 </ul>
 </div>
 </div>
@@ -1023,9 +1029,9 @@ ok
 <h2 id="orgfa3c311">警报管理</h2>
 <div class="outline-text-2" id="text-orgfa3c311">
 <pre class="example">
-  我们编写的应用程序只需要一个警报,这个警报会在CPU因为计算超大质数而温度过热时抛出(别忘了我们正在建设一家销售质数的公司)
+    我们编写的应用程序只需要一个警报,这个警报会在CPU因为计算超大质数而温度过热时抛出(别忘了我们正在建设一家销售质数的公司)
 
-  这次将使用真正的OTP警报处理器
+    这次将使用真正的OTP警报处理器
 </pre>
 
 <p>
@@ -1064,7 +1070,7 @@ ok
 </div>
 
 <pre class="example">
-这段代码非常像之前看到的 gen_server 回调代码
+  这段代码非常像之前看到的 gen_server 回调代码
 </pre>
 <p>
 其中值得注意的方法是 <span class="underline">handle_event(Event, State)</span> : 
@@ -1183,6 +1189,141 @@ rb 模块里有一些函数能选择特定类型的错误或把它们提取到�
 
 <div id="outline-container-org53e623a" class="outline-2">
 <h2 id="org53e623a">应用程序服务器</h2>
+<div class="outline-text-2" id="text-org53e623a">
+<pre class="example">
+    我们的应用程序有两个服务器:一个质数服务器和一个面积服务器
+</pre>
+</div>
+
+<div id="outline-container-orga09134a" class="outline-3">
+<h3 id="orga09134a">质数服务器</h3>
+<div class="outline-text-3" id="text-orga09134a">
+<p>
+这里是质数服务器的代码,它是用 gen_server 行为编写的
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #7fffd4;">-module</span>(prime_server).
+<span style="color: #7fffd4;">-behaviour</span>(gen_server).
+<span style="color: #7fffd4;">-export</span>([<span style="color: #98fb98;">new_prime/1</span>, <span style="color: #98fb98;">start_link/0</span>]).
+
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">gen_server callbacks</span>
+<span style="color: #7fffd4;">-export</span>([<span style="color: #98fb98;">init/1</span>, <span style="color: #98fb98;">handle_call/3</span>, <span style="color: #98fb98;">handle_cast/2</span>, <span style="color: #98fb98;">handle_info/2</span>,
+         <span style="color: #98fb98;">terminate/2</span>, <span style="color: #98fb98;">code_change/3</span>]).
+
+<span style="color: #87cefa;">start_link</span>() -&gt;
+    <span style="color: #98fb98;">gen_server</span>:<span style="color: #98fb98;">start_link</span>({local, ?<span style="color: #7fffd4;">MODULE</span>}, ?<span style="color: #7fffd4;">MODULE</span>, [], []).
+
+<span style="color: #87cefa;">new_prime</span>(<span style="color: #eedd82;">N</span>) -&gt;
+    <span style="color: #ff4500;">%% </span><span style="color: #ff4500;">20000 is a timeout (ms)</span>
+    <span style="color: #98fb98;">gen_server</span>:<span style="color: #98fb98;">call</span>(?<span style="color: #7fffd4;">MODULE</span>, {prime, <span style="color: #eedd82;">N</span>}, 20000).
+
+<span style="color: #87cefa;">init</span>([]) -&gt;
+    <span style="color: #ff4500;">%% </span><span style="color: #ff4500;">Note we must set trap_exit = true if we </span>
+    <span style="color: #ff4500;">%% </span><span style="color: #ff4500;">want terminate/2 to be called when the application</span>
+    <span style="color: #ff4500;">%% </span><span style="color: #ff4500;">is stopped</span>
+
+    <span style="color: #b0c4de;">process_flag</span>(trap_exit, true),
+    <span style="color: #98fb98;">io</span>:<span style="color: #98fb98;">format</span>(<span style="color: #ffa07a;">"~p starting~n"</span>,[?<span style="color: #7fffd4;">MODULE</span>]),
+    {ok, 0}.
+
+<span style="color: #87cefa;">handle_call</span>({prime, <span style="color: #eedd82;">K</span>}, <span style="color: #eedd82;">_From</span>, <span style="color: #eedd82;">N</span>) -&gt;<span style="color: #87cefa;"> </span>
+    {reply, <span style="color: #98fb98;">make_new_prime</span>(<span style="color: #eedd82;">K</span>), <span style="color: #eedd82;">N</span>+1}.
+
+<span style="color: #87cefa;">handle_cast</span>(<span style="color: #eedd82;">_Msg</span>, <span style="color: #eedd82;">N</span>)  -&gt;<span style="color: #87cefa;"> </span>{noreply, <span style="color: #eedd82;">N</span>}.
+
+<span style="color: #87cefa;">handle_info</span>(<span style="color: #eedd82;">_Info</span>, <span style="color: #eedd82;">N</span>)  -&gt;<span style="color: #87cefa;"> </span>{noreply, <span style="color: #eedd82;">N</span>}.
+
+<span style="color: #87cefa;">terminate</span>(<span style="color: #eedd82;">_Reason</span>, <span style="color: #eedd82;">_N</span>) -&gt;<span style="color: #87cefa;"> </span>
+    <span style="color: #98fb98;">io</span>:<span style="color: #98fb98;">format</span>(<span style="color: #ffa07a;">"~p stopping~n"</span>,[?<span style="color: #7fffd4;">MODULE</span>]),
+    ok.
+
+<span style="color: #87cefa;">code_change</span>(<span style="color: #eedd82;">_OldVsn</span>, <span style="color: #eedd82;">N</span>, <span style="color: #eedd82;">_Extra</span>) -&gt;<span style="color: #87cefa;"> </span>{ok, <span style="color: #eedd82;">N</span>}.
+
+<span style="color: #87cefa;">make_new_prime</span>(<span style="color: #eedd82;">K</span>) -&gt;
+    <span style="color: #00ffff;">if</span>
+        <span style="color: #eedd82;">K</span> &gt; 100 -&gt;
+            <span style="color: #98fb98;">alarm_handler</span>:<span style="color: #98fb98;">set_alarm</span>(tooHot),
+            <span style="color: #eedd82;">N</span> = <span style="color: #98fb98;">lib_primes</span>:<span style="color: #98fb98;">make_prime</span>(<span style="color: #eedd82;">K</span>),
+            <span style="color: #98fb98;">alarm_handler</span>:<span style="color: #98fb98;">clear_alarm</span>(tooHot),
+            <span style="color: #eedd82;">N</span>;
+        true -&gt;
+            <span style="color: #98fb98;">lib_primes</span>:<span style="color: #98fb98;">make_prime</span>(<span style="color: #eedd82;">K</span>)
+    <span style="color: #00ffff;">end</span>.
+</pre>
+</div>
+
+<pre class="example">
+     请注意它是如何纳入在前一节中开发的警报处理函数的
+</pre>
+</div>
+</div>
+<div id="outline-container-orgf573389" class="outline-3">
+<h3 id="orgf573389">面积服务器</h3>
+<div class="outline-text-3" id="text-orgf573389">
+<p>
+现在轮到面积服务器了,它也是用 gen_server 行为编写的
+</p>
+
+<pre class="example">
+     请注意,用这种方式编写服务器速度极快。在编写这个示例时剪切粘贴了质数服务器里的代码,然后把它转变成面积服务器。这只用了几分钟时间
+
+     这个面积服务器不是全世界最有才的程序,而且它还包含一个故意设置的错误,就是为了让服务器崩溃然后被监控器重启
+
+     此外还会在错误日志里获得关于这一切的报告
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #7fffd4;">-module</span>(area_server).
+<span style="color: #7fffd4;">-behaviour</span>(gen_server).
+
+<span style="color: #7fffd4;">-export</span>([<span style="color: #98fb98;">area/1</span>, <span style="color: #98fb98;">start_link/0</span>]).
+
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">gen_server callbacks</span>
+<span style="color: #7fffd4;">-export</span>([<span style="color: #98fb98;">init/1</span>, <span style="color: #98fb98;">handle_call/3</span>, <span style="color: #98fb98;">handle_cast/2</span>, <span style="color: #98fb98;">handle_info/2</span>,
+         <span style="color: #98fb98;">terminate/2</span>, <span style="color: #98fb98;">code_change/3</span>]).
+
+<span style="color: #87cefa;">start_link</span>() -&gt;
+    <span style="color: #98fb98;">gen_server</span>:<span style="color: #98fb98;">start_link</span>({local, ?<span style="color: #7fffd4;">MODULE</span>}, ?<span style="color: #7fffd4;">MODULE</span>, [], []).
+
+<span style="color: #87cefa;">area</span>(<span style="color: #eedd82;">Thing</span>) -&gt;
+    <span style="color: #98fb98;">gen_server</span>:<span style="color: #98fb98;">call</span>(?<span style="color: #7fffd4;">MODULE</span>, {area, <span style="color: #eedd82;">Thing</span>}).
+
+<span style="color: #87cefa;">init</span>([]) -&gt;
+    <span style="color: #ff4500;">%% </span><span style="color: #ff4500;">Note we must set trap_exit = true if we </span>
+    <span style="color: #ff4500;">%% </span><span style="color: #ff4500;">want terminate/2 to be called when the application</span>
+    <span style="color: #ff4500;">%% </span><span style="color: #ff4500;">is stopped</span>
+    <span style="color: #b0c4de;">process_flag</span>(trap_exit, true),
+    <span style="color: #98fb98;">io</span>:<span style="color: #98fb98;">format</span>(<span style="color: #ffa07a;">"~p starting~n"</span>,[?<span style="color: #7fffd4;">MODULE</span>]),
+    {ok, 0}.
+
+<span style="color: #87cefa;">handle_call</span>({area, <span style="color: #eedd82;">Thing</span>}, <span style="color: #eedd82;">_From</span>, <span style="color: #eedd82;">N</span>) -&gt;<span style="color: #87cefa;"> </span>{reply, <span style="color: #98fb98;">compute_area</span>(<span style="color: #eedd82;">Thing</span>), <span style="color: #eedd82;">N</span>+1}.
+
+<span style="color: #87cefa;">handle_cast</span>(<span style="color: #eedd82;">_Msg</span>, <span style="color: #eedd82;">N</span>)  -&gt;<span style="color: #87cefa;"> </span>{noreply, <span style="color: #eedd82;">N</span>}.
+
+<span style="color: #87cefa;">handle_info</span>(<span style="color: #eedd82;">_Info</span>, <span style="color: #eedd82;">N</span>)  -&gt;<span style="color: #87cefa;"> </span>{noreply, <span style="color: #eedd82;">N</span>}.
+
+<span style="color: #87cefa;">terminate</span>(<span style="color: #eedd82;">_Reason</span>, <span style="color: #eedd82;">_N</span>) -&gt;<span style="color: #87cefa;"> </span>
+    <span style="color: #98fb98;">io</span>:<span style="color: #98fb98;">format</span>(<span style="color: #ffa07a;">"~p stopping~n"</span>,[?<span style="color: #7fffd4;">MODULE</span>]),
+    ok.
+
+<span style="color: #87cefa;">code_change</span>(<span style="color: #eedd82;">_OldVsn</span>, <span style="color: #eedd82;">N</span>, <span style="color: #eedd82;">_Extra</span>) -&gt;<span style="color: #87cefa;"> </span>{ok, <span style="color: #eedd82;">N</span>}.
+
+<span style="color: #87cefa;">compute_area</span>({square, <span style="color: #eedd82;">X</span>})       -&gt;<span style="color: #87cefa;"> </span><span style="color: #eedd82;">X</span>*<span style="color: #eedd82;">X</span>;
+<span style="color: #87cefa;">compute_area</span>({rectongle, <span style="color: #eedd82;">X</span>, <span style="color: #eedd82;">Y</span>}) -&gt;<span style="color: #87cefa;"> </span><span style="color: #eedd82;">X</span>*<span style="color: #eedd82;">Y</span>.
+</pre>
+</div>
+
+<pre class="example">
+     已经编写完了应用程序代码,还加了一个小错误
+
+     现在必须设立一个监控结构来检测和纠正所有可能在运行时发生的错误
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org20c3171" class="outline-2">
+<h2 id="org20c3171">监控树</h2>
 </div>
 </div>
 <div id="postamble" class="status">
