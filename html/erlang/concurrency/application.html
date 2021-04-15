@@ -267,6 +267,11 @@ for the JavaScript code in this tag.
 </ul>
 </li>
 <li><a href="#org20c3171">监控树</a></li>
+<li><a href="#orgd88058a">启动系统</a></li>
+<li><a href="#org9052d82">应用程序</a></li>
+<li><a href="#orgbc22648">代码组织方式</a></li>
+<li><a href="#org95e312a">应用程序监视器</a></li>
+<li><a href="#org521f3d6">深入探索</a></li>
 </ul>
 </div>
 </div>
@@ -1324,6 +1329,395 @@ rb 模块里有一些函数能选择特定类型的错误或把它们提取到�
 </div>
 <div id="outline-container-org20c3171" class="outline-2">
 <h2 id="org20c3171">监控树</h2>
+<div class="outline-text-2" id="text-org20c3171">
+<p>
+监控树是一种由 <span class="underline">进程</span> 组成的 <span class="underline">树形结构</span> 。树的 <span class="underline">上级进程</span> (监控器)监视着 <span class="underline">下级进程</span> (工作器), 如果下级进程挂了就会重启它们。监控树有两种：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/monitor-tree.png" alt="monitor-tree.png" width="70%" /> 
+</p>
+</div>
+
+<ul class="org-ul">
+<li>一对一监控树：如果某个工作器崩溃了,就会被 监控器重启</li>
+<li>一对多监控树：如果任何一个工作器崩溃了,所有工作进程都会被终止(通过调用相应回调模块里的 terminate/2 函数)然后重启</li>
+</ul>
+
+<p>
+监控器是用 <span class="underline">OTP supervisor</span> 行为创建的。这个行为用一个 <span class="underline">回调模块</span> 作为参数,里面指定了 <span class="underline">监控策略</span> 以及如何 <span class="underline">启动</span> 监控树里的各个工作进程。监控树通过以下形式的函数指定：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #87cefa;">init</span>(...) -&gt;
+    {ok, {
+          {<span style="color: #eedd82;">RestartStrategy</span>, <span style="color: #eedd82;">MaxRestarts</span>, <span style="color: #eedd82;">Time</span>},
+          [worker1, worker2, ...]
+         }}
+</pre>
+</div>
+
+<ul class="org-ul">
+<li>RestartStrategy 是原子 one_for_one 或 one_for_all</li>
+<li>MaxRestarts 和 Time 则指定“重启频率”。如果一个监控器在 Time 秒内执行了超过 MaxRestarts 次重启,那么这个监控器就会终止所有工作进程然后退出
+<ul class="org-ul">
+<li>这是为了防止出现一种情形,即某个进程崩溃、被重启,然后又因为相同原因崩溃而形成的无限循环</li>
+</ul></li>
+<li>Worker1 和 Worker2 这些是描述如何启动各个工作进程的元组</li>
+</ul>
+
+<pre class="example">
+现在回到前面的代码上来,同时构建一个监控树
+
+要做的第一件事是给公司选一个名字,决定叫它 sellaprime
+
+sellaprime 监控器的工作是确保质数和面积服务器始终保持运行
+</pre>
+
+
+<p>
+为了做到这一点,将编写另一个用于 <span class="underline">gen_supervisor</span> 的回调模块。这个模块的代码如下:
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #7fffd4;">-module</span>(sellaprime_supervisor).
+<span style="color: #7fffd4;">-behaviour</span>(supervisor).         <span style="color: #ff4500;">% </span><span style="color: #ff4500;">see erl -man supervisor</span>
+<span style="color: #7fffd4;">-export</span>([<span style="color: #98fb98;">start/0</span>, <span style="color: #98fb98;">start_in_shell_for_testing/0</span>, <span style="color: #98fb98;">start_link/1</span>, <span style="color: #98fb98;">init/1</span>]).
+
+<span style="color: #87cefa;">start</span>() -&gt;
+    <span style="color: #b0c4de;">spawn</span>(<span style="color: #00ffff;">fun</span>() -&gt;
+                  <span style="color: #98fb98;">supervisor</span>:<span style="color: #98fb98;">start_link</span>({local,?<span style="color: #7fffd4;">MODULE</span>}, ?<span style="color: #7fffd4;">MODULE</span>, <span style="color: #eedd82;">_Arg</span> = [])
+          <span style="color: #00ffff;">end</span>).
+<span style="color: #87cefa;">start_in_shell_for_testing</span>() -&gt;
+    {ok, <span style="color: #eedd82;">Pid</span>} = <span style="color: #98fb98;">supervisor</span>:<span style="color: #98fb98;">start_link</span>({local,?<span style="color: #7fffd4;">MODULE</span>}, ?<span style="color: #7fffd4;">MODULE</span>, <span style="color: #eedd82;">_Arg</span> = []),
+    <span style="color: #b0c4de;">unlink</span>(<span style="color: #eedd82;">Pid</span>).
+<span style="color: #87cefa;">start_link</span>(<span style="color: #eedd82;">Args</span>) -&gt;
+    <span style="color: #98fb98;">supervisor</span>:<span style="color: #98fb98;">start_link</span>({local,?<span style="color: #7fffd4;">MODULE</span>}, ?<span style="color: #7fffd4;">MODULE</span>, <span style="color: #eedd82;">Args</span>).
+<span style="color: #87cefa;">init</span>([]) -&gt;
+    <span style="color: #ff4500;">%% </span><span style="color: #ff4500;">Install my personal error handler</span>
+     <span style="color: #98fb98;">gen_event</span>:<span style="color: #98fb98;">swap_handler</span>(alarm_handler, 
+                                   {alarm_handler, swap},
+                                   {my_alarm_handler, xyz}),
+    {ok, {{one_for_one, 3, 10},
+          [{tag1, 
+            {area_server, start_link, []},
+            permanent, 
+            10000, 
+            worker, 
+            [area_server]},
+           {tag2, 
+            {prime_server, start_link, []},
+            permanent, 
+            10000, 
+            worker, 
+            [prime_server]}
+          ]}}.
+</pre>
+</div>
+
+<p>
+重点部分是 init/1 返回的数据结构：
+</p>
+<div class="org-src-container">
+<pre class="src src-erlang">{ok, {{one_for_one, 3, 10},
+      [{tag1, 
+        {area_server, start_link, []},
+        permanent, 
+        10000, 
+        worker, 
+        [area_server]},
+       {tag2, 
+        {prime_server, start_link, []},
+        permanent, 
+        10000, 
+        worker, 
+        [prime_server]}
+      ]}}
+</pre>
+</div>
+
+<p>
+这个数据结构定义了一种监控策略
+</p>
+<pre class="example">
+    之前讨论过监控策略和重启频率，现在来看下的面积服务器和质数服务器的启动格式
+</pre>
+
+<p>
+Worker 的格式是下面这种元组:
+</p>
+<div class="org-src-container">
+<pre class="src src-erlang">{ <span style="color: #eedd82;">Tag</span>, 
+  {<span style="color: #eedd82;">Mod</span>, <span style="color: #eedd82;">Func</span>, <span style="color: #eedd82;">ArgList</span>}, 
+  <span style="color: #eedd82;">Restart</span>, 
+  <span style="color: #eedd82;">Shutdown</span>, 
+  <span style="color: #eedd82;">Type</span>, 
+  [<span style="color: #eedd82;">Mod1</span>]}
+</pre>
+</div>
+
+<p>
+这些参数的意义如下。
+</p>
+<ul class="org-ul">
+<li>Tag: 这是一个原子类型的标签,将来可以用它指代 <span class="underline">工作进程</span> (如果有必要的话)</li>
+<li>{Mod, Func, ArgList}: 它定义了监控器用于 <span class="underline">启动工作器的函数</span> ,将被用作 apply(Mod, Fun, ArgList) 的参数</li>
+<li>Restart = permanent | transient | temporary
+<ul class="org-ul">
+<li>permanent (永久)进程 <span class="underline">总是会被</span> 重启</li>
+<li>transient (过渡)进程只有在以 <span class="underline">非正常退出值</span> 终止时才会被重启</li>
+<li>temporary (临时)进程 <span class="underline">不会被</span> 重启。</li>
+</ul></li>
+<li>Shutdown 这关闭时间,也就是工作器 <span class="underline">终止过程允许耗费的最长时间</span> 。如果超过这个时间,工作进程就会被杀掉</li>
+<li>Type = worker | supervisor 这是被 <span class="underline">监控进程的类型</span> 。可以用监控进程代替工作进程来构建一个由监控器组成的树</li>
+<li>[Mod1] 如果子进程是 <span class="underline">监控器</span> 或者 gen_server 行为的 <span class="underline">回调模块</span> ,就在这里 <b>指定</b> 回调模块名</li>
+</ul>
+
+<pre class="example">
+    这些参数看上去很吓人,但其实不是
+
+    在实践中,可以剪切粘贴之前面积服务器代码里的值,然后插入你的模块名。这对大多数用途来说足够了
+</pre>
+</div>
+</div>
+<div id="outline-container-orgd88058a" class="outline-2">
+<h2 id="orgd88058a">启动系统</h2>
+<div class="outline-text-2" id="text-orgd88058a">
+<p>
+现在万事俱备，首先启动系统：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ erl -boot start_sasl -config elog3  
+Erlang/OTP 18 [erts-7.3] [source] [64-bit] [smp:6:6] [async-threads:10] [kernel-poll:false]
+
+Eshell V7.3  (abort with ^G)
+2&gt; sellaprime_supervisor:start_in_shell_for_testing() <span style="color: #b0c4de;">.</span> 
+*** my_alarm_handler init:{xyz,{alarm_handler,[]}}
+area_server starting
+prime_server starting
+true
+</pre>
+</div>
+
+<p>
+现在生成一个有效查询：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">3&gt; area_server:area({square, 10}) <span style="color: #b0c4de;">.</span> 
+100
+</pre>
+</div>
+
+<p>
+再生成一个无效查询：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">4&gt; area_server:area({rectangle, 10, 20}) <span style="color: #b0c4de;">.</span>  
+area_server stopping
+area_server starting
+
+=ERROR <span style="color: #eedd82;">REPORT</span>==== 15-Apr-2021::11:52:58 ===
+** Generic server area_server terminating 
+** Last message<span style="color: #00ffff;"> in</span> was {area,{rectangle,10,20}}
+** When Server state == 1
+** Reason for termination == 
+** {function_clause,[{area_server,compute_area,
+                                  [{rectangle,10,20}],
+                                  [{file,<span style="color: #ffa07a;">"area_server.erl"</span>},{line,44}]},
+                     {area_server,handle_call,3,
+                                  [{file,<span style="color: #ffa07a;">"area_server.erl"</span>},{line,32}]},
+                     {gen_server,try_handle_call,4,
+                                 [{file,<span style="color: #ffa07a;">"gen_server.erl"</span>},{line,629}]},
+                     {gen_server,handle_msg,5,
+                                 [{file,<span style="color: #ffa07a;">"gen_server.erl"</span>},{line,661}]},
+                     {proc_lib,init_p_do_apply,3,
+                               [{file,<span style="color: #ffa07a;">"proc_lib.erl"</span>},{line,240}]}]}
+** exception exit: {{function_clause,[{area_server,compute_area,
+                                                   [{rectangle,10,20}],
+                                                   [{file,<span style="color: #ffa07a;">"area_server.erl"</span>},{line,44}]},
+                                      {area_server,handle_call,3,
+                                                   [{file,<span style="color: #ffa07a;">"area_server.erl"</span>},{line,32}]},
+                                      {gen_server,try_handle_call,4,
+                                                  [{file,<span style="color: #ffa07a;">"gen_server.erl"</span>},{line,629}]},
+                                      {gen_server,handle_msg,5,
+                                                  [{file,<span style="color: #ffa07a;">"gen_server.erl"</span>},{line,661}]},
+                                      {proc_lib,init_p_do_apply,3,
+                                                [{file,<span style="color: #ffa07a;">"proc_lib.erl"</span>},{line,240}]}]},
+                    {gen_server,call,[area_server,{area,{rectangle,10,20}}]}}
+     <span style="color: #00ffff;">in</span> <span style="color: #00ffff;">function</span>  <span style="color: #87cefa;">gen_server</span>:call/2 (gen_server.erl, line 204)
+</pre>
+</div>
+
+<pre class="example">
+    不好,面积服务器崩溃了,触发了有意设置的错误。监控器检测到这次崩溃并重启了面积服务器
+
+    所有这些都被错误记录器记录下来,也看到了这个错误的打印输出
+
+    错误消息显示出问题所在:程序尝试执行 area_server:compute_area({rectangle,10,20}) 时崩溃了
+
+    也就是错误消息 function_clase 的第一行所展示的。错误消息的格式是 {Mod,Func,[Args]}
+
+    回去看看定义面积计算的部分(在 compute_area/1 里),应该能找到这个错误
+</pre>
+<p>
+崩溃发生后,一切都恢复正常,就像构想的那样。接下来生成一个合法请求：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">5&gt; area_server:area({square, 25}) <span style="color: #b0c4de;">.</span>         
+625
+</pre>
+</div>
+<p>
+系统又能正常工作了。现在来生成一个小质数：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">6&gt; prime_server:new_prime(20) <span style="color: #b0c4de;">.</span>     
+Generating a 20 digit prime ..........
+53076482275705498811
+</pre>
+</div>
+
+<p>
+再生成一个大质数：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">7&gt; prime_server:new_prime(120) <span style="color: #b0c4de;">.</span> 
+Generating a 120 digit prime ..
+=ERROR <span style="color: #eedd82;">REPORT</span>==== 15-Apr-2021::11:54:07 ===
+*** Tell the Engineer to turn on the fan
+........................................................................................................................................................................................................................
+629843095964883326439380674600451197441649615389439715257065277990540813955811087214345485499172035124010556643218342941
+</pre>
+</div>
+
+<pre class="example">
+    现在有了一个能正常运行的系统。如果某个服务器崩溃了,就会被自动重启,错误日志里则会有关于这个错误的信息
+</pre>
+<p>
+来看一下错误日志：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">8&gt; rb:start([{max, 20}]) <span style="color: #b0c4de;">.</span> 
+rb: reading report...done.
+{ok,&lt;0.59.0&gt;}
+
+9&gt; rb:list() <span style="color: #b0c4de;">.</span> 
+  No                Type      Process       Date     Time
+  ==                ====      =======       ====     ====
+  13            progress     &lt;0.31.0&gt; 2021-04-15 11:51:05
+  12            progress     &lt;0.31.0&gt; 2021-04-15 11:51:05
+  11            progress     &lt;0.31.0&gt; 2021-04-15 11:51:05
+  10            progress     &lt;0.31.0&gt; 2021-04-15 11:51:05
+   9            progress     &lt;0.24.0&gt; 2021-04-15 11:51:05
+   8            progress     &lt;0.25.0&gt; 2021-04-15 11:51:44
+   7            progress     &lt;0.25.0&gt; 2021-04-15 11:51:44
+   6               error     &lt;0.25.0&gt; 2021-04-15 11:52:58
+   5        crash_report  area_server 2021-04-15 11:52:58
+   4   supervisor_report     &lt;0.25.0&gt; 2021-04-15 11:52:58
+   3            progress     &lt;0.25.0&gt; 2021-04-15 11:52:58
+   2               error     &lt;0.31.0&gt; 2021-04-15 11:54:07
+   1               error     &lt;0.31.0&gt; 2021-04-15 11:54:08
+ok
+</pre>
+</div>
+
+<p>
+有地方出问题了，能看到一个面积服务器的错误报告。要想查明发生了什么,可以查看错误报告：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">10&gt; rb:show(5) <span style="color: #b0c4de;">.</span> 
+
+CRASH REPORT  &lt;0.49.0&gt;                                      2021-04-15 11:52:58
+===============================================================================
+Crashing process                                                               
+   initial_call                              {area_server,init,[<span style="color: #ffa07a;">'Argument__1'</span>]}
+   pid                                                                 &lt;0.49.0&gt;
+   registered_name                                                  area_server
+   error_info
+         {<span style="color: #00ffff;">exit</span>,
+            {function_clause,
+                [{area_server,compute_area,
+                     [{rectangle,10,20}],
+                     [{file,<span style="color: #ffa07a;">"area_server.erl"</span>},{line,44}]},
+                 {area_server,handle_call,3,
+                     [{file,<span style="color: #ffa07a;">"area_server.erl"</span>},{line,32}]},
+                 {gen_server,try_handle_call,4,
+                     [{file,<span style="color: #ffa07a;">"gen_server.erl"</span>},{line,629}]},
+                 {gen_server,handle_msg,5,
+                     [{file,<span style="color: #ffa07a;">"gen_server.erl"</span>},{line,661}]},
+                 {proc_lib,init_p_do_apply,3,
+                     [{file,<span style="color: #ffa07a;">"proc_lib.erl"</span>},{line,240}]}]},
+            [{gen_server,terminate,7,[{file,<span style="color: #ffa07a;">"gen_server.erl"</span>},{line,826}]},
+             {proc_lib,init_p_do_apply,3,
+                 [{file,<span style="color: #ffa07a;">"proc_lib.erl"</span>},{line,240}]}]}
+   ancestors                                   [sellaprime_supervisor,&lt;0.41.0&gt;]
+   messages                                                                  []
+   links                                                             [&lt;0.48.0&gt;]
+   dictionary                                                                []
+   trap_exit                                                               true
+   status                                                               running
+   heap_size                                                                610
+   stack_size                                                                27
+   reductions                                                               181
+
+ok
+</pre>
+</div>
+
+<p>
+打印输出 {function_clause, compute_area, &#x2026;} 展示了程序里导致服务器崩溃的准确位置。定位和纠正这个错误应该是件简单的事。再看一下后面这些错误：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">11&gt; rb:show(2) <span style="color: #b0c4de;">.</span> 
+
+ERROR REPORT  &lt;0.35.0&gt;                                      2021-04-15 11:54:07
+===============================================================================
+
+*** Tell the Engineer to turn on the fan
+ok
+
+12&gt; rb:show(1) <span style="color: #b0c4de;">.</span> 
+
+ERROR REPORT  &lt;0.35.0&gt;                                      2021-04-15 11:54:08
+===============================================================================
+
+*** Danger over. Turn off the fan
+ok
+</pre>
+</div>
+
+<p>
+这些是因为计算的质数过大而引发的风扇警报! 
+</p>
+
+<pre class="example">
+Erlang被设计用来编写容错式系统。它最初是在瑞典电信公司爱立信的计算机科学实验室里开发的。从那时起,爱立信的OTP团队在许多内部用户的帮助下接过了开发任务
+
+通过使用 gen_server 和 gen_supervisor 等行为,人们用Erlang构建了可靠性为99.9999999%的系统(9个9)
+
+如果用法正确,错误处理机制能帮助你的程序永久运行(好吧,几乎永久运行)。这里介绍的错误记录器已经在线上产品里运行多年了
+</pre>
+</div>
+</div>
+<div id="outline-container-org9052d82" class="outline-2">
+<h2 id="org9052d82">应用程序</h2>
+</div>
+<div id="outline-container-orgbc22648" class="outline-2">
+<h2 id="orgbc22648">代码组织方式</h2>
+</div>
+<div id="outline-container-org95e312a" class="outline-2">
+<h2 id="org95e312a">应用程序监视器</h2>
+</div>
+<div id="outline-container-org521f3d6" class="outline-2">
+<h2 id="org521f3d6">深入探索</h2>
 </div>
 </div>
 <div id="postamble" class="status">

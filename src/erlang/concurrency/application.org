@@ -826,3 +826,318 @@ $ erl -boot start_sasl
      现在必须设立一个监控结构来检测和纠正所有可能在运行时发生的错误
    #+END_EXAMPLE
 * 监控树
+  监控树是一种由 _进程_ 组成的 _树形结构_ 。树的 _上级进程_ (监控器)监视着 _下级进程_ (工作器), 如果下级进程挂了就会重启它们。监控树有两种：
+
+  #+ATTR_HTML: image :width 70% 
+  [[file:pic/monitor-tree.png]] 
+
+  + 一对一监控树：如果某个工作器崩溃了,就会被 监控器重启
+  + 一对多监控树：如果任何一个工作器崩溃了,所有工作进程都会被终止(通过调用相应回调模块里的 terminate/2 函数)然后重启
+
+  监控器是用 _OTP supervisor_ 行为创建的。这个行为用一个 _回调模块_ 作为参数,里面指定了 _监控策略_ 以及如何 _启动_ 监控树里的各个工作进程。监控树通过以下形式的函数指定：
+
+  #+BEGIN_SRC erlang 
+  init(...) ->
+      {ok, {
+	    {RestartStrategy, MaxRestarts, Time},
+	    [worker1, worker2, ...]
+	   }}
+  #+END_SRC
+
+  + RestartStrategy 是原子 one_for_one 或 one_for_all
+  + MaxRestarts 和 Time 则指定“重启频率”。如果一个监控器在 Time 秒内执行了超过 MaxRestarts 次重启,那么这个监控器就会终止所有工作进程然后退出
+    + 这是为了防止出现一种情形,即某个进程崩溃、被重启,然后又因为相同原因崩溃而形成的无限循环
+  + Worker1 和 Worker2 这些是描述如何启动各个工作进程的元组
+
+  #+BEGIN_EXAMPLE
+    现在回到前面的代码上来,同时构建一个监控树
+
+    要做的第一件事是给公司选一个名字,决定叫它 sellaprime
+
+    sellaprime 监控器的工作是确保质数和面积服务器始终保持运行
+  #+END_EXAMPLE
+
+
+  为了做到这一点,将编写另一个用于 _gen_supervisor_ 的回调模块。这个模块的代码如下:
+
+  #+BEGIN_SRC erlang 
+  -module(sellaprime_supervisor).
+  -behaviour(supervisor).		% see erl -man supervisor
+  -export([start/0, start_in_shell_for_testing/0, start_link/1, init/1]).
+
+  start() ->
+      spawn(fun() ->
+		    supervisor:start_link({local,?MODULE}, ?MODULE, _Arg = [])
+	    end).
+  start_in_shell_for_testing() ->
+      {ok, Pid} = supervisor:start_link({local,?MODULE}, ?MODULE, _Arg = []),
+      unlink(Pid).
+  start_link(Args) ->
+      supervisor:start_link({local,?MODULE}, ?MODULE, Args).
+  init([]) ->
+      %% Install my personal error handler
+       gen_event:swap_handler(alarm_handler, 
+				     {alarm_handler, swap},
+				     {my_alarm_handler, xyz}),
+      {ok, {{one_for_one, 3, 10},
+	    [{tag1, 
+	      {area_server, start_link, []},
+	      permanent, 
+	      10000, 
+	      worker, 
+	      [area_server]},
+	     {tag2, 
+	      {prime_server, start_link, []},
+	      permanent, 
+	      10000, 
+	      worker, 
+	      [prime_server]}
+	    ]}}.
+  #+END_SRC
+
+  重点部分是 init/1 返回的数据结构：
+  #+BEGIN_SRC erlang 
+  {ok, {{one_for_one, 3, 10},
+	[{tag1, 
+	  {area_server, start_link, []},
+	  permanent, 
+	  10000, 
+	  worker, 
+	  [area_server]},
+	 {tag2, 
+	  {prime_server, start_link, []},
+	  permanent, 
+	  10000, 
+	  worker, 
+	  [prime_server]}
+	]}}
+  #+END_SRC
+
+  这个数据结构定义了一种监控策略
+  #+BEGIN_EXAMPLE
+    之前讨论过监控策略和重启频率，现在来看下的面积服务器和质数服务器的启动格式
+  #+END_EXAMPLE
+
+  Worker 的格式是下面这种元组:
+  #+BEGIN_SRC erlang 
+  { Tag, 
+    {Mod, Func, ArgList}, 
+    Restart, 
+    Shutdown, 
+    Type, 
+    [Mod1]}
+  #+END_SRC
+
+  这些参数的意义如下。
+  + Tag: 这是一个原子类型的标签,将来可以用它指代 _工作进程_ (如果有必要的话)
+  + {Mod, Func, ArgList}: 它定义了监控器用于 _启动工作器的函数_ ,将被用作 apply(Mod, Fun, ArgList) 的参数
+  + Restart = permanent | transient | temporary
+    + permanent (永久)进程 _总是会被_ 重启
+    + transient (过渡)进程只有在以 _非正常退出值_ 终止时才会被重启
+    + temporary (临时)进程 _不会被_ 重启。
+  + Shutdown 这关闭时间,也就是工作器 _终止过程允许耗费的最长时间_ 。如果超过这个时间,工作进程就会被杀掉
+  + Type = worker | supervisor 这是被 _监控进程的类型_ 。可以用监控进程代替工作进程来构建一个由监控器组成的树
+  + [Mod1] 如果子进程是 _监控器_ 或者 gen_server 行为的 _回调模块_ ,就在这里 *指定* 回调模块名
+
+  #+BEGIN_EXAMPLE
+    这些参数看上去很吓人,但其实不是
+
+    在实践中,可以剪切粘贴之前面积服务器代码里的值,然后插入你的模块名。这对大多数用途来说足够了
+  #+END_EXAMPLE
+* 启动系统
+  现在万事俱备，首先启动系统：
+
+  #+BEGIN_SRC sh 
+  $ erl -boot start_sasl -config elog3  
+  Erlang/OTP 18 [erts-7.3] [source] [64-bit] [smp:6:6] [async-threads:10] [kernel-poll:false]
+
+  Eshell V7.3  (abort with ^G)
+  2> sellaprime_supervisor:start_in_shell_for_testing() . 
+  ,*** my_alarm_handler init:{xyz,{alarm_handler,[]}}
+  area_server starting
+  prime_server starting
+  true
+  #+END_SRC
+
+  现在生成一个有效查询：
+
+  #+BEGIN_SRC sh 
+  3> area_server:area({square, 10}) . 
+  100
+  #+END_SRC
+
+  再生成一个无效查询：
+
+  #+BEGIN_SRC sh 
+  4> area_server:area({rectangle, 10, 20}) .  
+  area_server stopping
+  area_server starting
+
+  =ERROR REPORT==== 15-Apr-2021::11:52:58 ===
+  ,** Generic server area_server terminating 
+  ,** Last message in was {area,{rectangle,10,20}}
+  ,** When Server state == 1
+  ,** Reason for termination == 
+  ,** {function_clause,[{area_server,compute_area,
+				    [{rectangle,10,20}],
+				    [{file,"area_server.erl"},{line,44}]},
+		       {area_server,handle_call,3,
+				    [{file,"area_server.erl"},{line,32}]},
+		       {gen_server,try_handle_call,4,
+				   [{file,"gen_server.erl"},{line,629}]},
+		       {gen_server,handle_msg,5,
+				   [{file,"gen_server.erl"},{line,661}]},
+		       {proc_lib,init_p_do_apply,3,
+				 [{file,"proc_lib.erl"},{line,240}]}]}
+  ,** exception exit: {{function_clause,[{area_server,compute_area,
+						     [{rectangle,10,20}],
+						     [{file,"area_server.erl"},{line,44}]},
+					{area_server,handle_call,3,
+						     [{file,"area_server.erl"},{line,32}]},
+					{gen_server,try_handle_call,4,
+						    [{file,"gen_server.erl"},{line,629}]},
+					{gen_server,handle_msg,5,
+						    [{file,"gen_server.erl"},{line,661}]},
+					{proc_lib,init_p_do_apply,3,
+						  [{file,"proc_lib.erl"},{line,240}]}]},
+		      {gen_server,call,[area_server,{area,{rectangle,10,20}}]}}
+       in function  gen_server:call/2 (gen_server.erl, line 204)
+  #+END_SRC
+
+  #+BEGIN_EXAMPLE
+    不好,面积服务器崩溃了,触发了有意设置的错误。监控器检测到这次崩溃并重启了面积服务器
+
+    所有这些都被错误记录器记录下来,也看到了这个错误的打印输出
+
+    错误消息显示出问题所在:程序尝试执行 area_server:compute_area({rectangle,10,20}) 时崩溃了
+
+    也就是错误消息 function_clase 的第一行所展示的。错误消息的格式是 {Mod,Func,[Args]}
+
+    回去看看定义面积计算的部分(在 compute_area/1 里),应该能找到这个错误
+  #+END_EXAMPLE
+  崩溃发生后,一切都恢复正常,就像构想的那样。接下来生成一个合法请求：
+
+  #+BEGIN_SRC sh 
+  5> area_server:area({square, 25}) .         
+  625
+  #+END_SRC
+  系统又能正常工作了。现在来生成一个小质数：
+
+  #+BEGIN_SRC sh 
+  6> prime_server:new_prime(20) .     
+  Generating a 20 digit prime ..........
+  53076482275705498811
+  #+END_SRC
+
+  再生成一个大质数：
+
+  #+BEGIN_SRC sh 
+  7> prime_server:new_prime(120) . 
+  Generating a 120 digit prime ..
+  =ERROR REPORT==== 15-Apr-2021::11:54:07 ===
+  ,*** Tell the Engineer to turn on the fan
+  ........................................................................................................................................................................................................................
+  629843095964883326439380674600451197441649615389439715257065277990540813955811087214345485499172035124010556643218342941
+  #+END_SRC
+
+  #+BEGIN_EXAMPLE
+    现在有了一个能正常运行的系统。如果某个服务器崩溃了,就会被自动重启,错误日志里则会有关于这个错误的信息
+  #+END_EXAMPLE
+  来看一下错误日志：
+
+  #+BEGIN_SRC sh 
+  8> rb:start([{max, 20}]) . 
+  rb: reading report...done.
+  {ok,<0.59.0>}
+
+  9> rb:list() . 
+    No                Type      Process       Date     Time
+    ==                ====      =======       ====     ====
+    13            progress     <0.31.0> 2021-04-15 11:51:05
+    12            progress     <0.31.0> 2021-04-15 11:51:05
+    11            progress     <0.31.0> 2021-04-15 11:51:05
+    10            progress     <0.31.0> 2021-04-15 11:51:05
+     9            progress     <0.24.0> 2021-04-15 11:51:05
+     8            progress     <0.25.0> 2021-04-15 11:51:44
+     7            progress     <0.25.0> 2021-04-15 11:51:44
+     6               error     <0.25.0> 2021-04-15 11:52:58
+     5        crash_report  area_server 2021-04-15 11:52:58
+     4   supervisor_report     <0.25.0> 2021-04-15 11:52:58
+     3            progress     <0.25.0> 2021-04-15 11:52:58
+     2               error     <0.31.0> 2021-04-15 11:54:07
+     1               error     <0.31.0> 2021-04-15 11:54:08
+  ok
+  #+END_SRC
+
+  有地方出问题了，能看到一个面积服务器的错误报告。要想查明发生了什么,可以查看错误报告：
+  #+BEGIN_SRC sh 
+  10> rb:show(5) . 
+
+  CRASH REPORT  <0.49.0>                                      2021-04-15 11:52:58
+  ===============================================================================
+  Crashing process                                                               
+     initial_call                              {area_server,init,['Argument__1']}
+     pid                                                                 <0.49.0>
+     registered_name                                                  area_server
+     error_info
+	   {exit,
+	      {function_clause,
+		  [{area_server,compute_area,
+		       [{rectangle,10,20}],
+		       [{file,"area_server.erl"},{line,44}]},
+		   {area_server,handle_call,3,
+		       [{file,"area_server.erl"},{line,32}]},
+		   {gen_server,try_handle_call,4,
+		       [{file,"gen_server.erl"},{line,629}]},
+		   {gen_server,handle_msg,5,
+		       [{file,"gen_server.erl"},{line,661}]},
+		   {proc_lib,init_p_do_apply,3,
+		       [{file,"proc_lib.erl"},{line,240}]}]},
+	      [{gen_server,terminate,7,[{file,"gen_server.erl"},{line,826}]},
+	       {proc_lib,init_p_do_apply,3,
+		   [{file,"proc_lib.erl"},{line,240}]}]}
+     ancestors                                   [sellaprime_supervisor,<0.41.0>]
+     messages                                                                  []
+     links                                                             [<0.48.0>]
+     dictionary                                                                []
+     trap_exit                                                               true
+     status                                                               running
+     heap_size                                                                610
+     stack_size                                                                27
+     reductions                                                               181
+
+  ok
+  #+END_SRC
+
+  打印输出 {function_clause, compute_area, ...} 展示了程序里导致服务器崩溃的准确位置。定位和纠正这个错误应该是件简单的事。再看一下后面这些错误：
+  #+BEGIN_SRC sh 
+  11> rb:show(2) . 
+
+  ERROR REPORT  <0.35.0>                                      2021-04-15 11:54:07
+  ===============================================================================
+
+  ,*** Tell the Engineer to turn on the fan
+  ok
+ 
+  12> rb:show(1) . 
+
+  ERROR REPORT  <0.35.0>                                      2021-04-15 11:54:08
+  ===============================================================================
+
+  ,*** Danger over. Turn off the fan
+  ok
+  #+END_SRC
+
+  这些是因为计算的质数过大而引发的风扇警报! 
+
+  #+BEGIN_EXAMPLE
+    Erlang被设计用来编写容错式系统。它最初是在瑞典电信公司爱立信的计算机科学实验室里开发的。从那时起,爱立信的OTP团队在许多内部用户的帮助下接过了开发任务
+
+    通过使用 gen_server 和 gen_supervisor 等行为,人们用Erlang构建了可靠性为99.9999999%的系统(9个9)
+
+    如果用法正确,错误处理机制能帮助你的程序永久运行(好吧,几乎永久运行)。这里介绍的错误记录器已经在线上产品里运行多年了
+  #+END_EXAMPLE
+* 应用程序
+* 代码组织方式
+* 应用程序监视器
+* 深入探索
