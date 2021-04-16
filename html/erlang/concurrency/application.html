@@ -270,7 +270,6 @@ for the JavaScript code in this tag.
 <li><a href="#orgd88058a">启动系统</a></li>
 <li><a href="#org9052d82">应用程序</a></li>
 <li><a href="#orgbc22648">代码组织方式</a></li>
-<li><a href="#org95e312a">应用程序监视器</a></li>
 <li><a href="#org521f3d6">深入探索</a></li>
 </ul>
 </div>
@@ -1709,15 +1708,251 @@ Erlang被设计用来编写容错式系统。它最初是在瑞典电信公司�
 </div>
 <div id="outline-container-org9052d82" class="outline-2">
 <h2 id="org9052d82">应用程序</h2>
+<div class="outline-text-2" id="text-org9052d82">
+<p>
+差不多已经完工了。现在要做的是编写一个扩展名为 .app 的文件,它包含关于这个应用程序的信息：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #ff4500;">%% </span><span style="color: #ff4500;">This is the application resource file (.app file) for the 'base'</span>
+<span style="color: #ff4500;">%% </span><span style="color: #ff4500;">application.</span>
+{application, sellaprime, 
+ [{description, <span style="color: #ffa07a;">"The Prime Number Shop"</span>},
+  {vsn, <span style="color: #ffa07a;">"1.0"</span>},
+  {modules, [sellaprime_app, sellaprime_supervisor, area_server, 
+             prime_server, lib_lin, lib_primes, my_alarm_handler]},     
+  {registered,[area_server, prime_server, sellaprime_super]},
+  {applications, [kernel,stdlib]},
+  {mod, {sellaprime_app,[]}},
+  {start_phases, []}
+ ]}.
+</pre>
 </div>
+
+<p>
+现在必须编写一个回调模块,它的名称与 <span class="underline">前面文件里的 mod 文件名</span> 相同：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-erlang"><span style="color: #7fffd4;">-module</span>(sellaprime_app).
+<span style="color: #7fffd4;">-behaviour</span>(application).
+<span style="color: #7fffd4;">-export</span>([<span style="color: #98fb98;">start/2</span>, <span style="color: #98fb98;">stop/1</span>]).
+<span style="color: #87cefa;">start</span>(<span style="color: #eedd82;">_Type</span>, <span style="color: #eedd82;">StartArgs</span>) -&gt;
+    <span style="color: #98fb98;">sellaprime_supervisor</span>:<span style="color: #98fb98;">start_link</span>(<span style="color: #eedd82;">StartArgs</span>).
+<span style="color: #87cefa;">stop</span>(<span style="color: #eedd82;">_State</span>) -&gt;
+    ok.
+</pre>
+</div>
+<p>
+它必须导出函数 <span class="underline">start/2</span> 和 <span class="underline">stop/1</span> 。做完这一切之后,就可以在shell里启动和停止应用程序了：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ erl -boot start_sasl -config elog3 
+Erlang/OTP 18 [erts-7.3] [source] [64-bit] [smp:6:6] [async-threads:10] [kernel-poll:false]
+Eshell V7.3  (abort with ^G)
+
+2&gt; application:loaded_applications() <span style="color: #b0c4de;">.</span> 
+[{stdlib,<span style="color: #ffa07a;">"ERTS  CXC 138 10"</span>,<span style="color: #ffa07a;">"2.8"</span>},
+ {sasl,<span style="color: #ffa07a;">"SASL  CXC 138 11"</span>,<span style="color: #ffa07a;">"2.7"</span>},
+ {kernel,<span style="color: #ffa07a;">"ERTS  CXC 138 10"</span>,<span style="color: #ffa07a;">"4.2"</span>}]
+
+4&gt; application:load(sellaprime) <span style="color: #b0c4de;">.</span>      
+ok
+
+5&gt; application:loaded_applications() <span style="color: #b0c4de;">.</span> 
+[{stdlib,<span style="color: #ffa07a;">"ERTS  CXC 138 10"</span>,<span style="color: #ffa07a;">"2.8"</span>},
+ {sellaprime,<span style="color: #ffa07a;">"The Prime Number Shop"</span>,<span style="color: #ffa07a;">"1.0"</span>},
+ {sasl,<span style="color: #ffa07a;">"SASL  CXC 138 11"</span>,<span style="color: #ffa07a;">"2.7"</span>},
+ {kernel,<span style="color: #ffa07a;">"ERTS  CXC 138 10"</span>,<span style="color: #ffa07a;">"4.2"</span>}]
+
+6&gt; application:start(sellaprime) <span style="color: #b0c4de;">.</span>     
+*** my_alarm_handler init:{xyz,{alarm_handler,[]}}
+area_server starting
+prime_server starting
+ok
+
+7&gt; application:stop(sellaprime) <span style="color: #b0c4de;">.</span>  
+prime_server stopping
+area_server stopping
+ok
+
+=INFO <span style="color: #eedd82;">REPORT</span>==== 16-Apr-2021::09:13:42 ===
+    application: sellaprime
+    exited: stopped
+    <span style="color: #b0c4de;">type</span>: temporary
+
+8&gt; application:unload(sellaprime) <span style="color: #b0c4de;">.</span> 
+ok
+
+9&gt; application:loaded_applications() <span style="color: #b0c4de;">.</span> 
+[{stdlib,<span style="color: #ffa07a;">"ERTS  CXC 138 10"</span>,<span style="color: #ffa07a;">"2.8"</span>},
+ {sasl,<span style="color: #ffa07a;">"SASL  CXC 138 11"</span>,<span style="color: #ffa07a;">"2.7"</span>},
+ {kernel,<span style="color: #ffa07a;">"ERTS  CXC 138 10"</span>,<span style="color: #ffa07a;">"4.2"</span>}]
+</pre>
+</div>
+
+<p>
+现在它就是一个功能完备的OTP应用程序了：
+</p>
+<ul class="org-ul">
+<li>在第4行里载入了应用程序,这么做会载入全部代码,但不会启动应用程序</li>
+<li>第6行启动了应用程序,第7行则停止了它</li>
+<li>在第8行卸载了应用程序,这样应用程序里的所有模块代码都被移除了</li>
+</ul>
+
+<pre class="example">
+    请注意,启动和停止应用程序时能看到打印输出,因为它调用了面积服务器和质数服务器里相应的回调函数
+
+    用OTP构建复杂的系统时,会把它们打包成应用程序。这样就能统一启动、停止和管理它们
+</pre>
+
+<p>
+用 init:stop() 关闭系统时,所有运行中的应用程序会按顺序一一关闭 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ erl -boot start_sasl -config elog3 
+Erlang/OTP 18 [erts-7.3] [source] [64-bit] [smp:6:6] [async-threads:10] [kernel-poll:false]
+
+Eshell V7.3  (abort with ^G)
+
+1&gt; application:start(sellaprime) <span style="color: #b0c4de;">.</span> 
+*** my_alarm_handler init:{xyz,{alarm_handler,[]}}
+area_server starting
+prime_server starting
+ok
+
+2&gt; init:stop() <span style="color: #b0c4de;">.</span> 
+ok
+prime_server stopping
+area_server stopping
+</pre>
+</div>
+
+<pre class="example">
+init:stop() 后面的两行文本来自面积与质数服务器,这就表示各个 gen_server 回调模块里的 terminate/2 函数都得到了调用
+</pre>
+</div>
+</div>
+
 <div id="outline-container-orgbc22648" class="outline-2">
 <h2 id="orgbc22648">代码组织方式</h2>
+<div class="outline-text-2" id="text-orgbc22648">
+<pre class="example">
+    还没有提到过文件系统的组织方式,这是有原因的：目的是每次只解决一个问题
+</pre>
+
+<p>
+规范的应用程序各个部分所属的文件通常都处于定义明确的位置。这不是必要条件,只要相关文件能在运行时找到,文件是如何组织的并不重要 
+</p>
+
+<pre class="example">
+    把本书的大多数演示文件都放在同一个目录里。这么做简化了示例,也避免了搜索路径和不同程序之间的交互等问题
+</pre>
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 1:</span> sellaprime公司使用的主要文件如下</caption>
+
+<colgroup>
+<col  class="org-left" />
+
+<col  class="org-left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="org-left">文件</td>
+<td class="org-left">内容</td>
+</tr>
+
+<tr>
+<td class="org-left">area_server.erl</td>
+<td class="org-left">面积服务器( gen_server 回调模块)</td>
+</tr>
+
+<tr>
+<td class="org-left">prime_server.erl</td>
+<td class="org-left">质数服务器( gen_server 回调模块)</td>
+</tr>
+
+<tr>
+<td class="org-left">sellaprime_supervisor.erl</td>
+<td class="org-left">监控器回调模块</td>
+</tr>
+
+<tr>
+<td class="org-left">sellaprime_app.erl</td>
+<td class="org-left">应用程序回调模块</td>
+</tr>
+
+<tr>
+<td class="org-left">my_alam_handler.erl</td>
+<td class="org-left">用于 gen_event 的事件回调模块</td>
+</tr>
+
+<tr>
+<td class="org-left">sellaprime.app</td>
+<td class="org-left">应用程序规范</td>
+</tr>
+
+<tr>
+<td class="org-left">elog4.config</td>
+<td class="org-left">错误记录器配置文件</td>
+</tr>
+</tbody>
+</table>
+
+
+<p>
+要了解这些文件和模块是如何使用的,可以来看看启动应用程序时发生的事件序列：
+</p>
+<ol class="org-ol">
+<li>用下列命令启动系统 <span class="underline">application:start(sellaprime) .</span> : 
+<ul class="org-ul">
+<li>sellaprime.app 文件必须位于Erlang的启动根目录或它的子目录里</li>
+<li>应用程序控制器随后在 sellaprime.app 里寻找一个 <span class="underline">{mod, &#x2026;}</span> 声明：它包含应用程序控制器的名称
+<ul class="org-ul">
+<li>在这个案例里是模块 sellaprime_app</li>
+</ul></li>
+</ul></li>
+<li>回调方法 <span class="underline">sellaprime_app:start/2</span> 被调用</li>
+<li>sellaprime_app:start/2 调用 <span class="underline">sellaprime_supervisor:start_link/2</span> ,  <b>启动</b>  sellaprime <span class="underline">监控器</span></li>
+<li>监控器回调函数 <span class="underline">sellaprime_supervisor:init/1</span> 被调用,它会 <b>安装</b> 一个 <span class="underline">错误处理器</span> ,然后返回一个监控规范
+<ul class="org-ul">
+<li>这个监控规范说明了如何启动面积服务器和质数服务器</li>
+</ul></li>
+<li>sellaprime 监控器 <b>启动</b> 面积服务器和质数服务器,两者都是 gen_server 的回调模块</li>
+</ol>
+
+<pre class="example">
+    停止这一切很容易,只需要调用 application:stop(sellaprime) 或 init:stop() 
+</pre>
 </div>
-<div id="outline-container-org95e312a" class="outline-2">
-<h2 id="org95e312a">应用程序监视器</h2>
 </div>
+
 <div id="outline-container-org521f3d6" class="outline-2">
 <h2 id="org521f3d6">深入探索</h2>
+<div class="outline-text-2" id="text-org521f3d6">
+<p>
+在目前这个阶段,已经涉及了构建兼容OTP框架的常规Erlang应用程序所需要的全部重要主题
+</p>
+
+<pre class="example">
+    在这里省略了很多细节,只解释了相关的原则
+
+    可以在 gen_event 、 error_logger 、 supervisor 和 application 的手册页里找到详细介绍
+
+    更多OTP设计原则的细节可以在Erlang/OTP系统文档里找到
+</pre>
+
+<p>
+<a href="otp.html">Previous：OTP库</a>
+</p>
+
+<p>
+<a href="concurrency.html">Home：目录</a>
+</p>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
