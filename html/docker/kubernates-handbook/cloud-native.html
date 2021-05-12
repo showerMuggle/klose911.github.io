@@ -285,7 +285,59 @@ for the JavaScript code in this tag.
 <li><a href="#org458b05c">云原生概念介绍</a></li>
 </ul>
 </li>
-<li><a href="#orgebf84f0">Kubernetes与云原生的关系</a></li>
+<li><a href="#orgebf84f0">Kubernetes与云原生的关系</a>
+<ul>
+<li><a href="#org8f92d4a">介绍</a></li>
+<li><a href="#org9deca66">12因素应用</a></li>
+</ul>
+</li>
+<li><a href="#org0bf950e">Kubernetes中的资源管理与容器设计模式</a>
+<ul>
+<li><a href="#orga57aed1">容器的设计模式</a></li>
+<li><a href="#orgfe5ddca">资源限制与配额</a></li>
+</ul>
+</li>
+<li><a href="#org54aeef9">管理Kubernetes集群</a>
+<ul>
+<li><a href="#org6378086">部署Kubernetes集群</a></li>
+<li><a href="#org684c5d2">服务发现与负载均衡</a></li>
+<li><a href="#org3cd137d">持续集成与发布</a></li>
+<li><a href="#orgf260b82">日志收集与监控</a></li>
+<li><a href="#org4485c7c">安全性与权限管理</a></li>
+</ul>
+</li>
+<li><a href="#orgae812f1">开发Kubernetes原生应用步骤</a>
+<ul>
+<li><a href="#org2b67b67">云原生应用开发示例</a>
+<ul>
+<li><a href="#org668458f">定义API生成API文档</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#orgc8db8c2">如何迁移到云原生应用架构</a>
+<ul>
+<li><a href="#orgb22a81a">迁移到云原生应用架构指南</a></li>
+<li><a href="#org24ae2ad">迁移案例解析</a></li>
+</ul>
+</li>
+<li><a href="#orgb6ebc68">Service Mesh</a>
+<ul>
+<li><a href="#orgf07b93c">什么是Service Mesh</a></li>
+<li><a href="#orgb30cb2b">Service Mesh使用指南</a></li>
+</ul>
+</li>
+<li><a href="#orgd90bf09">使用案例</a>
+<ul>
+<li><a href="#orgc4f7dfa">DevOps</a>
+<ul>
+<li><a href="#org7d6d800">行动指南</a></li>
+<li><a href="#orga063741">使用Kibana查看日志</a></li>
+<li><a href="#orgf18005e">使用Grafana查看应用状态</a></li>
+</ul>
+</li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -1055,6 +1107,543 @@ Kubernetes已然成为容器编排调度的标准
 
 <div id="outline-container-orgebf84f0" class="outline-3">
 <h3 id="orgebf84f0">Kubernetes与云原生的关系</h3>
+<div class="outline-text-3" id="text-orgebf84f0">
+<p>
+Kuberentes可以说是乘着Docker和微服务的东风，一经推出便迅速蹿红，它的很多设计思想都契合了微服务和云原生应用的设计法则，这其中最著名的就是开发了Heroku PaaS平台的工程师们总结的 Twelve-factor App了 
+</p>
+
+<pre class="example">
+   下面将讲解Kubernetes设计时是如何按照了十二因素应用法则，并给出Kubernetes中的应用示例，并附上一句话简短的介绍。
+</pre>
+</div>
+
+<div id="outline-container-org8f92d4a" class="outline-4">
+<h4 id="org8f92d4a">介绍</h4>
+<div class="outline-text-4" id="text-org8f92d4a">
+<p>
+Kubernetes是Google基于Borg开源的容器编排调度引擎，作为CNCF（Cloud Native Computing Foundation）最重要的组件之一，它的目标不仅仅是一个编排系统，而是提供一个规范，可以让你来描述集群的架构，定义服务的最终状态，Kubernetes可以帮你将系统自动得达到和维持在这个状态
+</p>
+
+<p>
+更直白的说，Kubernetes用户可以通过编写一个yaml或者json格式的配置文件，也可以通过工具/代码生成或直接请求Kubernetes API创建应用，该配置文件中包含了用户想要应用程序保持的状态，不论整个Kubernetes集群中的个别主机发生什么问题，都不会影响应用程序的状态，你还可以通过改变该配置文件或请求Kubernetes API来改变应用程序的状态
+</p>
+</div>
+</div>
+
+<div id="outline-container-org9deca66" class="outline-4">
+<h4 id="org9deca66">12因素应用</h4>
+<div class="outline-text-4" id="text-org9deca66">
+<pre class="example">
+12因素应用提出已经有几年的时间了，每个人对其可能都有自己的理解，切不可生搬硬套
+
+不一定所有云原生应用都必须符合这12条法则，其中有几条法则可能还有点争议，有人对其的解释和看法不同
+</pre>
+
+<p>
+不要孤立的来看这每一个因素，将其与自己软件开发流程联系起来，这12个因素大致就是按照软件从开发到交付的流程顺序来写的：
+</p>
+
+<div class="figure">
+<p><img src="pic/12-factor-app.png" alt="12-factor-app.png" width="90%" />
+</p>
+</div>
+
+<ol class="org-ol">
+<li>基准代码：每个代码仓库（repo）都生成docker image保存到镜像仓库中，并使用唯一的ID管理，在Jenkins中使用编译时的ID</li>
+<li>依赖：显式的声明代码中的依赖，使用软件包管理工具声明，比如Go中的Glide</li>
+<li>配置：将配置与代码分离，应用部署到Kubernetes中可以使用容器的环境变量或ConfigMap挂载到容器中</li>
+<li>后端服务：把后端服务当作附加资源，实质上是计算存储分离和降低服务耦合，分解单体应用</li>
+<li>构建、发布、运行：严格分离构建和运行，每次修改代码生成新的镜像，重新发布，不能直接修改运行时的代码和配置</li>
+<li>进程：应用程序进程应该是无状态的，这意味着再次重启后还可以计算出原先的状态</li>
+<li>端口绑定：在Kubernetes中每个Pod都有独立的IP，每个运行在Pod中的应用不必关心端口是否重复，只需在service中指定端口，集群内的service通过配置互相发现</li>
+<li>并发：每个容器都是一个进程，通过增加容器的副本数实现并发</li>
+<li>易处理：快速启动和优雅终止可最大化健壮性，Kuberentes优秀的Pod生存周期控制</li>
+<li>开发环境与线上环境等价：在Kubernetes中可以创建多个namespace，使用相同的镜像可以很方便的复制一套环境出来，镜像的使用可以很方便的部署一个后端服务</li>
+<li>日志：把日志当作事件流，使用stdout输出并收集汇聚起来，例如到ES中统一查看</li>
+<li>管理进程：后台管理任务当作一次性进程运行，kubectl exec进入容器内部操作</li>
+</ol>
+
+<pre class="example">
+    另外，Cloud Native Go 这本书的作者，CapitalOne公司的Kevin Hoffman在TalkingData T11峰会上的High Level Cloud Native的演讲中讲述了云原生应用的15个因素
+</pre>
+<p>
+在原先的12因素应用的基础上又增加了如下三个因素：
+</p>
+
+<ul class="org-ul">
+<li>API优先
+<ul class="org-ul">
+<li>服务间的合约</li>
+<li>团队协作的规约</li>
+<li>文档化、规范化</li>
+<li>RESTful或RPC</li>
+</ul></li>
+<li>监控
+<ul class="org-ul">
+<li>实时监控远程应用</li>
+<li>应用性能监控（APM）</li>
+<li>应用健康监控</li>
+<li>系统日志</li>
+<li>不建议在线Debug</li>
+</ul></li>
+<li>认证授权
+<ul class="org-ul">
+<li>不要等最后才去考虑应用的安全性</li>
+<li>详细设计、明确声明、文档化</li>
+<li>Bearer token、OAuth、OIDC认证</li>
+<li>操作审计</li>
+</ul></li>
+</ul>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org0bf950e" class="outline-3">
+<h3 id="org0bf950e">Kubernetes中的资源管理与容器设计模式</h3>
+<div class="outline-text-3" id="text-org0bf950e">
+<pre class="example">
+Kubernetes通过声明式配置，真正让开发人员能够理解应用的状态，并通过同一份配置可以立马启动一个一模一样的环境，大大提高了应用开发和部署的效率
+
+其中Kubernetes设计的多种资源类型可以帮助我们定义应用的运行状态，并使用资源配置来细粒度的明确限制应用的资源使用
+</pre>
+<p>
+而容器生态的成熟是 Kubernetes 诞生的前提，在谈到容器的设计模式之前先来了解下容器生态，请看下图：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/container-ecosystem.png" alt="container-ecosystem.png" width="70%" />
+</p>
+</div>
+</div>
+
+<div id="outline-container-orga57aed1" class="outline-4">
+<h4 id="orga57aed1">容器的设计模式</h4>
+<div class="outline-text-4" id="text-orga57aed1">
+<p>
+Kubernetes提供了多种 <span class="underline">资源对象</span> ，用户可以根据自己应用的特性加以选择。这些对象有：
+</p>
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 1:</span> Kubernetes资源对象</caption>
+
+<colgroup>
+<col  class="org-left" />
+
+<col  class="org-left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="org-left">类别</td>
+<td class="org-left">名称</td>
+</tr>
+
+<tr>
+<td class="org-left">资源对象</td>
+<td class="org-left">Pod、ReplicaSet、ReplicationController、Deployment、StatefulSet、DaemonSet、Job、CronJob、HorizontalPodAutoscaler</td>
+</tr>
+
+<tr>
+<td class="org-left">配置对象</td>
+<td class="org-left">Node、Namespace、Service、Secret、ConfigMap、Ingress、Label、CustomResourceDefinition、 ServiceAccount</td>
+</tr>
+
+<tr>
+<td class="org-left">存储对象</td>
+<td class="org-left">Volume、Persistent Volume</td>
+</tr>
+
+<tr>
+<td class="org-left">策略对象</td>
+<td class="org-left">SecurityContext、ResourceQuota、LimitRange</td>
+</tr>
+</tbody>
+</table>
+
+<p>
+在 Kubernetes 系统中， <span class="underline">Kubernetes 对象</span> 是 <b>持久化</b> 的条目。Kubernetes 使用这些条目去表示整个集群的状态。特别地，它们描述了如下信息：
+</p>
+<ul class="org-ul">
+<li>什么容器化应用在运行（以及在哪个 Node 上）</li>
+<li>可以被应用使用的资源</li>
+<li>关于应用如何表现的策略，比如重启策略、升级策略，以及容错策略</li>
+</ul>
+
+<p>
+Kubernetes 对象是 <span class="underline">目标性记录</span> ：一旦创建对象，Kubernetes 系统将持续工作以确保对象存在。通过创建对象，可以有效地告知 Kubernetes 系统，所需要的集群工作负载看起来是什么样子的，这就是 Kubernetes 集群的 <b>期望状态</b> 
+</p>
+</div>
+</div>
+
+<div id="outline-container-orgfe5ddca" class="outline-4">
+<h4 id="orgfe5ddca">资源限制与配额</h4>
+<div class="outline-text-4" id="text-orgfe5ddca">
+<p>
+两层的资源限制与配置
+</p>
+<ul class="org-ul">
+<li>Pod级别，最小的资源调度单位</li>
+<li>Namespace级别，限制资源配额和每个Pod的资源使用区间</li>
+</ul>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org54aeef9" class="outline-3">
+<h3 id="org54aeef9">管理Kubernetes集群</h3>
+<div class="outline-text-3" id="text-org54aeef9">
+<pre class="example">
+手工部署Kubernetes是一个很艰巨的活，需要了解：
+
+网络配置
+Docker的安装与使用
+镜像仓库的构建
+角色证书的创建
+Kubernetes的基本原理和构成
+Kubernetes应用程序的yaml文件编写等
+</pre>
+</div>
+
+
+<div id="outline-container-org6378086" class="outline-4">
+<h4 id="org6378086">部署Kubernetes集群</h4>
+<div class="outline-text-4" id="text-org6378086">
+<p>
+使用二进制部署 kubernetes 集群的所有组件和插件，而不是使用 kubeadm 等自动化方式来部署集群，同时开启了集群的TLS安全认证
+</p>
+
+<pre class="example">
+这样可以帮助了解系统各组件的交互原理，进而能快速解决实际问题 
+</pre>
+
+<p>
+集群详情
+</p>
+<ul class="org-ul">
+<li>Kubernetes 1.6.0</li>
+<li>Docker 1.12.5（使用yum安装）</li>
+<li>Etcd 3.1.5</li>
+<li>Flanneld 0.7 vxlan 网络</li>
+<li>TLS 认证通信 (所有组件，如 etcd、kubernetes master 和 node)</li>
+<li>RBAC 授权</li>
+<li>kubelet TLS BootStrapping</li>
+<li>kubedns、dashboard、heapster(influxdb、grafana)、EFK(elasticsearch、fluentd、kibana) 集群插件</li>
+<li>私有Docker镜像仓库Harbor（请自行部署，Harbor提供离线安装包，直接使用docker-compose启动即可）</li>
+</ul>
+
+<p>
+步骤介绍
+</p>
+<ol class="org-ol">
+<li>创建 TLS 证书和秘钥</li>
+<li>创建kubeconfig文件</li>
+<li>创建高可用etcd集群</li>
+<li>安装kubectl命令行工具</li>
+<li>部署master节点</li>
+<li>安装flannel网络插件</li>
+<li>部署node节点</li>
+<li>安装kubedns插件</li>
+<li>安装dashboard插件</li>
+<li>安装heapster插件</li>
+<li>安装EFK插件</li>
+</ol>
+</div>
+</div>
+
+<div id="outline-container-org684c5d2" class="outline-4">
+<h4 id="org684c5d2">服务发现与负载均衡</h4>
+<div class="outline-text-4" id="text-org684c5d2">
+<p>
+Kubernetes在设计之初就充分考虑了针对容器的服务发现与负载均衡机制，提供了Service资源，并通过kube-proxy配合cloud provider来适应不同的应用场景。随着Kubernetes用户的激增，用户场景的不断丰富，又产生了一些新的负载均衡机制。目前，Kubernetes中的负载均衡大致可以分为以下几种机制，每种机制都有其特定的应用场景：
+</p>
+<ul class="org-ul">
+<li>Service：直接用Service提供cluster内部的负载均衡，并借助cloud provider提供的LB提供外部访问</li>
+<li>Ingress：还是用Service提供cluster内部的负载均衡，但是通过自定义LB提供外部访问</li>
+<li>Service Load Balancer：把load balancer直接跑在容器中，实现Bare Metal的Service Load Balancer</li>
+<li>Custom Load Balancer：自定义负载均衡，并替代kube-proxy，一般在物理部署Kubernetes时使用，方便接入公司已有的外部服务</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-org3cd137d" class="outline-4">
+<h4 id="org3cd137d">持续集成与发布</h4>
+<div class="outline-text-4" id="text-org3cd137d">
+
+<div class="figure">
+<p><img src="pic/kubernetes-jenkins-ci-cd.png" alt="kubernetes-jenkins-ci-cd.png" width="70%" /> 
+</p>
+</div>
+
+<p>
+应用构建和发布流程说明：
+</p>
+<ol class="org-ol">
+<li>用户向Gitlab提交代码，代码中必须包含Dockerfile</li>
+<li>将代码提交到远程仓库</li>
+<li>用户在发布应用时需要填写git仓库地址和分支、服务类型、服务名称、资源数量、实例个数，确定后触发Jenkins自动构建</li>
+<li>Jenkins的CI流水线自动编译代码并打包成Docker镜像推送到Harbor镜像仓库</li>
+<li>Jenkins的CI流水线中包括了自定义脚本，根据已准备好的Kubernetes的YAML模板，将其中的变量替换成用户输入的选项</li>
+<li>生成应用的Kubernetes YAML配置文件</li>
+<li>更新Ingress的配置，根据新部署的应用的名称，在Ingress的配置文件中增加一条路由信息</li>
+<li>更新PowerDNS，向其中插入一条DNS记录，IP地址是边缘节点的IP地址。关于边缘节点，请查看边缘节点配置</li>
+<li>Jenkins调用Kubernetes的API，部署应用</li>
+</ol>
+</div>
+</div>
+
+<div id="outline-container-orgf260b82" class="outline-4">
+<h4 id="orgf260b82">日志收集与监控</h4>
+<div class="outline-text-4" id="text-orgf260b82">
+<p>
+基于现有的ELK日志收集方案，稍作改造，选用 <span class="underline">filebeat</span> 来收集日志，可以作为 <span class="underline">sidecar</span> 的形式跟应用运行在同一个Pod中，比较轻量级消耗资源比较少 
+</p>
+
+
+<div class="figure">
+<p><img src="pic/filebeat-log-collector-arch.png" alt="filebeat-log-collector-arch.png" width="70%" /> 
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org4485c7c" class="outline-4">
+<h4 id="org4485c7c">安全性与权限管理</h4>
+<div class="outline-text-4" id="text-org4485c7c">
+<p>
+Kubernetes是一个多租户的云平台，因此必须对用户的权限加以限制，对用户空间进行隔离。Kubernetes中的隔离主要包括这几种：
+</p>
+<ul class="org-ul">
+<li>网络隔离：需要使用网络插件，比如flannel, calico</li>
+<li>资源隔离：kubernetes原生支持资源隔离，pod就是资源隔离和调度的最小单位，同时使用namespace限制用户空间和资源限额</li>
+<li>身份隔离：使用RBAC-基于角色的访问控制，多租户的身份认证和权限控制</li>
+</ul>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgae812f1" class="outline-3">
+<h3 id="orgae812f1">开发Kubernetes原生应用步骤</h3>
+<div class="outline-text-3" id="text-orgae812f1">
+<p>
+当有了一个kubernetes集群后，如何在上面开发和部署应用，应该遵循怎样的流程？
+</p>
+
+<pre class="example">
+  下面将展示如何使用go语言开发和部署一个Kubernetes native应用，并使用wercker进行持续集成与持续发布
+
+  将以一个很简单的前后端访问，获取伪造数据并展示的例子来说明
+</pre>
+</div>
+
+<div id="outline-container-org2b67b67" class="outline-4">
+<h4 id="org2b67b67">云原生应用开发示例</h4>
+<div class="outline-text-4" id="text-org2b67b67">
+<p>
+按照如下步骤来开发部署一个Kubernetes原生应用并将它部署到Kubernetes集群上开放给集群外访问：
+</p>
+<ol class="org-ol">
+<li>服务API的定义</li>
+<li>使用Go语言开发Kubernetes原生应用</li>
+<li>一个持续构建与发布工具与环境</li>
+<li>使用traefik和VIP做边缘节点提供外部访问路由</li>
+</ol>
+
+<p>
+两个示例用于演示，开发部署一个伪造的 metric 并显示在 web 页面上，包括两个service：
+</p>
+<ul class="org-ul">
+<li>k8s-app-monitor-test：生成模拟的监控数据，发送http请求，获取json返回值</li>
+<li>K8s-app-monitor-agent：获取监控数据并绘图，访问浏览器获取图表</li>
+</ul>
+</div>
+
+<div id="outline-container-org668458f" class="outline-5">
+<h5 id="org668458f">定义API生成API文档</h5>
+<div class="outline-text-5" id="text-org668458f">
+<p>
+使用 <span class="underline">API blueprint</span> 格式，定义API文档，格式类似于 markdown，再使用 <span class="underline">aglio</span> 生成HTML文档 
+</p>
+
+
+
+<div class="figure">
+<p><img src="pic/k8s-app-monitor-test-api-doc.jpg" alt="k8s-app-monitor-test-api-doc.jpg" width="30%" /> 
+</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+
+<div id="outline-container-orgc8db8c2" class="outline-3">
+<h3 id="orgc8db8c2">如何迁移到云原生应用架构</h3>
+<div class="outline-text-3" id="text-orgc8db8c2">
+</div>
+<div id="outline-container-orgb22a81a" class="outline-4">
+<h4 id="orgb22a81a">迁移到云原生应用架构指南</h4>
+<div class="outline-text-4" id="text-orgb22a81a">
+<p>
+指出了迁移到云原生应用架构需要做出的企业文化、组织架构和技术变革，并给出了迁移指南。主要讨论的应用程序架构包括：
+</p>
+<ul class="org-ul">
+<li>十二因素应用程序：云原生应用程序架构模式的集合</li>
+<li>微服务：独立部署的服务，只做一件事情</li>
+<li>自治服务的敏捷基础设施：快速，可重复和一致地提供应用环境和后台服务的平台</li>
+<li>基于API的协作：发布和版本化的API，允许在云原生应用程序架构中的服务之间进行交互</li>
+<li>抗压性：根据压力变强的系统</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-org24ae2ad" class="outline-4">
+<h4 id="org24ae2ad">迁移案例解析</h4>
+<div class="outline-text-4" id="text-org24ae2ad">
+
+<div class="figure">
+<p><img src="pic/migrating-hadoop-yarn-to-kubernetes.png" alt="migrating-hadoop-yarn-to-kubernetes.png" width="50%" /> 
+</p>
+</div>
+
+<p>
+步骤说明：
+</p>
+<ol class="org-ol">
+<li>将原有应用拆解为服务</li>
+<li>定义服务的接口/API通信方式</li>
+<li>编写启动脚本作为容器的进程入口</li>
+<li>准备应用配置文件</li>
+<li>容器化、制作镜像</li>
+<li>准备Kubernetes YAML文件</li>
+<li>如果有外置配置文件需要创建ConfigMap或Secret存储</li>
+</ol>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgb6ebc68" class="outline-3">
+<h3 id="orgb6ebc68">Service Mesh</h3>
+<div class="outline-text-3" id="text-orgb6ebc68">
+<p>
+Service Mesh现在一般被翻译作服务网格，目前主流的Service Mesh有如下几款：
+</p>
+<ul class="org-ul">
+<li>Istio：IBM、Google、Lyft共同开源，详细文档见Istio官方文档</li>
+<li>Linkerd：原Twitter工程师开发，现为CNCF中的项目之一</li>
+<li>Envoy：Lyft开源的，可以在Istio中使用Sidecar模式运行</li>
+<li>Conduit：同样由Buoyant开源的轻量级的基于Kubernetes的Service Mesh</li>
+</ul>
+</div>
+
+<div id="outline-container-orgf07b93c" class="outline-4">
+<h4 id="orgf07b93c">什么是Service Mesh</h4>
+<div class="outline-text-4" id="text-orgf07b93c">
+<p>
+如果用一句话来解释什么是 Service Mesh，可以将它比作是 <b>应用程序或者说微服务间的 TCP/IP</b> ，负责服务之间的网络 <span class="underline">调用</span> 、 <span class="underline">限流</span> 、 <span class="underline">熔断</span> 和 <span class="underline">监控</span> 
+</p>
+
+<pre class="example">
+  对于编写应用程序来说一般无须关心 TCP/IP 这一层（比如通过 HTTP 协议的 RESTful 应用）
+
+  同样使用 Service Mesh 也就无须关心服务之间的那些原来是通过应用程序或者其他框架实现的事情，现在只要交给 Service Mesh 就可以了
+</pre>
+
+
+<div class="figure">
+<p><img src="pic/serivce-mesh-control-plane.png" alt="serivce-mesh-control-plane.png" width="50%" /> 
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgb30cb2b" class="outline-4">
+<h4 id="orgb30cb2b">Service Mesh使用指南</h4>
+</div>
+</div>
+
+<div id="outline-container-orgd90bf09" class="outline-3">
+<h3 id="orgd90bf09">使用案例</h3>
+<div class="outline-text-3" id="text-orgd90bf09">
+<p>
+Kubernetes作为云原生计算的基本组件之一，开源2年时间以来热度与日俱增，它可以跟我们的生产结合，擦出很多火花，比如FaaS和Serverless类应用，都很适合运行在kubernetes上
+</p>
+</div>
+
+<div id="outline-container-orgc4f7dfa" class="outline-4">
+<h4 id="orgc4f7dfa">DevOps</h4>
+<div class="outline-text-4" id="text-orgc4f7dfa">
+<pre class="example">
+下面是社区中Kubernetes开源爱好者的分享内容，我觉得是对Kubernetes在DevOps中应用的很好的形式值得大家借鉴
+</pre>
+<p>
+真正践行DevOps，让开发人员在掌握自己的开发和测试环境，让环境一致，让开发效率提升，让运维没有堆积如山的tickets，让监控更加精准，从Kubernetes平台开始
+</p>
+</div>
+
+<div id="outline-container-org7d6d800" class="outline-5">
+<h5 id="org7d6d800">行动指南</h5>
+<div class="outline-text-5" id="text-org7d6d800">
+<ol class="org-ol">
+<li>根据环境（比如开发、测试、生产）划分namespace，也可以根据项目来划分</li>
+<li>为每个用户划分一个namespace、创建一个serviceaccount和kubeconfig文件，不同namespace间的资源隔离，目前不隔离网络，不同namespace间的服务可以互相访问</li>
+<li>创建yaml模板，降低编写Kubernetes yaml文件编写难度</li>
+<li>在kubectl命令上再封装一层，增加用户身份设置和环境初始化操作，简化kubectl命令和常用功能</li>
+<li>管理员通过dashboard查看不同namespace的状态，也可以使用它来使操作更便捷</li>
+<li>所有应用的日志统一收集到ElasticSearch中，统一日志访问入口</li>
+<li>可以通过Grafana查看所有namespace中的应用的状态和kubernetes集群本身的状态</li>
+<li>需要持久化的数据保存在分布式存储中，例如GlusterFS或Ceph中</li>
+</ol>
+</div>
+</div>
+
+<div id="outline-container-orga063741" class="outline-5">
+<h5 id="orga063741">使用Kibana查看日志</h5>
+<div class="outline-text-5" id="text-orga063741">
+<p>
+日志字段中包括了应用的标签、容器名称、主机名称、宿主机名称、IP地址、时间：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/filebeat-docker-test.jpg" alt="filebeat-docker-test.jpg" width="40%" /> 
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgf18005e" class="outline-5">
+<h5 id="orgf18005e">使用Grafana查看应用状态</h5>
+<div class="outline-text-5" id="text-orgf18005e">
+<p>
+监控分类示意图：
+</p>
+
+
+<div class="figure">
+<p><img src="pic/kubernetes-devops-example-grafana-1.png" alt="kubernetes-devops-example-grafana-1.png" width="50%" /> 
+</p>
+</div>
+
+<p>
+可以看到集群硬件使用情况：
+</p>
+
+<div class="figure">
+<p><img src="pic/kubernetes-devops-example-grafana-2.png" alt="kubernetes-devops-example-grafana-2.png" width="50%" /> 
+</p>
+</div>
+
+<p>
+单个用户的namespace下的所有资源的使用情况：
+</p>
+
+<div class="figure">
+<p><img src="pic/kubernetes-devops-example-grafana-3.png" alt="kubernetes-devops-example-grafana-3.png" width="50%" /> 
+</p>
+</div>
+</div>
+</div>
+</div>
 </div>
 </div>
 </div>
