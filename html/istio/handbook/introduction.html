@@ -259,11 +259,50 @@ for the JavaScript code in this tag.
 <li><a href="#org8e69aae">影响</a></li>
 <li><a href="#orgd8ffb0e">优点</a></li>
 <li><a href="#orgea0ec0f">缺点</a></li>
-<li><a href="#orgdc5ee1c">总结</a></li>
+<li><a href="#orga18c122">总结</a></li>
 </ul>
 </li>
 </ul>
 </li>
+<li><a href="#org4fc2efb">istio 和 kubernates</a>
+<ul>
+<li><a href="#orgcacab0c">Kubernetes vs Service Mesh</a>
+<ul>
+<li><a href="#org98fcbac">流量转发</a></li>
+<li><a href="#org53f69be">服务发现</a>
+<ul>
+<li><a href="#org5601f06">Service Mesh 的劣势</a></li>
+<li><a href="#orgaae2afe">Service Mesh 的优势</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#orgf6ff999">kube-proxy 组件</a>
+<ul>
+<li><a href="#org88ec42e">kube-proxy 的缺陷</a></li>
+</ul>
+</li>
+<li><a href="#orgd645ec5">Kubernetes Ingress vs Istio Gateway</a></li>
+<li><a href="#orge731579">xDS 协议</a>
+<ul>
+<li><a href="#orgf4c4141">xDS 协议要点</a></li>
+</ul>
+</li>
+<li><a href="#org37b8a7a">Envoy</a>
+<ul>
+<li><a href="#orgc4f1634">基本术语</a></li>
+</ul>
+</li>
+<li><a href="#orgf073024">Istio Service Mesh</a>
+<ul>
+<li><a href="#orgab7b797">Istio 中的流量管理</a></li>
+</ul>
+</li>
+<li><a href="#org56d49ad">Kubernetes vs xDS vs Istio</a></li>
+<li><a href="#org624051d">总结</a></li>
+</ul>
+</li>
+<li><a href="#orgc5e34e4">什么是 Istio</a></li>
 </ul>
 </div>
 </div>
@@ -454,9 +493,9 @@ Service Mesh 是一个专门处理 <span class="underline">服务通讯</span> �
 </div>
 </div>
 
-<div id="outline-container-orgdc5ee1c" class="outline-4">
-<h4 id="orgdc5ee1c">总结</h4>
-<div class="outline-text-4" id="text-orgdc5ee1c">
+<div id="outline-container-orga18c122" class="outline-4">
+<h4 id="orga18c122">总结</h4>
+<div class="outline-text-4" id="text-orga18c122">
 <pre class="example">
 展望未来，Kubernetes 正在爆炸式发展，它已经成为企业应用的容器编排的首选
 
@@ -467,6 +506,452 @@ Service Mesh 是一个专门处理 <span class="underline">服务通讯</span> �
 </div>
 </div>
 </div>
+</div>
+
+<div id="outline-container-org4fc2efb" class="outline-2">
+<h2 id="org4fc2efb">istio 和 kubernates</h2>
+<div class="outline-text-2" id="text-org4fc2efb">
+<pre class="example">
+刚听说 Service Mesh 并试用过 Istio 的人可能都会有下面几个疑问：
+
+1. 为什么 Istio 要绑定 Kubernetes 呢？
+2. Kubernetes 和 Service Mesh 分别在云原生中扮演什么角色？
+3. Istio 扩展了 Kubernetes 的哪些方面？解决了哪些问题？
+4. Kubernetes、xDS 协议（Envoy、MOSN 等）与 Istio 之间又是什么关系？
+5. 到底该不该上 Service Mesh？
+
+
+接下来将试图带您梳理清楚 Kubernetes、xDS 协议以及 Istio Service Mesh 之间的内在联系。此外还将介绍 Kubernetes 中的负载均衡方式，xDS 协议对于 Service Mesh 的意义，为什么说即使有了 Kubernetes 还需要 Istio
+</pre>
+
+<p>
+使用 Service Mesh 并不是说与 Kubernetes 决裂，而是水到渠成的事情：
+</p>
+<ul class="org-ul">
+<li>Kubernetes 的本质是通过声明式配置对应用进行生命周期管理</li>
+<li>Service Mesh 的本质是提供应用间的流量和安全性管理以及可观察性</li>
+</ul>
+
+<pre class="example">
+假如你已经使用 Kubernetes 构建了稳定的微服务平台，那么如何设置服务间调用的负载均衡和流量控制？
+</pre>
+
+<p>
+Envoy 创造的 <span class="underline">xDS 协议</span> 被众多开源软件所支持，如 Istio、Linkerd、MOSN 等
+</p>
+
+<pre class="example">
+Envoy 对于 Service Mesh 或云原生来说最大的贡献就是定义了 xDS
+
+Envoy 本质上是一个 proxy，是可通过 API 配置的现代版 proxy，基于它衍生出来很多不同的使用场景，如 API Gateway、Service Mesh 中的 Sidecar proxy 和边缘代理 
+</pre>
+</div>
+
+
+<div id="outline-container-orgcacab0c" class="outline-3">
+<h3 id="orgcacab0c">Kubernetes vs Service Mesh</h3>
+<div class="outline-text-3" id="text-orgcacab0c">
+<p>
+下图展示的是 Kubernetes 与 Service Mesh 中的的服务访问关系（每个 pod 一个 sidecar 的模式）：
+</p>
+
+
+<div class="figure">
+<p><img src="./pic/kubernetes-vs-service-mesh.png" alt="kubernetes-vs-service-mesh.png" width="70%" /> 
+</p>
+</div>
+</div>
+
+<div id="outline-container-org98fcbac" class="outline-4">
+<h4 id="org98fcbac">流量转发</h4>
+<div class="outline-text-4" id="text-org98fcbac">
+<p>
+Kubernetes 集群的每个节点都部署了一个 <span class="underline">kube-proxy</span> 组件，该组件会与 <span class="underline">Kubernetes API Server</span> 通信，获取集群中的 service 信息，然后设置 <span class="underline">iptables 规则</span> ，直接将对某个 service 的请求发送到对应的 Endpoint（属于同一组 service 的 pod）上 
+</p>
+</div>
+</div>
+
+<div id="outline-container-org53f69be" class="outline-4">
+<h4 id="org53f69be">服务发现</h4>
+<div class="outline-text-4" id="text-org53f69be">
+<p>
+Istio Service Mesh 可以沿用 Kubernetes 中的 service 做服务注册，还可以通过控制平面的平台适配器对接其他服务发现系统，然后生成数据平面的配置（使用 CRD 声明，保存在 etcd 中）：
+</p>
+
+
+<div class="figure">
+<p><img src="./pic/istio-service-registry.png" alt="istio-service-registry.png" width="70%" /> 
+</p>
+</div>
+
+
+<p>
+数据平面的透明代理以 <span class="underline">sidecar 容器</span> 的形式 <b>部署</b> 在每个 <span class="underline">应用服务的 pod</span> 中：
+</p>
+<ul class="org-ul">
+<li>这些 proxy 都需要请求 <span class="underline">控制平面</span> 来 <b>同步</b> <span class="underline">代理配置</span></li>
+<li>透明代理，是因为应用程序容器完全无感知代理的存在</li>
+<li>该过程 kube-proxy 组件一样需要拦截流量：
+<ul class="org-ul">
+<li>现在kube-proxy 拦截的是进出 Kubernetes 节点的流量</li>
+<li>sidecar proxy 拦截的是进出该 Pod 的流量</li>
+</ul></li>
+</ul>
+</div>
+
+
+<div id="outline-container-org5601f06" class="outline-5">
+<h5 id="org5601f06">Service Mesh 的劣势</h5>
+<div class="outline-text-5" id="text-org5601f06">
+<p>
+因为 Kubernetes 每个节点上都会运行众多的 Pod，将原先 kube-proxy 方式的路由转发功能置于每个 pod 中，将导致大量的配置分发、同步和最终一致性问题
+</p>
+
+<pre class="example">
+为了细粒度地进行流量管理，必将添加一系列新的抽象，从而会进一步增加用户的学习成本，但随着技术的普及，这样的情况会慢慢地得到缓解
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orgaae2afe" class="outline-5">
+<h5 id="orgaae2afe">Service Mesh 的优势</h5>
+<div class="outline-text-5" id="text-orgaae2afe">
+<p>
+kube-proxy 的设置都是全局生效的，无法对每个服务做细粒度的控制，而 Service Mesh 通过 sidecar proxy 的方式将 Kubernetes 中对流量的控制从 service 一层抽离出来，可以做更多的扩展
+</p>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgf6ff999" class="outline-3">
+<h3 id="orgf6ff999">kube-proxy 组件</h3>
+<div class="outline-text-3" id="text-orgf6ff999">
+<p>
+在 Kubernetes 集群中，每个 Node 运行一个 kube-proxy 进程。kube-proxy 负责为 Service 实现了一种 VIP（虚拟 IP）的形式
+</p>
+
+<pre class="example">
+在 Kubernetes v1.0 版本，代理完全在 userspace 实现
+
+Kubernetes v1.1 版本新增了 iptables 代理模式，但并不是默认的运行模式
+
+从 Kubernetes v1.2 起，默认使用 iptables 代理
+
+在 Kubernetes v1.8.0-beta.0 中，添加了 ipvs 代理模式
+</pre>
+</div>
+
+
+<div id="outline-container-org88ec42e" class="outline-4">
+<h4 id="org88ec42e">kube-proxy 的缺陷</h4>
+<div class="outline-text-4" id="text-org88ec42e">
+<p>
+kube-proxy 的不足之处：
+</p>
+<ul class="org-ul">
+<li>如果转发的 pod 不能正常提供服务，它不会自动尝试另一个 pod，当然这个可以通过 liveness probes 来解决。每个 pod 都有一个健康检查的机制，当有 pod 健康状况有问题时，kube-proxy 会删除对应的转发规则</li>
+<li>nodePort 类型的服务也无法添加 TLS 或者更复杂的报文路由机制</li>
+</ul>
+
+<p>
+Kube-proxy 实现了流量在 Kubernetes service 多个 pod 实例间的负载均衡，但是如何对这些 service 间的流量做细粒度的控制，比如按照百分比划分流量到不同的应用版本
+</p>
+
+<pre class="example">
+如果这些应用都属于同一个 service，但位于不同的 deployment 上，怎么做金丝雀发布（灰度发布）和蓝绿发布?
+
+Kubernetes 社区给出了 使用 Deployment 做金丝雀发布的方法，该方法本质上就是通过修改 pod 的 label 来将不同的 pod 划归到 Deployment 的 Service 上
+</pre>
+</div>
+</div>
+</div>
+
+
+<div id="outline-container-orgd645ec5" class="outline-3">
+<h3 id="orgd645ec5">Kubernetes Ingress vs Istio Gateway</h3>
+<div class="outline-text-3" id="text-orgd645ec5">
+<pre class="example">
+kube-proxy 只能路由 Kubernetes 集群内部的流量，而Kubernetes 集群的 Pod 位于 CNI 创建的外网络中，集群外部是无法直接与其通信的
+</pre>
+
+<p>
+因此 Kubernetes 中创建了 ingress 这个资源对象，它由位于 Kubernetes 边缘节点的 Ingress controller 驱动，负责管理南北向流量：
+</p>
+<ul class="org-ul">
+<li>Ingress 必须对接各种 Ingress Controller 才能使用，比如 nginx ingress controller、traefik</li>
+<li>Ingress 只适用于 HTTP 流量，使用方式也很简单，只能对 service、port、HTTP 路径等有限字段匹配来路由流量
+<ul class="org-ul">
+<li>这导致它无法路由如 MySQL、Redis 和各种私有 RPC 等 TCP 流量</li>
+</ul></li>
+<li>要想直接路由南北向的流量，只能使用 Service 的 LoadBalancer 或 NodePort
+<ul class="org-ul">
+<li>前者需要云厂商支持</li>
+<li>后者需要进行额外的端口管理</li>
+</ul></li>
+<li>有些 Ingress controller 支持暴露 TCP 和 UDP 服务，但是只能使用 Service 来暴露，Ingress 本身是不支持的
+<ul class="org-ul">
+<li>例如 nginx ingress controller，服务暴露的端口是通过创建 ConfigMap 的方式来配置的</li>
+</ul></li>
+</ul>
+
+<p>
+Istio Gateway 的功能与 Kubernetes Ingress 类似，都是负责集群的南北向流量。Istio Gateway 描述的负载均衡器用于承载进出网格边缘的连接。该规范中描述了一系列开放端口和这些端口所使用的协议、负载均衡的 SNI 配置等内容
+</p>
+
+<pre class="example">
+Istio Gateway 是一种 CRD 扩展，它同时复用了 sidecar proxy 的能力
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orge731579" class="outline-3">
+<h3 id="orge731579">xDS 协议</h3>
+<div class="outline-text-3" id="text-orge731579">
+<p>
+xDS 协议是由 Envoy 提出的
+</p>
+
+<pre class="example">
+在 Envoy v2 版本 API 中最原始的 xDS 协议指的是 CDS（Cluster Discovery Service）、EDS（Endpoint Discovery service）、LDS（Listener Discovery Service） 和 RDS（Route Discovery Service）
+
+后来在 v3 版本中又发展出了 Scoped Route Discovery Service（SRDS）、Virtual Host Discovery Service （VHDS）、Secret Discovery Service（SDS）、Runtime Discovery Service（RTDS）
+</pre>
+
+
+<p>
+下面以各有两个实例的 service，来看下 xDS 协议：
+</p>
+
+
+<div class="figure">
+<p><img src="./pic/xds-protocol.png" alt="xds-protocol.png" width="70%" /> 
+</p>
+</div>
+
+<pre class="example">
+上图中的箭头不是流量进入 Proxy 后的路径或路由，也不是实际顺序，而是想象的一种 xDS 接口处理顺序，其实 xDS 之间也是有交叉引用的
+</pre>
+<p>
+支持 xDS 协议的代理通过 <span class="underline">查询文件</span> 或 <span class="underline">管理服务器</span> 来 <b>动态发现</b> 资源。概括地讲，对应的发现服务及其相应的 API 被称作 xDS。Envoy 通过 <span class="underline">订阅</span> 方式来获取资源，订阅方式有以下三种：
+</p>
+<ul class="org-ul">
+<li>文件订阅：监控指定路径下的文件，发现动态资源的最简单方式就是将其保存于文件，并将路径配置在 ConfigSource 中的 path 参数中</li>
+<li>gRPC 流式订阅：每个 xDS API 可以单独配置 ApiConfigSource，指向对应的上游管理服务器的集群地址</li>
+<li>轮询 REST-JSON 轮询订阅：单个 xDS API 可对 REST 端点进行的同步（长）轮询。</li>
+</ul>
+
+<pre class="example">
+以上的 xDS 订阅方式详情请参考 xDS 协议解析
+
+Istio 使用 gRPC 流式订阅的方式配置所有的数据平面的 sidecar proxy
+</pre>
+</div>
+
+<div id="outline-container-orgf4c4141" class="outline-4">
+<h4 id="orgf4c4141">xDS 协议要点</h4>
+<div class="outline-text-4" id="text-orgf4c4141">
+<ul class="org-ul">
+<li>CDS、EDS、LDS、RDS 是最基础的 xDS 协议，它们可以分别独立更新
+<ul class="org-ul">
+<li>CDS 设置 Service Mesh 中有哪些服务</li>
+<li>EDS 设置哪些实例（Endpoint）属于这些服务（Cluster）</li>
+<li>LDS 设置实例上监听的端口以配置路由</li>
+<li>RDS 最终服务间的路由关系，应该保证最后更新 RDS</li>
+</ul></li>
+<li>所有的发现服务（Discovery Service）可以连接不同的 Management Server，也就是说管理 xDS 的服务器可以是多个</li>
+<li>Envoy 在原始 xDS 协议的基础上进行了一些列扩充，增加了
+<ul class="org-ul">
+<li>SDS（秘钥发现服务）</li>
+<li>ADS（聚合发现服务）</li>
+<li>HDS（健康发现服务）</li>
+<li>MS（Metric 服务）</li>
+<li>RLS（速率限制服务）等</li>
+</ul></li>
+<li>为了保证数据一致性，若直接使用 xDS 原始 API 的话，需要保证这样的顺序更新：CDS &#x2013;&gt; EDS &#x2013;&gt; LDS &#x2013;&gt; RDS</li>
+</ul>
+
+<pre class="example">
+这是遵循电子工程中的先合后断（Make-Before-Break）原则，即在断开原来的连接之前先建立好新的连接
+
+应用在路由里就是为了防止设置了新的路由规则的时候却无法发现上游集群而导致流量被丢弃的情况，类似于电路里的断路
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org37b8a7a" class="outline-3">
+<h3 id="org37b8a7a">Envoy</h3>
+<div class="outline-text-3" id="text-org37b8a7a">
+<p>
+Envoy 是 Istio Service Mesh 中默认的 Sidecar，Istio 在 Enovy 的基础上按照 Envoy 的 xDS 协议扩展了其控制平面
+</p>
+
+
+<div class="figure">
+<p><img src="./pic/envoy-arch.png" alt="envoy-arch.png" width="70%" />  
+</p>
+</div>
+
+<p>
+在讲到 Envoy xDS 协议之前还需要先熟悉下 Envoy 的基本术语
+</p>
+</div>
+
+<div id="outline-container-orgc4f1634" class="outline-4">
+<h4 id="orgc4f1634">基本术语</h4>
+<div class="outline-text-4" id="text-orgc4f1634">
+<p>
+下面是应该了解的 Envoy 里的基本术语：
+</p>
+<ul class="org-ul">
+<li><span class="underline">Downstream</span> （下游）：下游主机连接到 Envoy，发送请求并接收响应，即发送请求的主机</li>
+<li><span class="underline">Upstream</span> （上游）：上游主机接收来自 Envoy 的连接和请求，并返回响应，即接受请求的主机</li>
+<li><span class="underline">Listener</span> （监听器）：监听器是命名网地址（例如，端口、unix domain socket 等)
+<ul class="org-ul">
+<li>下游客户端可以连接这些监听器。Envoy 暴露一个或者多个监听器给下游主机连接</li>
+</ul></li>
+<li><span class="underline">Cluster</span> （集群）：集群是指 Envoy 连接的一组逻辑相同的上游主机。Envoy 通过服务发现来发现集群的成员
+<ul class="org-ul">
+<li>可以选择通过主动健康检查来确定集群成员的健康状态</li>
+<li>通过负载均衡策略决定将请求路由到集群的哪个成员</li>
+</ul></li>
+</ul>
+
+<pre class="example">
+xDS 协议是由 Envoy 提出的，现在是 Istio 中默认的 sidecar proxy
+
+但只要实现 xDS 协议理论上都是可以作为 Istio 中的 sidecar proxy 的，例如蚂蚁金服开源的 MOSN
+</pre>
+
+<p>
+Envoy 中可以设置多个 Listener，每个 Listener 中又可以设置 filter chain（过滤器链表），而且过滤器是可扩展的，这样就可以更方便操作流量的行为，例如设置加密、私有 RPC 等
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgf073024" class="outline-3">
+<h3 id="orgf073024">Istio Service Mesh</h3>
+<div class="outline-text-3" id="text-orgf073024">
+
+<div class="figure">
+<p><img src="./pic/istio-mesh-arch.png" alt="istio-mesh-arch.png" width="70%" />  
+</p>
+</div>
+
+<p>
+Istio 是一个功能十分丰富的 Service Mesh，它包括如下功能：
+</p>
+<ul class="org-ul">
+<li>流量管理：这是 Istio 的最基本的功能</li>
+<li>策略控制：通过 Mixer 组件和各种适配器来实现，实现访问控制系统、遥测捕获、配额管理和计费等</li>
+<li>可观测性：通过 Mixer 来实现</li>
+<li>安全认证：Citadel 组件做密钥和证书管理</li>
+</ul>
+</div>
+
+<div id="outline-container-orgab7b797" class="outline-4">
+<h4 id="orgab7b797">Istio 中的流量管理</h4>
+<div class="outline-text-4" id="text-orgab7b797">
+<p>
+Istio 中定义了如下的 CRD 来帮助用户进行流量管理：
+</p>
+<ul class="org-ul">
+<li>Gateway：Gateway 描述了在网络边缘运行的负载均衡器，用于接收传入或传出的HTTP/TCP连接</li>
+<li>VirtualService：VirtualService 实际上将 Kubernetes 服务连接到 Istio Gateway。它还可以执行更多操作，例如定义一组流量路由规则，以便在主机被寻址时应用</li>
+<li>DestinationRule：DestinationRule 所定义的策略，决定了经过路由处理之后的流量的访问策略。简单的说就是定义流量如何路由。这些策略中可以定义负载均衡配置、连接池尺寸以及外部检测（用于在负载均衡池中对不健康主机进行识别和驱逐）配置</li>
+<li>EnvoyFilter：EnvoyFilter 对象描述了针对代理服务的过滤器，这些过滤器可以定制由 Istio Pilot 生成的代理配置。这个配置初级用户一般很少用到</li>
+<li>ServiceEntry：默认情况下 Istio Service Mesh 中的服务是无法发现 Mesh 外的服务的，ServiceEntry 能够在 Istio 内部的服务注册表中加入额外的条目，从而让网格中自动发现的服务能够访问和路由到这些手工加入的服务</li>
+</ul>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org56d49ad" class="outline-3">
+<h3 id="org56d49ad">Kubernetes vs xDS vs Istio</h3>
+<div class="outline-text-3" id="text-org56d49ad">
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 1:</span> 流量管理比较</caption>
+
+<colgroup>
+<col  class="org-left" />
+
+<col  class="org-left" />
+
+<col  class="org-left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="org-left">Kubernetes</td>
+<td class="org-left">xDS</td>
+<td class="org-left">Istio Service Mesh</td>
+</tr>
+
+<tr>
+<td class="org-left">Endpoint</td>
+<td class="org-left">Endpoint</td>
+<td class="org-left">-</td>
+</tr>
+
+<tr>
+<td class="org-left">Service</td>
+<td class="org-left">Route</td>
+<td class="org-left">VirtualService</td>
+</tr>
+
+<tr>
+<td class="org-left">kube-proxy</td>
+<td class="org-left">Route</td>
+<td class="org-left">DestinationRule</td>
+</tr>
+
+<tr>
+<td class="org-left">kube-proxy</td>
+<td class="org-left">Listener</td>
+<td class="org-left">EnvoyFilter</td>
+</tr>
+
+<tr>
+<td class="org-left">Ingress</td>
+<td class="org-left">Listener</td>
+<td class="org-left">Gateway</td>
+</tr>
+
+<tr>
+<td class="org-left">Service</td>
+<td class="org-left">Cluster</td>
+<td class="org-left">ServiceEntry</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+
+<div id="outline-container-org624051d" class="outline-3">
+<h3 id="org624051d">总结</h3>
+<div class="outline-text-3" id="text-org624051d">
+<ul class="org-ul">
+<li>Kubernetes 的本质是应用的生命周期管理，具体来说就是部署和管理（扩缩容、自动恢复、发布）
+<ul class="org-ul">
+<li>Kubernetes 为微服务提供了可扩展、高弹性的部署和管理平台</li>
+</ul></li>
+<li>Service Mesh 的基础是透明代理，通过 sidecar proxy 拦截到微服务间流量后再通过控制平面配置管理微服务的行为
+<ul class="org-ul">
+<li>Service Mesh 将流量管理从 Kubernetes 中解耦，Service Mesh 内部的流量无需 kube-proxy 组件的支持，通过为更接近微服务应用层的抽象，管理服务间的流量、安全性和可观察性</li>
+</ul></li>
+<li>xDS 定义了 Service Mesh 配置的协议标准</li>
+</ul>
+
+<pre class="example">
+Service Mesh 是对 Kubernetes 中的 service 更上层的抽象
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgc5e34e4" class="outline-2">
+<h2 id="orgc5e34e4">什么是 Istio</h2>
 </div>
 </div>
 <div id="postamble" class="status">
