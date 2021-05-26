@@ -245,8 +245,8 @@ for the JavaScript code in this tag.
 <li><a href="#org713f16d">核心组件</a>
 <ul>
 <li><a href="#org64af9f9">Envoy</a></li>
-<li><a href="#org14d9150">Pilot</a></li>
-<li><a href="#org458994f">Citadel</a></li>
+<li><a href="#org6e5fddb">Pilot</a></li>
+<li><a href="#org2cd246a">Citadel</a></li>
 <li><a href="#orgd3ac531">Galley</a></li>
 </ul>
 </li>
@@ -258,7 +258,7 @@ for the JavaScript code in this tag.
 </li>
 <li><a href="#orga3b983b">控制平面</a>
 <ul>
-<li><a href="#orgeaa9c4f">Pilot</a>
+<li><a href="#org4c9aecb">Pilot</a>
 <ul>
 <li><a href="#org61fea3a">Pilot 架构</a>
 <ul>
@@ -276,9 +276,22 @@ for the JavaScript code in this tag.
 </li>
 </ul>
 </li>
-<li><a href="#org782f26a">Citadel</a></li>
+<li><a href="#org92c3be4">Citadel</a>
+<ul>
+<li><a href="#orgd56f375">Citadel 基本功能</a></li>
+<li><a href="#org2f4595b">Citadel 工作原理</a>
+<ul>
+<li><a href="#org9d23bec">CA 服务器</a></li>
+<li><a href="#orgd05048e">SDS 服务器</a></li>
+<li><a href="#orga5f30a9">证书密钥控制器</a></li>
 </ul>
 </li>
+<li><a href="#org6d5f00a">小结</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#org883045b">数据平面</a></li>
 </ul>
 </div>
 </div>
@@ -349,18 +362,18 @@ Istio 的数据平面默认使用 Envoy 作为 <span class="underline">sidecar �
 </div>
 </div>
 
-<div id="outline-container-org14d9150" class="outline-5">
-<h5 id="org14d9150">Pilot</h5>
-<div class="outline-text-5" id="text-org14d9150">
+<div id="outline-container-org6e5fddb" class="outline-5">
+<h5 id="org6e5fddb">Pilot</h5>
+<div class="outline-text-5" id="text-org6e5fddb">
 <p>
 Pilot 组件的主要功能是将 <span class="underline">路由规则</span> 等配置信息转换为 sidecar 可以识别的信息，并下发给 <span class="underline">数据平面</span> 。可以把它简单的理解为是一个 <b>配置分发器</b> （dispatcher），并辅助 sidecar 完成流量控制相关的功能 
 </p>
 </div>
 </div>
 
-<div id="outline-container-org458994f" class="outline-5">
-<h5 id="org458994f">Citadel</h5>
-<div class="outline-text-5" id="text-org458994f">
+<div id="outline-container-org2cd246a" class="outline-5">
+<h5 id="org2cd246a">Citadel</h5>
+<div class="outline-text-5" id="text-org2cd246a">
 <p>
 Citadel 是 Istio 中专门负责 <b>安全</b> 的组件，内置有 <span class="underline">身份</span> 和 <span class="underline">证书</span> 管理功能，可以实现较为强大的授权和认证等操作 
 </p>
@@ -467,9 +480,9 @@ Mixer 组件就是在这一理念下诞生的，它被设计为一个插件模�
     目前的控制平面包括 Pilot、Galley、Citadel，接下来会一一介绍它们
 </pre>
 </div>
-<div id="outline-container-orgeaa9c4f" class="outline-3">
-<h3 id="orgeaa9c4f">Pilot</h3>
-<div class="outline-text-3" id="text-orgeaa9c4f">
+<div id="outline-container-org4c9aecb" class="outline-3">
+<h3 id="org4c9aecb">Pilot</h3>
+<div class="outline-text-3" id="text-org4c9aecb">
 <p>
 在应用从单体架构向微服务架构演进的过程中，微服务之间的服务发现、负载均衡、熔断、限流等服务治理需求是无法回避的问题。
 </p>
@@ -961,9 +974,164 @@ Pilot 中，目前实现了 ConfigStoreCache 的 controller 主要有以下五�
 </div>
 </div>
 
-<div id="outline-container-org782f26a" class="outline-3">
-<h3 id="org782f26a">Citadel</h3>
+<div id="outline-container-org92c3be4" class="outline-3">
+<h3 id="org92c3be4">Citadel</h3>
+<div class="outline-text-3" id="text-org92c3be4">
+<p>
+Citadel 是 Istio 中负责 <span class="underline">身份认证</span> 和 <span class="underline">证书管理</span> 的核心安全组件，1.5 版本之后取消了独立进程，作为一个模块被整合在 istiod 中
+</p>
 </div>
+
+<div id="outline-container-orgd56f375" class="outline-4">
+<h4 id="orgd56f375">Citadel 基本功能</h4>
+<div class="outline-text-4" id="text-orgd56f375">
+<p>
+总体来说，Istio 在安全架构方面主要包括以下内容：
+</p>
+<ul class="org-ul">
+<li><span class="underline">证书签发机构_（CA）负责 _密钥</span> 和 <span class="underline">证书</span> 管理</li>
+<li>API 服务器将 <span class="underline">安全配置</span> <b>分发</b> 给 <span class="underline">数据平面</span></li>
+<li>客户端、服务端通过代理 <span class="underline">安全通信</span></li>
+<li>Envoy 代理管理 <span class="underline">遥测</span> 和 <span class="underline">审计</span></li>
+</ul>
+
+<p>
+Istio 的 <span class="underline">身份标识模型</span> 使用一级服务标识来确定请求的来源，它可以灵活的标识终端用户、工作负载等。在平台层面，Istio 可以使用类似于 <span class="underline">服务名称</span> 来标识身份，或直接使用平台提供的服务标识
+</p>
+
+
+<pre class="example">
+      比如 Kubernetes 的 ServiceAccount，AWS IAM 用户、角色账户等
+</pre>
+
+<p>
+在身份和证书管理方面，Istio 使用 <span class="underline">X.509</span> 证书，并支持密钥和证书的 <span class="underline">自动轮换</span> 
+</p>
+
+<pre class="example">
+从 1.1 版本开始，Istio 开始支持 安全发现服务器（SDS）
+
+随着不断的完善和增强，1.5 版本 SDS 已经成为默认开启的组件
+
+Citadel 以前有两个功能：将证书以 Secret 的方式挂载到命名空间里；通过 SDS gRPC 接口与 nodeagent（已废弃）通信
+
+目前 Citadel 只需要完成与 SDS 相关的工作，其他功能被移动到了 istiod 中
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org2f4595b" class="outline-4">
+<h4 id="org2f4595b">Citadel 工作原理</h4>
+<div class="outline-text-4" id="text-org2f4595b">
+<p>
+Citadel 主要包括 <span class="underline">CA 服务器</span> 、 <span class="underline">SDS 服务器</span> 、 <span class="underline">证书密钥控制器</span> 等模块，它们的工作原理如下 
+</p>
+</div>
+
+
+<div id="outline-container-org9d23bec" class="outline-5">
+<h5 id="org9d23bec">CA 服务器</h5>
+<div class="outline-text-5" id="text-org9d23bec">
+<p>
+Citadel 中的 CA 签发机构是一个 <span class="underline">gRPC 服务器</span> ，启动时会注册两个 gRPC 服务：
+</p>
+<ul class="org-ul">
+<li>CA 服务，用来处理 <span class="underline">CSR 请求</span> （certificate signing request）</li>
+<li>证书服务，用来签发证书</li>
+</ul>
+
+<p>
+CA:
+</p>
+<ol class="org-ol">
+<li>通过 HandleCSR 接口处理来自客户端的 CSR 请求</li>
+<li>对客户端进行身份验证（包括 TLS 认证和 JWT 认证）</li>
+<li>验证成功后会调用 CreateCertificate 进行证书签发</li>
+</ol>
+</div>
+</div>
+
+<div id="outline-container-orgd05048e" class="outline-5">
+<h5 id="orgd05048e">SDS 服务器</h5>
+<div class="outline-text-5" id="text-orgd05048e">
+<p>
+SDS 即安全发现服务（Secret discovery service），它是一种在 <span class="underline">运行时</span> <b>动态获取</b> <span class="underline">证书私钥</span> 的 <span class="underline">API</span> ，Envoy 代理通过 SDS 动态获取证书私钥。Istio 中的 SDS 服务器负责 <span class="underline">证书管理</span> ，并实现了 <span class="underline">安全配置的自动化</span> 。相比传统的方式，使用 SDS 主要有以下优点：
+</p>
+<ul class="org-ul">
+<li>无需挂载 Secret 卷</li>
+<li>动态更新证书，无需重启</li>
+<li><p>
+可以监听多个证书密钥对
+</p>
+
+
+<div class="figure">
+<p><img src="./pic/identity-provision.png" alt="identity-provision.png" width="70%" /> 
+</p>
+</div></li>
+</ul>
+
+<p>
+目前的版本中，SDS 是默认开启的，它的工作流程如下：
+</p>
+<ol class="org-ol">
+<li>Envoy 通过 SDS API 发送证书和密钥请求</li>
+<li>istio-agent 作为 Envoy 的代理，创建一个私钥和证书签名请求（CSR），并发送给 istiod</li>
+<li>CA 机构验证收到的 CSR 并生成证书</li>
+<li>istio-agent 将私钥和从 istiod 收到的证书通过 SDS API 发送给 Envoy</li>
+</ol>
+
+<p>
+以上流程周期性执行实现密钥和证书轮换
+</p>
+</div>
+</div>
+
+<div id="outline-container-orga5f30a9" class="outline-5">
+<h5 id="orga5f30a9">证书密钥控制器</h5>
+<div class="outline-text-5" id="text-orga5f30a9">
+<p>
+证书密钥控制器 <span class="underline">CaSecretController</span> 监听 <span class="underline">istio.io/key-and-cert</span> 类型的 <span class="underline">Secret 资源</span> ，它会周期性的检查证书是否过期，并更新证书 
+</p>
+</div>
+
+<ul class="org-ul">
+<li><a id="org59b445a"></a>证书轮换<br />
+<div class="outline-text-6" id="text-org59b445a">
+<pre class="example">
+	如果没有自动证书轮换功能，当证书过期时，就不得不重启签发，并重启代理
+
+	证书轮换解决了这一问题，提高了服务的可用性
+</pre>
+<p>
+Istio 里通过一个 <span class="underline">轮换器</span> （Rotator）自动检查自签名的根证书，并在证书即将过期时进行更新，它本质上是一个协程（goroutine）在后台轮询实现的：
+</p>
+<ul class="org-ul">
+<li>获取当前证书，解析证书的有效期并获取下一次轮换时间</li>
+<li>启动定时器，如果发现证书到达轮换时间，从 CA 获取最新的证书密钥对</li>
+<li>更新证书</li>
+</ul>
+</div>
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-org6d5f00a" class="outline-4">
+<h4 id="org6d5f00a">小结</h4>
+<div class="outline-text-4" id="text-org6d5f00a">
+<pre class="example">
+      随着 1.5 版本新架构的发布，Citadel 从独立的进程变成了 istiod 中的一个模块，其功能也逐渐被弱化
+
+      目前主要和 istiod、istio-agent 协同工作，负责证书和密钥管理
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org883045b" class="outline-2">
+<h2 id="org883045b">数据平面</h2>
 </div>
 </div>
 <div id="postamble" class="status">
