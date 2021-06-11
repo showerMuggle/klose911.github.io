@@ -1814,6 +1814,431 @@ $ kubectl exec productpage-v1-6d8bc58dd7-ts8kw -c istio-proxy cat /etc/istio/pro
       + 最后一个对应到 PassthroughCluster，即当入向的请求没有找到对应的服务时，也会让其直接通过
 
 *** Bookinfo 端到端调用分析
+    #+BEGIN_EXAMPLE
+      通过前面对 Envoy 配置文件的分析，已经对 Envoy 上生成的各种配置数据的结构，包括 listener、cluster、route 和 endpoint 有了一定的了解
+
+      那么这些配置是如何有机地结合在一起，以对经过网格中的流量进行路由的呢？
+
+      下面通过 bookinfo 示例程序中一个端到端的调用请求把这些相关的配置串连起来，使用该完整的调用流程来帮助理解 Istio 控制平面的流量控制能力是如何在数据平面的 Envoy 上实现的
+    #+END_EXAMPLE
+
+    下图描述了 bookinfo 示例程序中 productpage 服务调用 reviews 服务的请求流程：
+    #+ATTR_HTML: image :width 50% 
+    [[./pic/envoy-traffic-route.jpg]] 
+
+    1. Productpage 发起对 reviews 服务的调用：http://reviews:9080/reviews/0
+    2. 请求被 productpage Pod 的 _iptable 规则_ *拦截* ，重定向到本地的 _15001_ 端口
+    3. 在 15001 端口上监听的 _VirtualOutbound listener_ 收到了该请求
+    4. 请求被 VirtualOutbound listener 根据原 _目标 IP_ （通配） 和 _端口_ （9080）转发到 _0.0.0.0_9080_ 这个 _Outbound Listener_ 
+       #+BEGIN_SRC js 
+      {
+	  "name": "virtualOutbound",
+	  "active_state": {
+	      "version_info": "2020-03-11T08:13:39Z/22",
+	      "listener": {
+		  "@type": "type.googleapis.com/envoy.api.v2.Listener",
+		  "name": "virtualOutbound",
+		  "address": {
+		      "socket_address": {
+			  "address": "0.0.0.0",
+			  "port_value": 15001
+		      }
+		  },
+		  ......
+
+		  "use_original_dst": true,
+		  "traffic_direction": "OUTBOUND"
+	      },
+	      "last_updated": "2020-03-11T08:14:04.929Z"
+	  }
+       #+END_SRC
+    5. 根据 0.0.0.0_9080 listener 的 _http_connection_manager filter_ 配置，该请求采用 _9080_ *route* 进行分发：
+       #+BEGIN_SRC js
+	 {
+	     "name": "0.0.0.0_9080",
+	     "active_state": {
+		 "version_info": "2020-03-11T08:13:39Z/22",
+		 "listener": {
+		     "@type": "type.googleapis.com/envoy.api.v2.Listener",
+		     "name": "0.0.0.0_9080",
+		     "address": {
+			 "socket_address": {
+			     "address": "0.0.0.0",
+			     "port_value": 9080
+			 }
+		     },
+		     "filter_chains": [
+			 ......
+			     {
+				 "filters": [
+				     {
+					 "name": "envoy.http_connection_manager",
+					 "typed_config": {
+					     "@type": "type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2.HttpConnectionManager",
+					     "stat_prefix": "outbound_0.0.0.0_9080",
+					     "rds": {
+						 "config_source": {
+						     "ads": {}
+						 },
+						 "route_config_name": "9080"
+					     },
+					     "http_filters": [
+						 {
+						     "name": "envoy.filters.http.wasm",
+						     ......
+						 },
+						 {
+						     "name": "istio.alpn",
+						     ......
+						 },
+						 {
+						     "name": "envoy.cors"
+						 },
+						 {
+						     "name": "envoy.fault"
+						 },
+						 {
+						     "name": "envoy.filters.http.wasm",
+						     ......
+						 },
+						 {
+						     "name": "envoy.router"
+						 }
+					     ],
+					     "tracing": {
+						 "client_sampling": {
+						     "value": 100
+						 },
+						 "random_sampling": {
+						     "value": 100
+						 },
+						 "overall_sampling": {
+						     "value": 100
+						 }
+					     },
+					     ......           
+					 }
+				     }
+				 ]
+			     }
+		     ],
+		     "deprecated_v1": {
+			 "bind_to_port": false
+		     },
+		     "traffic_direction": "OUTBOUND"
+		 },
+		 "last_updated": "2020-03-11T08:14:04.927Z"
+	     }
+	 },
+       #+END_SRC
+    6. 9080 这个 route 的配置中，host name 为 _reviews:9080_ 的请求对应的 *cluster* 为 _outbound|9080||reviews.default.svc.cluster.local_ : 
+       #+BEGIN_SRC js 
+	 {
+	     "version_info": "2020-03-11T08:13:39Z/22",
+	     "route_config": {
+		 "@type": "type.googleapis.com/envoy.api.v2.RouteConfiguration",
+		 "name": "9080",
+		 "virtual_hosts": [
+		     ......
+			 "name": "ratings.default.svc.cluster.local:9080",
+		     "domains": [
+			 "ratings.default.svc.cluster.local",
+			 "ratings.default.svc.cluster.local:9080",
+			 "ratings",
+			 "ratings:9080",
+			 "ratings.default.svc.cluster",
+			 "ratings.default.svc.cluster:9080",
+			 "ratings.default.svc",
+			 "ratings.default.svc:9080",
+			 "ratings.default",
+			 "ratings.default:9080",
+			 "10.102.90.243",
+			 "10.102.90.243:9080"
+		     ],
+		     "routes": [
+			 {
+			     "match": {
+				 "prefix": "/"
+			     },
+			     "route": {
+				 "cluster": "outbound|9080||ratings.default.svc.cluster.local",
+				 "timeout": "0s",
+				 "retry_policy": {
+				     "retry_on": "connect-failure,refused-stream,unavailable,cancelled,resource-exhausted,retriable-status-codes",
+				     "num_retries": 2,
+				     "retry_host_predicate": [
+					 {
+					     "name": "envoy.retry_host_predicates.previous_hosts"
+					 }
+				     ],
+				     "host_selection_retry_max_attempts": "5",
+				     "retriable_status_codes": [
+					 503
+				     ]
+				 },
+				 "max_grpc_timeout": "0s"
+			     },
+			     "decorator": {
+				 "operation": "ratings.default.svc.cluster.local:9080/*"
+			     },
+			     "name": "default"
+			 }
+		     ]
+		 },
+		 {
+		     "name": "reviews.default.svc.cluster.local:9080",
+		     "domains": [
+			 "reviews.default.svc.cluster.local",
+			 "reviews.default.svc.cluster.local:9080",
+			 "reviews",
+			 "reviews:9080",
+			 "reviews.default.svc.cluster",
+			 "reviews.default.svc.cluster:9080",
+			 "reviews.default.svc",
+			 "reviews.default.svc:9080",
+			 "reviews.default",
+			 "reviews.default:9080",
+			 "10.107.156.4",
+			 "10.107.156.4:9080"
+		     ],
+		     "routes": [
+			 {
+			     "match": {
+				 "prefix": "/"
+			     },
+			     "route": {
+				 "cluster": "outbound|9080||reviews.default.svc.cluster.local",
+				 "timeout": "0s",
+				 "retry_policy": {
+				     "retry_on": "connect-failure,refused-stream,unavailable,cancelled,resource-exhausted,retriable-status-codes",
+				     "num_retries": 2,
+				     "retry_host_predicate": [
+					 {
+					     "name": "envoy.retry_host_predicates.previous_hosts"
+					 }
+				     ],
+				     "host_selection_retry_max_attempts": "5",
+				     "retriable_status_codes": [
+					 503
+				     ]
+				 },
+				 "max_grpc_timeout": "0s"
+			     },
+			     "decorator": {
+				 "operation": "reviews.default.svc.cluster.local:9080/*"
+			     },
+			     "name": "default"
+			 }
+		     ]
+		 }
+	     ],
+	     "validate_clusters": false
+	 },
+	 "last_updated": "2020-03-11T08:14:04.971Z"
+	 }
+       #+END_SRC
+    7. _outbound|9080||reviews.default.svc.cluster.local_ cluster 为 *动态资源* ，通过 _EDS 查询_ 得到该 cluster 中有3个 _endpoint_ :
+       #+BEGIN_SRC js 
+	 {
+	     "clusterName": "outbound|9080||reviews.default.svc.cluster.local",
+	     "endpoints": [
+		 {
+		     "lbEndpoints": [
+			 {
+			     "endpoint": {
+				 "address": {
+				     "socketAddress": {
+					 "address": "10.40.0.15",
+					 "portValue": 9080
+				     }
+				 }
+			     },
+			     "metadata": {},
+			     "loadBalancingWeight": 1
+			 },
+			 {
+			     "endpoint": {
+				 "address": {
+				     "socketAddress": {
+					 "address": "10.40.0.16",
+					 "portValue": 9080
+				     }
+				 }
+			     },
+			     "metadata": {},
+			     "loadBalancingWeight": 1
+			 },
+			 {
+			     "endpoint": {
+				 "address": {
+				     "socketAddress": {
+					 "address": "10.40.0.17",
+					 "portValue": 9080
+				     }
+				 }
+			     },
+			     "metadata": {},
+			     "loadBalancingWeight": 1
+			 }
+		     ],
+		     "loadBalancingWeight": 3
+		 }
+	     ]
+	 }
+       #+END_SRC
+    8. 请求被转发到其中一个 *endpoint* _10.40.0.15_ ，即 reviews-v1 所在的 Pod
+    9. 该请求被 _iptable 规则_ *拦截* ，重定向到本地的 _15006_ 端口
+    10. 在 15006 端口上监听的 _VirtualInbound listener_ 收到了该请求
+    11. 根据匹配条件，请求被 VirtualInbound listener 内部配置的 Http connection manager filter 处理，该 filter 设置的路由配置为将其发送给 _inbound|9080|http|reviews.default.svc.cluster.local_ 这个 _Inbound Cluster_ :
+	#+BEGIN_SRC js 
+	  {
+	      "name": "virtualInbound",
+	      "active_state": {
+		  "version_info": "2020-03-11T08:13:14Z/21",
+		  "listener": {
+		      "@type": "type.googleapis.com/envoy.api.v2.Listener",
+		      "name": "virtualInbound",
+		      "address": {
+			  "socket_address": {
+			      "address": "0.0.0.0",
+			      "port_value": 15006
+			  }
+		      },
+		      "filter_chains": [
+			  {
+			      "filter_chain_match": {
+				  "prefix_ranges": [
+				      {
+					  "address_prefix": "10.40.0.15",
+					  "prefix_len": 32
+				      }
+				  ],
+				  "destination_port": 9080,
+				  "application_protocols": [
+				      "istio-peer-exchange",
+				      "istio",
+				      "istio-http/1.0",
+				      "istio-http/1.1",
+				      "istio-h2"
+				  ]
+			      },
+			      "filters": [
+				  {
+				      "name": "envoy.filters.network.metadata_exchange",
+				      "config": {
+					  "protocol": "istio-peer-exchange"
+				      }
+				  },
+				  {
+				      "name": "envoy.http_connection_manager",
+				      "typed_config": {
+					  "@type": "type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2.HttpConnectionManager",
+					  "stat_prefix": "inbound_10.40.0.15_9080",
+					  "route_config": {
+					      "name": "inbound|9080|http|reviews.default.svc.cluster.local",
+					      "virtual_hosts": [
+						  {
+						      "name": "inbound|http|9080",
+						      "domains": [
+							  "*"
+						      ],
+						      "routes": [
+							  {
+							      "match": {
+								  "prefix": "/"
+							      },
+							      "route": {
+								  "cluster": "inbound|9080|http|reviews.default.svc.cluster.local",
+								  "timeout": "0s",
+								  "max_grpc_timeout": "0s"
+							      },
+							      "decorator": {
+								  "operation": "reviews.default.svc.cluster.local:9080/*"
+							      },
+							      "name": "default"
+							  }
+						      ]
+						  }
+					      ],
+					      "validate_clusters": false
+					  },
+					  "http_filters": [
+					      {
+						  "name": "envoy.filters.http.wasm",
+						  ......
+					      },
+					      {
+						  "name": "istio_authn",
+						  ......
+					      },
+					      {
+						  "name": "envoy.cors"
+					      },
+					      {
+						  "name": "envoy.fault"
+					      },
+					      {
+						  "name": "envoy.filters.http.wasm",
+						  ......
+					      },
+					      {
+						  "name": "envoy.router"
+					      }
+					  ],
+					  ......
+				      }
+				  }
+			      ],
+			      "metadata": {...},
+			      "transport_socket": {...}
+			  ],
+			  ......
+		      }
+		  }
+	#+END_SRC
+    12. _inbound|9080|http|reviews.default.svc.cluster.local_ cluster 配置的 *host* 为 _127.0.0.1:9080_ :
+	#+BEGIN_SRC js 
+	  {
+	      "version_info": "2020-03-11T08:13:14Z/21",
+	      "cluster": {
+		  "@type": "type.googleapis.com/envoy.api.v2.Cluster",
+		  "name": "inbound|9080|http|reviews.default.svc.cluster.local",
+		  "type": "STATIC",
+		  "connect_timeout": "1s",
+		  "circuit_breakers": {
+		      "thresholds": [
+			  {
+			      "max_connections": 4294967295,
+			      "max_pending_requests": 4294967295,
+			      "max_requests": 4294967295,
+			      "max_retries": 4294967295
+			  }
+		      ]
+		  },
+		  "load_assignment": {
+		      "cluster_name": "inbound|9080|http|reviews.default.svc.cluster.local",
+		      "endpoints": [
+			  {
+			      "lb_endpoints": [
+				  {
+				      "endpoint": {
+					  "address": {
+					      "socket_address": {
+						  "address": "127.0.0.1",
+						  "port_value": 9080
+					      }
+					  }
+				      }
+				  }
+			      ]
+			  }
+		      ]
+		  }
+	      },
+	      "last_updated": "2020-03-11T08:13:39.118Z"
+	  }
+	#+END_SRC
+    13. 请求被转发到 127.0.0.1:9080，即 _reviews v1 服务_ 进行业务处理 
 
 ** Envoy
    #+BEGIN_EXAMPLE
