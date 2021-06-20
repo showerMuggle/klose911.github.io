@@ -250,7 +250,35 @@ for the JavaScript code in this tag.
 </li>
 </ul>
 </li>
-<li><a href="#org3ea3754">CNI</a></li>
+<li><a href="#org3ea3754">CNI</a>
+<ul>
+<li><a href="#org285b839">接口定义</a></li>
+<li><a href="#org54f082b">设计考量</a></li>
+<li><a href="#orgc411086">CNI 插件</a>
+<ul>
+<li><a href="#orgf5041b4">操作</a>
+<ul>
+<li><a href="#orgf37ff86">将容器添加到网络</a></li>
+<li><a href="#orgc4619e0">从网络中删除容器</a></li>
+<li><a href="#org72a66f6">报告版本</a></li>
+</ul>
+</li>
+<li><a href="#org72ccabb">IP 分配</a>
+<ul>
+<li><a href="#orgee98176">IPAM 插件</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#org2e00f5f">可用插件</a>
+<ul>
+<li><a href="#org2144a9c">Main：接口创建</a></li>
+<li><a href="#org5c42e1a">IPAM</a></li>
+<li><a href="#org6cc2135">其他</a></li>
+</ul>
+</li>
+</ul>
+</li>
 <li><a href="#orgbb0ecde">CSI</a></li>
 </ul>
 </div>
@@ -469,7 +497,263 @@ CRI-O是Kubernetes的CRI标准的实现，并且允许Kubernetes间接使用OCI�
 
 <div id="outline-container-org3ea3754" class="outline-2">
 <h2 id="org3ea3754">CNI</h2>
+<div class="outline-text-2" id="text-org3ea3754">
+<p>
+CNI（Container Network Interface）是 CNCF 旗下的一个项目，由一组用于配置 Linux 容器的 <b>网络接口</b> 的 <span class="underline">规范</span> 和 <span class="underline">库</span> 组成，同时还包含了一些 <span class="underline">插件</span> 。CNI 仅关心容器创建时的网络分配，和当容器被删除时释放网络资源
+</p>
+
+<pre class="example">
+Kubernetes 源码的 vendor/github.com/containernetworking/cni/libcni 目录中已经包含了 CNI 的代码，也就是说 kubernetes 中已经内置了 CNI
+</pre>
 </div>
+
+<div id="outline-container-org285b839" class="outline-3">
+<h3 id="org285b839">接口定义</h3>
+<div class="outline-text-3" id="text-org285b839">
+<p>
+CNI 的接口中包括以下几个方法：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-go"><span style="color: #00bfff; font-weight: bold;">type</span> <span style="color: #98f5ff;">CNI</span> <span style="color: #00bfff; font-weight: bold;">interface</span> {
+        <span style="color: #daa520; font-weight: bold;">AddNetworkList</span> (net *<span style="color: #98f5ff;">NetworkConfigList</span>, rt *<span style="color: #98f5ff;">RuntimeConf</span>) (<span style="color: #98f5ff;">types.Result</span>, <span style="color: #98f5ff;">error</span>)
+        <span style="color: #daa520; font-weight: bold;">DelNetworkList</span> (net *<span style="color: #98f5ff;">NetworkConfigList</span>, rt *<span style="color: #98f5ff;">RuntimeConf</span>) <span style="color: #98f5ff;">error</span>
+        <span style="color: #daa520; font-weight: bold;">AddNetwork</span> (net *<span style="color: #98f5ff;">NetworkConfig</span>, rt *<span style="color: #98f5ff;">RuntimeConf</span>) (<span style="color: #98f5ff;">types.Result</span>, <span style="color: #98f5ff;">error</span>)
+        <span style="color: #daa520; font-weight: bold;">DelNetwork</span> (net *<span style="color: #98f5ff;">NetworkConfig</span>, rt *<span style="color: #98f5ff;">RuntimeConf</span>) <span style="color: #98f5ff;">error</span>
+}
+</pre>
+</div>
+
+<p>
+该接口只有四个方法：
+</p>
+<ul class="org-ul">
+<li>添加网络</li>
+<li>删除网络</li>
+<li>添加网络列表</li>
+<li>删除网络列表</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-org54f082b" class="outline-3">
+<h3 id="org54f082b">设计考量</h3>
+<div class="outline-text-3" id="text-org54f082b">
+<p>
+CNI 设计的时候考虑了以下问题：
+</p>
+<ul class="org-ul">
+<li>容器运行时必须在调用任何插件之前为容器创建一个 <span class="underline">新的网络命名空间</span></li>
+<li>然后，运行时必须确定这个容器应属于哪个网络，并为每个网络确定 <span class="underline">哪些插件必须被执行</span></li>
+<li>网络配置采用 <span class="underline">JSON</span> 格式，可以很容易地存储在文件中
+<ul class="org-ul">
+<li>网络配置包括必填字段，如 name 和 type 以及插件（类型）</li>
+<li>网络配置允许字段在调用之间改变值。为此，有一个可选的字段 args，必须包含不同的信息</li>
+</ul></li>
+<li>容器运行时必须按 <b>顺序</b> 为每个网络执行相应的插件，将容器添加到每个网络中</li>
+<li>在完成容器生命周期后，运行时必须以 <b>相反的顺序</b> 执行插件（相对于执行添加容器的顺序）以将容器与网络断开连接</li>
+<li>容器运行时不能为同一容器调用并行操作，但可以为不同的容器调用并行操作</li>
+<li><p>
+容器运行时必须为容器订阅 ADD 和 DEL 操作，这样 ADD 后面总是跟着相应的 DEL
+</p>
+<pre class="example">
+DEL 可能跟着额外的 DEL，但是，插件应该允许处理多个 DEL（即插件 DEL 应该是幂等的）
+</pre></li>
+<li>容器必须由 <span class="underline">ContainerID</span> 唯一标识。存储状态的插件应该使用（ <span class="underline">网络名称，容器 ID</span> ）的主键来完成</li>
+<li><p>
+运行时不能调用同一个网络名称或容器 ID 执行两次 ADD（没有相应的 DEL）
+</p>
+<pre class="example">
+     换句话说，给定的容器 ID 必须只能添加到特定的网络一次
+</pre></li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-orgc411086" class="outline-3">
+<h3 id="orgc411086">CNI 插件</h3>
+<div class="outline-text-3" id="text-orgc411086">
+<p>
+CNI 插件必须实现一个 <span class="underline">可执行文件</span> ，这个文件可以被容器管理系统（例如 rkt 或 Kubernetes）调用。CNI 插件负责：
+</p>
+<ol class="org-ol">
+<li><p>
+将网络接口插入容器网络命名空间
+</p>
+<pre class="example">
+      例如，veth 对的一端
+</pre></li>
+<li><p>
+在主机上进行任何必要的改变
+</p>
+<pre class="example">
+      例如将 veth 的另一端连接到网桥
+</pre></li>
+<li>将 IP 分配给接口</li>
+<li>通过调用适当的 IPAM 插件来设置与 “IP 地址管理” 部分一致的路由</li>
+</ol>
+</div>
+
+
+<div id="outline-container-orgf5041b4" class="outline-4">
+<h4 id="orgf5041b4">操作</h4>
+<div class="outline-text-4" id="text-orgf5041b4">
+<p>
+CNI 插件必须支持以下操作 
+</p>
+</div>
+
+<div id="outline-container-orgf37ff86" class="outline-5">
+<h5 id="orgf37ff86">将容器添加到网络</h5>
+<div class="outline-text-5" id="text-orgf37ff86">
+<p>
+参数：
+</p>
+<ul class="org-ul">
+<li>版本：调用者正在使用的 CNI 规范（容器管理系统或调用插件）的版本</li>
+<li>容器 ID：由运行时分配的容器的唯一明文标识符。一定不能是空的</li>
+<li><p>
+网络命名空间路径：要添加的网络名称空间的路径
+</p>
+<pre class="example">
+       即 /proc/[pid]/ns/net 或绑定挂载 / 链接
+</pre></li>
+<li>网络配置：描述容器可以加入的网络的 JSON 文档</li>
+<li>额外的参数：这提供了一个替代机制，允许在每个容器上简单配置 CNI 插件</li>
+<li>容器内接口的名称：这是应该分配给容器（网络命名空间）内创建的接口的名称，因此它必须符合 Linux 接口名称上的标准限制　</li>
+</ul>
+
+<p>
+结果：
+</p>
+<ul class="org-ul">
+<li>接口列表：根据插件的不同，这可以包括沙箱（例如容器或管理程序）接口名称和 / 或主机接口名称，每个接口的硬件地址以及接口所在的沙箱（如果有的话）的详细信息</li>
+<li>分配给每个接口的 IP 配置：分配给沙箱和 / 或主机接口的 IPv4 和 / 或 IPv6 地址，网关和路由</li>
+<li>DNS 信息：包含 nameserver、domain、search domain 和 option 的 DNS 信息的字典</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-orgc4619e0" class="outline-5">
+<h5 id="orgc4619e0">从网络中删除容器</h5>
+<div class="outline-text-5" id="text-orgc4619e0">
+<p>
+参数：
+</p>
+<ul class="org-ul">
+<li>版本调用者：正在使用的 CNI 规范（容器管理系统或调用插件）的版本</li>
+<li>容器 ID</li>
+<li>网络命名空间路径</li>
+<li>网络配置</li>
+<li>额外的参数</li>
+<li>上面定义的容器内的接口的名称。</li>
+</ul>
+
+<pre class="example">
+       所有参数应与传递给相应的添加操作的参数相同
+
+       删除操作应释放配置的网络中提供的 containerid 拥有的所有资源
+</pre>
+</div>
+</div>
+<div id="outline-container-org72a66f6" class="outline-5">
+<h5 id="org72a66f6">报告版本</h5>
+<div class="outline-text-5" id="text-org72a66f6">
+<p>
+参数：无
+</p>
+
+<p>
+结果：插件支持的 CNI 规范版本信息 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-js">{&#8220;cniVersion&#8221;&#65306;&#8220;0.3.1&#8221;&#65292;<span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#27492;&#36755;&#20986;&#20351;&#29992;&#30340; CNI &#35268;&#33539;&#30340;&#29256;&#26412;</span>
+ &#8220;supportedVersions&#8221;&#65306;[&#8220;0.1.0&#8221;&#65292;&#8220;0.2.0&#8221;&#65292;&#8220;0.3.0&#8221;&#65292;&#8220;0.3.1&#8221;] <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#27492;&#25554;&#20214;&#25903;&#25345;&#30340; CNI &#35268;&#33539;&#29256;&#26412;&#21015;&#34920;</span>
+}
+</pre>
+</div>
+</div>
+</div>
+</div>
+<div id="outline-container-org72ccabb" class="outline-4">
+<h4 id="org72ccabb">IP 分配</h4>
+<div class="outline-text-4" id="text-org72ccabb">
+<pre class="example">
+      作为容器网络管理的一部分，CNI 插件需要为接口分配（并维护）IP 地址，并安装与该接口相关的所有必要路由
+
+      这给了 CNI 插件很大的灵活性，但也给它带来了很大的负担
+
+      众多的 CNI 插件需要编写相同的代码来支持用户需要的多种 IP 管理方案（例如 dhcp、host-local）
+</pre>
+<p>
+为了减轻负担，使 IP 管理策略与 CNI 插件类型解耦，定义了 <span class="underline">IP 地址管理插件</span> （IPAM 插件）
+</p>
+
+<pre class="example">
+CNI 插件的职责是在执行时恰当地调用 IPAM 插件
+</pre>
+</div>
+
+<div id="outline-container-orgee98176" class="outline-5">
+<h5 id="orgee98176">IPAM 插件</h5>
+<div class="outline-text-5" id="text-orgee98176">
+<pre class="example">
+像 CNI 插件一样，调用 IPAM 插件的可执行文件，可执行文件位于预定义的路径列表中，通过 CNI_PATH 指示给 CNI 插件
+
+IPAM 插件必须接收所有传入 CNI 插件的相同环境变量。就像 CNI 插件一样，IPAM 插件通过 stdin 接收网络配置
+</pre>
+
+<ul class="org-ul">
+<li>IPAM 插件必须确定接口 IP/subnet，网关和路由，并将此信息返回到 “主” 插件来应用配置</li>
+<li>IPAM 插件可以通过协议（例如 dhcp）、存储在本地文件系统上的数据、网络配置文件的 “ipam” 部分或上述的组合来获得信息</li>
+</ul>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org2e00f5f" class="outline-3">
+<h3 id="org2e00f5f">可用插件</h3>
+<div class="outline-text-3" id="text-org2e00f5f">
+</div>
+<div id="outline-container-org2144a9c" class="outline-4">
+<h4 id="org2144a9c">Main：接口创建</h4>
+<div class="outline-text-4" id="text-org2144a9c">
+<ul class="org-ul">
+<li>bridge：创建网桥，并添加主机和容器到该网桥</li>
+<li>ipvlan：在容器中添加一个 ipvlan 接口</li>
+<li>loopback：创建一个回环接口</li>
+<li>macvlan：创建一个新的 MAC 地址，将所有的流量转发到容器</li>
+<li>ptp：创建 veth 对</li>
+<li>vlan：分配一个 vlan 设备</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-org5c42e1a" class="outline-4">
+<h4 id="org5c42e1a">IPAM</h4>
+<div class="outline-text-4" id="text-org5c42e1a">
+<ul class="org-ul">
+<li>dhcp：在主机上运行守护程序，代表容器发出 DHCP 请求</li>
+<li>host-local：维护分配 IP 的本地数据库</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-org6cc2135" class="outline-4">
+<h4 id="org6cc2135">其他</h4>
+<div class="outline-text-4" id="text-org6cc2135">
+<ul class="org-ul">
+<li>flannel：根据 flannel 的配置文件创建接口</li>
+<li>tuning：调整现有接口的 sysctl 参数</li>
+<li>portmap：一个基于 iptables 的 portmapping 插件。将端口从主机的地址空间映射到容器</li>
+</ul>
+</div>
+</div>
+</div>
+</div>
+
 
 <div id="outline-container-orgbb0ecde" class="outline-2">
 <h2 id="orgbb0ecde">CSI</h2>
