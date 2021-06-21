@@ -234,7 +234,70 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="network.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">Flannel 插件</h1>
+<p>
+当初使用kubernetes-vagrant-centos-cluster安装了拥有三个节点的kubernetes集群，节点的状态如下所述：
+</p>
 
+<div class="org-src-container">
+<pre class="src src-sh">[root@node1 ~]# kubectl get nodes -o wide
+NAME      STATUS    ROLES     AGE       VERSION   EXTERNAL-IP   OS-IMAGE                KERNEL-VERSION               CONTAINER-RUNTIME
+node1     Ready     &lt;none&gt;    2d        v1.9.1    &lt;none&gt;        CentOS Linux 7 (Core)   3.10.0-693.11.6.el7.x86_64   docker://1.12.6
+node2     Ready     &lt;none&gt;    2d        v1.9.1    &lt;none&gt;        CentOS Linux 7 (Core)   3.10.0-693.11.6.el7.x86_64   docker://1.12.6
+node3     Ready     &lt;none&gt;    2d        v1.9.1    &lt;none&gt;        CentOS Linux 7 (Core)   3.10.0-693.11.6.el7.x86_64   docker://1.12.6
+</pre>
+</div>
+
+<p>
+当前Kubernetes集群中运行的所有Pod信息：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">[root@node1 ~]# kubectl get pods --all-namespaces -o wide
+NAMESPACE     NAME                                              READY     STATUS    RESTARTS   AGE       IP            NODE
+kube-system   coredns-5984fb8cbb-sjqv9                          1/1       Running   0          1h        172.33.68.2   node1
+kube-system   coredns-5984fb8cbb-tkfrc                          1/1       Running   1          1h        172.33.96.3   node3
+kube-system   heapster-v1.5.0-684c7f9488-z6sdz                  4/4       Running   0          1h        172.33.31.3   node2
+kube-system   kubernetes-dashboard-6b66b8b96c-mnm2c             1/1       Running   0          1h        172.33.31.2   node2
+kube-system   monitoring-influxdb-grafana-v4-54b7854697-tw9cd   2/2       Running   2          1h        
+</pre>
+</div>
+
+<p>
+当前etcd中的注册的宿主机的pod地址网段信息：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">[root@node1 ~]# etcdctl ls /kube-centos/network/subnets
+/kube-centos/network/subnets/172.33.68.0-24
+/kube-centos/network/subnets/172.33.31.0-24
+/kube-centos/network/subnets/172.33.96.0-24
+</pre>
+</div>
+
+<p>
+而每个node上的Pod子网是根据在安装flannel时配置来划分的，在etcd中查看该配置：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">[root@node1 ~]# etcdctl get /kube-centos/network/config
+{<span style="color: #ffa07a;">"Network"</span>:<span style="color: #ffa07a;">"172.33.0.0/16"</span>,<span style="color: #ffa07a;">"SubnetLen"</span>:24,<span style="color: #ffa07a;">"Backend"</span>:{<span style="color: #ffa07a;">"Type"</span>:<span style="color: #ffa07a;">"host-gw"</span>}}
+</pre>
+</div>
+
+<p>
+Kubernetes集群内部存在三类IP，分别是：
+</p>
+<ul class="org-ul">
+<li><span class="underline">Node</span> IP： <b>宿主机</b> 的IP地址</li>
+<li><span class="underline">Pod</span> IP：使用 <b>网络插件</b> 创建的IP（如flannel），使 <span class="underline">跨主机的Pod</span> 可以互通</li>
+<li><span class="underline">Cluster</span> IP： <b>虚拟</b> IP，通过 <span class="underline">iptables规则</span> 访问服务</li>
+</ul>
+
+<pre class="example">
+  在安装node节点的时候，节点上的进程是按照flannel -&gt; docker -&gt; kubelet -&gt; kube-proxy的顺序启动的
+
+  下面也会按照该顺序来讲解，flannel的网络划分和如何与docker交互，如何通过iptables访问service
+</pre>
 </div>
 <div id="postamble" class="status">
 
