@@ -234,6 +234,120 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="network.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">Calico 插件</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#orgc17e156">概念</a></li>
+<li><a href="#orga03caf6">架构</a></li>
+<li><a href="#org1ad8efd">部署</a></li>
+</ul>
+</div>
+</div>
+<pre class="example">
+Calico 原意为”有斑点的“，如果说一只猫为 calico cat 的话，就是说这是只花猫，也叫三色猫，所以 calico 的 logo 是只三色猫
+</pre>
+
+
+<div class="figure">
+<p><img src="../../pic/006tNc79gy1fz65bt7ieej30c90bsgn2.jpg" alt="006tNc79gy1fz65bt7ieej30c90bsgn2.jpg" width="20%" />
+</p>
+</div>
+
+<div id="outline-container-orgc17e156" class="outline-2">
+<h2 id="orgc17e156">概念</h2>
+<div class="outline-text-2" id="text-orgc17e156">
+<p>
+Calico创建和管理一个 <span class="underline">扁平的三层</span> 网络（不需要overlay），每个容器会分配一个 <b>可路由的IP</b> 
+</p>
+<pre class="example">
+  由于通信时不需要解包和封包，网络性能损耗小，易于排查，且易于水平扩展
+</pre>
+
+<p>
+小规模部署时可以通过 <span class="underline">BGP client</span> 直接互联，大规模下可通过指定的 <span class="underline">BGP Route Reflector</span> 来完成
+</p>
+
+<pre class="example">
+  这样保证所有的数据流量都是通过IP路由的方式完成互联的
+</pre>
+
+<p>
+Calico基于 <span class="underline">iptables</span> 还提供了丰富而灵活的网络Policy，保证通过 <b>各个节点上的ACL</b> 来提供 <span class="underline">Workload的多租户隔离</span> 、 <span class="underline">安全组</span> 以及其他 <span class="underline">可达性限制</span> 等功能 
+</p>
+</div>
+</div>
+
+<div id="outline-container-orga03caf6" class="outline-2">
+<h2 id="orga03caf6">架构</h2>
+<div class="outline-text-2" id="text-orga03caf6">
+
+<div class="figure">
+<p><img src="../../pic/calico.png" alt="calico.png" width="50%" /> 
+</p>
+</div>
+
+<p>
+Calico主要由下面几个组件组成：
+</p>
+<ul class="org-ul">
+<li>Etcd：负责存储网络信息</li>
+<li>BGP client：负责将Felix配置的 <span class="underline">路由信息</span> <b>分发</b> 到其他节点</li>
+<li>Felix：Calico Agent，每个节点都需要运行，主要负责 <span class="underline">配置路由</span> 、 <span class="underline">配置ACLs</span> 、 <span class="underline">报告状态</span></li>
+<li>BGP Route Reflector：大规模部署时需要用到，作为 <b>BGP client的中心连接点</b> ，可以避免每个节点互联</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-org1ad8efd" class="outline-2">
+<h2 id="org1ad8efd">部署</h2>
+<div class="outline-text-2" id="text-org1ad8efd">
+<p>
+运行下面的命令可以部署 calico 网络：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">mkdir /etc/cni/net.d/
+
+kubectl apply -f https://docs.projectcalico.org/v3.0/getting-started/kubernetes/installation/rbac.yaml
+
+wget https://docs.projectcalico.org/v3.0/getting-started/kubernetes/installation/hosted/calico.yaml
+
+<span style="color: #ff4500;"># </span><span style="color: #ff4500;">&#20462;&#25913;etcd_endpoints&#30340;&#20540;&#21644;&#40664;&#35748;&#30340;192.168.0.0/16(&#19981;&#33021;&#21644;&#24050;&#26377;&#32593;&#27573;&#20914;&#31361;)</span>
+
+kubectl apply -f calico.yaml
+
+wget  https://github.com/projectcalico/calicoctl/releases/download/v2.0.0/calicoctl
+
+mv calicoctl /usr/loca/bin &amp;&amp; chmod +x /usr/local/bin/calicoctl
+
+<span style="color: #b0c4de;">export</span> <span style="color: #eedd82;">CALICO_DATASTORE_TYPE</span>=kubernetes
+
+<span style="color: #b0c4de;">export</span> <span style="color: #eedd82;">CALICO_KUBECONFIG</span>=~/.kube/config 
+
+calicoctl get ippool
+
+calicoctl get node
+</pre>
+</div>
+
+<pre class="example">
+    如果安装时启用应用层策略的话还需要安装 istio
+</pre>
+
+<p>
+<a href="cilium.html">Next：cilium</a>
+</p>
+
+<p>
+<a href="flannel.html">Previous: flannel</a>
+</p>
+
+<p>
+<a href="network.html">Home：网络</a>
+</p>
+</div>
+</div>
 </div>
 <div id="postamble" class="status">
 
