@@ -5,7 +5,7 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>初始化 Pod</title>
+<title>Init 容器</title>
 <meta name="generator" content="Org mode" />
 <meta name="author" content="Wu, Shanliang" />
 <style type="text/css">
@@ -233,8 +233,400 @@ for the JavaScript code in this tag.
  |
  <a accesskey="H" href="pod.html"> HOME </a>
 </div><div id="content">
-<h1 class="title">初始化 Pod</h1>
+<h1 class="title">Init 容器</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#org2a72fe4">概念</a>
+<ul>
+<li><a href="#org6c20b4e">与普通容器的不同之处</a></li>
+</ul>
+</li>
+<li><a href="#org9d9443b">目的</a>
+<ul>
+<li><a href="#orge07ff1e">示例</a></li>
+<li><a href="#org5b52d02">使用</a></li>
+</ul>
+</li>
+<li><a href="#org1eab9e0">解析</a>
+<ul>
+<li><a href="#org78b0015">资源</a></li>
+<li><a href="#org5f822a9">Pod 重启</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<pre class="example">
+该特性自 Kubernetes 1.6 版本推出 beta 版本
 
+Init 容器可以在 PodSpec 中同应用程序的 containers 数组一起来指定
+
+此前 beta 注解的值仍将保留，并覆盖 PodSpec 字段值
+</pre>
+<p>
+接下来讲解  <span class="underline">Init 容器</span> 的基本概念，这是一种 <b>专用的</b> 容器 ，在应用程序容器启动之前运行，用来包含一些应用镜像中不存在的实用工具或安装脚本
+</p>
+<div id="outline-container-org2a72fe4" class="outline-2">
+<h2 id="org2a72fe4">概念</h2>
+<div class="outline-text-2" id="text-org2a72fe4">
+<p>
+Pod 能够具有多个容器，应用运行在容器里面，但是它也可能有一个或多个先于应用容器启动的 Init 容器。Init 容器与普通的容器非常像，除了如下两点：
+</p>
+<ul class="org-ul">
+<li>Init 容器总是 <b>运行到成功完成</b> 为止</li>
+<li>每个 Init 容器都必须在 <b>下一个 Init 容器启动之前成功完成</b></li>
+</ul>
+
+<p>
+如果 Pod 的 <span class="underline">Init 容器失败</span> ，Kubernetes 会 <b>不断地重启</b> 该 Pod，直到 Init 容器成功为止
+</p>
+
+<pre class="example">
+    然而，如果 Pod 对应的 restartPolicy 为 Never，它不会重新启动 
+</pre>
+
+<p>
+指定容器为 Init 容器：
+</p>
+<ol class="org-ol">
+<li>在 PodSpec 中添加 <span class="underline">initContainers</span> 字段
+<ul class="org-ul">
+<li>以 v1.Container 类型对象的 JSON 数组的形式</li>
+<li>还有 app 的 containers 数组</li>
+</ul></li>
+<li>Init 容器的状态在 <span class="underline">status.initContainerStatuses</span> 字段中以容器状态数组的格式返回（类似 status.containerStatuses 字段）</li>
+</ol>
+</div>
+
+<div id="outline-container-org6c20b4e" class="outline-3">
+<h3 id="org6c20b4e">与普通容器的不同之处</h3>
+<div class="outline-text-3" id="text-org6c20b4e">
+<p>
+Init 容器支持应用容器的全部字段和特性，包括资源限制、数据卷和安全设置
+</p>
+
+<pre class="example">
+Init 容器对资源请求和限制的处理稍有不同，在下面 资源 处有说明
+
+而且 Init 容器不支持 Readiness Probe，因为它们必须在 Pod 就绪之前运行完成
+</pre>
+
+<p>
+如果为一个 Pod 指定了多个 Init 容器，那些容器会按顺序一次运行一个
+</p>
+
+<pre class="example">
+     只有当前面的 Init 容器必须运行成功后，才可以运行下一个 Init 容器
+
+     当所有的 Init 容器运行完成后，Kubernetes 才初始化 Pod 和运行应用容器
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org9d9443b" class="outline-2">
+<h2 id="org9d9443b">目的</h2>
+<div class="outline-text-2" id="text-org9d9443b">
+<p>
+因为 Init 容器具有与应用程序容器分离的单独镜像，所以它们的启动相关代码具有如下优势：
+</p>
+<ul class="org-ul">
+<li>可以包含并运行实用工具，但是出于安全考虑，是不建议在应用程序容器镜像中包含这些实用工具的</li>
+<li><p>
+可以包含使用工具和定制化代码来安装，但是不能出现在应用程序镜像中
+</p>
+<pre class="example">
+      例如，创建镜像没必要 FROM 另一个镜像，只需要在安装过程中使用类似 sed、 awk、 python 或 dig 这样的工具
+</pre></li>
+<li>应用程序镜像可以分离出创建和部署的角色，而没有必要联合它们构建一个单独的镜像</li>
+<li><p>
+Init 容器使用 Linux Namespace，所以相对应用程序容器来说具有不同的文件系统视图
+</p>
+<pre class="example">
+      它们能够具有访问 Secret 的权限，而应用程序容器则不能
+</pre></li>
+<li>它们必须在应用程序容器启动之前运行完成，而应用程序容器是并行运行的，所以 Init 容器能够提供了一种简单的 <span class="underline">阻塞或延迟</span> 应用容器的启动的方法，直到满足了一组先决条件</li>
+</ul>
+</div>
+
+<div id="outline-container-orge07ff1e" class="outline-3">
+<h3 id="orge07ff1e">示例</h3>
+<div class="outline-text-3" id="text-orge07ff1e">
+<p>
+下面列举了 Init 容器的一些用途：
+</p>
+<ul class="org-ul">
+<li><p>
+等待一个 Service 创建完成，通过类似如下 shell 命令
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">$ for i<span style="color: #00ffff;"> in</span> {1..100}; <span style="color: #00ffff;">do</span> sleep 1; <span style="color: #00ffff;">if</span> dig myservice; <span style="color: #00ffff;">then exit</span> 0; <span style="color: #00ffff;">fi</span>; <span style="color: #00ffff;">exit</span> 1
+</pre>
+</div></li>
+<li><p>
+将 Pod 注册到远程服务器，通过在命令中调用 API，类似如下：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">$ curl -X POST http://$<span style="color: #eedd82;">MANAGEMENT_SERVICE_HOST</span>:$<span style="color: #eedd82;">MANAGEMENT_SERVICE_PORT</span>/register -d <span style="color: #ffa07a;">'instance=$(&lt;POD_NAME&gt;)&amp;ip=$(&lt;POD_IP&gt;)'</span>
+</pre>
+</div></li>
+<li>在启动应用容器之前等一段时间，使用类似 sleep 60 的命令</li>
+<li>克隆 Git 仓库到数据卷</li>
+<li><p>
+将配置值放到配置文件中，运行模板工具为主应用容器动态地生成配置文件
+</p>
+<pre class="example">
+     例如，在配置文件中存放 POD_IP 值，并使用 Jinja 生成主应用配置文件
+</pre></li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-org5b52d02" class="outline-3">
+<h3 id="org5b52d02">使用</h3>
+<div class="outline-text-3" id="text-org5b52d02">
+<p>
+下面 yaml 文件，展示了一个具有 2 个 Init 容器的简单 Pod，第一个等待 myservice 启动，第二个等待 mydb 启动。一旦这两个 Service 都启动完成，Pod 将开始启动：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #eedd82;">apiVersion</span>: v1
+<span style="color: #eedd82;">kind</span>: Pod
+<span style="color: #eedd82;">metadata</span>:
+  <span style="color: #eedd82;">name</span>: myapp-pod
+  <span style="color: #eedd82;">labels</span>:
+    <span style="color: #eedd82;">app</span>: myapp
+<span style="color: #eedd82;">spec</span>:
+  <span style="color: #eedd82;">containers</span>:
+  - <span style="color: #eedd82;">name</span>: myapp-container
+    <span style="color: #eedd82;">image</span>: busybox
+    <span style="color: #eedd82;">command</span>: [<span style="color: #ffa07a;">'sh'</span>, <span style="color: #ffa07a;">'-c'</span>, <span style="color: #ffa07a;">'echo The app is running! &amp;&amp; sleep 3600'</span>]
+  <span style="color: #eedd82;">initContainers</span>:
+  - <span style="color: #eedd82;">name</span>: init-myservice
+    <span style="color: #eedd82;">image</span>: busybox
+    <span style="color: #eedd82;">command</span>: [<span style="color: #ffa07a;">'sh'</span>, <span style="color: #ffa07a;">'-c'</span>, <span style="color: #ffa07a;">'until nslookup myservice; do echo waiting for myservice; sleep 2; done;'</span>]
+  - <span style="color: #eedd82;">name</span>: init-mydb
+    <span style="color: #eedd82;">image</span>: busybox
+    <span style="color: #eedd82;">command</span>: [<span style="color: #ffa07a;">'sh'</span>, <span style="color: #ffa07a;">'-c'</span>, <span style="color: #ffa07a;">'until nslookup mydb; do echo waiting for mydb; sleep 2; done;'</span>]
+</pre>
+</div>
+
+<p>
+下面的 YAML 文件展示了 mydb 和 myservice 两个 Service：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-yaml">
+<span style="color: #eedd82;">kind</span>: Service
+<span style="color: #eedd82;">apiVersion</span>: v1
+<span style="color: #eedd82;">metadata</span>:
+  <span style="color: #eedd82;">name</span>: myservice
+<span style="color: #eedd82;">spec</span>:
+  <span style="color: #eedd82;">ports</span>:
+    - <span style="color: #eedd82;">protocol</span>: TCP
+      <span style="color: #eedd82;">port</span>: 80
+      <span style="color: #eedd82;">targetPort</span>: 9376
+<span style="color: #ff4500;">---</span>
+<span style="color: #eedd82;">kind</span>: Service
+<span style="color: #eedd82;">apiVersion</span>: v1
+<span style="color: #eedd82;">metadata</span>:
+  <span style="color: #eedd82;">name</span>: mydb
+<span style="color: #eedd82;">spec</span>:
+  <span style="color: #eedd82;">ports</span>:
+    - <span style="color: #eedd82;">protocol</span>: TCP
+      <span style="color: #eedd82;">port</span>: 80
+      <span style="color: #eedd82;">targetPort</span>: 9377
+</pre>
+</div>
+
+<p>
+这个 Pod 可以使用下面的命令进行启动和调试：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">
+$ kubectl create -f myapp.yaml
+pod <span style="color: #ffa07a;">"myapp-pod"</span> created
+$ kubectl get -f myapp.yaml
+NAME        READY     STATUS     RESTARTS   AGE
+myapp-pod   0/1       Init:0/2   0          6m
+$ kubectl describe -f myapp.yaml 
+Name:          myapp-pod
+Namespace:     default
+[...]
+Labels:        <span style="color: #eedd82;">app</span>=myapp
+Status:        Pending
+[...]
+Init Containers:
+  init-myservice:
+[...]
+    State:         Running
+[...]
+  init-mydb:
+[...]
+    State:         Waiting
+      Reason:      PodInitializing
+    Ready:         False
+[...]
+Containers:
+  myapp-container:
+[...]
+    State:         Waiting
+      Reason:      PodInitializing
+    Ready:         False
+[...]
+Events:
+  FirstSeen    LastSeen    Count    From                      SubObjectPath                           Type          Reason        Message
+  ---------    --------    -----    ----                      -------------                           --------      ------        -------
+  16s          16s         1        {default-scheduler }                                              Normal        Scheduled     Successfully assigned myapp-pod to 172.17.4.201
+  16s          16s         1        {kubelet 172.17.4.201}    spec.initContainers{init-myservice}     Normal        Pulling       pulling image <span style="color: #ffa07a;">"busybox"</span>
+  13s          13s         1        {kubelet 172.17.4.201}    spec.initContainers{init-myservice}     Normal        Pulled        Successfully pulled image <span style="color: #ffa07a;">"busybox"</span>
+  13s          13s         1        {kubelet 172.17.4.201}    spec.initContainers{init-myservice}     Normal        Created       Created container with docker id 5ced34a04634; Security:[<span style="color: #eedd82;">seccomp</span>=unconfined]
+  13s          13s         1        {kubelet 172.17.4.201}    spec.initContainers{init-myservice}     Normal        Started       Started container with docker id 5ced34a04634
+$ kubectl logs myapp-pod -c init-myservice <span style="color: #ff4500;"># </span><span style="color: #ff4500;">Inspect the first init container</span>
+$ kubectl logs myapp-pod -c init-mydb      <span style="color: #ff4500;"># </span><span style="color: #ff4500;">Inspect the second init container</span>
+</pre>
+</div>
+
+<p>
+一旦启动了 mydb 和 myservice 这两个 Service，能够看到 Init 容器完成，并且 myapp-pod 被创建：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl create -f services.yaml
+service <span style="color: #ffa07a;">"myservice"</span> created
+service <span style="color: #ffa07a;">"mydb"</span> created
+$ kubectl get -f myapp.yaml
+NAME        READY     STATUS    RESTARTS   AGE
+myapp-pod   1/1       Running   0          9m
+</pre>
+</div>
+
+<pre class="example">
+     这个例子非常简单，但是应该能够为创建自己的 Init 容器提供一些启发
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org1eab9e0" class="outline-2">
+<h2 id="org1eab9e0">解析</h2>
+<div class="outline-text-2" id="text-org1eab9e0">
+<p>
+在 Pod 启动过程中，Init 容器会按顺序在网络和数据卷初始化之后启动。每个容器必须在下一个容器启动之前成功退出。如果由于运行时或失败退出，将导致容器启动失败，它会根据 Pod 的 restartPolicy 指定的策略进行重试。然而，如果 Pod 的 restartPolicy 设置为 Always，Init 容器失败时会使用 RestartPolicy 策略：
+</p>
+<ol class="org-ol">
+<li>在所有的 Init 容器没有成功之前，Pod 将 <b>不会变成 Ready 状态</b> 
+<ul class="org-ul">
+<li>Init 容器的端口将不会在 Service 中进行聚集</li>
+<li>正在初始化中的 Pod 处于 <span class="underline">Pending</span> 状态</li>
+<li>应该会将 <span class="underline">Initializing 状态</span> 设置为 <span class="underline">true</span></li>
+</ul></li>
+<li>如果 Pod 重启，所有 Init 容器必须重新执行</li>
+<li><p>
+对 Init 容器 spec 的修改被限制在容器 image 字段，修改其他字段都不会生效
+</p>
+<pre class="example">
+	更改 Init 容器的 image 字段，等价于重启该 Pod
+</pre></li>
+<li><p>
+因为 Init 容器可能会被重启、重试或者重新执行，所以 Init 容器的代码应该是 <b>幂等的</b> 
+</p>
+<pre class="example">
+       特别地当写到 EmptyDirs 文件中的代码，应该对输出文件可能已经存在做好准备
+</pre></li>
+<li><p>
+Init 容器具有应用容器的所有字段。除了 <span class="underline">readinessProbe</span>
+</p>
+<pre class="example">
+       因为 Init 容器无法定义不同于完成（completion）的就绪（readiness）之外的其他状态，这会在验证过程中强制执行
+</pre></li>
+<li><p>
+在 Pod 上使用 <span class="underline">activeDeadlineSeconds</span> ，在容器上使用 <span class="underline">livenessProbe</span> 
+</p>
+<pre class="example">
+       这样能够避免 Init 容器一直失败，这就为 Init 容器活跃设置了一个期限
+</pre></li>
+<li><p>
+在 Pod 中的每个 app 和 Init 容器的名称必须唯一
+</p>
+<pre class="example">
+     与任何其它容器共享同一个名称，会在验证时抛出错误
+</pre></li>
+</ol>
+</div>
+
+<div id="outline-container-org78b0015" class="outline-3">
+<h3 id="org78b0015">资源</h3>
+<div class="outline-text-3" id="text-org78b0015">
+<p>
+为 Init 容器指定顺序和执行逻辑，下面对资源使用的规则将被应用：
+</p>
+<ul class="org-ul">
+<li>在所有 Init 容器上定义的，任何特殊资源请求或限制的最大值，是 <span class="underline">有效初始请求/限制</span></li>
+<li><p>
+Pod 对资源的有效请求/限制要高于：
+</p>
+<ul class="org-ul">
+<li>所有应用容器对某个资源的请求/限制之和</li>
+<li>对某个资源的有效初始请求/限制</li>
+</ul>
+<pre class="example">
+     基于有效请求/限制完成调度，这意味着 Init 容器能够为初始化预留资源，这些资源在 Pod 生命周期过程中并没有被使用
+</pre></li>
+<li><p>
+Pod 的 有效 QoS 层，是 Init 容器和应用容器相同的 QoS 层
+</p>
+<pre class="example">
+Pod 级别的 cgroups 是基于有效 Pod 请求和限制，和调度器相同
+</pre></li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-org5f822a9" class="outline-3">
+<h3 id="org5f822a9">Pod 重启</h3>
+<div class="outline-text-3" id="text-org5f822a9">
+<p>
+Pod 重启，会导致 Init 容器重新执行，主要有如下几个原因：
+</p>
+<ul class="org-ul">
+<li><p>
+用户更新 PodSpec 导致 Init 容器镜像发生改变
+</p>
+<pre class="example">
+     应用容器镜像的变更只会重启应用容器
+</pre></li>
+<li><p>
+Pod 基础设施容器被重启
+</p>
+<pre class="example">
+     这不多见，但某些具有 root 权限可访问 Node 的人可能会这样做
+</pre></li>
+<li><p>
+当 restartPolicy 设置为 Always，Pod 中所有容器会终止，强制重启
+</p>
+<pre class="example">
+     由于垃圾收集导致 Init 容器完整的记录丢失
+</pre></li>
+</ul>
+
+<p>
+<a href="pause.html">Next：Pause 容器</a>
+</p>
+
+<p>
+<a href="mechanism.html">Previous：解析</a>
+</p>
+
+<p>
+<a href="pod.html">Home: pod</a>
+</p>
+</div>
+</div>
+</div>
 </div>
 <div id="postamble" class="status">
 
