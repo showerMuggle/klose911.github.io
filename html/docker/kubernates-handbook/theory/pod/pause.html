@@ -39,7 +39,7 @@
   }
   pre.src {
     position: relative;
-    overflow: visible;
+    overflow: auto;
     padding-top: 1.2em;
   }
   pre.src:before {
@@ -51,7 +51,7 @@
     padding: 3px;
     border: 1px solid black;
   }
-  pre.src:hover:before { display: inline;}
+  pre.src:hover:before { display: inline; margin-top: 14px;}
   /* Languages per Org manual */
   pre.src-asymptote:before { content: 'Asymptote'; }
   pre.src-awk:before { content: 'Awk'; }
@@ -160,6 +160,19 @@
   .footdef  { margin-bottom: 1em; }
   .figure { padding: 1em; }
   .figure p { text-align: center; }
+  .equation-container {
+    display: table;
+    text-align: center;
+    width: 100%;
+  }
+  .equation {
+    vertical-align: middle;
+  }
+  .equation-label {
+    display: table-cell;
+    text-align: right;
+    vertical-align: middle;
+  }
   .inlinetask {
     padding: 10px;
     border: 2px solid gray;
@@ -181,50 +194,26 @@
 </style>
 <link rel="stylesheet" type="text/css" href="../../css/main.css" />
 <script type="text/javascript">
-/*
-@licstart  The following is the entire license notice for the
-JavaScript code in this tag.
-
-Copyright (C) 2012-2019 Free Software Foundation, Inc.
-
-The JavaScript code in this tag is free software: you can
-redistribute it and/or modify it under the terms of the GNU
-General Public License (GNU GPL) as published by the Free Software
-Foundation, either version 3 of the License, or (at your option)
-any later version.  The code is distributed WITHOUT ANY WARRANTY;
-without even the implied warranty of MERCHANTABILITY or FITNESS
-FOR A PARTICULAR PURPOSE.  See the GNU GPL for more details.
-
-As additional permission under GNU GPL version 3 section 7, you
-may distribute non-source (e.g., minimized or compacted) forms of
-that code without the copy of the GNU GPL normally required by
-section 4, provided you include this license notice and a URL
-through which recipients can access the Corresponding Source.
-
-
-@licend  The above is the entire license notice
-for the JavaScript code in this tag.
-*/
+// @license magnet:?xt=urn:btih:e95b018ef3580986a04669f1b5879592219e2a7a&dn=public-domain.txt Public Domain
 <!--/*--><![CDATA[/*><!--*/
- function CodeHighlightOn(elem, id)
- {
-   var target = document.getElementById(id);
-   if(null != target) {
-     elem.cacheClassElem = elem.className;
-     elem.cacheClassTarget = target.className;
-     target.className = "code-highlighted";
-     elem.className   = "code-highlighted";
-   }
- }
- function CodeHighlightOff(elem, id)
- {
-   var target = document.getElementById(id);
-   if(elem.cacheClassElem)
-     elem.className = elem.cacheClassElem;
-   if(elem.cacheClassTarget)
-     target.className = elem.cacheClassTarget;
- }
-/*]]>*///-->
+     function CodeHighlightOn(elem, id)
+     {
+       var target = document.getElementById(id);
+       if(null != target) {
+         elem.classList.add("code-highlighted");
+         target.classList.add("code-highlighted");
+       }
+     }
+     function CodeHighlightOff(elem, id)
+     {
+       var target = document.getElementById(id);
+       if(null != target) {
+         elem.classList.remove("code-highlighted");
+         target.classList.remove("code-highlighted");
+       }
+     }
+    /*]]>*///-->
+// @license-end
 </script>
 </head>
 <body>
@@ -234,6 +223,235 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="pod.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">Pause 容器</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#org9fa0b14">特点</a></li>
+<li><a href="#org28da600">背景</a></li>
+<li><a href="#org49de9b2">实现</a></li>
+<li><a href="#orge1b3dff">作用</a>
+<ul>
+<li><a href="#org3dea7fb">实例</a>
+<ul>
+<li><a href="#orgb5bbac6">解析</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<p>
+openshift中kubelet的配置中有这样一个参数：
+</p>
+
+<pre class="example" id="orgddafb22">
+KUBELET_POD_INFRA_CONTAINER=--pod-infra-container-image=registry.access.redhat.com/rhel7/pod-infrastructure:latest
+</pre>
+
+
+<p>
+kubernetes中默认的配置参数是：
+</p>
+
+<pre class="example" id="org7cd8fbf">
+KUBELET_POD_INFRA_CONTAINER=--pod-infra-container-image=gcr.io/google_containers/pause-amd64:3.0
+</pre>
+
+<p>
+Pause容器，可以自己来定义，官方使用的gcr.io/google_containers/pause-amd64:3.0容器的代码见 <a href="https://github.com/kubernetes/kubernetes/tree/master/build/pause">Github</a>，使用C语言编写
+</p>
+<div id="outline-container-org9fa0b14" class="outline-2">
+<h2 id="org9fa0b14">特点</h2>
+<div class="outline-text-2" id="text-org9fa0b14">
+<ul class="org-ul">
+<li>镜像非常小，目前在700KB左右</li>
+<li>永远处于Pause(暂停)状态</li>
+</ul>
+</div>
+</div>
+<div id="outline-container-org28da600" class="outline-2">
+<h2 id="org28da600">背景</h2>
+<div class="outline-text-2" id="text-org28da600">
+<pre class="example" id="org0a9c548">
+像 Pod 这样一个东西，本身是一个逻辑概念。那在机器上，它究竟是怎么实现的呢？
+
+这就是我们要解释的一个问题
+</pre>
+
+<p>
+既然说 Pod 要解决这个问题，核心就在于如何让一个 Pod 里的多个容器之间最高效的共享某些资源和数据
+</p>
+
+<pre class="example" id="org47d2e04">
+因为容器之间原本是被 Linux Namespace 和 cgroups 隔开的，所以现在实际要解决的是怎么去打破这个隔离，然后共享某些事情和某些信息
+
+这就是 Pod 的设计要解决的核心问题所在
+</pre>
+<p>
+所以说具体的解法分为两个部分： <span class="underline">网络</span> 和 <span class="underline">存储</span> 
+</p>
+
+<pre class="example" id="orgaffd50c">
+Pause容器就是为解决Pod中的网络问题而生的
+</pre>
+</div>
+</div>
+<div id="outline-container-org49de9b2" class="outline-2">
+<h2 id="org49de9b2">实现</h2>
+<div class="outline-text-2" id="text-org49de9b2">
+<p>
+Pod 里的多个容器怎么去共享网络？下面是个例子：
+</p>
+
+<pre class="example" id="org599ac15">
+比如说现在有一个 Pod，其中包含了一个容器 A 和一个容器 B，它们两个就要共享 Network Namespace
+
+在 Kubernetes 里的解法是这样的：它会在每个 Pod 里，额外起一个 Infra container 小容器来共享整个 Pod 的 Network Namespace
+
+Infra container 是一个非常小的镜像，大概 700KB 左右，是一个C语言写的、永远处于“暂停”状态的容器。由于有了这样一个 Infra container 之后，其他所有容器都会通过 Join Namespace 的方式加入到 Infra container 的 Network Namespace 中
+
+所以说一个 Pod 里面的所有容器，它们看到的网络视图是完全一样的。即：它们看到的网络设备、IP地址、Mac地址等等，跟网络相关的信息，其实全是一份，这一份都来自于 Pod 第一次创建的这个 Infra container。这就是 Pod 解决网络共享的一个解法
+
+在 Pod 里面，一定有一个 IP 地址，是这个 Pod 的 Network Namespace 对应的地址，也是这个 Infra container 的 IP 地址。所以大家看到的都是一份，而其他所有网络资源，都是一个 Pod 一份，并且被 Pod 中的所有容器共享。这就是 Pod 的网络实现方式
+</pre>
+
+<p>
+由于需要有一个相当于说中间的容器存在，所以整个 Pod 里面，必然是 Infra container 第一个启动。并且整个 Pod 的生命周期是等同于 Infra container 的生命周期的，与容器 A 和 B 是无关的
+</p>
+
+<pre class="example" id="org119910f">
+这也是为什么在 Kubernetes 里面，它是允许去单独更新 Pod 里的某一个镜像的
+
+做这个操作，整个 Pod 不会重建，也不会重启，这是非常重要的一个设计
+</pre>
+</div>
+</div>
+<div id="outline-container-orge1b3dff" class="outline-2">
+<h2 id="orge1b3dff">作用</h2>
+<div class="outline-text-2" id="text-orge1b3dff">
+<p>
+检查node节点的时候会发现每个node上都运行了很多的pause容器:
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ docker ps
+
+CONTAINER ID        IMAGE                                                                                                                    COMMAND                  CREATED             STATUS              PORTS               NAMES
+2c7d50f1a7be        docker.io/jimmysong/heapster-grafana-amd64@sha256:d663759b3de86cf62e64a43b021f133c383e8f7b0dc2bdd78115bc95db371c9a       <span style="color: #ffa07a;">"/run.sh"</span>                3 hours ago         Up 3 hours                              k8s_grafana_monitoring-influxdb-grafana-v4-5697c6b59-76zqs_kube-system_5788a3c5-29c0-11e8-9e88-525400005732_0
+5df93dea877a        docker.io/jimmysong/heapster-influxdb-amd64@sha256:a217008b68cb49e8f038c4eeb6029261f02adca81d8eae8c5c01d030361274b8      <span style="color: #ffa07a;">"influxd --config ..."</span>   3 hours ago         Up 3 hours                              k8s_influxdb_monitoring-influxdb-grafana-v4-5697c6b59-76zqs_kube-system_5788a3c5-29c0-11e8-9e88-525400005732_0
+9cec6c0ef583        jimmysong/pause-amd64:3.0                                                                                                <span style="color: #ffa07a;">"/pause"</span>                 3 hours ago         Up 3 hours                              k8s_POD_monitoring-influxdb-grafana-v4-5697c6b59-76zqs_kube-system_5788a3c5-29c0-11e8-9e88-525400005732_0
+54d06e30a4c7        docker.io/jimmysong/kubernetes-dashboard-amd64@sha256:668710d034c4209f8fa9a342db6d8be72b6cb5f1f3f696cee2379b8512330be4   <span style="color: #ffa07a;">"/dashboard --inse..."</span>   3 hours ago         Up 3 hours                              k8s_kubernetes-dashboard_kubernetes-dashboard-65486f5fdf-lshl7_kube-system_27c414a1-29c0-11e8-9e88-525400005732_0
+5a5ef33b0d58        jimmysong/pause-amd64:3.0   
+</pre>
+</div>
+
+<p>
+kubernetes中的pause容器主要为每个业务容器提供以下功能：
+</p>
+<ul class="org-ul">
+<li>在pod中担任 <span class="underline">Linux命名空间</span> <b>共享</b> 的基础</li>
+<li>启用 <span class="underline">pid命名空间</span> ，开启 <span class="underline">init进程</span></li>
+</ul>
+</div>
+<div id="outline-container-org3dea7fb" class="outline-3">
+<h3 id="org3dea7fb">实例</h3>
+<div class="outline-text-3" id="text-org3dea7fb">
+
+<div id="org569ddde" class="figure">
+<p><img src="../../pic/pause-container.png" alt="pause-container.png" width="40%" />
+</p>
+</div>
+
+<p>
+首先在节点上运行一个pause容器
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">docker run -d --name pause -p 8880:80 jimmysong/pause-amd64:3.0
+</pre>
+</div>
+
+<p>
+然后再运行一个nginx容器，nginx将为localhost:2368创建一个代理
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">
+$ cat &lt;&lt;EOF &gt;&gt; nginx.conff
+<span style="color: #ffff00; font-weight: bold;">error_log stderr;</span>
+<span style="color: #ffff00; font-weight: bold;">events { worker_connections  1024; }</span>
+<span style="color: #ffff00; font-weight: bold;">http {</span>
+<span style="color: #ffff00; font-weight: bold;">    access_log /dev/stdout combined;</span>
+<span style="color: #ffff00; font-weight: bold;">    server {</span>
+<span style="color: #ffff00; font-weight: bold;">        listen 80 default_server;</span>
+<span style="color: #ffff00; font-weight: bold;">        server_name example.com www.example.com;</span>
+<span style="color: #ffff00; font-weight: bold;">        location / {</span>
+<span style="color: #ffff00; font-weight: bold;">            proxy_pass http://127.0.0.1:2368;</span>
+<span style="color: #ffff00; font-weight: bold;">        }</span>
+<span style="color: #ffff00; font-weight: bold;">    }</span>
+<span style="color: #ffff00; font-weight: bold;">}</span>
+<span style="color: #ffff00; font-weight: bold;">EOF</span>
+$ docker run -d --name nginx -v <span style="color: #fa8072;">`pwd`</span>/nginx.conf:/etc/nginx/nginx.conf --net=container:pause --ipc=container:pause --pid=container:pause nginx
+</pre>
+</div>
+
+<p>
+然后再为ghost创建一个应用容器，这是一款博客软件
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ docker run -d --name ghost --net=container:pause --ipc=container:pause --pid=container:pause ghost
+</pre>
+</div>
+
+<p>
+现在访问 <a href="http://localhost:8880/">http://localhost:8880/</a> 就可以看到ghost博客的界面
+</p>
+</div>
+<div id="outline-container-orgb5bbac6" class="outline-4">
+<h4 id="orgb5bbac6">解析</h4>
+<div class="outline-text-4" id="text-orgb5bbac6">
+<ol class="org-ol">
+<li>pause容器将内部的80端口映射到宿主机的8880端口</li>
+<li>pause容器在宿主机上设置好了网络namespace后</li>
+<li>nginx容器加入到该网络namespace中
+<ul class="org-ul">
+<li>nginx容器启动的时候指定了&#x2013;net=container:pause</li>
+</ul></li>
+<li>ghost容器同样加入到了该网络namespace中，这样三个容器就共享了网络，互相之间就可以使用localhost直接通信
+<ul class="org-ul">
+<li>&#x2013;ipc=contianer:pause &#x2013;pid=container:pause就是三个容器处于同一个namespace中</li>
+</ul></li>
+<li><p>
+init进程为pause，这时进入到ghost容器中查看进程情况
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh"><span style="color: #ff4500;"># </span><span style="color: #ff4500;">ps aux</span>
+USER       PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+root         1  0.0  0.0   1024     4 ?        Ss   13:49   0:00 /pause
+root         5  0.0  0.1  32432  5736 ?        Ss   13:51   0:00 nginx: master p
+systemd+     9  0.0  0.0  32980  3304 ?        S    13:51   0:00 nginx: worker p
+node        10  0.3  2.0 1254200 83788 ?       Ssl  13:53   0:03 node current/in
+root        79  0.1  0.0   4336   812 pts/0    Ss   14:09   0:00 sh
+root        87  0.0  0.0  17500  2080 pts/0    R+   14:10   0:00 ps aux
+</pre>
+</div></li>
+</ol>
+
+<pre class="example" id="org865e3a9">
+在ghost容器中同时可以看到pause和nginx容器的进程，并且pause容器的PID是1
+</pre>
+
+<p>
+在kubernetes中容器的PID=1的进程即为容器本身的业务进程
+</p>
+</div>
+</div>
+</div>
+</div>
 </div>
 <div id="postamble" class="status">
 
