@@ -97,77 +97,83 @@ _PodSecurityPolicy_ 类型的对象控制，是否可以向 Pod 发送请求，�
   Pod 必须基于 PSP 验证每个字段 
 * 安全策略
 ** 创建
-  下面是一个 Pod 安全策略的例子，所有字段的设置都被允许：
+   下面是一个 Pod 安全策略的例子，所有字段的设置都被允许：
 
-  #+begin_src yaml 
-    apiVersion: extensions/v1beta1
-    kind: PodSecurityPolicy
-    metadata:
-      name: permissive
-      spec:
-	seLinux:
-	  rule: RunAsAny
-	supplementalGroups:
-	  rule: RunAsAny
-	runAsUser:
-	  rule: RunAsAny
-	fsGroup:
-	  rule: RunAsAny
-	hostPorts:
-	  - min: 8000
-	  max: 8080
-	volumes:
-	  - '*'
-  #+end_src
+   #+begin_src yaml 
+     apiVersion: extensions/v1beta1
+     kind: PodSecurityPolicy
+     metadata:
+       name: permissive
+       spec:
+	 seLinux:
+	   rule: RunAsAny
+	   supplementalGroups:
+	     rule: RunAsAny
+	     runAsUser:
+	       rule: RunAsAny
+	       fsGroup:
+		 rule: RunAsAny
+		 hostPorts:
+		   - min: 8000
+		     max: 8080
+		     volumes:
+		       - '*'
+   #+end_src
 
-  然后执行如下命令：
-  #+begin_src sh
-    $ kubectl create -f ./psp.yaml
-    podsecuritypolicy "permissive" created
-  #+end_src
+   然后执行如下命令：
+   #+begin_src sh
+     $ kubectl create -f ./psp.yaml
+     podsecuritypolicy "permissive" created
+   #+end_src
 
 ** 获取
 
-  获取已存在策略列表，使用 kubectl get：
+   获取已存在策略列表，使用 kubectl get：
 
-  #+begin_src sh 
-    $ kubectl get psp
-    NAME        PRIV   CAPS  SELINUX   RUNASUSER         FSGROUP   SUPGROUP  READONLYROOTFS  VOLUMES
-    permissive  false  []    RunAsAny  RunAsAny          RunAsAny  RunAsAny  false           [*]
-    privileged  true   []    RunAsAny  RunAsAny          RunAsAny  RunAsAny  false           [*]
-    restricted  false  []    RunAsAny  MustRunAsNonRoot  RunAsAny  RunAsAny  false           [emptyDir secret downwardAPI configMap persistentVolumeClaim projected]
-  #+end_src
+   #+begin_src sh 
+     $ kubectl get psp
+     NAME        PRIV   CAPS  SELINUX   RUNASUSER         FSGROUP   SUPGROUP  READONLYROOTFS  VOLUMES
+     permissive  false  []    RunAsAny  RunAsAny          RunAsAny  RunAsAny  false           [*]
+     privileged  true   []    RunAsAny  RunAsAny          RunAsAny  RunAsAny  false           [*]
+     restricted  false  []    RunAsAny  MustRunAsNonRoot  RunAsAny  RunAsAny  false           [emptyDir secret downwardAPI configMap persistentVolumeClaim projected]
+   #+end_src
  
 ** 修改
 
-  通过交互方式修改策略，使用 kubectl edit：
+   通过交互方式修改策略，使用 kubectl edit：
 
-  #+begin_src sh 
-    $ kubectl edit psp permissive
-  #+end_src
-  该命令将打开一个默认文本编辑器，在这里能够修改策略
+   #+begin_src sh 
+     $ kubectl edit psp permissive
+   #+end_src
+   该命令将打开一个默认文本编辑器，在这里能够修改策略
 
 ** 删除 
-  一旦不再需要一个策略，很容易通过 kubectl 删除它：
+   一旦不再需要一个策略，很容易通过 kubectl 删除它：
 
-  #+begin_src sh 
-    $ kubectl delete psp permissive
-    podsecuritypolicy "permissive" deleted
-  #+end_src
+   #+begin_src sh 
+     $ kubectl delete psp permissive
+     podsecuritypolicy "permissive" deleted
+   #+end_src
 ** 启用 
-  为了能够在集群中使用 Pod 安全策略，必须确保如下：
-  1. 启用 API 类型 extensions/v1beta1/podsecuritypolicy（仅对 1.6 之前的版本）
-  2. 启用许可控制器 PodSecurityPolicy
-  3. 定义自己的策略
+   为了能够在集群中使用 Pod 安全策略，必须确保如下：
+   1. 启用 API 类型 extensions/v1beta1/podsecuritypolicy（仅对 1.6 之前的版本）
+   2. 启用许可控制器 PodSecurityPolicy
+   3. 定义自己的策略
 * RBAC 
-在 Kubernetes 1.5 或更新版本：
-+ 可以使用 PodSecurityPolicy 来控制，对基于用户角色和组的已授权容器的访问
-+ 访问不同的 PodSecurityPolicy 对象，可以基于认证来控制
-+ 基于 Deployment、ReplicaSet 等创建的 Pod，限制访问 PodSecurityPolicy 对象
-  + Controller Manager 必须基于安全 API 端口运行，并且不能够具有超级用户权限
+  在 Kubernetes 1.5 或更新版本：
+  + 可以使用 PodSecurityPolicy 来控制，对基于用户角色和组的已授权容器的访问
+  + 访问不同的 PodSecurityPolicy 对象，可以基于认证来控制
+  + 基于 Deployment、ReplicaSet 等创建的 Pod，限制访问 PodSecurityPolicy 对象
+    + Controller Manager 必须基于安全 API 端口运行，并且不能够具有超级用户权限
 
-#+begin_example
-  如果基于非安全 API 端口运行，允许所有的 PodSecurityPolicy 对象，并且不能够有效地实现细分权限
+  #+begin_example
+    如果基于非安全 API 端口运行，允许所有的 PodSecurityPolicy 对象，并且不能够有效地实现细分权限
 
-  用户访问给定的 PSP 策略有效，仅当是直接部署 Pod 的情况，当直接部署 Pod 时，应用 PodSecurityPolicy 控制基于角色和组的已授权容器的访问 
-#+end_example
+    用户访问给定的 PSP 策略有效，仅当是直接部署 Pod 的情况，当直接部署 Pod 时，应用 PodSecurityPolicy 控制基于角色和组的已授权容器的访问 
+  #+end_example
+
+  [[file:life_cycle.org][Next：生命周期]]
+
+  [[file:pause.org][Previous：Pause 容器]]
+
+  [[file:pod.org][Home: pod]]
