@@ -39,7 +39,7 @@
   }
   pre.src {
     position: relative;
-    overflow: auto;
+    overflow: visible;
     padding-top: 1.2em;
   }
   pre.src:before {
@@ -51,7 +51,7 @@
     padding: 3px;
     border: 1px solid black;
   }
-  pre.src:hover:before { display: inline; margin-top: 14px;}
+  pre.src:hover:before { display: inline;}
   /* Languages per Org manual */
   pre.src-asymptote:before { content: 'Asymptote'; }
   pre.src-awk:before { content: 'Awk'; }
@@ -160,19 +160,6 @@
   .footdef  { margin-bottom: 1em; }
   .figure { padding: 1em; }
   .figure p { text-align: center; }
-  .equation-container {
-    display: table;
-    text-align: center;
-    width: 100%;
-  }
-  .equation {
-    vertical-align: middle;
-  }
-  .equation-label {
-    display: table-cell;
-    text-align: right;
-    vertical-align: middle;
-  }
   .inlinetask {
     padding: 10px;
     border: 2px solid gray;
@@ -194,26 +181,50 @@
 </style>
 <link rel="stylesheet" type="text/css" href="../../css/main.css" />
 <script type="text/javascript">
-// @license magnet:?xt=urn:btih:e95b018ef3580986a04669f1b5879592219e2a7a&dn=public-domain.txt Public Domain
+/*
+@licstart  The following is the entire license notice for the
+JavaScript code in this tag.
+
+Copyright (C) 2012-2019 Free Software Foundation, Inc.
+
+The JavaScript code in this tag is free software: you can
+redistribute it and/or modify it under the terms of the GNU
+General Public License (GNU GPL) as published by the Free Software
+Foundation, either version 3 of the License, or (at your option)
+any later version.  The code is distributed WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU GPL for more details.
+
+As additional permission under GNU GPL version 3 section 7, you
+may distribute non-source (e.g., minimized or compacted) forms of
+that code without the copy of the GNU GPL normally required by
+section 4, provided you include this license notice and a URL
+through which recipients can access the Corresponding Source.
+
+
+@licend  The above is the entire license notice
+for the JavaScript code in this tag.
+*/
 <!--/*--><![CDATA[/*><!--*/
-     function CodeHighlightOn(elem, id)
-     {
-       var target = document.getElementById(id);
-       if(null != target) {
-         elem.classList.add("code-highlighted");
-         target.classList.add("code-highlighted");
-       }
-     }
-     function CodeHighlightOff(elem, id)
-     {
-       var target = document.getElementById(id);
-       if(null != target) {
-         elem.classList.remove("code-highlighted");
-         target.classList.remove("code-highlighted");
-       }
-     }
-    /*]]>*///-->
-// @license-end
+ function CodeHighlightOn(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(null != target) {
+     elem.cacheClassElem = elem.className;
+     elem.cacheClassTarget = target.className;
+     target.className = "code-highlighted";
+     elem.className   = "code-highlighted";
+   }
+ }
+ function CodeHighlightOff(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(elem.cacheClassElem)
+     elem.className = elem.cacheClassElem;
+   if(elem.cacheClassTarget)
+     target.className = elem.cacheClassTarget;
+ }
+/*]]>*///-->
 </script>
 </head>
 <body>
@@ -227,11 +238,11 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org4911b0d">理解 kubernetes 中的对象</a>
+<li><a href="#org64a02a9">理解 kubernetes 中的对象</a>
 <ul>
-<li><a href="#orgdda4a6e">对象 Spec 与状态</a></li>
-<li><a href="#org04c540f">描述 Kubernetes 对象</a></li>
-<li><a href="#orgf62c744">必须字段</a></li>
+<li><a href="#orge606a9b">对象 Spec 与状态</a></li>
+<li><a href="#org4bd63b7">描述 Kubernetes 对象</a></li>
+<li><a href="#orgdc9fdd1">必须字段</a></li>
 </ul>
 </li>
 </ul>
@@ -307,9 +318,9 @@
 </tr>
 </tbody>
 </table>
-<div id="outline-container-org4911b0d" class="outline-2">
-<h2 id="org4911b0d">理解 kubernetes 中的对象</h2>
-<div class="outline-text-2" id="text-org4911b0d">
+<div id="outline-container-org64a02a9" class="outline-2">
+<h2 id="org64a02a9">理解 kubernetes 中的对象</h2>
+<div class="outline-text-2" id="text-org64a02a9">
 <p>
 在 Kubernetes 系统中，Kubernetes 对象 是 <b>持久化的条目</b> 。Kubernetes 使用这些条目去表示 <span class="underline">整个集群的状态</span> 。特别地，它们描述了如下信息：
 </p>
@@ -319,7 +330,7 @@
 <li>关于应用如何表现的策略，比如重启策略、升级策略，以及容错策略</li>
 </ul>
 
-<pre class="example" id="orgda6db48">
+<pre class="example">
 Kubernetes 对象是 “目标性记录”： 一旦创建对象，Kubernetes 系统将持续工作以确保对象存在
 
 通过创建对象，可以有效地告知 Kubernetes 系统，所需要的集群工作负载看起来是什么样子的，这就是 Kubernetes 集群的 “期望状态”
@@ -329,15 +340,15 @@ Kubernetes 对象是 “目标性记录”： 一旦创建对象，Kubernetes �
 与 Kubernetes 对象工作（是否创建、修改，或者删除）需要使用 Kubernetes API
 </p>
 
-<pre class="example" id="org9ccd45a">
-当使用 kubectl 命令行接口时，比如，CLI 会使用必要的 Kubernetes API 调用，也可以在程序中直接使用 Kubernetes API
+<pre class="example">
+    当使用 kubectl 命令行接口时，比如，CLI 会使用必要的 Kubernetes API 调用，也可以在程序中直接使用 Kubernetes API
 
-为了实现该目标，Kubernetes 当前提供了一个 golang 客户端库，其它语言库（例如Python）也正在开发中
+    为了实现该目标，Kubernetes 当前提供了一个 golang 客户端库，其它语言库（例如Python）也正在开发中
 </pre>
 </div>
-<div id="outline-container-orgdda4a6e" class="outline-3">
-<h3 id="orgdda4a6e">对象 Spec 与状态</h3>
-<div class="outline-text-3" id="text-orgdda4a6e">
+<div id="outline-container-orge606a9b" class="outline-3">
+<h3 id="orge606a9b">对象 Spec 与状态</h3>
+<div class="outline-text-3" id="text-orge606a9b">
 <p>
 每个 Kubernetes 对象包含两个嵌套的对象字段，它们负责管理对象的配置：对象 <span class="underline">spec</span> 和 对象 <span class="underline">status</span>
 </p>
@@ -349,7 +360,7 @@ Kubernetes 对象是 “目标性记录”： 一旦创建对象，Kubernetes �
 </ul></li>
 </ul>
 
-<pre class="example" id="orgf675182">
+<pre class="example">
 例如，Kubernetes Deployment 对象能够表示运行在集群中的应用
 
 当创建 Deployment 时，可能需要设置 Deployment 的 spec，以指定该应用需要有 3 个副本在运行
@@ -360,9 +371,9 @@ Kubernetes 系统读取 Deployment spec，启动我们所期望的该应用的 3
 </pre>
 </div>
 </div>
-<div id="outline-container-org04c540f" class="outline-3">
-<h3 id="org04c540f">描述 Kubernetes 对象</h3>
-<div class="outline-text-3" id="text-org04c540f">
+<div id="outline-container-org4bd63b7" class="outline-3">
+<h3 id="org4bd63b7">描述 Kubernetes 对象</h3>
+<div class="outline-text-3" id="text-org4bd63b7">
 <ul class="org-ul">
 <li>当创建 Kubernetes 对象时，必须提供对象的 spec，用来描述该对象的期望状态，以及关于对象的一些基本信息（例如，名称）</li>
 <li>当使用 Kubernetes API 创建对象时（或者直接创建，或者基于kubectl），API 请求必须在请求体中包含 JSON 格式的信息</li>
@@ -374,22 +385,22 @@ Kubernetes 系统读取 Deployment spec，启动我们所期望的该应用的 3
 </p>
 
 <div class="org-src-container">
-<pre class="src src-yaml"><span style="color: #eedd82;">apiVersion</span>: apps/v1beta1
-<span style="color: #eedd82;">kind</span>: Deployment
-<span style="color: #eedd82;">metadata</span>:
-  <span style="color: #eedd82;">name</span>: nginx-deployment
-  <span style="color: #eedd82;">spec</span>:
-    <span style="color: #eedd82;">replicas</span>: 3
-    <span style="color: #eedd82;">template</span>:
-      <span style="color: #eedd82;">metadata</span>:
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #eedd82;">labels</span>:
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #eedd82;">  app</span>: nginx
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #eedd82;">  spec</span>:
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #eedd82;">    containers</span>:
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #eedd82;">      - name</span>: nginx
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">                </span><span style="color: #eedd82;">image</span>: nginx:1.7.9
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">                </span><span style="color: #eedd82;">ports</span>:
-<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">                </span><span style="color: #eedd82;">  - containerPort</span>: 80
+<pre class="src src-yaml"><span style="color: #4eee94;">apiVersion</span>: apps/v1beta1
+<span style="color: #4eee94;">kind</span>: Deployment
+<span style="color: #4eee94;">metadata</span>:
+  <span style="color: #4eee94;">name</span>: nginx-deployment
+  <span style="color: #4eee94;">spec</span>:
+    <span style="color: #4eee94;">replicas</span>: 3
+    <span style="color: #4eee94;">template</span>:
+      <span style="color: #4eee94;">metadata</span>:
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">labels</span>:
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">  app</span>: nginx
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">  spec</span>:
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">    containers</span>:
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">      - name</span>: nginx
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">                </span><span style="color: #4eee94;">image</span>: nginx:1.7.9
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">                </span><span style="color: #4eee94;">ports</span>:
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">                </span><span style="color: #4eee94;">  - containerPort</span>: 80
 </pre>
 </div>
 <p>
@@ -404,15 +415,15 @@ Kubernetes 系统读取 Deployment spec，启动我们所期望的该应用的 3
 <p>
 输出类似如下这样：
 </p>
-<pre class="example" id="org57c2606">
+<pre class="example">
 deployment "nginx-deployment" created
 </pre>
 </div>
 </div>
 
-<div id="outline-container-orgf62c744" class="outline-3">
-<h3 id="orgf62c744">必须字段</h3>
-<div class="outline-text-3" id="text-orgf62c744">
+<div id="outline-container-orgdc9fdd1" class="outline-3">
+<h3 id="orgdc9fdd1">必须字段</h3>
+<div class="outline-text-3" id="text-orgdc9fdd1">
 <p>
 在想要创建的 Kubernetes 对象对应的 .yaml 文件中，需要配置如下的字段：
 </p>
@@ -426,7 +437,7 @@ deployment "nginx-deployment" created
 当然也需要提供对象的 <span class="underline">spec</span> 字段，但是对象 spec 的精确格式对每个 Kubernetes 对象来说是不同的，包含了特定于该对象的嵌套字段
 </p>
 
-<pre class="example" id="org91a4503">
+<pre class="example">
 Kubernetes API 参考能够帮助我们找到任何我们想创建的对象的 spec 格式
 </pre>
 
