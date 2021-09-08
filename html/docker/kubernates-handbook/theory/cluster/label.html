@@ -223,7 +223,202 @@
  <a accesskey="H" href="cluster.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">Label</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#orgaede684">动机</a></li>
+<li><a href="#orgd2a8808">语法和字符集</a></li>
+<li><a href="#orgfe686c7">selector</a></li>
+<li><a href="#orgfe4f48e">示例</a>
+<ul>
+<li><a href="#org08e46e2">在API object中设置label selector</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<p>
+Label是附着到 <span class="underline">object</span> 上（例如Pod）的 <span class="underline">键值对</span> ，可以在创建object的时候指定，也可以在object创建后随时指定
+</p>
 
+<pre class="example" id="org3b6b611">
+Labels的值对系统本身并没有什么含义，只是对用户才有意义
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-js"><span style="color: #ffa07a;">"labels"</span>: {
+    <span style="color: #ffa07a;">"key1"</span> : <span style="color: #ffa07a;">"value1"</span>,
+    <span style="color: #ffa07a;">"key2"</span> : <span style="color: #ffa07a;">"value2"</span>
+}
+</pre>
+</div>
+
+<p>
+Kubernetes最终将对labels做 <span class="underline">索引</span> 和 <span class="underline">反向索引</span> 用来优化查询和watch，在UI和命令行中会对它们排序
+</p>
+
+<pre class="example" id="orgbf97516">
+不要在label中使用大型、非标识的结构化数据，记录这样的数据应该用annotation
+</pre>
+
+<div id="outline-container-orgaede684" class="outline-2">
+<h2 id="orgaede684">动机</h2>
+<div class="outline-text-2" id="text-orgaede684">
+<p>
+Label能够将 <span class="underline">组织架构</span> <b>映射</b> 到 <span class="underline">系统架构</span> 上，这样能够更便于微服务的管理，可以给object打上如下类型的label：
+</p>
+
+<pre class="example" id="org8732979">
+"release" : "stable", "release" : "canary"
+
+"environment" : "dev", "environment" : "qa", "environment" : "production"
+
+"tier" : "frontend", "tier" : "backend", "tier" : "cache"
+
+"partition" : "customerA", "partition" : "customerB"
+
+"track" : "daily", "track" : "weekly"
+
+"team" : "teamA","team:" : "teamB"
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orgd2a8808" class="outline-2">
+<h2 id="orgd2a8808">语法和字符集</h2>
+<div class="outline-text-2" id="text-orgd2a8808">
+<p>
+Label key的组成：
+</p>
+<ul class="org-ul">
+<li>不得超过63个字符</li>
+<li><p>
+可以使用前缀，使用/分隔，前缀必须是DNS子域，不得超过253个字符，系统中的自动化组件创建的label必须指定前缀
+</p>
+<pre class="example" id="orgd83812f">
+kubernetes.io/由kubernetes保留
+</pre></li>
+<li>起始必须是字母（大小写都可以）或数字，中间可以有连字符、下划线和点</li>
+</ul>
+
+<p>
+Label value的组成：
+</p>
+<ul class="org-ul">
+<li>不得超过63个字符</li>
+<li>起始必须是字母（大小写都可以）或数字，中间可以有连字符、下划线和点</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-orgfe686c7" class="outline-2">
+<h2 id="orgfe686c7">selector</h2>
+<div class="outline-text-2" id="text-orgfe686c7">
+<pre class="example" id="orgde9a05f">
+Label不是唯一的，很多object可能有相同的label
+</pre>
+<p>
+通过label selector，客户端／用户可以 <b>指定</b> 一个 <span class="underline">object集合</span> ，通过label selector对object的集合进行操作。Label selector有两种类型：
+</p>
+<ul class="org-ul">
+<li>equality-based ：可以使用 <span class="underline">=</span> 、 <span class="underline">==</span> 、 <span class="underline">!=</span> 操作符，可以使用 <span class="underline">逗号</span> 分隔多个表达式</li>
+<li>set-based ：可以使用 <span class="underline">in</span> 、 <span class="underline">notin</span> 、 <span class="underline">!</span> 操作符
+<ul class="org-ul">
+<li>还可以没有操作符，直接写出某个label的key，表示过滤有某个key的object而不管该key的value是何值，!表示没有该label的object</li>
+</ul></li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-orgfe4f48e" class="outline-2">
+<h2 id="orgfe4f48e">示例</h2>
+<div class="outline-text-2" id="text-orgfe4f48e">
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl get pods -l <span style="color: #eedd82;">environment</span>=production,<span style="color: #eedd82;">tier</span>=frontend
+
+$ kubectl get pods -l <span style="color: #ffa07a;">'environment in (production),tier in (frontend)'</span>
+
+$ kubectl get pods -l <span style="color: #ffa07a;">'environment in (production, qa)'</span>
+
+$ kubectl get pods -l <span style="color: #ffa07a;">'environment,environment notin (frontend)'</span>
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org08e46e2" class="outline-3">
+<h3 id="org08e46e2">在API object中设置label selector</h3>
+<div class="outline-text-3" id="text-org08e46e2">
+<p>
+在 <span class="underline">service</span> 、 <span class="underline">replicationcontroller</span> 等object中有对pod的label selector，使用方法只能使用 <span class="underline">等于</span> 操作，例如：
+</p>
+
+<pre class="example" id="orgbcd6add">
+selector:
+    component: redis
+</pre>
+<p>
+在 <span class="underline">Job</span> 、 <span class="underline">Deployment</span> 、 <span class="underline">ReplicaSet</span> 和 <span class="underline">DaemonSet</span> 这些object中，支持 <span class="underline">set-based</span> 的过滤，例如：
+</p>
+
+<pre class="example" id="org041557f">
+selector:
+  matchLabels:
+    component: redis
+  matchExpressions:
+    - {key: tier, operator: In, values: [cache]}
+    - {key: environment, operator: NotIn, values: [dev]}
+</pre>
+
+<p>
+例如Service通过label selector将同一类型的pod作为一个服务expose出来：
+</p>
+
+
+<div id="org84ca142" class="figure">
+<p><img src="../../pic/labels.png" alt="labels.png" width="80%" /> 
+</p>
+</div>
+
+<p>
+另外在 <span class="underline">node affinity</span> 和 <span class="underline">pod affinity</span> 中的label selector的语法又有些许不同，示例如下：
+</p>
+
+<pre class="example" id="orgb6f309d">
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+      - matchExpressions:
+	- key: kubernetes.io/e2e-az-name
+	  operator: In
+	  values:
+	  - e2e-az1
+	  - e2e-az2
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 1
+      preference:
+	matchExpressions:
+	- key: another-node-label-key
+	  operator: In
+	  values:
+	  - another-node-label-value
+</pre>
+
+<p>
+<a href="annotation.html">Next：Annotation</a>
+</p>
+
+<p>
+<a href="namespace.html">Previous：Namespace</a>
+</p>
+
+<p>
+<a href="cluster.html">Home：Cluster</a>
+</p>
+</div>
+</div>
+</div>
 </div>
 <div id="postamble" class="status">
 
