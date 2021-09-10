@@ -39,7 +39,7 @@
   }
   pre.src {
     position: relative;
-    overflow: auto;
+    overflow: visible;
     padding-top: 1.2em;
   }
   pre.src:before {
@@ -51,7 +51,7 @@
     padding: 3px;
     border: 1px solid black;
   }
-  pre.src:hover:before { display: inline; margin-top: 14px;}
+  pre.src:hover:before { display: inline;}
   /* Languages per Org manual */
   pre.src-asymptote:before { content: 'Asymptote'; }
   pre.src-awk:before { content: 'Awk'; }
@@ -194,26 +194,50 @@
 </style>
 <link rel="stylesheet" type="text/css" href="../../css/main.css" />
 <script type="text/javascript">
-// @license magnet:?xt=urn:btih:e95b018ef3580986a04669f1b5879592219e2a7a&dn=public-domain.txt Public Domain
+/*
+@licstart  The following is the entire license notice for the
+JavaScript code in this tag.
+
+Copyright (C) 2012-2020 Free Software Foundation, Inc.
+
+The JavaScript code in this tag is free software: you can
+redistribute it and/or modify it under the terms of the GNU
+General Public License (GNU GPL) as published by the Free Software
+Foundation, either version 3 of the License, or (at your option)
+any later version.  The code is distributed WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU GPL for more details.
+
+As additional permission under GNU GPL version 3 section 7, you
+may distribute non-source (e.g., minimized or compacted) forms of
+that code without the copy of the GNU GPL normally required by
+section 4, provided you include this license notice and a URL
+through which recipients can access the Corresponding Source.
+
+
+@licend  The above is the entire license notice
+for the JavaScript code in this tag.
+*/
 <!--/*--><![CDATA[/*><!--*/
-     function CodeHighlightOn(elem, id)
-     {
-       var target = document.getElementById(id);
-       if(null != target) {
-         elem.classList.add("code-highlighted");
-         target.classList.add("code-highlighted");
-       }
-     }
-     function CodeHighlightOff(elem, id)
-     {
-       var target = document.getElementById(id);
-       if(null != target) {
-         elem.classList.remove("code-highlighted");
-         target.classList.remove("code-highlighted");
-       }
-     }
-    /*]]>*///-->
-// @license-end
+ function CodeHighlightOn(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(null != target) {
+     elem.cacheClassElem = elem.className;
+     elem.cacheClassTarget = target.className;
+     target.className = "code-highlighted";
+     elem.className   = "code-highlighted";
+   }
+ }
+ function CodeHighlightOff(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(elem.cacheClassElem)
+     elem.className = elem.cacheClassElem;
+   if(elem.cacheClassTarget)
+     target.className = elem.cacheClassTarget;
+ }
+/*]]>*///-->
 </script>
 </head>
 <body>
@@ -223,6 +247,103 @@
  <a accesskey="H" href="cluster.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">Taint 和 Toleration</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#org5b22d8c">示例</a>
+<ul>
+<li><a href="#org4d7dd3d">为 node 设置 taint</a></li>
+<li><a href="#orgcbf1b18">为 pod 设置 toleration</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<p>
+Taint（污点）和 Toleration（容忍）可以作用于 node 和 pod 上，其目的是 <b>优化</b> <span class="underline">pod 在集群间</span> 的 <b>调度</b> ，这跟 <span class="underline">节点亲和性</span> 类似，只不过它们作用的方式相反：
+</p>
+<ul class="org-ul">
+<li>具有 taint 的 node 和 pod 是互斥关系，而具有节点亲和性关系的 node 和 pod 是相吸的</li>
+<li>可以给 node 节点设置 label，通过给 pod 设置 nodeSelector 将 pod 调度到具有匹配标签的节点上</li>
+</ul>
+
+<p>
+Taint 和 toleration 相互配合，可以用来避免 pod 被分配到不合适的节点上：
+</p>
+<ul class="org-ul">
+<li>每个 <span class="underline">节点</span> 上都可以应用一个或多个 <span class="underline">taint</span>  ，这表示对于那些不能容忍这些 taint 的 pod，是 <b>不会被该节点接受</b> 的</li>
+<li>如果将  <span class="underline">toleration</span> 应用于 <span class="underline">pod</span> 上，则表示这些 pod  <b>可以（但不要求）被调度</b> 到具有 <span class="underline">相应 taint 的节点</span> 上</li>
+</ul>
+<div id="outline-container-org5b22d8c" class="outline-2">
+<h2 id="org5b22d8c">示例</h2>
+<div class="outline-text-2" id="text-org5b22d8c">
+</div>
+<div id="outline-container-org4d7dd3d" class="outline-3">
+<h3 id="org4d7dd3d">为 node 设置 taint</h3>
+<div class="outline-text-3" id="text-org4d7dd3d">
+<p>
+为 node1 设置 taint：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">kubectl taint nodes node1 <span style="color: #4eee94;">key1</span>=value1:NoSchedule
+kubectl taint nodes node1 <span style="color: #4eee94;">key1</span>=value1:NoExecute
+kubectl taint nodes node1 <span style="color: #4eee94;">key2</span>=value2:NoSchedule
+</pre>
+</div>
+
+<p>
+删除上面的 taint：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">kubectl taint nodes node1 key1:NoSchedule-
+kubectl taint nodes node1 key1:NoExecute-
+kubectl taint nodes node1 key2:NoSchedule-
+</pre>
+</div>
+
+<p>
+查看 node1 上的 taint：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">kubectl describe nodes node1
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-orgcbf1b18" class="outline-3">
+<h3 id="orgcbf1b18">为 pod 设置 toleration</h3>
+<div class="outline-text-3" id="text-orgcbf1b18">
+<p>
+只要在 pod 的 spec 中设置 tolerations 字段即可，可以有多个 key，如下所示：
+</p>
+
+<pre class="example">
+tolerations:
+- key: "key1"
+  operator: "Equal"
+  value: "value1"
+  effect: "NoSchedule"
+- key: "key1"
+  operator: "Equal"
+  value: "value1"
+  effect: "NoExecute"
+- key: "node.alpha.kubernetes.io/unreachable"
+  operator: "Exists"
+  effect: "NoExecute"
+  tolerationSeconds: 6000
+</pre>
+
+<ul class="org-ul">
+<li>value 的值可以为 <span class="underline">NoSchedule</span> 、 <span class="underline">PreferNoSchedule</span> 或 <span class="underline">NoExecute</span></li>
+<li>tolerationSeconds 是当 pod 需要被驱逐时，可以继续在 node 上运行的时间</li>
+</ul>
+</div>
+</div>
+</div>
 </div>
 <div id="postamble" class="status">
 
