@@ -5,7 +5,7 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Label</title>
+<title>垃圾回收</title>
 <meta name="generator" content="Org mode" />
 <meta name="author" content="Wu, Shanliang" />
 <style type="text/css">
@@ -229,199 +229,228 @@ for the JavaScript code in this tag.
 </head>
 <body>
 <div id="org-div-home-and-up">
- <a accesskey="h" href="namespace.html"> UP </a>
+ <a accesskey="h" href="taint_toleration.html"> UP </a>
  |
  <a accesskey="H" href="cluster.html"> HOME </a>
 </div><div id="content">
-<h1 class="title">Label</h1>
+<h1 class="title">垃圾回收</h1>
 <div id="table-of-contents">
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org3d560ba">动机</a></li>
-<li><a href="#org0775dbf">语法和字符集</a></li>
-<li><a href="#orgccb56f7">selector</a></li>
-<li><a href="#org80b25df">示例</a>
+<li><a href="#org366ca16">Owner 和 Dependent</a></li>
+<li><a href="#orge424cb3">控制垃圾收集器删除 Dependent</a>
 <ul>
-<li><a href="#orge445506">在API object中设置label selector</a></li>
+<li><a href="#orgeeea735">Background 级联删除</a></li>
+<li><a href="#orgf6da708">Foreground 级联删除</a></li>
+<li><a href="#org3e1987e">设置级联删除策略</a></li>
 </ul>
 </li>
 </ul>
 </div>
 </div>
 <p>
-Label是附着到 <span class="underline">object</span> 上（例如Pod）的 <span class="underline">键值对</span> ，可以在创建object的时候指定，也可以在object创建后随时指定
+Kubernetes 垃圾收集器的角色是删除指定的对象，这些对象曾经有但以后不再拥有 Owner 了 
 </p>
 
 <pre class="example">
-Labels的值对系统本身并没有什么含义，只是对用户才有意义
+  注意：垃圾收集是 beta 特性，在 Kubernetes 1.4 及以上版本默认启用
 </pre>
-
-<div class="org-src-container">
-<pre class="src src-js"><span style="color: #deb887;">"labels"</span>: {
-    <span style="color: #deb887;">"key1"</span> : <span style="color: #deb887;">"value1"</span>,
-    <span style="color: #deb887;">"key2"</span> : <span style="color: #deb887;">"value2"</span>
-}
-</pre>
-</div>
-
+<div id="outline-container-org366ca16" class="outline-2">
+<h2 id="org366ca16">Owner 和 Dependent</h2>
+<div class="outline-text-2" id="text-org366ca16">
 <p>
-Kubernetes最终将对labels做 <span class="underline">索引</span> 和 <span class="underline">反向索引</span> 用来优化查询和watch，在UI和命令行中会对它们排序
+一些 Kubernetes 对象是其它一些的 Owner，具有 Owner 的对象被称为是 Owner 的 Dependent
 </p>
 
 <pre class="example">
-  不要在label中使用大型、非标识的结构化数据，记录这样的数据应该用annotation
+    例如，一个 ReplicaSet 是一组 Pod 的 Owner
 </pre>
 
-<div id="outline-container-org3d560ba" class="outline-2">
-<h2 id="org3d560ba">动机</h2>
-<div class="outline-text-2" id="text-org3d560ba">
 <p>
-Label能够将 <span class="underline">组织架构</span> <b>映射</b> 到 <span class="underline">系统架构</span> 上，这样能够更便于微服务的管理，可以给object打上如下类型的label：
-</p>
-
-<pre class="example">
-"release" : "stable", "release" : "canary"
-
-"environment" : "dev", "environment" : "qa", "environment" : "production"
-
-"tier" : "frontend", "tier" : "backend", "tier" : "cache"
-
-"partition" : "customerA", "partition" : "customerB"
-
-"track" : "daily", "track" : "weekly"
-
-"team" : "teamA","team:" : "teamB"
-</pre>
-</div>
-</div>
-
-<div id="outline-container-org0775dbf" class="outline-2">
-<h2 id="org0775dbf">语法和字符集</h2>
-<div class="outline-text-2" id="text-org0775dbf">
-<p>
-Label key的组成：
+每个 Dependent 对象具有一个指向其所属对象的 <span class="underline">metadata.ownerReferences</span> 字段：
 </p>
 <ul class="org-ul">
-<li>不得超过63个字符</li>
 <li><p>
-可以使用前缀，使用/分隔，前缀必须是DNS子域，不得超过253个字符，系统中的自动化组件创建的label必须指定前缀
+有时，Kubernetes 会自动设置 ownerReference 的值
 </p>
 <pre class="example">
-kubernetes.io/由kubernetes保留
+      例如，当创建一个 ReplicaSet 时，Kubernetes 自动设置 ReplicaSet 中每个 Pod 的 ownerReference 字段值
+
+      在 1.6 版本，Kubernetes 会自动为一些对象设置 ownerReference 的值，这些对象是由 ReplicationController、ReplicaSet、StatefulSet、DaemonSet 和 Deployment 所创建或管理
 </pre></li>
-<li>起始必须是字母（大小写都可以）或数字，中间可以有连字符、下划线和点</li>
+<li>也可以通过手动设置 ownerReference 的值，来指定 Owner 和 Dependent 之间的关系：</li>
 </ul>
 
-<p>
-Label value的组成：
-</p>
-<ul class="org-ul">
-<li>不得超过63个字符</li>
-<li>起始必须是字母（大小写都可以）或数字，中间可以有连字符、下划线和点</li>
-</ul>
-</div>
-</div>
-
-<div id="outline-container-orgccb56f7" class="outline-2">
-<h2 id="orgccb56f7">selector</h2>
-<div class="outline-text-2" id="text-orgccb56f7">
 <pre class="example">
-Label不是唯一的，很多object可能有相同的label
+apiVersion: extensions/v1beta1
+kind: ReplicaSet
+metadata:
+  name: my-repset
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      pod-is-for: garbage-collection-example
+  template:
+    metadata:
+      labels:
+	pod-is-for: garbage-collection-example
+    spec:
+      containers:
+      - name: nginx
+	image: nginx
 </pre>
-<p>
-通过label selector，客户端／用户可以 <b>指定</b> 一个 <span class="underline">object集合</span> ，通过label selector对object的集合进行操作。Label selector有两种类型：
-</p>
-<ul class="org-ul">
-<li>equality-based ：可以使用 <span class="underline">=</span> 、 <span class="underline">==</span> 、 <span class="underline">!=</span> 操作符，可以使用 <span class="underline">逗号</span> 分隔多个表达式</li>
-<li>set-based ：可以使用 <span class="underline">in</span> 、 <span class="underline">notin</span> 、 <span class="underline">!</span> 操作符
-<ul class="org-ul">
-<li>还可以没有操作符，直接写出某个label的key，表示过滤有某个key的object而不管该key的value是何值，!表示没有该label的object</li>
-</ul></li>
-</ul>
-</div>
-</div>
 
-<div id="outline-container-org80b25df" class="outline-2">
-<h2 id="org80b25df">示例</h2>
-<div class="outline-text-2" id="text-org80b25df">
+<p>
+如果创建该 ReplicaSet，然后查看 Pod 的 metadata 字段，能够看到 OwnerReferences 字段：
+</p>
+
 <div class="org-src-container">
-<pre class="src src-sh">$ kubectl get pods -l <span style="color: #4eee94;">environment</span>=production,<span style="color: #4eee94;">tier</span>=frontend
-
-$ kubectl get pods -l <span style="color: #deb887;">'environment in (production),tier in (frontend)'</span>
-
-$ kubectl get pods -l <span style="color: #deb887;">'environment in (production, qa)'</span>
-
-$ kubectl get pods -l <span style="color: #deb887;">'environment,environment notin (frontend)'</span>
+<pre class="src src-sh">$ kubectl create -f https://k8s.io/docs/concepts/abstractions/controllers/my-repset.yaml
+$ kubectl get pods --output=yaml
 </pre>
 </div>
-</div>
 
-<div id="outline-container-orge445506" class="outline-3">
-<h3 id="orge445506">在API object中设置label selector</h3>
-<div class="outline-text-3" id="text-orge445506">
 <p>
-在 <span class="underline">service</span> 、 <span class="underline">replicationcontroller</span> 等object中有对pod的label selector，使用方法只能使用 <span class="underline">等于</span> 操作，例如：
+输出显示了 Pod 的 Owner 是名为 my-repset 的 ReplicaSet：
 </p>
 
 <pre class="example">
-selector:
-    component: redis
+apiVersion: v1
+kind: Pod
+metadata:
+  ...
+  ownerReferences:
+  - apiVersion: extensions/v1beta1
+    controller: true
+    blockOwnerDeletion: true
+    kind: ReplicaSet
+    name: my-repset
+    uid: d9607e19-f88f-11e6-a518-42010a800195
+  ...
 </pre>
+</div>
+</div>
+<div id="outline-container-orge424cb3" class="outline-2">
+<h2 id="orge424cb3">控制垃圾收集器删除 Dependent</h2>
+<div class="outline-text-2" id="text-orge424cb3">
 <p>
-在 <span class="underline">Job</span> 、 <span class="underline">Deployment</span> 、 <span class="underline">ReplicaSet</span> 和 <span class="underline">DaemonSet</span> 这些object中，支持 <span class="underline">set-based</span> 的过滤，例如：
+当删除对象时，可以指定是否该对象的 Dependent 也自动删除掉。自动删除 Dependent 也称为 <span class="underline">级联删除</span> 。Kubernetes 中有两种 级联删除 的模式：
+</p>
+<ul class="org-ul">
+<li>background 模式</li>
+<li>foreground 模式</li>
+</ul>
+
+<p>
+如果删除对象时，不自动删除它的 Dependent，这些 Dependent 被称作是原对象的 <span class="underline">孤儿</span> 
+</p>
+</div>
+<div id="outline-container-orgeeea735" class="outline-3">
+<h3 id="orgeeea735">Background 级联删除</h3>
+<div class="outline-text-3" id="text-orgeeea735">
+<p>
+在 background 级联删除 模式下，Kubernetes 会立即删除 Owner 对象，然后垃圾收集器会在后台删除这些 Dependent 
+</p>
+</div>
+</div>
+<div id="outline-container-orgf6da708" class="outline-3">
+<h3 id="orgf6da708">Foreground 级联删除</h3>
+<div class="outline-text-3" id="text-orgf6da708">
+<p>
+在 foreground 级联删除 模式下，根对象首先进入 <span class="underline">删除中</span> 状态。在 “删除中” 状态会有如下的情况：
+</p>
+<ul class="org-ul">
+<li>对象仍然可以通过 <b>REST API 可见</b></li>
+<li>会设置对象的 <span class="underline">deletionTimestamp</span> 字段</li>
+<li>对象的 <span class="underline">metadata.finalizers</span> 字段包含了值 <span class="underline">foregroundDeletion</span></li>
+</ul>
+
+
+<p>
+一旦被设置为 “删除中” 状态，垃圾收集器会删除对象的所有 Dependent。垃圾收集器 <b>删除</b> 了所有 <b>Blocking</b> 的 <span class="underline">Dependent_（对象的 _ownerReference.blockOwnerDeletion</span> =true）之后，它会删除 Owner 对象。
 </p>
 
 <pre class="example">
-selector:
-  matchLabels:
-    component: redis
-  matchExpressions:
-    - {key: tier, operator: In, values: [cache]}
-    - {key: environment, operator: NotIn, values: [dev]}
+     注意，在 “foreground 删除” 模式下，Dependent 只有通过 ownerReference.blockOwnerDeletion 才能阻止删除 Owner 对象
+
+     在 Kubernetes 1.7 版本中将增加 admission controller，基于 Owner 对象上的删除权限来控制用户去设置 blockOwnerDeletion 的值为 true，所以未授权的 Dependent 不能够延迟 Owner 对象的删除
+
+     如果一个对象的ownerReferences 字段被一个 Controller（例如 Deployment 或 ReplicaSet）设置，blockOwnerDeletion 会被自动设置，没必要手动修改这个字段
+</pre>
+</div>
+</div>
+<div id="outline-container-org3e1987e" class="outline-3">
+<h3 id="org3e1987e">设置级联删除策略</h3>
+<div class="outline-text-3" id="text-org3e1987e">
+<p>
+通过为 <span class="underline">Owner 对象</span> 设置 <span class="underline">deleteOptions.propagationPolicy</span> 字段，可以控制级联删除策略。可能的取值包括： <span class="underline">orphan</span> 、 <span class="underline">Foreground</span> 或 <span class="underline">Background</span> 
+</p>
+
+<p>
+对很多 <span class="underline">Controller</span> 资源，包括 ReplicationController、ReplicaSet、StatefulSet、DaemonSet 和 Deployment， 默认的 <span class="underline">垃圾收集策略</span> 是 <b>orphan</b> 。因此，除非指定其它的垃圾收集策略，否则所有 Dependent 对象使用的都是 orphan 策略
+</p>
+
+<pre class="example">
+     注意：这里所指的默认值是指 REST API 的默认值，并非 kubectl 命令的默认值，kubectl 默认为级联删除
 </pre>
 
 <p>
-例如Service通过label selector将同一类型的pod作为一个服务expose出来：
+在后台删除 Dependent 对象的例子：
 </p>
 
-
-<div class="figure">
-<p><img src="../../pic/labels.png" alt="labels.png" width="80%" /> 
-</p>
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl proxy --port=8080
+$ curl -X DELETE localhost:8080/apis/extensions/v1beta1/namespaces/default/replicasets/my-repset <span style="color: #deb887;">\</span>
+-d <span style="color: #deb887;">'{"kind":"DeleteOptions","apiVersion":"v1","propagationPolicy":"Background"}'</span> <span style="color: #deb887;">\</span>
+-H <span style="color: #deb887;">"Content-Type: application/json"</span>
+</pre>
 </div>
 
 <p>
-另外在 <span class="underline">node affinity</span> 和 <span class="underline">pod affinity</span> 中的label selector的语法又有些许不同，示例如下：
+在前台删除 Dependent 对象的例子：
 </p>
-
-<pre class="example">
-affinity:
-  nodeAffinity:
-    requiredDuringSchedulingIgnoredDuringExecution:
-      nodeSelectorTerms:
-      - matchExpressions:
-	- key: kubernetes.io/e2e-az-name
-	  operator: In
-	  values:
-	  - e2e-az1
-	  - e2e-az2
-    preferredDuringSchedulingIgnoredDuringExecution:
-    - weight: 1
-      preference:
-	matchExpressions:
-	- key: another-node-label-key
-	  operator: In
-	  values:
-	  - another-node-label-value
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl proxy --port=8080
+$ curl -X DELETE localhost:8080/apis/extensions/v1beta1/namespaces/default/replicasets/my-repset <span style="color: #deb887;">\</span>
+-d <span style="color: #deb887;">'{"kind":"DeleteOptions","apiVersion":"v1","propagationPolicy":"Foreground"}'</span> <span style="color: #deb887;">\</span>
+-H <span style="color: #deb887;">"Content-Type: application/json"</span>
 </pre>
+</div>
 
 <p>
-<a href="annotation.html">Next：Annotation</a>
+一个孤儿 Dependent 的例子：
 </p>
 
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl proxy --port=8080
+$ curl -X DELETE localhost:8080/apis/extensions/v1beta1/namespaces/default/replicasets/my-repset <span style="color: #deb887;">\</span>
+-d <span style="color: #deb887;">'{"kind":"DeleteOptions","apiVersion":"v1","propagationPolicy":"Orphan"}'</span> <span style="color: #deb887;">\</span>
+-H <span style="color: #deb887;">"Content-Type: application/json"</span>
+</pre>
+</div>
+
 <p>
-<a href="namespace.html">Previous：Namespace</a>
+kubectl 也支持级联删除：
+</p>
+<ul class="org-ul">
+<li>设置 <span class="underline">&#x2013;cascade</span> 为 true，使 kubectl 自动删除 Dependent 对象</li>
+<li>设置 &#x2013;cascade 为 false，会使 Dependent 对象成为孤儿 Dependent 对象</li>
+<li>&#x2013;cascade 的默认值是 true</li>
+</ul>
+
+<p>
+使一个 ReplicaSet 的 Dependent 对象成为孤儿 Dependent的例子：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">kubectl delete replicaset my-repset --cascade=false
+</pre>
+</div>
+
+<p>
+<a href="taint_toleration.html">Previous：Taint 和 Toleration</a>
 </p>
 
 <p>
