@@ -4,3 +4,187 @@
 #+HTML_LINK_HOME: controller.html
 #+OPTIONS: num:nil timestamp:nil ^:nil
 
+Deployment 为 _Pod_ 和 _ReplicaSet_ 提供了一个 *声明式* 定义方法，用来替代以前的 ReplicationController 来方便的管理应用。典型的应用场景包括：
++ 定义 Deployment 来 *创建* _Pod_ 和 _ReplicaSet_
++ _滚动升级_ 和 _回滚_ 应用
++ _扩容_ 和 _缩容_
++ _暂停_ 和 _继续_ Deployment
+
+比如一个简单的 nginx 应用可以定义为：
+
+#+BEGIN_EXAMPLE
+  apiVersion: extensions/v1beta1
+  kind: Deployment
+  metadata:
+    name: nginx-deployment
+  spec:
+    replicas: 3
+    template:
+      metadata:
+	labels:
+	  app: nginx
+      spec:
+	containers:
+	- name: nginx
+	  image: nginx:1.7.9
+	  ports:
+	  - containerPort: 80
+#+END_EXAMPLE
+
+扩容：
+
+#+BEGIN_SRC sh 
+  kubectl scale deployment nginx-deployment --replicas 10
+#+END_SRC
+
+如果集群支持 horizontal pod autoscaling 的话，还可以为 Deployment 设置自动扩展：
+
+#+BEGIN_SRC sh 
+  kubectl autoscale deployment nginx-deployment --min=10 --max=15 --cpu-percent=80
+#+END_SRC
+
+更新镜像也比较简单：
+
+#+BEGIN_SRC sh 
+  kubectl set image deployment/nginx-deployment nginx=nginx:1.9.1
+#+END_SRC
+
+回滚：
+
+#+BEGIN_SRC sh 
+  kubectl rollout undo deployment/nginx-deployment
+#+END_SRC
+* Deployment 结构示意图
+
+  #+ATTR_HTML: image :width 70% 
+  [[file:../../pic/deployment-cheatsheet.png]]
+* 概念
+  Deployment 为 Pod 和 Replica Set（下一代 Replication Controller）提供声明式更新
+
+  #+BEGIN_EXAMPLE
+    只需要在 Deployment 中描述您想要的目标状态是什么，Deployment controller 就会将 Pod 和 ReplicaSet 的实际状态改变到目标状态
+  #+END_EXAMPLE
+
+  可以定义一个全新的 Deployment 来创建 ReplicaSet 或者删除已有的 Deployment 并创建一个新的来替换
+
+  #+BEGIN_EXAMPLE
+    注意：不该手动管理由 Deployment 创建的 ReplicaSet，否则就篡越了 Deployment controller 的职责
+
+  #+END_EXAMPLE
+
+  典型的用例如下：
+  + 使用 Deployment 来创建 ReplicaSet。ReplicaSet 在后台创建 pod。检查启动状态，看它是成功还是失败
+  + 然后，通过更新 Deployment 的 _PodTemplateSpec_ 字段来声明 Pod 的新状态。这会创建一个新的 ReplicaSet，Deployment 会按照控制的速率将 pod 从旧的 ReplicaSet 移动到新的 ReplicaSet 中
+  + 如果当前状态不稳定，回滚到之前的 Deployment _revision_ 。每次回滚都会更新 Deployment 的 revision
+  + 扩容 Deployment 以满足更高的负载
+  + 暂停 Deployment 来应用 PodTemplateSpec 的多个修复，然后恢复上线
+  + 根据 Deployment 的状态判断上线是否 hang 住了
+  + 清除旧的不必要的 ReplicaSet 
+* 创建
+  #+BEGIN_EXAMPLE
+    下面是一个 Deployment 示例，它创建了一个 ReplicaSet 来启动 3 个 nginx pod
+  #+END_EXAMPLE
+
+  下载示例文件并执行命令：
+
+  #+BEGIN_SRC sh 
+  $ kubectl create -f https://kubernetes.io/docs/user-guide/nginx-deployment.yaml --record
+  deployment "nginx-deployment" created
+  #+END_SRC
+
+  #+BEGIN_EXAMPLE
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: nginx-deployment
+      labels:
+	app: nginx
+    spec:
+      replicas: 3
+      selector:
+	matchLabels:
+	  app: nginx
+      template:
+	metadata:
+	  labels:
+	    app: nginx
+	spec:
+	  containers:
+	  - name: nginx
+	    image: nginx:1.7.9
+	    ports:
+	    - containerPort: 80
+  #+END_EXAMPLE
+
+  将 kubectl 的 _--record_ 的 flag 设置为true 可以在 _annotation_ 中 *记录* 当前命令 _创建_ 或者 _升级_ 了该资源
+
+  #+BEGIN_EXAMPLE
+    这在未来会很有用，例如，查看在每个 Deployment revision 中执行了哪些命令
+  #+END_EXAMPLE
+
+  然后立即执行 get 将获得如下结果：
+
+  #+BEGIN_SRC sh 
+  $ kubectl get deployments
+  NAME               READY   UP-TO-DATE   AVAILABLE   AGE
+  nginx-deployment   3/0     0            0           1s
+  #+END_SRC
+
+  输出结果表明：
+  + 希望的 repalica 数（根据 deployment 中的 _.spec.replicas_ 配置）是 3 
+  + 当前 replica 数（ _.status.replicas_ ）是 0,
+  + 最新的 replica 数（ _.status.updatedReplicas_ ）是 0
+  + 可用的 replica 数（ _.status.availableReplicas_ ）是 0 
+
+  过几秒后再执行 get 命令，将获得如下输出：
+  #+BEGIN_SRC sh 
+  $ kubectl get deployments
+  NAME               READY   UP-TO-DATE   AVAILABLE   AGE
+  nginx-deployment   3/3     3            3           18s
+  #+END_SRC
+
+  #+BEGIN_EXAMPLE
+    可以看到 Deployment 已经创建了 3 个 replica，所有的 replica 都已经是最新的了（包含最新的 pod template），可用的（根据 Deployment 中的.spec.minReadySeconds声明，处于已就绪状态的 pod 的最少个数）
+  #+END_EXAMPLE
+  执行kubectl get rs和kubectl get pods会显示 _Replica Set_ 和 _Pod_ 已创建：
+
+  #+BEGIN_SRC sh 
+  $ kubectl get rs 
+  NAME                          DESIRED   CURRENT   READY   AGE
+  nginx-deployment-5d59d67564   3         3         3       5m45s
+  #+END_SRC
+
+  注意： ReplicaSet 的名字总是 _<Deployment 的名字>_ - _<pod template 的 hash 值>_ 
+
+  #+BEGIN_SRC sh 
+  $ kubectl get pods 
+  NAME                                READY   STATUS    RESTARTS   AGE
+  nginx-deployment-5d59d67564-7hk6b   2/2     Running   0          6m52s
+  nginx-deployment-5d59d67564-h9l2x   2/2     Running   0          6m52s
+  nginx-deployment-5d59d67564-tqnh5   2/2     Running   0          6m52s
+  #+END_SRC
+
+  #+BEGIN_EXAMPLE
+    刚创建的 Replica Set 将保证总是有 3 个 nginx 的 pod 存在
+  #+END_EXAMPLE
+
+  注意： 必须在 _Deployment_ 中的 _selector_ 指定 *正确的 pod template label* 
+  #+BEGIN_EXAMPLE
+    在该示例中是 app = nginx
+  #+END_EXAMPLE
+  不要跟其他的 controller 的 selector 中指定的 pod template label 搞混了（包括 Deployment、Replica Set、Replication Controller 等）
+  #+BEGIN_EXAMPLE
+    Kubernetes 本身并不会阻止任意指定 pod template label，但是如果真的这么做了，这些 controller 之间会相互打架，并可能导致不正确的行为
+  #+END_EXAMPLE
+** Pod-template-hash label
+   注意示例中的 pod label 里的 pod-template-hash label：
+   + 当 Deployment 创建或者接管 ReplicaSet 时，Deployment controller 会自动为 Pod 添加 pod-template-hash label
+   #+BEGIN_EXAMPLE
+     这样做的目的是防止 Deployment 的子 ReplicaSet 的 pod 名字重复
+   #+END_EXAMPLE
+   + 通过将 ReplicaSet 的 _PodTemplate_ 进行 *哈希散列* ，使用生成的哈希值作为 label 的值，并添加到 _ReplicaSet selector_ 里、 _pod template label_ 和 _ReplicaSet 管理中的 Pod 上_ 
+   #+BEGIN_EXAMPLE
+     注意：这个 label 不是用户指定的！
+   #+END_EXAMPLE
+* 更新
+

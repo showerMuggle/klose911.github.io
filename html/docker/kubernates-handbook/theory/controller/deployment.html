@@ -234,7 +234,281 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="controller.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">Deployment</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#org89e3fab">Deployment 结构示意图</a></li>
+<li><a href="#org16be822">概念</a></li>
+<li><a href="#org9f14c4f">创建</a>
+<ul>
+<li><a href="#org2a5806c">Pod-template-hash label</a></li>
+</ul>
+</li>
+<li><a href="#org3fb18be">更新</a></li>
+</ul>
+</div>
+</div>
+<p>
+Deployment 为 <span class="underline">Pod</span> 和 <span class="underline">ReplicaSet</span> 提供了一个 <b>声明式</b> 定义方法，用来替代以前的 ReplicationController 来方便的管理应用。典型的应用场景包括：
+</p>
+<ul class="org-ul">
+<li>定义 Deployment 来 <b>创建</b> <span class="underline">Pod</span> 和 <span class="underline">ReplicaSet</span></li>
+<li><span class="underline">滚动升级</span> 和 <span class="underline">回滚</span> 应用</li>
+<li><span class="underline">扩容</span> 和 <span class="underline">缩容</span></li>
+<li><span class="underline">暂停</span> 和 <span class="underline">继续</span> Deployment</li>
+</ul>
 
+<p>
+比如一个简单的 nginx 应用可以定义为：
+</p>
+
+<pre class="example">
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+spec:
+  replicas: 3
+  template:
+    metadata:
+      labels:
+	app: nginx
+    spec:
+      containers:
+      - name: nginx
+	image: nginx:1.7.9
+	ports:
+	- containerPort: 80
+</pre>
+
+<p>
+扩容：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">kubectl scale deployment nginx-deployment --replicas 10
+</pre>
+</div>
+
+<p>
+如果集群支持 horizontal pod autoscaling 的话，还可以为 Deployment 设置自动扩展：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">kubectl autoscale deployment nginx-deployment --min=10 --max=15 --cpu-percent=80
+</pre>
+</div>
+
+<p>
+更新镜像也比较简单：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">kubectl set image deployment/nginx-deployment <span style="color: #4eee94;">nginx</span>=nginx:1.9.1
+</pre>
+</div>
+
+<p>
+回滚：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">kubectl rollout undo deployment/nginx-deployment
+</pre>
+</div>
+<div id="outline-container-org89e3fab" class="outline-2">
+<h2 id="org89e3fab">Deployment 结构示意图</h2>
+<div class="outline-text-2" id="text-org89e3fab">
+
+<div class="figure">
+<p><img src="../../pic/deployment-cheatsheet.png" alt="deployment-cheatsheet.png" width="70%" />
+</p>
+</div>
+</div>
+</div>
+<div id="outline-container-org16be822" class="outline-2">
+<h2 id="org16be822">概念</h2>
+<div class="outline-text-2" id="text-org16be822">
+<p>
+Deployment 为 Pod 和 Replica Set（下一代 Replication Controller）提供声明式更新
+</p>
+
+<pre class="example">
+    只需要在 Deployment 中描述您想要的目标状态是什么，Deployment controller 就会将 Pod 和 ReplicaSet 的实际状态改变到目标状态
+</pre>
+
+<p>
+可以定义一个全新的 Deployment 来创建 ReplicaSet 或者删除已有的 Deployment 并创建一个新的来替换
+</p>
+
+<pre class="example">
+    注意：不该手动管理由 Deployment 创建的 ReplicaSet，否则就篡越了 Deployment controller 的职责
+
+</pre>
+
+<p>
+典型的用例如下：
+</p>
+<ul class="org-ul">
+<li>使用 Deployment 来创建 ReplicaSet。ReplicaSet 在后台创建 pod。检查启动状态，看它是成功还是失败</li>
+<li>然后，通过更新 Deployment 的 <span class="underline">PodTemplateSpec</span> 字段来声明 Pod 的新状态。这会创建一个新的 ReplicaSet，Deployment 会按照控制的速率将 pod 从旧的 ReplicaSet 移动到新的 ReplicaSet 中</li>
+<li>如果当前状态不稳定，回滚到之前的 Deployment <span class="underline">revision</span> 。每次回滚都会更新 Deployment 的 revision</li>
+<li>扩容 Deployment 以满足更高的负载</li>
+<li>暂停 Deployment 来应用 PodTemplateSpec 的多个修复，然后恢复上线</li>
+<li>根据 Deployment 的状态判断上线是否 hang 住了</li>
+<li>清除旧的不必要的 ReplicaSet</li>
+</ul>
+</div>
+</div>
+<div id="outline-container-org9f14c4f" class="outline-2">
+<h2 id="org9f14c4f">创建</h2>
+<div class="outline-text-2" id="text-org9f14c4f">
+<pre class="example">
+    下面是一个 Deployment 示例，它创建了一个 ReplicaSet 来启动 3 个 nginx pod
+</pre>
+
+<p>
+下载示例文件并执行命令：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl create -f https://kubernetes.io/docs/user-guide/nginx-deployment.yaml --record
+deployment <span style="color: #deb887;">"nginx-deployment"</span> created
+</pre>
+</div>
+
+<pre class="example">
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+  labels:
+    app: nginx
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+	app: nginx
+    spec:
+      containers:
+      - name: nginx
+	image: nginx:1.7.9
+	ports:
+	- containerPort: 80
+</pre>
+
+<p>
+将 kubectl 的 <span class="underline">&#x2013;record</span> 的 flag 设置为true 可以在 <span class="underline">annotation</span> 中 <b>记录</b> 当前命令 <span class="underline">创建</span> 或者 <span class="underline">升级</span> 了该资源
+</p>
+
+<pre class="example">
+    这在未来会很有用，例如，查看在每个 Deployment revision 中执行了哪些命令
+</pre>
+
+<p>
+然后立即执行 get 将获得如下结果：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl get deployments
+NAME               READY   UP-TO-DATE   AVAILABLE   AGE
+nginx-deployment   3/0     0            0           1s
+</pre>
+</div>
+
+<p>
+输出结果表明：
+</p>
+<ul class="org-ul">
+<li>希望的 repalica 数（根据 deployment 中的 <span class="underline">.spec.replicas</span> 配置）是 3</li>
+<li>当前 replica 数（ <span class="underline">.status.replicas</span> ）是 0,</li>
+<li>最新的 replica 数（ <span class="underline">.status.updatedReplicas</span> ）是 0</li>
+<li>可用的 replica 数（ <span class="underline">.status.availableReplicas</span> ）是 0</li>
+</ul>
+
+<p>
+过几秒后再执行 get 命令，将获得如下输出：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl get deployments
+NAME               READY   UP-TO-DATE   AVAILABLE   AGE
+nginx-deployment   3/3     3            3           18s
+</pre>
+</div>
+
+<pre class="example">
+    可以看到 Deployment 已经创建了 3 个 replica，所有的 replica 都已经是最新的了（包含最新的 pod template），可用的（根据 Deployment 中的.spec.minReadySeconds声明，处于已就绪状态的 pod 的最少个数）
+</pre>
+<p>
+执行kubectl get rs和kubectl get pods会显示 <span class="underline">Replica Set</span> 和 <span class="underline">Pod</span> 已创建：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl get rs 
+NAME                          DESIRED   CURRENT   READY   AGE
+nginx-deployment-5d59d67564   3         3         3       5m45s
+</pre>
+</div>
+
+<p>
+注意： ReplicaSet 的名字总是 <span class="underline">&lt;Deployment 的名字&gt;</span> - <span class="underline">&lt;pod template 的 hash 值&gt;</span> 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl get pods 
+NAME                                READY   STATUS    RESTARTS   AGE
+nginx-deployment-5d59d67564-7hk6b   2/2     Running   0          6m52s
+nginx-deployment-5d59d67564-h9l2x   2/2     Running   0          6m52s
+nginx-deployment-5d59d67564-tqnh5   2/2     Running   0          6m52s
+</pre>
+</div>
+
+<pre class="example">
+    刚创建的 Replica Set 将保证总是有 3 个 nginx 的 pod 存在
+</pre>
+
+<p>
+注意： 必须在 <span class="underline">Deployment</span> 中的 <span class="underline">selector</span> 指定 <b>正确的 pod template label</b> 
+</p>
+<pre class="example">
+    在该示例中是 app = nginx
+</pre>
+<p>
+不要跟其他的 controller 的 selector 中指定的 pod template label 搞混了（包括 Deployment、Replica Set、Replication Controller 等）
+</p>
+<pre class="example">
+Kubernetes 本身并不会阻止任意指定 pod template label，但是如果真的这么做了，这些 controller 之间会相互打架，并可能导致不正确的行为
+</pre>
+</div>
+<div id="outline-container-org2a5806c" class="outline-3">
+<h3 id="org2a5806c">Pod-template-hash label</h3>
+<div class="outline-text-3" id="text-org2a5806c">
+<p>
+注意示例中的 pod label 里的 pod-template-hash label：
+</p>
+<ul class="org-ul">
+<li>当 Deployment 创建或者接管 ReplicaSet 时，Deployment controller 会自动为 Pod 添加 pod-template-hash label</li>
+</ul>
+<pre class="example">
+     这样做的目的是防止 Deployment 的子 ReplicaSet 的 pod 名字重复
+</pre>
+<ul class="org-ul">
+<li>通过将 ReplicaSet 的 <span class="underline">PodTemplate</span> 进行 <b>哈希散列</b> ，使用生成的哈希值作为 label 的值，并添加到 <span class="underline">ReplicaSet selector</span> 里、 <span class="underline">pod template label</span> 和 <span class="underline">ReplicaSet 管理中的 Pod 上</span></li>
+</ul>
+<pre class="example">
+     注意：这个 label 不是用户指定的！
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org3fb18be" class="outline-2">
+<h2 id="org3fb18be">更新</h2>
+</div>
 </div>
 <div id="postamble" class="status">
 
