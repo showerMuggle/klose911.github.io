@@ -251,7 +251,14 @@ for the JavaScript code in this tag.
 <li><a href="#org811b478">Label Selector 更新</a></li>
 </ul>
 </li>
-<li><a href="#org2aa24b5">回退</a></li>
+<li><a href="#org2aa24b5">回退</a>
+<ul>
+<li><a href="#org2af0ea0">检查 Deployment 升级的历史记录</a></li>
+<li><a href="#org9046813">回退到历史版本</a></li>
+<li><a href="#org53a7686">清理 Policy</a></li>
+</ul>
+</li>
+<li><a href="#orga3ffa7d">扩容</a></li>
 </ul>
 </div>
 </div>
@@ -695,6 +702,225 @@ Events:
 </div>
 <div id="outline-container-org2aa24b5" class="outline-2">
 <h2 id="org2aa24b5">回退</h2>
+<div class="outline-text-2" id="text-org2aa24b5">
+<pre class="example">
+    有时候可能想回退一个 Deployment，例如，当 Deployment 不稳定时，比如一直 crash looping
+</pre>
+
+<p>
+默认情况下，kubernetes 会在系统中保存前两次的 Deployment 的 rollout 历史记录，以便可以随时回退（可以修改 <span class="underline">revision history limit</span> 来更改保存的 revision 数） 
+</p>
+
+<pre class="example">
+    注意：只有 Deployment 的 rollout 被触发就会创建一个 revision，也就是说当且仅当 Deployment 的 Pod template（如 .spec.template）被更改
+
+    例如更新 template 中的 label 和容器镜像时，就会创建出一个新的 revision，其他的更新，比如扩容 Deployment 不会创建 revision
+
+    因此可以很方便的手动或者自动扩容。这意味着当回退到历史 revision 时，只有 Deployment 中的 Pod template 部分才会回退
+</pre>
+
+<p>
+假设在更新 Deployment 的时候犯了一个拼写错误，将镜像的名字写成了 nginx:1.91，而正确的名字应该是 nginx:1.9.1：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl set image deployment/nginx-deployment <span style="color: #4eee94;">nginx</span>=nginx:1.91
+deployment <span style="color: #deb887;">"nginx-deployment"</span> image updated
+</pre>
+</div>
+
+<p>
+Rollout 将会卡住：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl rollout status deployments nginx-deployment
+Waiting for rollout to finish: 2 out of 3 new replicas have been updated...
+</pre>
+</div>
+
+<p>
+按住 Ctrl-C 停止上面的 rollout 状态监控。查看 rs 会发现旧的 replica（nginx-deployment-1564180365 和 nginx-deployment-2035384211）和新的 replica （nginx-deployment-3066724191）数目都是 2 个　
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl get rs
+NAME                          DESIRED   CURRENT   READY   AGE
+nginx-deployment-1564180365   2         2         0       25s
+nginx-deployment-2035384211   0         0         0       36s
+nginx-deployment-3066724191   2         2         2       6s
+</pre>
+</div>
+
+<p>
+看下 Pod，会看到有两个新的 ReplicaSet 创建的 Pod 处于 ImagePullBackOff 状态，循环拉取镜像
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl get pods
+NAME                                READY     STATUS             RESTARTS   AGE
+nginx-deployment-1564180365-70iae   1/1       Running            0          25s
+nginx-deployment-1564180365-jbqqo   1/1       Running            0          25s
+nginx-deployment-3066724191-08mng   0/1       ImagePullBackOff   0          6s
+nginx-deployment-3066724191-eocby   0/1       ImagePullBackOff   0          6s
+</pre>
+</div>
+
+<p>
+注意，Deployment controller 会自动停止坏的 rollout，并停止扩容新的 ReplicaSet
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl describe deployment
+Name:           nginx-deployment
+Namespace:      default
+CreationTimestamp:  Tue, 15 Mar 2016 14:48:04 -0700
+Labels:         <span style="color: #4eee94;">app</span>=nginx
+Selector:       <span style="color: #4eee94;">app</span>=nginx
+Replicas:       2 updated | 3 total | 2 available | 2 unavailable
+StrategyType:       RollingUpdate
+MinReadySeconds:    0
+RollingUpdateStrategy:  1 max unavailable, 1 max surge
+OldReplicaSets:     nginx-deployment-1564180365 (2/2 replicas created)
+NewReplicaSet:      nginx-deployment-3066724191 (2/2 replicas created)
+Events:
+  FirstSeen LastSeen    Count   From                    SubobjectPath   Type        Reason              Message
+  --------- --------    -----   ----                    -------------   --------    ------              -------
+  1m        1m          1       {deployment-controller}                Normal      ScalingReplicaSet   Scaled up replica set nginx-deployment-2035384211 to 3
+  22s       22s         1       {deployment-controller}                Normal      ScalingReplicaSet   Scaled up replica set nginx-deployment-1564180365 to 1
+  22s       22s         1       {deployment-controller}                Normal      ScalingReplicaSet   Scaled down replica set nginx-deployment-2035384211 to 2
+  22s       22s         1       {deployment-controller}                Normal      ScalingReplicaSet   Scaled up replica set nginx-deployment-1564180365 to 2
+  21s       21s         1       {deployment-controller}                Normal      ScalingReplicaSet   Scaled down replica set nginx-deployment-2035384211 to 0
+  21s       21s         1       {deployment-controller}                Normal      ScalingReplicaSet   Scaled up replica set nginx-deployment-1564180365 to 3
+  13s       13s         1       {deployment-controller}                Normal      ScalingReplicaSet   Scaled up replica set nginx-deployment-3066724191 to 1
+  13s       13s         1       {deployment-controller}                Normal      ScalingReplicaSet   Scaled down replica set nginx-deployment-1564180365 to 2
+  13s       13s         1       {deployment-controller}                Normal      ScalingReplicaSet   Scaled up replica set nginx-deployment-3066724191 to 2
+</pre>
+</div>
+
+<p>
+为了修复这个问题，需要 <b>回退</b> 到稳定的 Deployment revision
+</p>
+</div>
+<div id="outline-container-org2af0ea0" class="outline-3">
+<h3 id="org2af0ea0">检查 Deployment 升级的历史记录</h3>
+<div class="outline-text-3" id="text-org2af0ea0">
+<p>
+首先，检查下 Deployment 的 revision：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl rollout history deployment/nginx-deployment
+deployments <span style="color: #deb887;">"nginx-deployment"</span>:
+REVISION    CHANGE-CAUSE
+1           kubectl create -f https://kubernetes.io/docs/user-guide/nginx-deployment.yaml--record
+2           kubectl set image deployment/nginx-deployment <span style="color: #4eee94;">nginx</span>=nginx:1.9.1
+3           kubectl set image deployment/nginx-deployment <span style="color: #4eee94;">nginx</span>=nginx:1.91
+</pre>
+</div>
+
+<pre class="example">
+     因为创建 Deployment 的时候使用了--record 参数可以记录命令，可以很方便的查看每次 revision 的变化
+</pre>
+
+<p>
+查看单个 revision 的详细信息：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl rollout history deployment/nginx-deployment --revision=2
+deployments <span style="color: #deb887;">"nginx-deployment"</span> revision 2
+  Labels:       <span style="color: #4eee94;">app</span>=nginx
+          pod-template-hash=1159050644
+  Annotations:  kubernetes.io/change-cause=kubectl set image deployment/nginx-deployment <span style="color: #4eee94;">nginx</span>=nginx:1.9.1
+  Containers:
+   nginx:
+    Image:      nginx:1.9.1
+    Port:       80/TCP
+     QoS Tier:
+        cpu:      BestEffort
+        memory:   BestEffort
+    Environment Variables:      &lt;none&gt;
+  No volumes.
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org9046813" class="outline-3">
+<h3 id="org9046813">回退到历史版本</h3>
+<div class="outline-text-3" id="text-org9046813">
+<p>
+现在，可以决定回退当前的 rollout 到之前的版本：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl rollout undo deployment/nginx-deployment
+deployment <span style="color: #deb887;">"nginx-deployment"</span> rolled back
+</pre>
+</div>
+<p>
+也可以使用&#x2013;revision参数指定某个历史版本：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl rollout undo deployment/nginx-deployment --to-revision=2
+deployment <span style="color: #deb887;">"nginx-deployment"</span> rolled back
+</pre>
+</div>
+
+<p>
+该 Deployment 现在已经回退到了先前的稳定版本。Deployment controller 产生了一个回退到 revison 2 的DeploymentRollback的 event 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl get deployment
+NAME               DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+nginx-deployment   3         3         3            3           30m
+
+$ kubectl describe deployment
+Name:           nginx-deployment
+Namespace:      default
+CreationTimestamp:  Tue, 15 Mar 2016 14:48:04 -0700
+Labels:         <span style="color: #4eee94;">app</span>=nginx
+Selector:       <span style="color: #4eee94;">app</span>=nginx
+Replicas:       3 updated | 3 total | 3 available | 0 unavailable
+StrategyType:       RollingUpdate
+MinReadySeconds:    0
+RollingUpdateStrategy:  1 max unavailable, 1 max surge
+OldReplicaSets:     &lt;none&gt;
+NewReplicaSet:      nginx-deployment-1564180365 (3/3 replicas created)
+Events:
+  FirstSeen LastSeen    Count   From                    SubobjectPath   Type        Reason              Message
+  --------- --------    -----   ----                    -------------   --------    ------              -------
+  30m       30m         1       {deployment-controller}                Normal      ScalingReplicaSet   Scaled up replica set nginx-deployment-2035384211 to 3
+  29m       29m         1       {deployment-controller}                Normal      ScalingReplicaSet   Scaled up replica set nginx-deployment-1564180365 to 1
+  29m       29m         1       {deployment-controller}                Normal      ScalingReplicaSet   Scaled down replica set nginx-deployment-2035384211 to 2
+  29m       29m         1       {deployment-controller}                Normal      ScalingReplicaSet   Scaled up replica set nginx-deployment-1564180365 to 2
+  29m       29m         1       {deployment-controller}                Normal      ScalingReplicaSet   Scaled down replica set nginx-deployment-2035384211 to 0
+  29m       29m         1       {deployment-controller}                Normal      ScalingReplicaSet   Scaled up replica set nginx-deployment-3066724191 to 2
+  29m       29m         1       {deployment-controller}                Normal      ScalingReplicaSet   Scaled up replica set nginx-deployment-3066724191 to 1
+  29m       29m         1       {deployment-controller}                Normal      ScalingReplicaSet   Scaled down replica set nginx-deployment-1564180365 to 2
+  2m        2m          1       {deployment-controller}                Normal      ScalingReplicaSet   Scaled down replica set nginx-deployment-3066724191 to 0
+  2m        2m          1       {deployment-controller}                Normal      DeploymentRollback  Rolled back deployment <span style="color: #deb887;">"nginx-deployment"</span> to revision 2
+  29m       2m          2       {deployment-controller}                Normal      ScalingReplicaSet   Scaled up replica set nginx-deployment-1564180365 to 3
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org53a7686" class="outline-3">
+<h3 id="org53a7686">清理 Policy</h3>
+<div class="outline-text-3" id="text-org53a7686">
+<p>
+可以通过设置 <span class="underline">.spec.revisonHistoryLimit</span> 项来指定 deployment 最多保留多少 revision 历史记录：
+</p>
+<ul class="org-ul">
+<li>默认的会保留所有的 revision</li>
+<li>如果将该项设置为 0，Deployment 就不允许回退了</li>
+</ul>
+</div>
+</div>
+</div>
+<div id="outline-container-orga3ffa7d" class="outline-2">
+<h2 id="orga3ffa7d">扩容</h2>
 </div>
 </div>
 <div id="postamble" class="status">
