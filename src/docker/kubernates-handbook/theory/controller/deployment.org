@@ -187,4 +187,141 @@ Deployment 为 _Pod_ 和 _ReplicaSet_ 提供了一个 *声明式* 定义方法�
      注意：这个 label 不是用户指定的！
    #+END_EXAMPLE
 * 更新
+  #+BEGIN_EXAMPLE
+    注意：Deployment 的 rollout 当且仅当 Deployment 的 pod template（例如 .spec.template）中的 label 更新或者镜像更改时被触发
+
+    其他更新，例如扩容 Deployment 不会触发 rollout
+  #+END_EXAMPLE
+
+  假如现在想要让 nginx pod 使用 nginx:1.16.1 的镜像来代替原来的 nginx:1.14.2 的镜像 
+  #+BEGIN_SRC sh 
+  $ kubectl set image deployment/nginx-deployment nginx=nginx:1.16.1
+  deployment "nginx-deployment" image updated
+  #+END_SRC
+
+  可以使用edit命令来编辑 Deployment，修改.spec.template.spec.containers [0].image
+
+  #+BEGIN_SRC sh 
+  $ kubectl edit deployment/nginx-deployment
+  deployment "nginx-deployment" edited
+  #+END_SRC
+
+  查看 rollout 的状态，只要执行：
+
+  #+BEGIN_SRC sh 
+  $ kubectl rollout status deployment/nginx-deployment 
+  Waiting for rollout to finish: 2 out of 3 new replicas have been updated...
+  deployment "nginx-deployment" successfully rolled out
+  #+END_SRC
+
+  Rollout 成功后，getDeployment：
+
+  #+BEGIN_SRC sh 
+  $ kubectl get deployments
+  NAME               DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+  nginx-deployment   3         3         3            3           36s
+  #+END_SRC
+
+  #+BEGIN_EXAMPLE
+    UP-TO-DATE 的 replica 的数目已经达到了配置中要求的数目
+
+    CURRENT 的 replica 数表示 Deployment 管理的 replica 数量
+
+    AVAILABLE 的 replica 数是当前可用的 replica 数量
+  #+END_EXAMPLE
+
+  通过执行 _kubectl get rs_ 可以看到 Deployment 更新了 Pod，通过创建一个新的 ReplicaSet 并扩容了 3 个 replica，同时将原来的 ReplicaSet 缩容到了 0 个 replica
+
+  #+BEGIN_SRC sh 
+  $ kubectl get rs 
+  NAME                          DESIRED   CURRENT   READY   AGE
+  nginx-deployment-559d658b74   3         3         3       2m43s
+  nginx-deployment-5d59d67564   0         0         0       3m49s
+  #+END_SRC
+
+  执行get pods只会看到当前的新的 pod：
+
+  #+BEGIN_SRC sh 
+  $ kubectl get pods 
+  NAME                                READY   STATUS    RESTARTS   AGE
+  nginx-deployment-559d658b74-f7r7t   2/2     Running   0          3m30s
+  nginx-deployment-559d658b74-kvdql   2/2     Running   0          3m26s
+  nginx-deployment-559d658b74-swzqk   2/2     Running   0          3m34s
+  #+END_SRC
+
+  + Deployment保证在升级时只有一定数量的 Pod 是 down 的。默认的，它会确保至少有比期望的 Pod 数量少一个是 up 状态（最多一个不可用）
+  + Deployment 同时也可以确保只创建出超过期望数量的一定数量的 Pod。默认的，它会确保最多比期望的 Pod 数量多一个的 Pod 是 up 的（最多 1 个 surge ） 
+
+  #+BEGIN_EXAMPLE
+    例如，如果看下上面的 Deployment，会发现，开始创建一个新的 Pod，然后删除一些旧的 Pod 再创建一个新的，当新的 Pod 创建出来之前不会杀掉旧的 Pod
+
+    这样能够确保可用的 Pod 数量至少有 2 个，Pod 的总数最多 4 个
+  #+END_EXAMPLE
+
+  #+BEGIN_SRC sh 
+  $ kubectl describe deployments
+  Name:           nginx-deployment
+  Namespace:      default
+  CreationTimestamp:  Tue, 15 Mar 2016 12:01:06 -0700
+  Labels:         app=nginx
+  Selector:       app=nginx
+  Replicas:       3 updated | 3 total | 3 available | 0 unavailable
+  StrategyType:       RollingUpdate
+  MinReadySeconds:    0
+  RollingUpdateStrategy:  1 max unavailable, 1 max surge
+  OldReplicaSets:     <none>
+  NewReplicaSet:      nginx-deployment-1564180365 (3/3 replicas created)
+  Events:
+    FirstSeen LastSeen    Count   From                     SubobjectPath   Type        Reason              Message
+    --------- --------    -----   ----                     -------------   --------    ------              -------
+    36s       36s         1       {deployment-controller}                 Normal      ScalingReplicaSet   Scaled up replica set nginx-deployment-2035384211 to 3
+    23s       23s         1       {deployment-controller}                 Normal      ScalingReplicaSet   Scaled up replica set nginx-deployment-1564180365 to 1
+    23s       23s         1       {deployment-controller}                 Normal      ScalingReplicaSet   Scaled down replica set nginx-deployment-2035384211 to 2
+    23s       23s         1       {deployment-controller}                 Normal      ScalingReplicaSet   Scaled up replica set nginx-deployment-1564180365 to 2
+    21s       21s         1       {deployment-controller}                 Normal      ScalingReplicaSet   Scaled down replica set nginx-deployment-2035384211 to 0
+    21s       21s         1       {deployment-controller}                 Normal      ScalingReplicaSet   Scaled up replica set nginx-deployment-1564180365 to 3
+  #+END_SRC
+
+  1. 刚开始创建这个 Deployment 的时候，创建了一个 ReplicaSet（nginx-deployment-2035384211），并直接扩容到了 3 个 replica
+  2. 当更新这个 Deployment 的时候，它会创建一个新的 ReplicaSet（nginx-deployment-1564180365），将它扩容到 1 个 replica，然后缩容原先的 ReplicaSet 到 2 个 replica，此时满足至少 2 个 Pod 是可用状态，同一时刻最多有 4 个 Pod 处于创建的状态
+  3. 接着继续使用相同的 rolling update 策略扩容新的 ReplicaSet 和缩容旧的 ReplicaSet
+  4. 最终，将会在新的 ReplicaSet 中有 3 个可用的 replica，旧的 ReplicaSet 的 replica 数目变成 0
+
+  #+BEGIN_EXAMPLE
+    在未来的 Kuberentes 版本中，将从 1-1 变成 25%-25%
+  #+END_EXAMPLE
+** Rollover 
+   #+BEGIN_EXAMPLE
+     每当 Deployment controller 观测到有新的 deployment 被创建时，如果没有已存在的 ReplicaSet 来创建期望个数的 Pod 的话，就会创建出一个新的 ReplicaSet 来做这件事
+
+     已存在的 ReplicaSet 控制 label 与 .spec.selector 匹配但是 template 跟 .spec.template 不匹配的 Pod 缩容
+
+     最终，新的 ReplicaSet 将会扩容出 .spec.replicas 指定数目的 Pod，旧的 ReplicaSet 会缩容到 0
+   #+END_EXAMPLE
+
+   如果更新了一个的已存在并正在进行中的 Deployment，每次更新 Deployment 都会创建一个新的 ReplicaSet 并扩容它，同时 *回滚* 之前扩容的 ReplicaSet（将它添加到旧的 ReplicaSet 列表中，开始缩容）
+
+   #+BEGIN_EXAMPLE
+     例如，假如创建了一个有 5 个 niginx:1.7.9 replica 的 Deployment，但是当还只有 3 个 nginx:1.7.9 的 replica 创建出来的时候就开始更新含有 5 个 nginx:1.9.1 replica 的 Deployment
+
+     在这种情况下，Deployment 会立即杀掉已创建的 3 个 nginx:1.7.9 的 Pod，并开始创建 nginx:1.9.1 的 Pod
+
+     它不会等到所有的 5 个 nginx:1.7.9 的 Pod 都创建完成后才开始改变航道
+   #+END_EXAMPLE
+** Label Selector 更新
+
+   #+BEGIN_EXAMPLE
+     通常不鼓励更新 label selector，建议事先规划好您的 selector
+   #+END_EXAMPLE
+   任何情况下，只要想要执行 label selector 的更新，请一定要谨慎并确认已经预料到所有可能因此导致的后果：
+   + 增添 selector 需要同时在 Deployment 的 spec 中更新新的 label，否则将返回校验错误
+     #+BEGIN_EXAMPLE
+       此更改是不可覆盖的，这意味着新的 selector 不会选择使用旧 selector 创建的 ReplicaSet 和 Pod，从而导致所有旧版本的 ReplicaSet 都被丢弃，并创建新的 ReplicaSet
+     #+END_EXAMPLE
+   + 更新 selector，即更改 selector key 的当前值，将导致跟增添 selector 同样的后果
+   + 删除 selector，即删除 Deployment selector 中的已有的 key，不需要对 Pod template label 做任何更改，现有的 ReplicaSet 也不会成为孤儿
+     #+BEGIN_EXAMPLE
+       但是请注意，删除的 label 仍然存在于现有的 Pod 和 ReplicaSet 中
+     #+END_EXAMPLE
+* 回退
 
