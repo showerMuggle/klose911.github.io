@@ -490,3 +490,67 @@ Deployment 为 _Pod_ 和 _ReplicaSet_ 提供了一个 *声明式* 定义方法�
    + 默认的会保留所有的 revision
    + 如果将该项设置为 0，Deployment 就不允许回退了 
 * 扩容
+  可以使用以下命令扩容 Deployment：
+  #+BEGIN_SRC sh 
+  $ kubectl scale deployment nginx-deployment --replicas 10
+  #+END_SRC
+
+  假设集群中启用了 _horizontal pod autoscaling_ ，可以给 Deployment 设置一个 autoscale，基于当前 Pod 的 *CPU 利用率* 选择 _最少_ 和 _最多_ 的 Pod 数 
+
+  #+BEGIN_SRC sh 
+  $ kubectl autoscale deployment nginx-deployment --min=10 --max=15 --cpu-percent=80
+  deployment "nginx-deployment" autoscaled
+  #+END_SRC
+** 比例扩容
+   RollingUpdate Deployment 支持同时运行一个应用的多个版本。或者 autoscaler 扩容 RollingUpdate Deployment 的时候，正在中途的 rollout（进行中或者已经暂停的），为了降低风险，Deployment controller 将会 *平衡& _已存在的活动中的 ReplicaSet_ （有 Pod 的 ReplicaSet）和 _新加入的 Replicaset_ 。这被称为 _比例扩容_ 
+
+   #+BEGIN_EXAMPLE
+   例如，正在运行中含有 10 个 replica 的 Deployment。maxSurge=3，maxUnavailable=2
+   #+END_EXAMPLE
+
+   #+BEGIN_SRC sh 
+  $ kubectl get deploy
+  NAME                 DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+  nginx-deployment     10        10        10           10          50s
+   #+END_SRC
+
+   更新了一个镜像，而在集群内部无法解析 
+
+   #+BEGIN_SRC sh 
+  $ kubectl set image deploy/nginx-deployment nginx=nginx:sometag
+  deployment "nginx-deployment" image updated
+   #+END_SRC
+
+   镜像更新启动了一个包含 ReplicaSet _nginx-deployment-1989198191_ 的新的 rollout，但是它被阻塞了，因为上面提到的 maxUnavailable 
+
+   #+BEGIN_SRC sh 
+  $ kubectl get rs
+  NAME                          DESIRED   CURRENT   READY     AGE
+  nginx-deployment-1989198191   5         5         0         9s
+  nginx-deployment-618515232    8         8         8         1m
+   #+END_SRC
+
+   然后发起了一个新的 Deployment 扩容请求。autoscaler 将 Deployment 的 replica 数目增加到了 15 个。Deployment controller 需要判断在哪里增加这 5 个新的 replica：
+   + 如果没有用比例扩容，所有的 5 个 replica 都会加到一个新的 ReplicaSet 中
+   + 如果使用比例扩容，新添加的 replica 将传播到所有的 ReplicaSet 中
+     + 大的部分加入 replica 数最多的 ReplicaSet 中
+     + 小的部分加入到 replica 数少的 ReplciaSet 中
+     + 0 个 replica 的 ReplicaSet 不会被扩容 
+
+   #+BEGIN_EXAMPLE
+     在上面的例子中，3 个 replica 将添加到旧的 ReplicaSet 中，2 个 replica 将添加到新的 ReplicaSet 中
+
+     rollout 进程最终会将所有的 replica 移动到新的 ReplicaSet 中，假设新的 replica 成为健康状态
+   #+END_EXAMPLE
+
+   #+BEGIN_SRC sh 
+  $ kubectl get deploy
+  NAME                 DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+  nginx-deployment     15        18        7            8           7m
+  $ kubectl get rs
+  NAME                          DESIRED   CURRENT   READY     AGE
+  nginx-deployment-1989198191   7         7         0         7m
+  nginx-deployment-618515232    11        11        11        7m
+   #+END_SRC
+
+

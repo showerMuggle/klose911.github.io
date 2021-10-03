@@ -258,7 +258,11 @@ for the JavaScript code in this tag.
 <li><a href="#org53a7686">清理 Policy</a></li>
 </ul>
 </li>
-<li><a href="#orga3ffa7d">扩容</a></li>
+<li><a href="#orga3ffa7d">扩容</a>
+<ul>
+<li><a href="#org23f88f9">比例扩容</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
@@ -921,6 +925,96 @@ Events:
 </div>
 <div id="outline-container-orga3ffa7d" class="outline-2">
 <h2 id="orga3ffa7d">扩容</h2>
+<div class="outline-text-2" id="text-orga3ffa7d">
+<p>
+可以使用以下命令扩容 Deployment：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl scale deployment nginx-deployment --replicas 10
+</pre>
+</div>
+
+<p>
+假设集群中启用了 <span class="underline">horizontal pod autoscaling</span> ，可以给 Deployment 设置一个 autoscale，基于当前 Pod 的 <b>CPU 利用率</b> 选择 <span class="underline">最少</span> 和 <span class="underline">最多</span> 的 Pod 数 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl autoscale deployment nginx-deployment --min=10 --max=15 --cpu-percent=80
+deployment <span style="color: #deb887;">"nginx-deployment"</span> autoscaled
+</pre>
+</div>
+</div>
+<div id="outline-container-org23f88f9" class="outline-3">
+<h3 id="org23f88f9">比例扩容</h3>
+<div class="outline-text-3" id="text-org23f88f9">
+<p>
+RollingUpdate Deployment 支持同时运行一个应用的多个版本。或者 autoscaler 扩容 RollingUpdate Deployment 的时候，正在中途的 rollout（进行中或者已经暂停的），为了降低风险，Deployment controller 将会 *平衡&amp; <span class="underline">已存在的活动中的 ReplicaSet</span> （有 Pod 的 ReplicaSet）和 <span class="underline">新加入的 Replicaset</span> 。这被称为 <span class="underline">比例扩容</span> 
+</p>
+
+<pre class="example">
+   例如，正在运行中含有 10 个 replica 的 Deployment。maxSurge=3，maxUnavailable=2
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl get deploy
+NAME                 DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+nginx-deployment     10        10        10           10          50s
+</pre>
+</div>
+
+<p>
+更新了一个镜像，而在集群内部无法解析 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl set image deploy/nginx-deployment <span style="color: #4eee94;">nginx</span>=nginx:sometag
+deployment <span style="color: #deb887;">"nginx-deployment"</span> image updated
+</pre>
+</div>
+
+<p>
+镜像更新启动了一个包含 ReplicaSet <span class="underline">nginx-deployment-1989198191</span> 的新的 rollout，但是它被阻塞了，因为上面提到的 maxUnavailable 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl get rs
+NAME                          DESIRED   CURRENT   READY     AGE
+nginx-deployment-1989198191   5         5         0         9s
+nginx-deployment-618515232    8         8         8         1m
+</pre>
+</div>
+
+<p>
+然后发起了一个新的 Deployment 扩容请求。autoscaler 将 Deployment 的 replica 数目增加到了 15 个。Deployment controller 需要判断在哪里增加这 5 个新的 replica：
+</p>
+<ul class="org-ul">
+<li>如果没有用比例扩容，所有的 5 个 replica 都会加到一个新的 ReplicaSet 中</li>
+<li>如果使用比例扩容，新添加的 replica 将传播到所有的 ReplicaSet 中
+<ul class="org-ul">
+<li>大的部分加入 replica 数最多的 ReplicaSet 中</li>
+<li>小的部分加入到 replica 数少的 ReplciaSet 中</li>
+<li>0 个 replica 的 ReplicaSet 不会被扩容</li>
+</ul></li>
+</ul>
+
+<pre class="example">
+在上面的例子中，3 个 replica 将添加到旧的 ReplicaSet 中，2 个 replica 将添加到新的 ReplicaSet 中
+
+rollout 进程最终会将所有的 replica 移动到新的 ReplicaSet 中，假设新的 replica 成为健康状态
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl get deploy
+NAME                 DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+nginx-deployment     15        18        7            8           7m
+$ kubectl get rs
+NAME                          DESIRED   CURRENT   READY     AGE
+nginx-deployment-1989198191   7         7         0         7m
+nginx-deployment-618515232    11        11        11        7m
+</pre>
+</div>
+</div>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
