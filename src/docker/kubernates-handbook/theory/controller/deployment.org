@@ -552,5 +552,86 @@ Deployment 为 _Pod_ 和 _ReplicaSet_ 提供了一个 *声明式* 定义方法�
   nginx-deployment-1989198191   7         7         0         7m
   nginx-deployment-618515232    11        11        11        7m
    #+END_SRC
+** 删除 autoscale
+   #+BEGIN_SRC sh 
+  $ kubectl get hpa
+  $ kubectl delete hpa ${name of hpa}
+   #+END_SRC
+* 暂停和恢复 
+  可以在发出一次或多次更新前暂停一个 Deployment，然后再恢复它
 
+  #+BEGIN_EXAMPLE
+    这样就能在 Deployment 暂停期间进行多次修复工作，而不会发出不必要的 rollout
+  #+END_EXAMPLE
 
+  例如使用刚刚创建 Deployment：
+
+  #+BEGIN_SRC sh 
+  $ kubectl get deploy
+  NAME      DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+  nginx     3         3         3            3           1m
+  $ kubectl get rs
+  NAME               DESIRED   CURRENT   READY     AGE
+  nginx-2142116321   3         3         3         1m
+  #+END_SRC
+
+  使用以下命令暂停 Deployment：
+
+  #+BEGIN_SRC sh 
+  $ kubectl rollout pause deployment/nginx-deployment
+  deployment "nginx-deployment" paused
+  #+END_SRC
+  然后更新 Deplyment 中的镜像：
+
+  #+BEGIN_SRC sh 
+  $ kubectl set image deploy/nginx-deployment nginx=nginx:1.16.1
+  deployment "nginx-deployment" image updated
+  #+END_SRC
+
+  注意，新的 rollout 启动了：
+
+  #+BEGIN_SRC sh 
+  $ kubectl rollout history deploy/nginx-deployment
+  deployments "nginx-deployment"
+  REVISION  CHANGE-CAUSE
+  1   <none>
+
+  $ kubectl get rs
+  NAME                         DESIRED   CURRENT   READY     AGE
+  nginx-deployment-5d59d67564   0         0         0        2m
+  #+END_SRC
+
+  可以进行任意多次更新，例如更新使用的资源：
+
+  #+BEGIN_SRC sh 
+  $ kubectl set resources deployment nginx-deployment -c=nginx --limits=cpu=200m,memory=512Mi
+  deployment.apps/nginx-deployment resource requirements updated
+  #+END_SRC
+
+  #+BEGIN_EXAMPLE
+    Deployment 暂停前的初始状态将继续它的功能，而不会对 Deployment 的更新产生任何影响，只要 Deployment 是暂停的
+  #+END_EXAMPLE
+
+  最后，恢复这个 Deployment，观察完成更新的 ReplicaSet 已经创建出来了：
+
+  #+BEGIN_SRC sh 
+  $ kubectl get rs -w 
+  NAME                          DESIRED   CURRENT   READY   AGE
+  nginx-deployment-5d59d67564   1         1         1       3m45s
+  nginx-deployment-84864d5954   3         3         2       11s
+  nginx-deployment-84864d5954   3         3         3       11s
+  nginx-deployment-5d59d67564   0         1         1       3m45s
+  nginx-deployment-5d59d67564   0         1         1       3m45s
+  nginx-deployment-5d59d67564   0         0         0       3m45s
+
+  ^C 
+  $ kubectl get rs 
+  NAME                          DESIRED   CURRENT   READY   AGE
+  nginx-deployment-5d59d67564   0         0         0       3m58s
+  nginx-deployment-84864d5954   3         3         3       24s
+  #+END_SRC
+
+  #+BEGIN_EXAMPLE
+    注意：在恢复 Deployment 之前无法回退一个已经暂停的 Deployment
+  #+END_EXAMPLE
+* 状态

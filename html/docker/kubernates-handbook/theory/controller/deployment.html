@@ -261,8 +261,11 @@ for the JavaScript code in this tag.
 <li><a href="#orga3ffa7d">扩容</a>
 <ul>
 <li><a href="#org23f88f9">比例扩容</a></li>
+<li><a href="#org0e4fd45">删除 autoscale</a></li>
 </ul>
 </li>
+<li><a href="#org146269d">暂停和恢复</a></li>
+<li><a href="#orga56ee20">状态</a></li>
 </ul>
 </div>
 </div>
@@ -1015,6 +1018,120 @@ nginx-deployment-618515232    11        11        11        7m
 </div>
 </div>
 </div>
+<div id="outline-container-org0e4fd45" class="outline-3">
+<h3 id="org0e4fd45">删除 autoscale</h3>
+<div class="outline-text-3" id="text-org0e4fd45">
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl get hpa
+$ kubectl delete hpa ${<span style="color: #4eee94;">name</span> of hpa}
+</pre>
+</div>
+</div>
+</div>
+</div>
+<div id="outline-container-org146269d" class="outline-2">
+<h2 id="org146269d">暂停和恢复</h2>
+<div class="outline-text-2" id="text-org146269d">
+<p>
+可以在发出一次或多次更新前暂停一个 Deployment，然后再恢复它
+</p>
+
+<pre class="example">
+    这样就能在 Deployment 暂停期间进行多次修复工作，而不会发出不必要的 rollout
+</pre>
+
+<p>
+例如使用刚刚创建 Deployment：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl get deploy
+NAME      DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+nginx     3         3         3            3           1m
+$ kubectl get rs
+NAME               DESIRED   CURRENT   READY     AGE
+nginx-2142116321   3         3         3         1m
+</pre>
+</div>
+
+<p>
+使用以下命令暂停 Deployment：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl rollout pause deployment/nginx-deployment
+deployment <span style="color: #deb887;">"nginx-deployment"</span> paused
+</pre>
+</div>
+<p>
+然后更新 Deplyment 中的镜像：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl set image deploy/nginx-deployment <span style="color: #4eee94;">nginx</span>=nginx:1.16.1
+deployment <span style="color: #deb887;">"nginx-deployment"</span> image updated
+</pre>
+</div>
+
+<p>
+注意，新的 rollout 启动了：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl rollout history deploy/nginx-deployment
+deployments <span style="color: #deb887;">"nginx-deployment"</span>
+REVISION  CHANGE-CAUSE
+1   &lt;none&gt;
+
+$ kubectl get rs
+NAME                         DESIRED   CURRENT   READY     AGE
+nginx-deployment-5d59d67564   0         0         0        2m
+</pre>
+</div>
+
+<p>
+可以进行任意多次更新，例如更新使用的资源：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl set resources deployment nginx-deployment -c=nginx --limits=<span style="color: #4eee94;">cpu</span>=200m,<span style="color: #4eee94;">memory</span>=512Mi
+deployment.apps/nginx-deployment resource requirements updated
+</pre>
+</div>
+
+<pre class="example">
+Deployment 暂停前的初始状态将继续它的功能，而不会对 Deployment 的更新产生任何影响，只要 Deployment 是暂停的
+</pre>
+
+<p>
+最后，恢复这个 Deployment，观察完成更新的 ReplicaSet 已经创建出来了：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl get rs -w 
+NAME                          DESIRED   CURRENT   READY   AGE
+nginx-deployment-5d59d67564   1         1         1       3m45s
+nginx-deployment-84864d5954   3         3         2       11s
+nginx-deployment-84864d5954   3         3         3       11s
+nginx-deployment-5d59d67564   0         1         1       3m45s
+nginx-deployment-5d59d67564   0         1         1       3m45s
+nginx-deployment-5d59d67564   0         0         0       3m45s
+
+^C 
+$ kubectl get rs 
+NAME                          DESIRED   CURRENT   READY   AGE
+nginx-deployment-5d59d67564   0         0         0       3m58s
+nginx-deployment-84864d5954   3         3         3       24s
+</pre>
+</div>
+
+<pre class="example">
+    注意：在恢复 Deployment 之前无法回退一个已经暂停的 Deployment
+</pre>
+</div>
+</div>
+<div id="outline-container-orga56ee20" class="outline-2">
+<h2 id="orga56ee20">状态</h2>
 </div>
 </div>
 <div id="postamble" class="status">
