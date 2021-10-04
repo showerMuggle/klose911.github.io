@@ -1,6 +1,5 @@
 #+TITLE: Deployment
 #+HTML_HEAD: <link rel="stylesheet" type="text/css" href="../../css/main.css" />
-#+HTML_LINK_UP: controller.html   
 #+HTML_LINK_HOME: controller.html
 #+OPTIONS: num:nil timestamp:nil ^:nil
 
@@ -792,4 +791,111 @@ Deployment 为 _Pod_ 和 _ReplicaSet_ 提供了一个 *声明式* 定义方法�
   #+BEGIN_EXAMPLE
     参照 https://kubernetes.io/docs/concepts/cluster-administration/manage-deployment/#canary-deployments 中对金丝雀模式的描述 
   #+END_EXAMPLE
+
+* 编写 
+** Pod Template
+   _.spec.template_ 是 _.spec_ 中唯一要求的字段：
+   + .spec.template 是 pod template. 它跟 Pod 有一模一样的 schema，除了它是嵌套的并且 *不需要* _apiVersion_ 和 _kind_ 字段
+   + 为了划分 Pod 的范围，Deployment 中的 pod template 必须指定适当的 _label_ （不要跟其他 controller 重复了，参考 selector）和适当的 _重启策略_ 
+     + _.spec.template.spec.restartPolicy_ 可以设置为 _Always_ , 如果不指定的话这就是默认配置。
+** Replicas 
+   _.spec.replicas_ 是可以选字段，指定 *期望的 pod 数量* ，默认是 _1_ 
+** Selector
+   _.spec.selector_ 是可选字段，用来指定 _label selector_ ，限定 Deployment 管理的 pod 范围　
+   + 如果被指定， .spec.selector 必须匹配 _.spec.template.metadata.labels_ ，否则它将被 API 拒绝
+   + 如果 .spec.selector 没有被指定， .spec.selector.matchLabels 默认是 _.spec.template.metadata.labels_ 
+
+   #+BEGIN_EXAMPLE
+     注意：不应该再创建其他 label 跟这个 selector 匹配的 pod，或者通过其他 Deployment，或者通过其他 Controller
+
+     如果有多个 controller 使用了重复的 selector，controller 们就会互相打架并导致不正确的行为
+
+     例如 ReplicaSet 和 ReplicationController，否则该 Deployment 会被把它们当成都是自己创建的，Kubernetes 不会阻止这么做
+   #+END_EXAMPLE
+
+   在 Pod 的 template 跟 .spec.template 不同或者数量超过了 .spec.replicas 规定的数量的情况下，Deployment 会杀掉 label 跟 selector 不同的 Pod 
+** Strategy
+   _.spec.strategy_ 指定 _新的 Pod_ *替换* _旧的 Pod_ 的策略
+   + .spec.strategy.type 可以是 _Recreate_ 或者是 _RollingUpdate_
+   + RollingUpdate 是默认值 
+*** Recreate Deployment
+    _.spec.strategy.type=Recreate_ 时，在创建出新的 Pod 之前会先杀掉所有已存在的 Pod 
+
+*** Rolling Update Deployment
+    _.spec.strategy.type=RollingUpdate_ 时，Deployment 使用 rolling update 的方式更新 Pod 
+    + 可以指定 _maxUnavailable_ 和 _maxSurge_ 来控制 rolling update 进程 
+
+**** Max Unavailable
+     _.spec.strategy.rollingUpdate.maxUnavailable_ 是可选配置项，用来指定在升级过程中 *不可用 Pod 的最大数量* ：
+     + 可以是一个绝对值（例如 5）
+     + 可以是期望 Pod 数量的百分比（例如 10%）
+     + 通过计算百分比的绝对值向下取整
+     + 如果 .spec.strategy.rollingUpdate.maxSurge 为 0 时，这个值不可以为 0
+     + 默认值是 1 
+
+     #+BEGIN_EXAMPLE
+       例如，该值设置成 30%，启动 rolling update 后旧的 ReplicatSet 将会立即缩容到期望的 Pod 数量的 70%
+
+       新的 Pod ready 后，随着新的 ReplicaSet 的扩容，旧的 ReplicaSet 会进一步缩容，确保在升级的所有时刻可以用的 Pod 数量至少是期望 Pod 数量的 70%
+     #+END_EXAMPLE
+
+**** Max Surge
+     _.spec.strategy.rollingUpdate.maxSurge_ 是可选配置项，用来指定可以 *超过期望的 Pod 数量的最大个数* ：
+     + 可以是一个绝对值（例如 5）
+     + 可以是期望的 Pod 数量的百分比（例如 10%）
+     + 当 MaxUnavailable 为 0 时该值不可以为 0
+     + 通过百分比计算的绝对值向上取整
+     + 默认值是 1　
+
+     #+BEGIN_EXAMPLE
+       例如，该值设置成 30%，启动 rolling update 后新的 ReplicatSet 将会立即扩容，新老 Pod 的总数不能超过期望的 Pod 数量的 130%
+
+       旧的 Pod 被杀掉后，新的 ReplicaSet 将继续扩容，旧的 ReplicaSet 会进一步缩容，确保在升级的所有时刻所有的 Pod 数量和不会超过期望 Pod 数量的 130% 
+     #+END_EXAMPLE
+
+** Progress Deadline Seconds
+   _.spec.progressDeadlineSeconds_ 是可选配置项，用来指定在系统报告 Deployment 的 failed progressing 
+
+   #+BEGIN_EXAMPLE
+     表现为 resource 的状态中 type=Progressing、Status=False、 Reason=ProgressDeadlineExceeded 前可以等待的 Deployment 进行的秒数
+
+     Deployment controller 会继续重试该 Deployment
+
+     未来，在实现了自动回滚后， deployment controller 在观察到这种状态时就会自动回滚
+   #+END_EXAMPLE
+
+   如果设置该参数，该值必须 *大于* _.spec.minReadySeconds_
+** Min Ready Seconds
+   _.spec.minReadySeconds_ 是一个可选配置项，用来指定没有任何容器 crash 的 Pod 并被认为是可用状态的最小秒数。默认是 _0_（Pod 在 ready 后就会被认为是可用状态）
+
+** Rollback To
+   _.spec.rollbackTo_ 是一个可以选配置项，用来配置 Deployment 回退的配置：
+   + 设置该参数将 *触发* _回退_ 操作
+   + 每次 _回退完成_ 后，该值就会被 *清除* 
+
+*** Revision 
+    _.spec.rollbackTo.revision_ 是一个可选配置项，用来指定 *回退到的 revision* 。默认是 _0_ ，意味着回退到 _上一个_ revision 
+
+** Revision History Limit
+   #+BEGIN_EXAMPLE
+     Deployment revision history 存储在它控制的 ReplicaSets 中
+   #+END_EXAMPLE
+
+   _.spec.revisionHistoryLimit_ 是一个可选配置项，用来指定 _可以保留的_ _旧的_ ReplicaSet *数量* ：
+   + 该理想值取决于心 Deployment 的 _频率_ 和 _稳定性_ 
+   + 如果该值没有设置的话，默认所有旧的 Replicaset 或会被保留，将资源存储在 etcd 中，是用 kubectl get rs 查看输出
+     + 每个 Deployment 的该配置都保存在 ReplicaSet 中。一旦删除的旧的 RepelicaSet，Deployment 就无法再回退到那个 revison 了 
+
+   #+BEGIN_EXAMPLE
+     如果将该值设置为 0，所有具有 0 个 replica 的 ReplicaSet 都会被删除
+
+     在这种情况下，新的 Deployment rollout 无法撤销，因为 revision history 都被清理掉了
+   #+END_EXAMPLE
+** Paused
+   _.spec.paused_ 是可以可选配置项， _boolean_ 值。用来指定 _暂停_ 和 _恢复_ Deployment
+   + Paused 和没有 paused 的 Deployment 之间的唯一区别就是： *所有对 paused deployment 中的 PodTemplateSpec 的修改都不会触发新的 rollout* 
+   + Deployment 被创建之后默认是 _非 paused_ 
+
+
+
 
