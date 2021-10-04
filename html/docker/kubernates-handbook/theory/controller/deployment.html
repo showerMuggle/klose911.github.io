@@ -265,7 +265,18 @@ for the JavaScript code in this tag.
 </ul>
 </li>
 <li><a href="#org146269d">暂停和恢复</a></li>
-<li><a href="#orga56ee20">状态</a></li>
+<li><a href="#orga56ee20">状态</a>
+<ul>
+<li><a href="#org3964f73">进行中</a></li>
+<li><a href="#org893d333">完成</a></li>
+<li><a href="#org673fcb3">失败</a>
+<ul>
+<li><a href="#org4bf26e2">操作失败的 Deployment</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#org8a8ef4a">金丝雀 Deployment</a></li>
 </ul>
 </div>
 </div>
@@ -1132,6 +1143,233 @@ nginx-deployment-84864d5954   3         3         3       24s
 </div>
 <div id="outline-container-orga56ee20" class="outline-2">
 <h2 id="orga56ee20">状态</h2>
+<div class="outline-text-2" id="text-orga56ee20">
+<p>
+Deployment 在生命周期中有多种状态。在创建一个新的 ReplicaSet 的时候它可以是 <span class="underline">progressing</span> ， <span class="underline">complete</span> ，或者 <span class="underline">fail to progress</span> 
+</p>
+</div>
+<div id="outline-container-org3964f73" class="outline-3">
+<h3 id="org3964f73">进行中</h3>
+<div class="outline-text-3" id="text-org3964f73">
+<p>
+Kubernetes 将执行过下列任务之一的 Deployment 标记为 progressing ：
+</p>
+<ul class="org-ul">
+<li>Deployment 正在 <b>创建</b> 新的 <span class="underline">ReplicaSet</span> 过程中</li>
+<li>Deployment 正在 <b>扩容</b> 一个已有的 <span class="underline">ReplicaSet</span></li>
+<li>Deployment 正在 <b>缩容</b> 一个已有的 <span class="underline">ReplicaSet</span></li>
+<li>有 <b>新的可用的</b>  <span class="underline">pod</span> 出现</li>
+</ul>
+
+<p>
+可以使用 <span class="underline">kubectl rollout status</span> 命令监控 Deployment 的进度 
+</p>
+</div>
+</div>
+<div id="outline-container-org893d333" class="outline-3">
+<h3 id="org893d333">完成</h3>
+<div class="outline-text-3" id="text-org893d333">
+<p>
+Kubernetes 将包括以下特性的 Deployment 标记为 <span class="underline">complete</span> 状态：
+</p>
+<ul class="org-ul">
+<li><p>
+Deployment <b>最小可用</b> ：
+</p>
+<pre class="example">
+       最小可用意味着 Deployment 的可用 replica 个数等于或者超过 Deployment 策略中的期望个数
+</pre></li>
+<li>所有与该 Deployment 相关的 <span class="underline">replica</span> 都被更新到了指定版本，也就说 <b>更新完成</b></li>
+<li>该 Deployment 中 <b>没有旧的</b> <span class="underline">Pod</span> 存在</li>
+</ul>
+
+<p>
+可以用 kubectl rollout status 命令查看 Deployment 是否完成。如果 rollout 成功完成，kubectl rollout status 将返回一个 <span class="underline">0</span> 值的 Exit Code 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl rollout status deploy/nginx-deployment
+Waiting for rollout to finish: 2 of 3 updated replicas are available...
+deployment <span style="color: #deb887;">"nginx-deployment"</span> successfully rolled out
+
+$ echo $<span style="color: #4eee94;">?</span>
+0
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org673fcb3" class="outline-3">
+<h3 id="org673fcb3">失败</h3>
+<div class="outline-text-3" id="text-org673fcb3">
+<p>
+Deployment 在尝试部署新的 ReplicaSet 的时候可能卡住，永远也不会完成。这可能是因为以下几个因素引起的：
+</p>
+<ul class="org-ul">
+<li>无效的引用</li>
+<li>不可读的 probe failure</li>
+<li>镜像拉取错误</li>
+<li>权限不够</li>
+<li>范围限制</li>
+<li>程序运行时配置错误</li>
+</ul>
+
+<p>
+检查这种情况的一种方式是，在 Deployment spec 中指定 <span class="underline">spec.progressDeadlineSeconds</span> ，表示 Deployment controller 等待多少秒才能确定（通过 Deployment status）Deployment 进程是卡住的　
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl patch deployment/nginx-deployment -p <span style="color: #deb887;">'{"spec":{"progressDeadlineSeconds":600}}'</span>
+<span style="color: #deb887;">"nginx-deployment"</span> patched
+</pre>
+</div>
+
+<pre class="example">
+     设置 progressDeadlineSeconds 使 controller 在 Deployment 在进度卡住 10 分钟后报告
+</pre>
+
+<p>
+当超过截止时间后，Deployment controller 会在 Deployment 的 <span class="underline">status.conditions</span> 中增加一条 <span class="underline">DeploymentCondition</span> ，它包括如下属性：
+</p>
+<ul class="org-ul">
+<li>Type: Progressing</li>
+<li>Status: False</li>
+<li>Reason: ProgressDeadlineExceeded</li>
+</ul>
+
+<pre class="example">
+     注意：kubernetes 除了报告 Reason=ProgressDeadlineExceeded 状态信息外不会对卡住的 Deployment 做任何操作，更高层次的协调器可以利用它并采取相应行动，例如，回滚 Deployment 到之前的版本
+
+     如果暂停了一个 Deployment，在暂停的这段时间内 kubernetnes 不会检查您指定的 deadline，可以在 Deployment 的 rollout 途中安全的暂停它，然后再恢复它，这不会触发超过 deadline 的状态
+</pre>
+
+<p>
+在使用 Deployment 的时候遇到一些短暂的错误，这些可能是由于设置了太短的 timeout，也有可能是因为各种其他错误导致的短暂错误。在 Describe Deployment 的时候可能会注意到如下信息：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl describe deployment nginx-deployment
+&lt;...&gt;
+Conditions:
+  Type            Status  Reason
+----            ------  ------
+  Available       True    MinimumReplicasAvailable
+  Progressing     True    ReplicaSetUpdated
+  ReplicaFailure  True    FailedCreate
+&lt;...&gt;
+</pre>
+</div>
+
+<p>
+执行 <span class="underline">kubectl get deployment nginx-deployment -o yaml</span> ，Deployement 的状态可能看起来像这个样子：
+</p>
+
+<pre class="example">
+status:
+  availableReplicas: 2
+  conditions:
+  - lastTransitionTime: 2016-10-04T12:25:39Z
+    lastUpdateTime: 2016-10-04T12:25:39Z
+    message: Replica set "nginx-deployment-4262182780" is progressing.
+    reason: ReplicaSetUpdated
+    status: "True"
+    type: Progressing
+  - lastTransitionTime: 2016-10-04T12:25:42Z
+    lastUpdateTime: 2016-10-04T12:25:42Z
+    message: Deployment has minimum availability.
+    reason: MinimumReplicasAvailable
+    status: "True"
+    type: Available
+  - lastTransitionTime: 2016-10-04T12:25:39Z
+    lastUpdateTime: 2016-10-04T12:25:39Z
+    message: 'Error creating: pods "nginx-deployment-4262182780-" is forbidden: exceeded quota:
+      object-counts, requested: pods=1, used: pods=3, limited: pods=2'
+    reason: FailedCreate
+    status: "True"
+    type: ReplicaFailure
+    observedGeneration: 3
+    replicas: 2
+    unavailableReplicas: 2
+</pre>
+
+<p>
+最终，一旦超过 Deployment 进程的 deadline，kubernetes 会更新状态和导致 Progressing 状态的原因：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">Conditions:
+    Type            Status  Reason
+----            ------  ------
+  Available       True    MinimumReplicasAvailable
+  Progressing     False   ProgressDeadlineExceeded
+  ReplicaFailure  True    FailedCreate
+</pre>
+</div>
+
+<pre class="example">
+     可以通过缩容 Deployment 的方式解决配额不足的问题，或者增加您的 namespace 的配额
+</pre>
+
+<p>
+如果满足了配额条件后，Deployment controller 就会完成您的 Deployment rollout，将看到 Deployment 的状态更新为成功状态：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">Conditions:
+  Type          Status  Reason
+----          ------  ------
+  Available     True    MinimumReplicasAvailable
+  Progressing   True    NewReplicaSetAvailable
+</pre>
+</div>
+
+<ul class="org-ul">
+<li><span class="underline">Type=Available, Status=True</span>:  意味着您Deployment 有最小可用性，最小可用性是在 Deployment 策略中指定的参数</li>
+<li><span class="underline">Type=Progressing 、 Status=True</span> 意味着 Deployment 或者在部署过程中，或者已经成功部署，达到了期望的最少的可用 replica 数量</li>
+</ul>
+
+<pre class="example">
+     查看特定状态的 Reason，例子中 Reason=NewReplicaSetAvailable 意味着 Deployment 已经完成　
+</pre>
+
+<p>
+也可以使用 kubectl rollout status 命令查看 Deployment 进程是否失败。当 Deployment 过程超过了 deadline，kubectl rollout status 将返回 <span class="underline">非 0</span> 的 exit code 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl rollout status deploy/nginx-deployment
+Waiting for rollout to finish: 2 out of 3 new replicas have been updated...
+error: deployment <span style="color: #deb887;">"nginx-deployment"</span> exceeded its progress deadline
+
+$ echo $<span style="color: #4eee94;">?</span>
+1
+</pre>
+</div>
+</div>
+<div id="outline-container-org4bf26e2" class="outline-4">
+<h4 id="org4bf26e2">操作失败的 Deployment</h4>
+<div class="outline-text-4" id="text-org4bf26e2">
+<p>
+所有对完成的 Deployment 的操作都适用于失败的 Deployment
+</p>
+
+<pre class="example">
+      可以对它扩 / 缩容，回退到历史版本，甚至可以多次暂停它来应用 Deployment pod template
+</pre>
+</div>
+</div>
+</div>
+</div>
+<div id="outline-container-org8a8ef4a" class="outline-2">
+<h2 id="org8a8ef4a">金丝雀 Deployment</h2>
+<div class="outline-text-2" id="text-org8a8ef4a">
+<p>
+如果想要使用 Deployment 对部分用户或服务器发布 release，可以创建多个 Deployment，每个 Deployment 对应一个 release
+</p>
+
+<pre class="example">
+    参照 https://kubernetes.io/docs/concepts/cluster-administration/manage-deployment/#canary-deployments 中对金丝雀模式的描述 
+</pre>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">

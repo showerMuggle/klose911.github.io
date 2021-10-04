@@ -635,3 +635,161 @@ Deployment 为 _Pod_ 和 _ReplicaSet_ 提供了一个 *声明式* 定义方法�
     注意：在恢复 Deployment 之前无法回退一个已经暂停的 Deployment
   #+END_EXAMPLE
 * 状态
+  Deployment 在生命周期中有多种状态。在创建一个新的 ReplicaSet 的时候它可以是 _progressing_ ， _complete_ ，或者 _fail to progress_ 
+** 进行中
+   Kubernetes 将执行过下列任务之一的 Deployment 标记为 progressing ：
+   + Deployment 正在 *创建* 新的 _ReplicaSet_ 过程中
+   + Deployment 正在 *扩容* 一个已有的 _ReplicaSet_
+   + Deployment 正在 *缩容* 一个已有的 _ReplicaSet_
+   + 有 *新的可用的*  _pod_ 出现 
+
+   可以使用 _kubectl rollout status_ 命令监控 Deployment 的进度 
+** 完成
+   Kubernetes 将包括以下特性的 Deployment 标记为 _complete_ 状态：
+   + Deployment *最小可用* ：
+     #+BEGIN_EXAMPLE
+       最小可用意味着 Deployment 的可用 replica 个数等于或者超过 Deployment 策略中的期望个数
+     #+END_EXAMPLE
+   + 所有与该 Deployment 相关的 _replica_ 都被更新到了指定版本，也就说 *更新完成*
+   + 该 Deployment 中 *没有旧的* _Pod_ 存在 
+
+   可以用 kubectl rollout status 命令查看 Deployment 是否完成。如果 rollout 成功完成，kubectl rollout status 将返回一个 _0_ 值的 Exit Code 
+
+   #+BEGIN_SRC sh 
+  $ kubectl rollout status deploy/nginx-deployment
+  Waiting for rollout to finish: 2 of 3 updated replicas are available...
+  deployment "nginx-deployment" successfully rolled out
+
+  $ echo $?
+  0
+   #+END_SRC
+** 失败
+   Deployment 在尝试部署新的 ReplicaSet 的时候可能卡住，永远也不会完成。这可能是因为以下几个因素引起的：
+   + 无效的引用
+   + 不可读的 probe failure
+   + 镜像拉取错误
+   + 权限不够
+   + 范围限制
+   + 程序运行时配置错误
+
+   检查这种情况的一种方式是，在 Deployment spec 中指定 _spec.progressDeadlineSeconds_ ，表示 Deployment controller 等待多少秒才能确定（通过 Deployment status）Deployment 进程是卡住的　
+
+   #+BEGIN_SRC sh 
+  $ kubectl patch deployment/nginx-deployment -p '{"spec":{"progressDeadlineSeconds":600}}'
+  "nginx-deployment" patched
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     设置 progressDeadlineSeconds 使 controller 在 Deployment 在进度卡住 10 分钟后报告
+   #+END_EXAMPLE
+
+   当超过截止时间后，Deployment controller 会在 Deployment 的 _status.conditions_ 中增加一条 _DeploymentCondition_ ，它包括如下属性：
+   + Type: Progressing
+   + Status: False
+   + Reason: ProgressDeadlineExceeded
+
+   #+BEGIN_EXAMPLE
+     注意：kubernetes 除了报告 Reason=ProgressDeadlineExceeded 状态信息外不会对卡住的 Deployment 做任何操作，更高层次的协调器可以利用它并采取相应行动，例如，回滚 Deployment 到之前的版本
+
+     如果暂停了一个 Deployment，在暂停的这段时间内 kubernetnes 不会检查您指定的 deadline，可以在 Deployment 的 rollout 途中安全的暂停它，然后再恢复它，这不会触发超过 deadline 的状态
+   #+END_EXAMPLE
+
+   在使用 Deployment 的时候遇到一些短暂的错误，这些可能是由于设置了太短的 timeout，也有可能是因为各种其他错误导致的短暂错误。在 Describe Deployment 的时候可能会注意到如下信息：
+
+   #+BEGIN_SRC sh 
+  $ kubectl describe deployment nginx-deployment
+  <...>
+  Conditions:
+    Type            Status  Reason
+  ----            ------  ------
+    Available       True    MinimumReplicasAvailable
+    Progressing     True    ReplicaSetUpdated
+    ReplicaFailure  True    FailedCreate
+  <...>
+   #+END_SRC
+
+   执行 _kubectl get deployment nginx-deployment -o yaml_ ，Deployement 的状态可能看起来像这个样子：
+
+   #+BEGIN_EXAMPLE
+     status:
+       availableReplicas: 2
+       conditions:
+       - lastTransitionTime: 2016-10-04T12:25:39Z
+	 lastUpdateTime: 2016-10-04T12:25:39Z
+	 message: Replica set "nginx-deployment-4262182780" is progressing.
+	 reason: ReplicaSetUpdated
+	 status: "True"
+	 type: Progressing
+       - lastTransitionTime: 2016-10-04T12:25:42Z
+	 lastUpdateTime: 2016-10-04T12:25:42Z
+	 message: Deployment has minimum availability.
+	 reason: MinimumReplicasAvailable
+	 status: "True"
+	 type: Available
+       - lastTransitionTime: 2016-10-04T12:25:39Z
+	 lastUpdateTime: 2016-10-04T12:25:39Z
+	 message: 'Error creating: pods "nginx-deployment-4262182780-" is forbidden: exceeded quota:
+	   object-counts, requested: pods=1, used: pods=3, limited: pods=2'
+	 reason: FailedCreate
+	 status: "True"
+	 type: ReplicaFailure
+	 observedGeneration: 3
+	 replicas: 2
+	 unavailableReplicas: 2
+   #+END_EXAMPLE
+
+   最终，一旦超过 Deployment 进程的 deadline，kubernetes 会更新状态和导致 Progressing 状态的原因：
+
+   #+BEGIN_SRC sh 
+  Conditions:
+      Type            Status  Reason
+  ----            ------  ------
+    Available       True    MinimumReplicasAvailable
+    Progressing     False   ProgressDeadlineExceeded
+    ReplicaFailure  True    FailedCreate
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     可以通过缩容 Deployment 的方式解决配额不足的问题，或者增加您的 namespace 的配额
+   #+END_EXAMPLE
+
+   如果满足了配额条件后，Deployment controller 就会完成您的 Deployment rollout，将看到 Deployment 的状态更新为成功状态：
+
+   #+BEGIN_SRC sh 
+  Conditions:
+    Type          Status  Reason
+  ----          ------  ------
+    Available     True    MinimumReplicasAvailable
+    Progressing   True    NewReplicaSetAvailable
+   #+END_SRC
+
+   + _Type=Available, Status=True_:  意味着您Deployment 有最小可用性，最小可用性是在 Deployment 策略中指定的参数
+   + _Type=Progressing 、 Status=True_ 意味着 Deployment 或者在部署过程中，或者已经成功部署，达到了期望的最少的可用 replica 数量
+
+   #+BEGIN_EXAMPLE
+     查看特定状态的 Reason，例子中 Reason=NewReplicaSetAvailable 意味着 Deployment 已经完成　
+   #+END_EXAMPLE
+
+   也可以使用 kubectl rollout status 命令查看 Deployment 进程是否失败。当 Deployment 过程超过了 deadline，kubectl rollout status 将返回 _非 0_ 的 exit code 
+
+   #+BEGIN_SRC sh 
+  $ kubectl rollout status deploy/nginx-deployment
+  Waiting for rollout to finish: 2 out of 3 new replicas have been updated...
+  error: deployment "nginx-deployment" exceeded its progress deadline
+
+  $ echo $?
+  1
+   #+END_SRC
+*** 操作失败的 Deployment
+    所有对完成的 Deployment 的操作都适用于失败的 Deployment
+
+    #+BEGIN_EXAMPLE
+      可以对它扩 / 缩容，回退到历史版本，甚至可以多次暂停它来应用 Deployment pod template
+    #+END_EXAMPLE
+* 金丝雀 Deployment
+  如果想要使用 Deployment 对部分用户或服务器发布 release，可以创建多个 Deployment，每个 Deployment 对应一个 release
+
+  #+BEGIN_EXAMPLE
+    参照 https://kubernetes.io/docs/concepts/cluster-administration/manage-deployment/#canary-deployments 中对金丝雀模式的描述 
+  #+END_EXAMPLE
+
