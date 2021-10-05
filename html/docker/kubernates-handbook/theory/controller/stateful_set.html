@@ -270,6 +270,17 @@ for the JavaScript code in this tag.
 <li><a href="#org3bae3f3">稳定存储</a></li>
 </ul>
 </li>
+<li><a href="#orgf8d0657">部署和 Scale 保证</a>
+<ul>
+<li><a href="#org199f74d">Pod 管理策略</a>
+<ul>
+<li><a href="#orgb633e91">OrderedReady Pod 管理</a></li>
+<li><a href="#orga392da9">并行 Pod 管理</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#orgd0d99f1">更新策略</a></li>
 </ul>
 </div>
 </div>
@@ -556,9 +567,9 @@ Kubernetes 为每个 VolumeClaimTemplate 创建一个 PersistentVolume
 </p>
 
 <pre class="example">
-  上面的 nginx 的例子中，每个 Pod 将具有一个由 anything 存储类创建的 1 GB 存储的 PersistentVolume
+     上面的 nginx 的例子中，每个 Pod 将具有一个由 anything 存储类创建的 1 GB 存储的 PersistentVolume
 
-  当该 Pod （重新）调度到节点上，volumeMounts 将挂载与 PersistentVolume Claim 相关联的 PersistentVolume
+     当该 Pod （重新）调度到节点上，volumeMounts 将挂载与 PersistentVolume Claim 相关联的 PersistentVolume
 </pre>
 
 <p>
@@ -566,6 +577,71 @@ Kubernetes 为每个 VolumeClaimTemplate 创建一个 PersistentVolume
 </p>
 </div>
 </div>
+</div>
+
+<div id="outline-container-orgf8d0657" class="outline-2">
+<h2 id="orgf8d0657">部署和 Scale 保证</h2>
+<div class="outline-text-2" id="text-orgf8d0657">
+<ul class="org-ul">
+<li>对于有 N 个副本的 StatefulSet，Pod 将按照 {0..N-1} 的顺序被创建和部署</li>
+<li>当 删除 Pod 的时候，将按照逆序来终结，从{N-1..0}</li>
+<li>对 Pod 执行 scale 操作之前，它所有的前任必须处于 Running 和 Ready 状态</li>
+<li>在终止 Pod 前，它所有的继任者必须处于完全关闭状态</li>
+</ul>
+
+<pre class="example">
+    不应该将 StatefulSet 的 pod.Spec.TerminationGracePeriodSeconds 设置为 0，这样是不安全的且强烈不建议这样做
+</pre>
+
+<p>
+上面的 nginx 示例创建后，3 个 Pod 将按照如下顺序创建 web-0，web-1，web-2
+</p>
+
+<pre class="example">
+    在 web-0 处于 运行并就绪 状态之前，web-1 将不会被部署，同样当 web-1 处于运行并就绪状态之前 web-2也不会被部署
+
+    如果在 web-1 运行并就绪后，web-2 启动之前， web-0 失败了，web-2 将不会启动，直到 web-0 成功重启并处于运行并就绪状态
+</pre>
+
+<p>
+如果用户通过修补 StatefulSet 来 scale 部署的示例，以使 replicas=1，则 web-2 将首先被终止
+</p>
+
+<pre class="example">
+    在 web-2 完全关闭和删除之前，web-1 不会被终止
+
+    如果 web-0 在 web-2 终止并且完全关闭之后，但是在 web-1 终止之前失败，则 web-1 将不会终止，除非 web-0 正在运行并准备就绪
+</pre>
+</div>
+
+<div id="outline-container-org199f74d" class="outline-3">
+<h3 id="org199f74d">Pod 管理策略</h3>
+<div class="outline-text-3" id="text-org199f74d">
+<p>
+在 Kubernetes 1.7 和之后版本，StatefulSet 允许放开顺序保证，同时通过 <span class="underline">.spec.podManagementPolicy</span> 字段 <b>保证</b> <span class="underline">身份的唯一性</span> 
+</p>
+</div>
+
+<div id="outline-container-orgb633e91" class="outline-4">
+<h4 id="orgb633e91">OrderedReady Pod 管理</h4>
+<div class="outline-text-4" id="text-orgb633e91">
+<p>
+StatefulSet 中默认使用的是 OrderedReady pod 管理。它实现了 如上 所述的行为 
+</p>
+</div>
+</div>
+<div id="outline-container-orga392da9" class="outline-4">
+<h4 id="orga392da9">并行 Pod 管理</h4>
+<div class="outline-text-4" id="text-orga392da9">
+<p>
+Parallel pod 管理告诉 StatefulSet controller <b>并行的</b> <span class="underline">启动</span> 和 <span class="underline">终止</span> Pod，在启动和终止其他 Pod 之前不会等待 Pod 变成 运行并就绪或完全终止状态 
+</p>
+</div>
+</div>
+</div>
+</div>
+<div id="outline-container-orgd0d99f1" class="outline-2">
+<h2 id="orgd0d99f1">更新策略</h2>
 </div>
 </div>
 <div id="postamble" class="status">
