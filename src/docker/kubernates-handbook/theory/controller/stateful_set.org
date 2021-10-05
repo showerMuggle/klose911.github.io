@@ -3,3 +3,50 @@
 #+HTML_LINK_UP: deployment.html
 #+HTML_LINK_HOME: controller.html
 #+OPTIONS: num:nil timestamp:nil ^:nil
+
+StatefulSet 作为 Controller 为 _Pod_ *提供* _唯一的标识_ 。它可以 *保证* _部署_ 和 _scale_ 的顺序
+
+#+BEGIN_EXAMPLE
+  使用案例参考：https://github.com/kubernetes-retired/contrib/tree/master/statefulsets
+
+  其中包含zookeeper和kakfa的statefulset设置和使用说明
+#+END_EXAMPLE
+
+
+StatefulSet是为了解决 *有状态服务* 的问题（对应Deployments和ReplicaSets是为无状态服务而设计），其应用场景包括：
++ 稳定的 _持久化存储_ 
+  #+BEGIN_EXAMPLE
+    即Pod重新调度后还是能访问到相同的持久化数据，基于PVC来实现
+  #+END_EXAMPLE
++ 稳定的 _网络标志_ 
+  #+BEGIN_EXAMPLE
+    即Pod重新调度后其PodName和HostName不变，基于Headless Service（即没有Cluster IP的Service）来实现
+  #+END_EXAMPLE
++ 有序部署， _有序扩展_ 
+  #+BEGIN_EXAMPLE
+    即Pod是有顺序的，在部署或者扩展的时候要依据定义的顺序依次依次进行
+
+    即从0到N-1，在下一个Pod运行之前所有之前的Pod必须都是Running和Ready状态，基于init containers来实现
+  #+END_EXAMPLE
++ 有序收缩， _有序删除_ 
+  #+BEGIN_EXAMPLE
+    即从N-1到0
+  #+END_EXAMPLE
+
+
+从上面的应用场景可以发现，StatefulSet由以下几个部分组成：
++ 用于 _定义_  *网络标志* （DNS domain）的 _Headless Service_
++ 用于 _创建_ *PersistentVolumes* 的 _volumeClaimTemplates_
++ _定义_ *具体应用* 的 _StatefulSet_
+
+StatefulSet中每个Pod的 _DNS格式_ 为 _statefulSetName-{0..N-1}.serviceName.namespace.svc.cluster.local_ ，其中
++ serviceName: Headless Service的名字
++ 0..N-1: Pod所在的序号，从0开始到N-1
++ statefulSetName: StatefulSet的名字
++ namespace: 服务所在的namespace
+  #+BEGIN_EXAMPLE
+    Headless Servic和StatefulSet必须在相同的namespace
+  #+END_EXAMPLE
++ .cluster.local: Cluster Domain
+
+
