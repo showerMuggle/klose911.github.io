@@ -280,7 +280,17 @@ for the JavaScript code in this tag.
 </li>
 </ul>
 </li>
-<li><a href="#orgd0d99f1">更新策略</a></li>
+<li><a href="#orgd0d99f1">更新策略</a>
+<ul>
+<li><a href="#org711953d">删除</a></li>
+<li><a href="#org81d3bf4">滚动更新</a>
+<ul>
+<li><a href="#org0fad403">分区</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#orga3b2f25"></a></li>
 </ul>
 </div>
 </div>
@@ -642,6 +652,63 @@ Parallel pod 管理告诉 StatefulSet controller <b>并行的</b> <span class="u
 </div>
 <div id="outline-container-orgd0d99f1" class="outline-2">
 <h2 id="orgd0d99f1">更新策略</h2>
+<div class="outline-text-2" id="text-orgd0d99f1">
+<p>
+在 kubernetes 1.7 和以上版本中，StatefulSet 的 <span class="underline">.spec.updateStrategy</span> 字段允许 <b>配置</b> 和 <b>禁用</b>  StatefulSet 中的 <span class="underline">容器</span> 、 <span class="underline">label</span> 、 <span class="underline">resource request/limit</span> 、 <span class="underline">annotation</span> 的 <b>滚动更新</b> 
+</p>
+</div>
+<div id="outline-container-org711953d" class="outline-3">
+<h3 id="org711953d">删除</h3>
+<div class="outline-text-3" id="text-org711953d">
+<p>
+<span class="underline">OnDelete</span> 更新策略实现了遗留（1.6和以前）的行为
+</p>
+
+<pre class="example">
+  当 spec.updateStrategy 未指定时，这是默认策略
+</pre>
+
+<p>
+当StatefulSet 的 <span class="underline">.spec.updateStrategy.type</span> 设置为 <span class="underline">OnDelete</span> 时，StatefulSet 控制器将 <b>不会自动更新</b> StatefulSet 中的 <span class="underline">Pod</span> 
+</p>
+
+<pre class="example">
+  用户必须手动删除 Pod 以使控制器创建新的 Pod，以反映对StatefulSet的 .spec.template 进行的修改
+</pre>
+</div>
+</div>
+<div id="outline-container-org81d3bf4" class="outline-3">
+<h3 id="org81d3bf4">滚动更新</h3>
+<div class="outline-text-3" id="text-org81d3bf4">
+<p>
+RollingUpdate 更新策略在 StatefulSet 中实现 Pod 的自动滚动更新。 当StatefulSet的 <span class="underline">.spec.updateStrategy.type</span> 设置为 <span class="underline">RollingUpdate</span> 时，StatefulSet 控制器将在 StatefulSet 中 <b>删除</b> 并 <b>重新创建</b> 每个 <span class="underline">Pod</span> 
+</p>
+<ul class="org-ul">
+<li>将以与 Pod 终止相同的顺序进行（从最大的序数到最小的序数），每次更新一个 Pod</li>
+<li>在更新其前身之前，它将等待正在更新的 Pod 状态变成正在运行并就绪</li>
+</ul>
+</div>
+<div id="outline-container-org0fad403" class="outline-4">
+<h4 id="org0fad403">分区</h4>
+<div class="outline-text-4" id="text-org0fad403">
+<p>
+可以通过指定 <span class="underline">.spec.updateStrategy.rollingUpdate.partition</span> 来对 RollingUpdate 更新策略进行分区。如果指定了分区：
+</p>
+<ul class="org-ul">
+<li>则当 StatefulSet 的 .spec.template 更新时，具有 <b>大于或等于</b> <span class="underline">分区序数</span> 的所有 Pod 将被更新</li>
+<li>具有小于分区的序数的所有 Pod 将不会被更新，即使删除它们也将被重新创建</li>
+<li>如果 StatefulSet 的 .spec.updateStrategy.rollingUpdate.partition 大于其 .spec.replicas，则其 .spec.template 的更新将不会传播到 Pod</li>
+</ul>
+
+<pre class="example">
+  在大多数情况下，不需要使用分区，但如果想要进行分阶段更新，使用金丝雀发布或执行分阶段发布，它们将非常有用
+</pre>
+</div>
+</div>
+</div>
+</div>
+<div id="outline-container-orga3b2f25" class="outline-2">
+<h2 id="orga3b2f25"></h2>
 </div>
 </div>
 <div id="postamble" class="status">

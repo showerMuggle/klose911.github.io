@@ -199,3 +199,30 @@ StatefulSet中每个Pod的 _DNS格式_ 为 _statefulSetName-{0..N-1}.serviceName
 *** 并行 Pod 管理
     Parallel pod 管理告诉 StatefulSet controller *并行的* _启动_ 和 _终止_ Pod，在启动和终止其他 Pod 之前不会等待 Pod 变成 运行并就绪或完全终止状态 
 * 更新策略
+在 kubernetes 1.7 和以上版本中，StatefulSet 的 _.spec.updateStrategy_ 字段允许 *配置* 和 *禁用*  StatefulSet 中的 _容器_ 、 _label_ 、 _resource request/limit_ 、 _annotation_ 的 *滚动更新* 
+** 删除
+_OnDelete_ 更新策略实现了遗留（1.6和以前）的行为
+
+#+BEGIN_EXAMPLE
+  当 spec.updateStrategy 未指定时，这是默认策略
+#+END_EXAMPLE
+
+当StatefulSet 的 _.spec.updateStrategy.type_ 设置为 _OnDelete_ 时，StatefulSet 控制器将 *不会自动更新* StatefulSet 中的 _Pod_ 
+
+#+BEGIN_EXAMPLE
+  用户必须手动删除 Pod 以使控制器创建新的 Pod，以反映对StatefulSet的 .spec.template 进行的修改
+#+END_EXAMPLE
+** 滚动更新
+RollingUpdate 更新策略在 StatefulSet 中实现 Pod 的自动滚动更新。 当StatefulSet的 _.spec.updateStrategy.type_ 设置为 _RollingUpdate_ 时，StatefulSet 控制器将在 StatefulSet 中 *删除* 并 *重新创建* 每个 _Pod_ 
++ 将以与 Pod 终止相同的顺序进行（从最大的序数到最小的序数），每次更新一个 Pod
++ 在更新其前身之前，它将等待正在更新的 Pod 状态变成正在运行并就绪 
+*** 分区
+可以通过指定 _.spec.updateStrategy.rollingUpdate.partition_ 来对 RollingUpdate 更新策略进行分区。如果指定了分区：
++ 则当 StatefulSet 的 .spec.template 更新时，具有 *大于或等于* _分区序数_ 的所有 Pod 将被更新
++ 具有小于分区的序数的所有 Pod 将不会被更新，即使删除它们也将被重新创建
++ 如果 StatefulSet 的 .spec.updateStrategy.rollingUpdate.partition 大于其 .spec.replicas，则其 .spec.template 的更新将不会传播到 Pod
+
+#+BEGIN_EXAMPLE
+  在大多数情况下，不需要使用分区，但如果想要进行分阶段更新，使用金丝雀发布或执行分阶段发布，它们将非常有用
+#+END_EXAMPLE
+* 
