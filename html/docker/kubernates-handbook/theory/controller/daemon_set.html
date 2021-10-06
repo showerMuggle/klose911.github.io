@@ -247,7 +247,9 @@ for the JavaScript code in this tag.
 <li><a href="#orgd03b84f">仅在相同的 Node 上运行 Pod</a></li>
 </ul>
 </li>
-<li><a href="#orgb4bf364"></a></li>
+<li><a href="#orgbdcab30">调度</a></li>
+<li><a href="#org9f5e5f3">通信</a></li>
+<li><a href="#org0591b91">更新</a></li>
 </ul>
 </div>
 </div>
@@ -384,8 +386,53 @@ Kubernetes 不会阻止这样做。一个场景是，可能希望在一个具有
 </div>
 </div>
 
-<div id="outline-container-orgb4bf364" class="outline-2">
-<h2 id="orgb4bf364"></h2>
+<div id="outline-container-orgbdcab30" class="outline-2">
+<h2 id="orgbdcab30">调度</h2>
+<div class="outline-text-2" id="text-orgbdcab30">
+<p>
+正常情况下，Pod 运行在哪个机器上是由 Kubernetes 调度器进行选择的。然而，由 Daemon Controller 创建的 Pod 已经确定了在哪个机器上（Pod 创建时指定了 .spec.nodeName），因此：
+</p>
+<ul class="org-ul">
+<li>DaemonSet Controller 并不关心一个 Node 的 <span class="underline">unschedulable</span> 字段</li>
+<li>DaemonSet Controller 可以创建 Pod， <b>即使调度器还没有被启动</b> ，这对集群启动是非常有帮助的</li>
+</ul>
+
+<pre class="example">
+Daemon Pod 关心 Taint 和 Toleration，它们会为没有指定 tolerationSeconds 的 node.alpha.kubernetes.io/notReady 和 node.alpha.kubernetes.io/unreachable 的 Taint，而创建具有 NoExecute 的 Toleration
+
+这确保了当 alpha 特性的 TaintBasedEvictions 被启用，当 Node 出现故障，比如网络分区，这时它们将不会被清除掉
+
+当 TaintBasedEvictions 特性没有启用，在这些场景下也不会被清除，但会因为 NodeController 的硬编码行为而被清除，Toleration 是不会的
+</pre>
+</div>
+</div>
+<div id="outline-container-org9f5e5f3" class="outline-2">
+<h2 id="org9f5e5f3">通信</h2>
+<div class="outline-text-2" id="text-org9f5e5f3">
+<p>
+与 DaemonSet 中的 Pod 进行通信，几种可能的模式如下：
+</p>
+<ul class="org-ul">
+<li><p>
+<span class="underline">Push</span> ： 配置 DaemonSet 中的 Pod 向其它 Service 发送更新
+</p>
+<pre class="example">
+    例如统计数据库。它们没有客户端
+</pre></li>
+<li><span class="underline">NodeIP</span> 和 <span class="underline">已知端口</span> ：DaemonSet 中的 Pod 可以使用 hostPort，从而可以通过 Node IP 访问到 Pod。客户端能通过某种方法知道 Node IP 列表，并且基于此也可以知道端口</li>
+<li><span class="underline">DNS</span> ：创建具有相同 Pod Selector 的 Headless Service，然后通过使用 endpoints 资源或从 DNS 检索到多个 A 记录来发现 DaemonSet</li>
+<li><p>
+<span class="underline">Service</span> ：创建具有相同 Pod Selector 的 Service，并使用该 Service 访问到某个随机 Node 上的 daemon
+</p>
+<pre class="example">
+    没有办法访问到特定 Node
+</pre></li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-org0591b91" class="outline-2">
+<h2 id="org0591b91">更新</h2>
 </div>
 </div>
 <div id="postamble" class="status">

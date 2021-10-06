@@ -78,4 +78,29 @@ _.spec.selector_ 字段表示 *Pod Selector* 。spec.selector 表示一个对象
   如果根本就没有指定，则 DaemonSet Controller 将在所有 Node 上创建 Pod
 #+END_EXAMPLE
 
-* 
+* 调度
+正常情况下，Pod 运行在哪个机器上是由 Kubernetes 调度器进行选择的。然而，由 Daemon Controller 创建的 Pod 已经确定了在哪个机器上（Pod 创建时指定了 .spec.nodeName），因此：
++ DaemonSet Controller 并不关心一个 Node 的 _unschedulable_ 字段
++ DaemonSet Controller 可以创建 Pod， *即使调度器还没有被启动* ，这对集群启动是非常有帮助的 
+
+#+BEGIN_EXAMPLE
+  Daemon Pod 关心 Taint 和 Toleration，它们会为没有指定 tolerationSeconds 的 node.alpha.kubernetes.io/notReady 和 node.alpha.kubernetes.io/unreachable 的 Taint，而创建具有 NoExecute 的 Toleration
+
+  这确保了当 alpha 特性的 TaintBasedEvictions 被启用，当 Node 出现故障，比如网络分区，这时它们将不会被清除掉
+
+  当 TaintBasedEvictions 特性没有启用，在这些场景下也不会被清除，但会因为 NodeController 的硬编码行为而被清除，Toleration 是不会的
+#+END_EXAMPLE
+* 通信
+与 DaemonSet 中的 Pod 进行通信，几种可能的模式如下：
++ _Push_ ： 配置 DaemonSet 中的 Pod 向其它 Service 发送更新
+  #+BEGIN_EXAMPLE
+    例如统计数据库。它们没有客户端
+  #+END_EXAMPLE
++ _NodeIP_ 和 _已知端口_ ：DaemonSet 中的 Pod 可以使用 hostPort，从而可以通过 Node IP 访问到 Pod。客户端能通过某种方法知道 Node IP 列表，并且基于此也可以知道端口
++ _DNS_ ：创建具有相同 Pod Selector 的 Headless Service，然后通过使用 endpoints 资源或从 DNS 检索到多个 A 记录来发现 DaemonSet
++ _Service_ ：创建具有相同 Pod Selector 的 Service，并使用该 Service 访问到某个随机 Node 上的 daemon
+  #+BEGIN_EXAMPLE
+    没有办法访问到特定 Node
+  #+END_EXAMPLE
+
+* 更新
