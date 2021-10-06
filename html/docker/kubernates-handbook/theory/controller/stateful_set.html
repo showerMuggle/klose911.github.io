@@ -290,7 +290,16 @@ for the JavaScript code in this tag.
 </li>
 </ul>
 </li>
-<li><a href="#orga3b2f25"></a></li>
+<li><a href="#org8dadae2">实例</a>
+<ul>
+<li><a href="#orgd359ccf">nginx-web</a></li>
+<li><a href="#orgadfc52f">Zookeeper</a>
+<ul>
+<li><a href="#org87c49f7">集群外部访问StatefulSet的Pod</a></li>
+</ul>
+</li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
@@ -665,7 +674,7 @@ Parallel pod 管理告诉 StatefulSet controller <b>并行的</b> <span class="u
 </p>
 
 <pre class="example">
-  当 spec.updateStrategy 未指定时，这是默认策略
+     当 spec.updateStrategy 未指定时，这是默认策略
 </pre>
 
 <p>
@@ -673,7 +682,7 @@ Parallel pod 管理告诉 StatefulSet controller <b>并行的</b> <span class="u
 </p>
 
 <pre class="example">
-  用户必须手动删除 Pod 以使控制器创建新的 Pod，以反映对StatefulSet的 .spec.template 进行的修改
+     用户必须手动删除 Pod 以使控制器创建新的 Pod，以反映对StatefulSet的 .spec.template 进行的修改
 </pre>
 </div>
 </div>
@@ -701,14 +710,368 @@ RollingUpdate 更新策略在 StatefulSet 中实现 Pod 的自动滚动更新。
 </ul>
 
 <pre class="example">
-  在大多数情况下，不需要使用分区，但如果想要进行分阶段更新，使用金丝雀发布或执行分阶段发布，它们将非常有用
+      在大多数情况下，不需要使用分区，但如果想要进行分阶段更新，使用金丝雀发布或执行分阶段发布，它们将非常有用
 </pre>
 </div>
 </div>
 </div>
 </div>
-<div id="outline-container-orga3b2f25" class="outline-2">
-<h2 id="orga3b2f25"></h2>
+<div id="outline-container-org8dadae2" class="outline-2">
+<h2 id="org8dadae2">实例</h2>
+<div class="outline-text-2" id="text-org8dadae2">
+</div>
+<div id="outline-container-orgd359ccf" class="outline-3">
+<h3 id="orgd359ccf">nginx-web</h3>
+<div class="outline-text-3" id="text-orgd359ccf">
+<p>
+以一个简单的nginx服务web.yaml为例：
+</p>
+<pre class="example">
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx
+  labels:
+    app: nginx
+spec:
+  ports:
+  - port: 80
+    name: web
+  clusterIP: None
+  selector:
+    app: nginx
+---
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: web
+spec:
+  serviceName: "nginx"
+  replicas: 2
+  template:
+    metadata:
+      labels:
+	app: nginx
+    spec:
+      containers:
+      - name: nginx
+	image: gcr.io/google_containers/nginx-slim:0.8
+	ports:
+	- containerPort: 80
+	  name: web
+	volumeMounts:
+	- name: www
+	  mountPath: /usr/share/nginx/html
+  volumeClaimTemplates:
+  - metadata:
+      name: www
+      annotations:
+	volume.alpha.kubernetes.io/storage-class: anything
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+	requests:
+	  storage: 1Gi
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl create -f web.yaml
+service <span style="color: #deb887;">"nginx"</span> created
+statefulset <span style="color: #deb887;">"web"</span> created
+
+<span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">&#26597;&#30475;&#21019;&#24314;&#30340;headless service&#21644;statefulset</span>
+$ kubectl get service nginx
+NAME      CLUSTER-IP   EXTERNAL-IP   PORT(S)   AGE
+nginx     None         &lt;none&gt;        80/TCP    1m
+$ kubectl get statefulset web
+NAME      DESIRED   CURRENT   AGE
+web       2         2         2m
+
+<span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">&#26681;&#25454;volumeClaimTemplates&#33258;&#21160;&#21019;&#24314;PVC&#65288;&#22312;GCE&#20013;&#20250;&#33258;&#21160;&#21019;&#24314;kubernetes.io/gce-pd&#31867;&#22411;&#30340;volume&#65289;</span>
+$ kubectl get pvc
+NAME        STATUS    VOLUME                                     CAPACITY   ACCESSMODES   AGE
+www-web-0   Bound     pvc-d064a004-d8d4-11e6-b521-42010a800002   1Gi        RWO           16s
+www-web-1   Bound     pvc-d06a3946-d8d4-11e6-b521-42010a800002   1Gi        RWO           16s
+
+<span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">&#26597;&#30475;&#21019;&#24314;&#30340;Pod&#65292;&#20182;&#20204;&#37117;&#26159;&#26377;&#24207;&#30340;</span>
+$ kubectl get pods -l <span style="color: #4eee94;">app</span>=nginx
+NAME      READY     STATUS    RESTARTS   AGE
+web-0     1/1       Running   0          5m
+web-1     1/1       Running   0          4m
+
+<span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">&#20351;&#29992;nslookup&#26597;&#30475;&#36825;&#20123;Pod&#30340;DNS</span>
+$ kubectl run -i --tty --image busybox dns-test --restart=Never --rm /bin/sh
+/ <span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">nslookup web-0.nginx</span>
+Server:    10.0.0.10
+Address 1: 10.0.0.10 kube-dns.kube-system.svc.cluster.local
+
+Name:      web-0.nginx
+Address 1: 10.244.2.10
+/ <span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">nslookup web-1.nginx</span>
+Server:    10.0.0.10
+Address 1: 10.0.0.10 kube-dns.kube-system.svc.cluster.local
+
+Name:      web-1.nginx
+Address 1: 10.244.3.12
+/ <span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">nslookup web-0.nginx.default.svc.cluster.local</span>
+Server:    10.0.0.10
+Address 1: 10.0.0.10 kube-dns.kube-system.svc.cluster.local
+
+Name:      web-0.nginx.default.svc.cluster.local
+Address 1: 10.244.2.10
+</pre>
+</div>
+
+<p>
+还可以进行其他的操作：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh"><span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">&#25193;&#23481;</span>
+$ kubectl scale statefulset web --replicas=5
+
+<span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">&#32553;&#23481;</span>
+$ kubectl patch statefulset web -p <span style="color: #deb887;">'{"spec":{"replicas":3}}'</span>
+
+<span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">&#38236;&#20687;&#26356;&#26032;&#65288;&#30446;&#21069;&#36824;&#19981;&#25903;&#25345;&#30452;&#25509;&#26356;&#26032;image&#65292;&#38656;&#35201;patch&#26469;&#38388;&#25509;&#23454;&#29616;&#65289;</span>
+$ kubectl patch statefulset web --type=<span style="color: #deb887;">'json'</span> -p=<span style="color: #deb887;">'[{"op": "replace", "path": "/spec/template/spec/containers/0/image", "value":"gcr.io/google_containers/nginx-slim:0.7"}]'</span>
+
+<span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">&#21024;&#38500;StatefulSet&#21644;Headless Service</span>
+$ kubectl delete statefulset web
+$ kubectl delete service nginx
+
+<span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">StatefulSet&#21024;&#38500;&#21518;PVC&#36824;&#20250;&#20445;&#30041;&#30528;&#65292;&#25968;&#25454;&#19981;&#20877;&#20351;&#29992;&#30340;&#35805;&#20063;&#38656;&#35201;&#21024;&#38500;</span>
+$ kubectl delete pvc www-web-0 www-web-1
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-orgadfc52f" class="outline-3">
+<h3 id="orgadfc52f">Zookeeper</h3>
+<div class="outline-text-3" id="text-orgadfc52f">
+<p>
+另外一个更能说明StatefulSet强大功能的示例为 <span class="underline">zookeeper.yaml</span> 
+</p>
+
+<pre class="example">
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zk-headless
+  labels:
+    app: zk-headless
+spec:
+  ports:
+  - port: 2888
+    name: server
+  - port: 3888
+    name: leader-election
+  clusterIP: None
+  selector:
+    app: zk
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: zk-config
+data:
+  ensemble: "zk-0;zk-1;zk-2"
+  jvm.heap: "2G"
+  tick: "2000"
+  init: "10"
+  sync: "5"
+  client.cnxns: "60"
+  snap.retain: "3"
+  purge.interval: "1"
+---
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: zk-budget
+spec:
+  selector:
+    matchLabels:
+      app: zk
+  minAvailable: 2
+---
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: zk
+spec:
+  serviceName: zk-headless
+  replicas: 3
+  template:
+    metadata:
+      labels:
+	app: zk
+      annotations:
+	pod.alpha.kubernetes.io/initialized: "true"
+	scheduler.alpha.kubernetes.io/affinity: &gt;
+	    {
+	      "podAntiAffinity": {
+		"requiredDuringSchedulingRequiredDuringExecution": [{
+		  "labelSelector": {
+		    "matchExpressions": [{
+		      "key": "app",
+		      "operator": "In",
+		      "values": ["zk-headless"]
+		    }]
+		  },
+		  "topologyKey": "kubernetes.io/hostname"
+		}]
+	      }
+	    }
+    spec:
+      containers:
+      - name: k8szk
+	imagePullPolicy: Always
+	image: gcr.io/google_samples/k8szk:v1
+	resources:
+	  requests:
+	    memory: "4Gi"
+	    cpu: "1"
+	ports:
+	- containerPort: 2181
+	  name: client
+	- containerPort: 2888
+	  name: server
+	- containerPort: 3888
+	  name: leader-election
+	env:
+	- name : ZK_ENSEMBLE
+	  valueFrom:
+	    configMapKeyRef:
+	      name: zk-config
+	      key: ensemble
+	- name : ZK_HEAP_SIZE
+	  valueFrom:
+	    configMapKeyRef:
+		name: zk-config
+		key: jvm.heap
+	- name : ZK_TICK_TIME
+	  valueFrom:
+	    configMapKeyRef:
+		name: zk-config
+		key: tick
+	- name : ZK_INIT_LIMIT
+	  valueFrom:
+	    configMapKeyRef:
+		name: zk-config
+		key: init
+	- name : ZK_SYNC_LIMIT
+	  valueFrom:
+	    configMapKeyRef:
+		name: zk-config
+		key: tick
+	- name : ZK_MAX_CLIENT_CNXNS
+	  valueFrom:
+	    configMapKeyRef:
+		name: zk-config
+		key: client.cnxns
+	- name: ZK_SNAP_RETAIN_COUNT
+	  valueFrom:
+	    configMapKeyRef:
+		name: zk-config
+		key: snap.retain
+	- name: ZK_PURGE_INTERVAL
+	  valueFrom:
+	    configMapKeyRef:
+		name: zk-config
+		key: purge.interval
+	- name: ZK_CLIENT_PORT
+	  value: "2181"
+	- name: ZK_SERVER_PORT
+	  value: "2888"
+	- name: ZK_ELECTION_PORT
+	  value: "3888"
+	command:
+	- sh
+	- -c
+	- zkGenConfig.sh &amp;&amp; zkServer.sh start-foreground
+	readinessProbe:
+	  exec:
+	    command:
+	    - "zkOk.sh"
+	  initialDelaySeconds: 15
+	  timeoutSeconds: 5
+	livenessProbe:
+	  exec:
+	    command:
+	    - "zkOk.sh"
+	  initialDelaySeconds: 15
+	  timeoutSeconds: 5
+	volumeMounts:
+	- name: datadir
+	  mountPath: /var/lib/zookeeper
+      securityContext:
+	runAsUser: 1000
+	fsGroup: 1000
+  volumeClaimTemplates:
+  - metadata:
+      name: datadir
+      annotations:
+	volume.alpha.kubernetes.io/storage-class: anything
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+	requests:
+	  storage: 20Gi
+</pre>
+
+
+<pre class="example">
+     这个例子仅为讲解，实际可用的配置请使用 https://github.com/kubernetes/contrib/tree/master/statefulsets 中的配置
+</pre>
+</div>
+<div id="outline-container-org87c49f7" class="outline-4">
+<h4 id="org87c49f7">集群外部访问StatefulSet的Pod</h4>
+<div class="outline-text-4" id="text-org87c49f7">
+<pre class="example">
+      设想一下这样的场景：在kubernetes集群外部调试StatefulSet中有序的Pod，那么如何访问这些的pod呢？
+</pre>
+<p>
+方法是为pod <b>设置</b> <span class="underline">label</span> ，然后用 <span class="underline">kubectl expose</span> 将其以 <span class="underline">NodePort</span> 的方式 <b>暴露</b> 到集群外部，以上面的zookeeper的例子来说明，下面使用命令的方式来暴露其中的两个zookeeper节点，也可以写一个serivce配置yaml文件 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">kubectl label pod zk-0 <span style="color: #4eee94;">zkInst</span>=0                                                                          
+kubectl label pod zk-1 <span style="color: #4eee94;">zkInst</span>=1                                                                         
+kubectl expose po zk-0 --port=2181 --target-port=2181 --name=zk-0 --selector=<span style="color: #4eee94;">zkInst</span>=0 --type=NodePort
+kubectl expose po zk-1 --port=2181 --target-port=2181 --name=zk-1 --selector=<span style="color: #4eee94;">zkInst</span>=1 --type=NodePort
+</pre>
+</div>
+
+<p>
+这样在kubernetes集群外部就可以根据pod所在的主机所映射的端口来访问了。查看 zk-0 这个service可以看到如下结果：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">NAME      CLUSTER-IP     EXTERNAL-IP   PORT(S)          AGE
+zk-0      10.254.98.14   &lt;nodes&gt;       2181:31693/TCP   5m
+</pre>
+</div>
+
+<p>
+集群外部就可以使用 <span class="underline">所有的node</span> 中的 <span class="underline">任何一个IP:31693</span> 来访问这个zookeeper实例 
+</p>
+
+<p>
+<a href="daemon_set.html">Next：DaemonSet</a>
+</p>
+
+<p>
+<a href="deployment.html">Previous: Deployment</a>
+</p>
+
+<p>
+<a href="controller.html">Home：Controller</a>
+</p>
+</div>
+</div>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
