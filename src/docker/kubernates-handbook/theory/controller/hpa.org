@@ -26,25 +26,97 @@ HPA属于Kubernetes中的 _autoscaling SIG_ （Special Interest Group），其�
   1.6版本之后必须通过API server、Heapseter或者kube-aggregator来获取监控指标
 #+END_EXAMPLE
 * 解析
-Horizontal Pod Autoscaling仅适用于 _Deployment_ 和 _ReplicaSet_ ，在v1版本中仅支持根据 _Pod的CPU利用率_ 扩缩容，在v1alpha版本中，支持根据 _内存_ 和 _用户自定义的metric_ 扩缩容 
+  Horizontal Pod Autoscaling仅适用于 _Deployment_ 和 _ReplicaSet_ ，在v1版本中仅支持根据 _Pod的CPU利用率_ 扩缩容，在v1alpha版本中，支持根据 _内存_ 和 _用户自定义的metric_ 扩缩容 
 
 
   #+ATTR_HTML: image :width 80% 
   [[file:../../pic/horizontal-pod-autoscaler.png]]
 
-Horizontal Pod Autoscaling由API server和controller共同实现
+  Horizontal Pod Autoscaling由API server和controller共同实现
 * Metrics
-在不同版本的API中，HPA autoscale时可以根据以下指标来判断：
-+ autoscaling/v1
-  + CPU
-+ autoscaling/v1alpha1
-  + 内存
-  + 自定义metrics
-    + kubernetes1.6起支持自定义metrics，但是必须在 _kube-controller-manager_ 中配置如下两项：
-      + _--horizontal-pod-autoscaler-use-rest-clients_ =true
-      + _--api-server_ 指向kube-aggregator
-	#+BEGIN_EXAMPLE
-	  也可以使用heapster来实现，通过在启动heapster的时候指定--api-server=true
-	#+END_EXAMPLE
-+ 多种metrics组合：HPA会根据每个metric的值计算出scale的值，并将最大的那个值作为扩容的最终结果　
+  在不同版本的API中，HPA autoscale时可以根据以下指标来判断：
+  + autoscaling/v1
+    + CPU
+  + autoscaling/v1alpha1
+    + 内存
+    + 自定义metrics
+      + kubernetes1.6起支持自定义metrics，但是必须在 _kube-controller-manager_ 中配置如下两项：
+	+ _--horizontal-pod-autoscaler-use-rest-clients_ =true
+	+ _--api-server_ 指向kube-aggregator
+	  #+BEGIN_EXAMPLE
+	    也可以使用heapster来实现，通过在启动heapster的时候指定--api-server=true
+	  #+END_EXAMPLE
+  + 多种metrics组合：HPA会根据每个metric的值计算出scale的值，并将最大的那个值作为扩容的最终结果　
 * 管理
+  在不同版本的API中，HPA autoscale时可以根据以下指标来判断：
+  + autoscaling/v1
+    + CPU
+  + autoscaling/v1alpha1
+    + 内存
+    + 自定义metrics
+      + kubernetes1.6起支持自定义metrics，但是必须在 _kube-controller-manager_ 中配置如下两项：
+	+ _--horizontal-pod-autoscaler-use-rest-clients_ =true
+	+ _--api-server_ 指向kube-aggregator
+	  #+BEGIN_EXAMPLE
+	    也可以使用heapster来实现，通过在启动heapster的时候指定--api-server=true
+	  #+END_EXAMPLE
+  + 多种metrics组合：HPA会根据每个metric的值计算出scale的值，并将最大的那个值作为扩容的最终结果　
+* 管理
+  Horizontal Pod Autoscaling作为API resource也可以像Pod、Deployment一样使用kubeclt命令管理，使用方法跟它们一样，资源名称为 _hpa_ 
+
+  #+BEGIN_SRC sh 
+  $ kubectl create hpa
+  $ kubectl get hpa
+  $ kubectl describe hpa
+  $ kubectl delete hpa
+  #+END_SRC
+
+  有一点不同的是，可以直接使用 _kubectl autoscale_ 通过命令行的方式创建Horizontal Pod Autoscaler：
+
+  #+BEGIN_EXAMPLE
+    kubectl autoscale (-f FILENAME | TYPE NAME | TYPE/NAME) [--min=MINPODS] --max=MAXPODS
+    [--cpu-percent=CPU] [flags] [options]
+  #+END_EXAMPLE
+
+  例如：
+
+  #+BEGIN_SRC sh 
+  kubectl autoscale deployment foo --min=2 --max=5 --cpu-percent=80
+  #+END_SRC
+
+  #+BEGIN_EXAMPLE
+    为Deployment foo创建 一个autoscaler，当Pod的CPU利用率达到80%的时候，RC的replica数在2到5之间
+  #+END_EXAMPLE
+
+  + 如果为ReplicaSet创建HPA的话，无法使用rolling update
+  + 对于Deployment来说是可以的，因为Deployment在执行rolling update的时候会自动创建新的ReplicationController 
+* 定义
+  利用 Horizontal Pod Autoscaling，kubernetes 能够根据 _监测到_ 的 _CPU 利用率_ （或者在 alpha 版本中支持的应用提供的 metric） *自动的扩容* _replication controller_ ， _deployment_ 和 _replica set_ 。Horizontal Pod Autoscaler 作为 _kubernetes API resource_ 和 _controller_ 的实现：
+  + Resource: 确定 controller 的行为
+  + Controller: 会根据监测到用户指定的目标的 CPU 利用率周期性得调整 replication controller 或 deployment 的 replica 数量
+* 原理
+  1. Horizontal Pod Autoscaler 由一个 *控制循环* 实现，循环周期由 _controller manager_ 中的 _--horizontal-pod-autoscaler-sync-period_ 标志指定（默认是 30 秒）
+  2. 在每个周期内， _controller manager_ 会 *查询* _HorizontalPodAutoscaler_ 中定义的 _metric_ 的资源利用率。Controller manager从下面获取 metric :
+     + 从 resource metric API（每个 pod 的 resource metric）
+     + 或者自定义 metric API（所有的metric）中
+  3. 如果 *设置* 了 _目标利用率_ ，controller 计算利用的值与每个 Pod 的容器里的 resource request 值的百分比。如果 *设置* 了 _目标原始值_ ，将直接使用该原始 metric 值
+     #+BEGIN_EXAMPLE
+       请注意，如果某些 Pod 的容器没有设置相关的 resource request ，则不会定义 Pod 的 CPU 利用率，并且 Aucoscaler 也不会对该 metric 采取任何操作
+
+       对于每个 Pod 自定义的 metric，controller 功能类似于每个 Pod 的 resource metric，只是它使用原始值而不是利用率值
+
+       对于 object metric，获取单个度量（描述有问题的对象），并与目标值进行比较，以产生如上所述的比率
+     #+END_EXAMPLE
+  4. controller 计算所有目标 Pod 的利用率或原始值（取决于所指定的目标类型）的 *平均值* ，产生一个用于缩放所需 replica 数量的比率
+  5. HorizontalPodAutoscaler 控制器可以以两种不同的方式获取 metric ：直接的 _Heapster_ 访问和 _REST 客户端_ 访问
+     + 当使用直接的 Heapster 访问时，HorizontalPodAutoscaler 直接通过 API 服务器的服务代理子资源查询 Heapster
+       #+BEGIN_EXAMPLE
+	 需要在集群上部署 Heapster 并在 kube-system namespace 中运行
+       #+END_EXAMPLE
+     + Autoscaler 访问相应的 replication controller，deployment 或 replica set 来缩放子资源
+       + Scale 是一个允许动态设置副本数并检查其当前状态的接口 
+* API 
+_Horizontal Pod Autoscaler_ 是 kubernetes 的 _autoscaling API_ 组中的 *API 资源* 
+* 使用
+
+
