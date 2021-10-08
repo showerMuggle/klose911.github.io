@@ -3,3 +3,48 @@
 #+HTML_LINK_UP: cronjob.html
 #+HTML_LINK_HOME: controller.html
 #+OPTIONS: num:nil timestamp:nil ^:nil
+
+#+BEGIN_EXAMPLE
+  应用的资源使用率通常都有高峰和低谷的时候，如何削峰填谷，提高集群的整体资源利用率，让service中的Pod个数自动调整呢？
+#+END_EXAMPLE
+
+这就有赖于 _Horizontal Pod Autoscaling_ 了，顾名思义，使Pod水平自动缩放
+
+#+BEGIN_EXAMPLE
+  这个Object（跟Pod、Deployment一样都是API resource）也是最能体现kubernetes之于传统运维价值的地方，不再需要手动扩容了
+
+  终于实现自动化了，还可以自定义指标，没准未来还可以通过人工智能自动进化呢！
+#+END_EXAMPLE
+
+HPA属于Kubernetes中的 _autoscaling SIG_ （Special Interest Group），其下有两个feature：
++ [[file:https:/github.com/kubernetes/features/issues/117][Arbitrary/Custom Metrics in the Horizontal Pod Autoscaler#117]]
++ [[https://github.com/kubernetes/features/issues/118][Monitoring Pipeline Metrics HPA API #118]]
+
+#+BEGIN_EXAMPLE
+  Kubernetes自1.2版本引入HPA机制，到1.6版本之前一直是通过kubelet来获取监控指标来判断是否需要扩缩容
+
+  1.6版本之后必须通过API server、Heapseter或者kube-aggregator来获取监控指标
+#+END_EXAMPLE
+* 解析
+Horizontal Pod Autoscaling仅适用于 _Deployment_ 和 _ReplicaSet_ ，在v1版本中仅支持根据 _Pod的CPU利用率_ 扩缩容，在v1alpha版本中，支持根据 _内存_ 和 _用户自定义的metric_ 扩缩容 
+
+
+  #+ATTR_HTML: image :width 80% 
+  [[file:../../pic/horizontal-pod-autoscaler.png]]
+
+Horizontal Pod Autoscaling由API server和controller共同实现
+* Metrics
+在不同版本的API中，HPA autoscale时可以根据以下指标来判断：
++ autoscaling/v1
+  + CPU
++ autoscaling/v1alpha1
+  + 内存
+  + 自定义metrics
+    + kubernetes1.6起支持自定义metrics，但是必须在 _kube-controller-manager_ 中配置如下两项：
+      + _--horizontal-pod-autoscaler-use-rest-clients_ =true
+      + _--api-server_ 指向kube-aggregator
+	#+BEGIN_EXAMPLE
+	  也可以使用heapster来实现，通过在启动heapster的时候指定--api-server=true
+	#+END_EXAMPLE
++ 多种metrics组合：HPA会根据每个metric的值计算出scale的值，并将最大的那个值作为扩容的最终结果　
+* 管理

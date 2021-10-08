@@ -234,6 +234,97 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="controller.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">水平自动扩展</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#org278b709">解析</a></li>
+<li><a href="#orge207b6f">Metrics</a></li>
+<li><a href="#org442edc5">管理</a></li>
+</ul>
+</div>
+</div>
+<pre class="example">
+  应用的资源使用率通常都有高峰和低谷的时候，如何削峰填谷，提高集群的整体资源利用率，让service中的Pod个数自动调整呢？
+</pre>
+
+<p>
+这就有赖于 <span class="underline">Horizontal Pod Autoscaling</span> 了，顾名思义，使Pod水平自动缩放
+</p>
+
+<pre class="example">
+  这个Object（跟Pod、Deployment一样都是API resource）也是最能体现kubernetes之于传统运维价值的地方，不再需要手动扩容了
+
+  终于实现自动化了，还可以自定义指标，没准未来还可以通过人工智能自动进化呢！
+</pre>
+
+<p>
+HPA属于Kubernetes中的 <span class="underline">autoscaling SIG</span> （Special Interest Group），其下有两个feature：
+</p>
+<ul class="org-ul">
+<li><a href="https:/github.com/kubernetes/features/issues/117">Arbitrary/Custom Metrics in the Horizontal Pod Autoscaler#117</a></li>
+<li><a href="https://github.com/kubernetes/features/issues/118">Monitoring Pipeline Metrics HPA API #118</a></li>
+</ul>
+
+<pre class="example">
+Kubernetes自1.2版本引入HPA机制，到1.6版本之前一直是通过kubelet来获取监控指标来判断是否需要扩缩容
+
+1.6版本之后必须通过API server、Heapseter或者kube-aggregator来获取监控指标
+</pre>
+<div id="outline-container-org278b709" class="outline-2">
+<h2 id="org278b709">解析</h2>
+<div class="outline-text-2" id="text-org278b709">
+<p>
+Horizontal Pod Autoscaling仅适用于 <span class="underline">Deployment</span> 和 <span class="underline">ReplicaSet</span> ，在v1版本中仅支持根据 <span class="underline">Pod的CPU利用率</span> 扩缩容，在v1alpha版本中，支持根据 <span class="underline">内存</span> 和 <span class="underline">用户自定义的metric</span> 扩缩容 
+</p>
+
+
+
+<div class="figure">
+<p><img src="../../pic/horizontal-pod-autoscaler.png" alt="horizontal-pod-autoscaler.png" width="80%" />
+</p>
+</div>
+
+<p>
+Horizontal Pod Autoscaling由API server和controller共同实现
+</p>
+</div>
+</div>
+<div id="outline-container-orge207b6f" class="outline-2">
+<h2 id="orge207b6f">Metrics</h2>
+<div class="outline-text-2" id="text-orge207b6f">
+<p>
+在不同版本的API中，HPA autoscale时可以根据以下指标来判断：
+</p>
+<ul class="org-ul">
+<li>autoscaling/v1
+<ul class="org-ul">
+<li>CPU</li>
+</ul></li>
+<li>autoscaling/v1alpha1
+<ul class="org-ul">
+<li>内存</li>
+<li>自定义metrics
+<ul class="org-ul">
+<li>kubernetes1.6起支持自定义metrics，但是必须在 <span class="underline">kube-controller-manager</span> 中配置如下两项：
+<ul class="org-ul">
+<li><span class="underline">&#x2013;horizontal-pod-autoscaler-use-rest-clients</span> =true</li>
+<li><p>
+<span class="underline">&#x2013;api-server</span> 指向kube-aggregator
+</p>
+<pre class="example">
+	  也可以使用heapster来实现，通过在启动heapster的时候指定--api-server=true
+</pre></li>
+</ul></li>
+</ul></li>
+</ul></li>
+<li>多种metrics组合：HPA会根据每个metric的值计算出scale的值，并将最大的那个值作为扩容的最终结果　</li>
+</ul>
+</div>
+</div>
+<div id="outline-container-org442edc5" class="outline-2">
+<h2 id="org442edc5">管理</h2>
+</div>
 </div>
 <div id="postamble" class="status">
 
