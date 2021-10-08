@@ -116,7 +116,85 @@ HPA属于Kubernetes中的 _autoscaling SIG_ （Special Interest Group），其�
      + Autoscaler 访问相应的 replication controller，deployment 或 replica set 来缩放子资源
        + Scale 是一个允许动态设置副本数并检查其当前状态的接口 
 * API 
-_Horizontal Pod Autoscaler_ 是 kubernetes 的 _autoscaling API_ 组中的 *API 资源* 
+  _Horizontal Pod Autoscaler_ 是 kubernetes 的 _autoscaling API_ 组中的 *API 资源* 
 * 使用
+  Horizontal Pod Autoscaler 和其他的所有 API 资源一样，通过 kubectl 以标准的方式支持。
+  + 使用kubectl create命令创建一个新的 autoscaler
+  + 使用kubectl get hpa列出所有的 autoscaler
+  + 使用kubectl describe hpa获取其详细信息
+  + 使用kubectl delete hpa删除 autoscaler。
 
+  另外，可以使用kubectl autoscale命令，很轻易的就可以创建一个 Horizontal Pod Autoscaler
 
+** 滚动更新期间的自动扩缩容
+   #+BEGIN_EXAMPLE
+     目前在Kubernetes中，可以通过直接管理 replication controller 或使用 deployment 对象来执行 滚动更新
+
+     deployment 对象会自动管理基础 replication controller
+   #+END_EXAMPLE
+   Horizontal Pod Autoscaler 仅支持后一种方法：Horizontal Pod Autoscaler 被绑定到 deployment 对象，它设置 deployment 对象的大小，deployment 负责设置底层 replication controller 的大小
+
+   #+BEGIN_EXAMPLE
+     Horizontal Pod Autoscaler 不能使用直接操作 replication controller 进行滚动更新，即不能将 Horizontal Pod Autoscaler 绑定到 replication controller，并进行滚动更新（例如使用kubectl rolling-update）
+
+     这不行的原因是，当滚动更新创建一个新的 replication controller 时，Horizontal Pod Autoscaler 将不会绑定到新的 replication controller 上
+   #+END_EXAMPLE
+
+** 多个 metric
+   Kubernetes 1.6 中增加了支持基于多个 metric 的扩缩容
+
+   #+BEGIN_EXAMPLE
+     可以使用autoscaling/v2alpha1 API 版本来为 Horizontal Pod Autoscaler 指定多个 metric
+
+     然后 Horizontal Pod Autoscaler controller 将权衡每一个 metric，并根据该 metric 提议一个新的 scale，在所有提议里最大的那个 scale 将作为最终的 scale
+   #+END_EXAMPLE
+
+** 自定义 metric
+   #+BEGIN_EXAMPLE
+     kubernetes1.8版本以后的kubernetes中，使用 聚合的API server 来实现自定义指标的HPA
+   #+END_EXAMPLE
+
+*** 配置
+    + 将 _kube-controller-manager_ 的启动参数中 _--horizontal-pod-autoscaler-use-rest-clients_ 设置为 _true_ ，并指定 _--master_ 为 *API server地址* 
+      #+BEGIN_EXAMPLE
+	如--master=http://172.20.0.113:8080
+      #+END_EXAMPLE
+    + 修改 _kube-apiserver_ 的配置文件 _apiserver_ ，增加一条配置用来配置aggregator的CA证书 
+      #+BEGIN_EXAMPLE
+	--requestheader-client-ca-file=/etc/kubernetes/ssl/ca.pem --requestheader-allowed-names=aggregator --requestheader-extra-headers-prefix=X-Remote-Extra- --requestheader-group-headers=X-Remote-Group --requestheader-username-headers=X-Remote-User --proxy-client-cert-file=/etc/kubernetes/ssl/kubernetes.pem --proxy-client-key-file=/etc/kubernetes/ssl/kubernetes-key.pem
+      #+END_EXAMPLE
+
+*** 定义APIService 
+    已经内置了apiregistration.k8s.io/v1beta1 API，可以直接定义APIService，如：
+
+    #+BEGIN_EXAMPLE
+      apiVersion: apiregistration.k8s.io/v1
+      kind: APIService
+      metadata:
+	name: v1.custom-metrics.metrics.k8s.io
+      spec:
+	insecureSkipTLSVerify: true
+	group: custom-metrics.metrics.k8s.io
+	groupPriorityMinimum: 1000
+	versionPriority: 5
+	service:
+	  name: api
+	  namespace: custom-metrics
+	version: v1alpha1
+    #+END_EXAMPLE
+
+*** 部署Prometheus
+    最后使用prometheus-operator.yaml文件部署Prometheus operator
+
+    这会产生一个自定义的API：http://xxx.xxx.xxx.xxx:8080/apis/custom-metrics.metrics.k8s.io/v1alpha1 它可以通过浏览器访问，也可以使用下面的命令可以检查该API：
+
+    #+BEGIN_SRC sh 
+  $ kubectl get --raw=apis/custom-metrics.metrics.k8s.io/v1alpha1
+  {"kind":"APIResourceList","apiVersion":"v1","groupVersion":"custom-metrics.metrics.k8s.io/v1alpha1","resources":[{"name":"jobs.batch/http_requests","singularName":"","namespaced":true,"kind":"MetricValueList","verbs":["get"]},{"name":"namespaces/http_requests","singularName":"","namespaced":false,"kind":"MetricValueList","verbs":["get"]},{"name":"jobs.batch/up","singularName":"","namespaced":true,"kind":"MetricValueList","verbs":["get"]},{"name":"pods/up","singularName":"","namespaced":true,"kind":"MetricValueList","verbs":["get"]},{"name":"services/scrape_samples_scraped","singularName":"","namespaced":true,"kind":"MetricValueList","verbs":["get"]},{"name":"namespaces/scrape_samples_scraped","singularName":"","namespaced":false,"kind":"MetricValueList","verbs":["get"]},{"name":"pods/scrape_duration_seconds","singularName":"","namespaced":true,"kind":"MetricValueList","verbs":["get"]},{"name":"services/scrape_duration_seconds","singularName":"","namespaced":true,"kind":"MetricValueList","verbs":["get"]},{"name":"pods/http_requests","singularName":"","namespaced":true,"kind":"MetricValueList","verbs":["get"]},{"name":"pods/scrape_samples_post_metric_relabeling","singularName":"","namespaced":true,"kind":"MetricValueList","verbs":["get"]},{"name":"jobs.batch/scrape_samples_scraped","singularName":"","namespaced":true,"kind":"MetricValueList","verbs":["get"]},{"name":"jobs.batch/scrape_duration_seconds","singularName":"","namespaced":true,"kind":"MetricValueList","verbs":["get"]},{"name":"namespaces/scrape_duration_seconds","singularName":"","namespaced":false,"kind":"MetricValueList","verbs":["get"]},{"name":"namespaces/scrape_samples_post_metric_relabeling","singularName":"","namespaced":false,"kind":"MetricValueList","verbs":["get"]},{"name":"services/scrape_samples_post_metric_relabeling","singularName":"","namespaced":true,"kind":"MetricValueList","verbs":["get"]},{"name":"services/up","singularName":"","namespaced":true,"kind":"MetricValueList","verbs":["get"]},{"name":"pods/scrape_samples_scraped","singularName":"","namespaced":true,"kind":"MetricValueList","verbs":["get"]},{"name":"services/http_requests","singularName":"","namespaced":true,"kind":"MetricValueList","verbs":["get"]},{"name":"jobs.batch/scrape_samples_post_metric_relabeling","singularName":"","namespaced":true,"kind":"MetricValueList","verbs":["get"]},{"name":"namespaces/up","singularName":"","namespaced":false,"kind":"MetricValueList","verbs":["get"]}]}
+    #+END_SRC
+
+    [[file:admission_controller.org][Next：准入控制器]]
+
+    [[file:cronjob.org][Previous: CronJob]]
+
+    [[file:controller.org][Home：Controller]]
