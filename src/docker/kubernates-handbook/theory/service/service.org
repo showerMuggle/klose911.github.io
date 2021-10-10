@@ -245,3 +245,75 @@ Kubernetes Pod 是有生命周期的，它们可以被创建，也可以被销�
    #+END_EXAMPLE
 
 * 服务发现 
+Kubernetes 支持2种基本的服务发现模式： _环境变量_ 和 _DNS_ 
+
+** 环境变量
+当 Pod 运行在 Node 上，kubelet 会为每个 _活跃的_ Service  *添加* 一组 _环境变量_ 。 它同时支持 _Docker links 兼容_ 变量 、简单的 _{SVCNAME}_SERVICE_HOST_ 和 _{SVCNAME}_SERVICE_PORT_ 变量
+
+#+BEGIN_EXAMPLE
+  这里 Service 的名称需大写，横线被转换成下划线
+#+END_EXAMPLE
+
+举个例子，一个名称为 "redis-master" 的 Service 暴露了 TCP 端口 6379，同时给它分配了 Cluster IP 地址 10.0.0.11，这个 Service 生成了如下环境变量：
+
+#+BEGIN_EXAMPLE
+  REDIS_MASTER_SERVICE_HOST=10.0.0.11
+  REDIS_MASTER_SERVICE_PORT=6379
+  REDIS_MASTER_PORT=tcp://10.0.0.11:6379
+  REDIS_MASTER_PORT_6379_TCP=tcp://10.0.0.11:6379
+  REDIS_MASTER_PORT_6379_TCP_PROTO=tcp
+  REDIS_MASTER_PORT_6379_TCP_PORT=6379
+  REDIS_MASTER_PORT_6379_TCP_ADDR=10.0.0.11
+#+END_EXAMPLE
+
+#+BEGIN_EXAMPLE
+  这意味着需要有顺序的要求：Pod 想要访问的任何 Service 必须在 Pod 自己之前被创建，否则这些环境变量就不会被赋值
+
+  DNS 并没有这个限制
+#+END_EXAMPLE
+** DNS 
+一个可选 _集群插件_ 是 *DNS 服务器* 。DNS 服务器 *监视* 着 _创建_ 新 _Service_ 的 Kubernetes API，从而为每一个 Service 创建 *一组 DNS 记录* 。如果整个集群的 DNS 一直被启用，那么所有的 Pod 应该能够自动对 Service 进行名称解析
+
+#+BEGIN_EXAMPLE
+  例如，有一个名称为 "my-service" 的 Service，它在 Kubernetes 集群中名为 "my-ns" 的 Namespace 中，为 "my-service.my-ns" 创建了一条 DNS 记录
+
+  在名称为 "my-ns" 的 Namespace 中的 Pod 应该能够简单地通过名称查询找到 "my-service"
+
+  在另一个 Namespace 中的 Pod 必须限定名称为 "my-service.my-ns"
+
+  这些名称查询的结果是 Cluster IP 
+#+END_EXAMPLE
+Kubernetes 也支持对 *端口名称* 的 _DNS SRV_ (Service) 记录
+
+#+BEGIN_EXAMPLE
+  如果名称为 "my-service.my-ns" 的 Service 有一个名为 "http" 的 TCP 端口，可以对 "_http._tcp.my-service.my-ns" 执行 DNS SRV 查询，得到 "http" 的端口号
+#+END_EXAMPLE
+
+Kubernetes DNS 服务器是 *唯一* 的一种能够 *访问* _ExternalName_ 类型的 Service 的方式 
+* Headless Service
+有时不需要或不想要负载均衡，以及单独的 Service IP。遇到这种情况，可以通过指定 Cluster IP _spec.clusterIP_ 的值为 _None_ 来创建 Headless Service 
+
+#+BEGIN_EXAMPLE
+  这个选项允许开发人员自由寻找他们自己的方式，从而降低与 Kubernetes 系统的耦合性
+
+  应用仍然可以使用一种自注册的模式和适配器，对其它需要发现机制的系统能够很容易地基于这个 API 来构建
+#+END_EXAMPLE
+对这类 Service 并不会分配 Cluster IP，kube-proxy 不会处理它们，而且平台也不会为它们进行负载均衡和路由
+
+#+BEGIN_EXAMPLE
+  DNS 如何实现自动配置，依赖于 Service 是否定义了 selector
+#+END_EXAMPLE
+** 配置 Selector
+如果定义了 selector 的 Headless Service， _Endpoint 控制器_ 在 API 中创建了 _Endpoints 记录_ ，并且 *修改* _DNS 配置_ 返回 _A 记录_ （地址）
+
+#+BEGIN_EXAMPLE
+  通过这个地址直接到达 Service 的后端 Pod 上
+#+END_EXAMPLE
+
+** 不配置 Selector
+对没有定义 selector 的 Headless Service，Endpoint 控制器 *不会创建* _Endpoints 记录_ 。 然而 DNS 系统会查找和配置，无论是：
++ ExternalName 类型: Service 的 CNAME 记录
+  + 记录：与 Service 共享一个名称的任何 Endpoints，以及所有其它类型
+
+* 发布服务 
+

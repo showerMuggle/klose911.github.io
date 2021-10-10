@@ -257,7 +257,19 @@ for the JavaScript code in this tag.
 <li><a href="#orge95a276">为何不使用 round-robin DNS？</a></li>
 </ul>
 </li>
-<li><a href="#org8cd7c87">服务发现</a></li>
+<li><a href="#org8cd7c87">服务发现</a>
+<ul>
+<li><a href="#org666f1f8">环境变量</a></li>
+<li><a href="#org3e106a7">DNS</a></li>
+</ul>
+</li>
+<li><a href="#orgafdefb0">Headless Service</a>
+<ul>
+<li><a href="#orgf991733">配置 Selector</a></li>
+<li><a href="#orge6adeb3">不配置 Selector</a></li>
+</ul>
+</li>
+<li><a href="#orgb3c66e5">发布服务</a></li>
 </ul>
 </div>
 </div>
@@ -615,6 +627,125 @@ spec:
 
 <div id="outline-container-org8cd7c87" class="outline-2">
 <h2 id="org8cd7c87">服务发现</h2>
+<div class="outline-text-2" id="text-org8cd7c87">
+<p>
+Kubernetes 支持2种基本的服务发现模式： <span class="underline">环境变量</span> 和 <span class="underline">DNS</span> 
+</p>
+</div>
+
+<div id="outline-container-org666f1f8" class="outline-3">
+<h3 id="org666f1f8">环境变量</h3>
+<div class="outline-text-3" id="text-org666f1f8">
+<p>
+当 Pod 运行在 Node 上，kubelet 会为每个 <span class="underline">活跃的</span> Service  <b>添加</b> 一组 <span class="underline">环境变量</span> 。 它同时支持 <span class="underline">Docker links 兼容</span> 变量 、简单的 <span class="underline">{SVCNAME}_SERVICE_HOST</span> 和 <span class="underline">{SVCNAME}_SERVICE_PORT</span> 变量
+</p>
+
+<pre class="example">
+  这里 Service 的名称需大写，横线被转换成下划线
+</pre>
+
+<p>
+举个例子，一个名称为 "redis-master" 的 Service 暴露了 TCP 端口 6379，同时给它分配了 Cluster IP 地址 10.0.0.11，这个 Service 生成了如下环境变量：
+</p>
+
+<pre class="example">
+REDIS_MASTER_SERVICE_HOST=10.0.0.11
+REDIS_MASTER_SERVICE_PORT=6379
+REDIS_MASTER_PORT=tcp://10.0.0.11:6379
+REDIS_MASTER_PORT_6379_TCP=tcp://10.0.0.11:6379
+REDIS_MASTER_PORT_6379_TCP_PROTO=tcp
+REDIS_MASTER_PORT_6379_TCP_PORT=6379
+REDIS_MASTER_PORT_6379_TCP_ADDR=10.0.0.11
+</pre>
+
+<pre class="example">
+这意味着需要有顺序的要求：Pod 想要访问的任何 Service 必须在 Pod 自己之前被创建，否则这些环境变量就不会被赋值
+
+DNS 并没有这个限制
+</pre>
+</div>
+</div>
+<div id="outline-container-org3e106a7" class="outline-3">
+<h3 id="org3e106a7">DNS</h3>
+<div class="outline-text-3" id="text-org3e106a7">
+<p>
+一个可选 <span class="underline">集群插件</span> 是 <b>DNS 服务器</b> 。DNS 服务器 <b>监视</b> 着 <span class="underline">创建</span> 新 <span class="underline">Service</span> 的 Kubernetes API，从而为每一个 Service 创建 <b>一组 DNS 记录</b> 。如果整个集群的 DNS 一直被启用，那么所有的 Pod 应该能够自动对 Service 进行名称解析
+</p>
+
+<pre class="example">
+  例如，有一个名称为 "my-service" 的 Service，它在 Kubernetes 集群中名为 "my-ns" 的 Namespace 中，为 "my-service.my-ns" 创建了一条 DNS 记录
+
+  在名称为 "my-ns" 的 Namespace 中的 Pod 应该能够简单地通过名称查询找到 "my-service"
+
+  在另一个 Namespace 中的 Pod 必须限定名称为 "my-service.my-ns"
+
+  这些名称查询的结果是 Cluster IP 
+</pre>
+<p>
+Kubernetes 也支持对 <b>端口名称</b> 的 <span class="underline">DNS SRV</span> (Service) 记录
+</p>
+
+<pre class="example">
+  如果名称为 "my-service.my-ns" 的 Service 有一个名为 "http" 的 TCP 端口，可以对 "_http._tcp.my-service.my-ns" 执行 DNS SRV 查询，得到 "http" 的端口号
+</pre>
+
+<p>
+Kubernetes DNS 服务器是 <b>唯一</b> 的一种能够 <b>访问</b> <span class="underline">ExternalName</span> 类型的 Service 的方式 
+</p>
+</div>
+</div>
+</div>
+<div id="outline-container-orgafdefb0" class="outline-2">
+<h2 id="orgafdefb0">Headless Service</h2>
+<div class="outline-text-2" id="text-orgafdefb0">
+<p>
+有时不需要或不想要负载均衡，以及单独的 Service IP。遇到这种情况，可以通过指定 Cluster IP <span class="underline">spec.clusterIP</span> 的值为 <span class="underline">None</span> 来创建 Headless Service 
+</p>
+
+<pre class="example">
+  这个选项允许开发人员自由寻找他们自己的方式，从而降低与 Kubernetes 系统的耦合性
+
+  应用仍然可以使用一种自注册的模式和适配器，对其它需要发现机制的系统能够很容易地基于这个 API 来构建
+</pre>
+<p>
+对这类 Service 并不会分配 Cluster IP，kube-proxy 不会处理它们，而且平台也不会为它们进行负载均衡和路由
+</p>
+
+<pre class="example">
+DNS 如何实现自动配置，依赖于 Service 是否定义了 selector
+</pre>
+</div>
+<div id="outline-container-orgf991733" class="outline-3">
+<h3 id="orgf991733">配置 Selector</h3>
+<div class="outline-text-3" id="text-orgf991733">
+<p>
+如果定义了 selector 的 Headless Service， <span class="underline">Endpoint 控制器</span> 在 API 中创建了 <span class="underline">Endpoints 记录</span> ，并且 <b>修改</b> <span class="underline">DNS 配置</span> 返回 <span class="underline">A 记录</span> （地址）
+</p>
+
+<pre class="example">
+  通过这个地址直接到达 Service 的后端 Pod 上
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orge6adeb3" class="outline-3">
+<h3 id="orge6adeb3">不配置 Selector</h3>
+<div class="outline-text-3" id="text-orge6adeb3">
+<p>
+对没有定义 selector 的 Headless Service，Endpoint 控制器 <b>不会创建</b> <span class="underline">Endpoints 记录</span> 。 然而 DNS 系统会查找和配置，无论是：
+</p>
+<ul class="org-ul">
+<li>ExternalName 类型: Service 的 CNAME 记录
+<ul class="org-ul">
+<li>记录：与 Service 共享一个名称的任何 Endpoints，以及所有其它类型</li>
+</ul></li>
+</ul>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgb3c66e5" class="outline-2">
+<h2 id="orgb3c66e5">发布服务</h2>
 </div>
 </div>
 <div id="postamble" class="status">
