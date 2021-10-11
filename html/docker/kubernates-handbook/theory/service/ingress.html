@@ -5,7 +5,7 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>ReplicaSet</title>
+<title>Ingress</title>
 <meta name="generator" content="Org mode" />
 <meta name="author" content="Wu, Shanliang" />
 <style type="text/css">
@@ -218,87 +218,57 @@
 </head>
 <body>
 <div id="org-div-home-and-up">
- <a accesskey="h" href="daemon_set.html"> UP </a>
+ <a accesskey="h" href="toplogy.html"> UP </a>
  |
- <a accesskey="H" href="controller.html"> HOME </a>
+ <a accesskey="H" href="index.html"> HOME </a>
 </div><div id="content">
-<h1 class="title">ReplicaSet</h1>
+<h1 class="title">Ingress</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#org192586e">定义</a></li>
+</ul>
+</div>
+</div>
 <p>
-ReplicationController 用来 <b>确保</b> <span class="underline">容器应用的副本数</span> <b>始终保持</b> 在 <span class="underline">用户定义的副本数</span> ：
+<span class="underline">Ingress</span> 是从 <span class="underline">Kubernetes 集群外部</span> 访问 <span class="underline">集群内部服务</span> 的入口。先澄清几个术语：
 </p>
 <ul class="org-ul">
-<li>如果有容器异常退出，会自动创建新的 Pod 来替代</li>
-<li>而如果异常多出来的容器也会自动回收</li>
+<li><span class="underline">节点</span> ：Kubernetes 集群中的一台物理机或者虚拟机</li>
+<li><p>
+<span class="underline">集群</span> ：位于 Internet 防火墙后的节点
+</p>
+<pre class="example" id="org5085062">
+这是 kubernetes 管理的主要计算资源
+</pre></li>
+<li><p>
+<span class="underline">边界路由器</span> ：为集群强制执行防火墙策略的路由器
+</p>
+<pre class="example" id="org2f66452">
+这可能是由云提供商或物理硬件管理的网关
+</pre></li>
+<li><p>
+<span class="underline">集群网络</span> ：一组逻辑或物理链接，可根据 Kubernetes 网络模型实现集群内的通信
+</p>
+<pre class="example" id="org2b4714c">
+集群网络的实现包括 Overlay 模型的 flannel 和基于 SDN 的 OVS
+</pre></li>
+<li><p>
+<span class="underline">服务</span> ：使用标签选择器标识一组 pod 成为的 Kubernetes 服务
+</p>
+<pre class="example" id="org940e528">
+除非另有说明，否则服务假定在集群网络内仅可通过虚拟 IP 访问
+</pre></li>
 </ul>
 
-<pre class="example" id="orgfa304f3">
-在新版本的 Kubernetes 中建议使用 ReplicaSet 来取代 ReplicationController
-
-ReplicaSet 跟 ReplicationController 没有本质的不同，只是名字不一样，并且 ReplicaSet 支持集合式的 selector
-</pre>
-<p>
-虽然 ReplicaSet 可以独立使用，但一般还是建议使用 <span class="underline">Deployment</span> 来 <b>自动管理</b> <span class="underline">ReplicaSet</span> ，这样就无需担心跟其他机制的不兼容问题（比如 ReplicaSet 不支持 rolling-update 但 Deployment 支持） 
-</p>
-
-<pre class="example" id="orgd68fe2d">
-apiVersion: extensions/v1beta1
-kind: ReplicaSet
-metadata:
-  name: frontend
-  # these labels can be applied automatically
-  # from the labels in the pod template if not set
-  # labels:
-    # app: guestbook
-    # tier: frontend
-spec:
-  # this replicas value is default
-  # modify it according to your case
-  replicas: 3
-  # selector can be applied automatically
-  # from the labels in the pod template if not set,
-  # but we are specifying the selector here to
-  # demonstrate its usage.
-  selector:
-    matchLabels:
-      tier: frontend
-    matchExpressions:
-      - {key: tier, operator: In, values: [frontend]}
-  template:
-    metadata:
-      labels:
-	app: guestbook
-	tier: frontend
-    spec:
-      containers:
-      - name: php-redis
-	image: gcr.io/google_samples/gb-frontend:v3
-	resources:
-	  requests:
-	    cpu: 100m
-	    memory: 100Mi
-	env:
-	- name: GET_HOSTS_FROM
-	  value: dns
-	  # If your cluster config does not include a dns service, then to
-	  # instead access environment variables to find service host
-	  # info, comment out the 'value: dns' line above, and uncomment the
-	  # line below.
-	  # value: env
-	ports:
-	- containerPort: 80
+<pre class="example" id="orge2b2aa8">
+接下来还会讲到使用 Traefik 来做 Ingress controller，并给出了几个相关链接
 </pre>
 
-<p>
-<a href="job.html">Next:Job</a>
-</p>
-
-<p>
-<a href="daemon_set.html">Previous:DaemonSet</a>
-</p>
-
-<p>
-<a href="controller.html">Home：Controller</a>
-</p>
+<div id="outline-container-org192586e" class="outline-2">
+<h2 id="org192586e">定义</h2>
+</div>
 </div>
 <div id="postamble" class="status">
 

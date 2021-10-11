@@ -39,7 +39,7 @@
   }
   pre.src {
     position: relative;
-    overflow: visible;
+    overflow: auto;
     padding-top: 1.2em;
   }
   pre.src:before {
@@ -51,7 +51,7 @@
     padding: 3px;
     border: 1px solid black;
   }
-  pre.src:hover:before { display: inline;}
+  pre.src:hover:before { display: inline; margin-top: 14px;}
   /* Languages per Org manual */
   pre.src-asymptote:before { content: 'Asymptote'; }
   pre.src-awk:before { content: 'Awk'; }
@@ -160,6 +160,19 @@
   .footdef  { margin-bottom: 1em; }
   .figure { padding: 1em; }
   .figure p { text-align: center; }
+  .equation-container {
+    display: table;
+    text-align: center;
+    width: 100%;
+  }
+  .equation {
+    vertical-align: middle;
+  }
+  .equation-label {
+    display: table-cell;
+    text-align: right;
+    vertical-align: middle;
+  }
   .inlinetask {
     padding: 10px;
     border: 2px solid gray;
@@ -181,50 +194,26 @@
 </style>
 <link rel="stylesheet" type="text/css" href="../../css/main.css" />
 <script type="text/javascript">
-/*
-@licstart  The following is the entire license notice for the
-JavaScript code in this tag.
-
-Copyright (C) 2012-2019 Free Software Foundation, Inc.
-
-The JavaScript code in this tag is free software: you can
-redistribute it and/or modify it under the terms of the GNU
-General Public License (GNU GPL) as published by the Free Software
-Foundation, either version 3 of the License, or (at your option)
-any later version.  The code is distributed WITHOUT ANY WARRANTY;
-without even the implied warranty of MERCHANTABILITY or FITNESS
-FOR A PARTICULAR PURPOSE.  See the GNU GPL for more details.
-
-As additional permission under GNU GPL version 3 section 7, you
-may distribute non-source (e.g., minimized or compacted) forms of
-that code without the copy of the GNU GPL normally required by
-section 4, provided you include this license notice and a URL
-through which recipients can access the Corresponding Source.
-
-
-@licend  The above is the entire license notice
-for the JavaScript code in this tag.
-*/
+// @license magnet:?xt=urn:btih:e95b018ef3580986a04669f1b5879592219e2a7a&dn=public-domain.txt Public Domain
 <!--/*--><![CDATA[/*><!--*/
- function CodeHighlightOn(elem, id)
- {
-   var target = document.getElementById(id);
-   if(null != target) {
-     elem.cacheClassElem = elem.className;
-     elem.cacheClassTarget = target.className;
-     target.className = "code-highlighted";
-     elem.className   = "code-highlighted";
-   }
- }
- function CodeHighlightOff(elem, id)
- {
-   var target = document.getElementById(id);
-   if(elem.cacheClassElem)
-     elem.className = elem.cacheClassElem;
-   if(elem.cacheClassTarget)
-     target.className = elem.cacheClassTarget;
- }
-/*]]>*///-->
+     function CodeHighlightOn(elem, id)
+     {
+       var target = document.getElementById(id);
+       if(null != target) {
+         elem.classList.add("code-highlighted");
+         target.classList.add("code-highlighted");
+       }
+     }
+     function CodeHighlightOff(elem, id)
+     {
+       var target = document.getElementById(id);
+       if(null != target) {
+         elem.classList.remove("code-highlighted");
+         target.classList.remove("code-highlighted");
+       }
+     }
+    /*]]>*///-->
+// @license-end
 </script>
 </head>
 <body>
@@ -238,22 +227,22 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org278b709">解析</a></li>
-<li><a href="#orge207b6f">Metrics</a></li>
-<li><a href="#org729d43a">管理</a></li>
-<li><a href="#org99bd0a7">管理</a></li>
-<li><a href="#org28ac252">定义</a></li>
-<li><a href="#org2128903">原理</a></li>
-<li><a href="#orgf705062">API</a></li>
-<li><a href="#org83b5c4f">使用</a>
+<li><a href="#org20631dc">解析</a></li>
+<li><a href="#org7f4f34a">Metrics</a></li>
+<li><a href="#org105e303">管理</a></li>
+<li><a href="#org01e7215">管理</a></li>
+<li><a href="#org355efd0">定义</a></li>
+<li><a href="#org6f6d9f0">原理</a></li>
+<li><a href="#org7b94f03">API</a></li>
+<li><a href="#org455cf2d">使用</a>
 <ul>
-<li><a href="#org3359645">滚动更新期间的自动扩缩容</a></li>
-<li><a href="#org4c0ab2f">多个 metric</a></li>
-<li><a href="#org79d904d">自定义 metric</a>
+<li><a href="#org5f16175">滚动更新期间的自动扩缩容</a></li>
+<li><a href="#org13db671">多个 metric</a></li>
+<li><a href="#org23ab2a5">自定义 metric</a>
 <ul>
-<li><a href="#org1eec7d0">配置</a></li>
-<li><a href="#org4f24df8">定义APIService</a></li>
-<li><a href="#orga7f6173">部署Prometheus</a></li>
+<li><a href="#org8bb39c4">配置</a></li>
+<li><a href="#orgecc7aae">定义APIService</a></li>
+<li><a href="#orgf04338c">部署Prometheus</a></li>
 </ul>
 </li>
 </ul>
@@ -261,18 +250,18 @@ for the JavaScript code in this tag.
 </ul>
 </div>
 </div>
-<pre class="example">
-  应用的资源使用率通常都有高峰和低谷的时候，如何削峰填谷，提高集群的整体资源利用率，让service中的Pod个数自动调整呢？
+<pre class="example" id="org9f86534">
+应用的资源使用率通常都有高峰和低谷的时候，如何削峰填谷，提高集群的整体资源利用率，让service中的Pod个数自动调整呢？
 </pre>
 
 <p>
 这就有赖于 <span class="underline">Horizontal Pod Autoscaling</span> 了，顾名思义，使Pod水平自动缩放
 </p>
 
-<pre class="example">
-  这个Object（跟Pod、Deployment一样都是API resource）也是最能体现kubernetes之于传统运维价值的地方，不再需要手动扩容了
+<pre class="example" id="orgea5f231">
+这个Object（跟Pod、Deployment一样都是API resource）也是最能体现kubernetes之于传统运维价值的地方，不再需要手动扩容了
 
-  终于实现自动化了，还可以自定义指标，没准未来还可以通过人工智能自动进化呢！
+终于实现自动化了，还可以自定义指标，没准未来还可以通过人工智能自动进化呢！
 </pre>
 
 <p>
@@ -283,21 +272,21 @@ HPA属于Kubernetes中的 <span class="underline">autoscaling SIG</span> （Spec
 <li><a href="https://github.com/kubernetes/features/issues/118">Monitoring Pipeline Metrics HPA API #118</a></li>
 </ul>
 
-<pre class="example">
+<pre class="example" id="orgf042adb">
 Kubernetes自1.2版本引入HPA机制，到1.6版本之前一直是通过kubelet来获取监控指标来判断是否需要扩缩容
 
 1.6版本之后必须通过API server、Heapseter或者kube-aggregator来获取监控指标
 </pre>
-<div id="outline-container-org278b709" class="outline-2">
-<h2 id="org278b709">解析</h2>
-<div class="outline-text-2" id="text-org278b709">
+<div id="outline-container-org20631dc" class="outline-2">
+<h2 id="org20631dc">解析</h2>
+<div class="outline-text-2" id="text-org20631dc">
 <p>
 Horizontal Pod Autoscaling仅适用于 <span class="underline">Deployment</span> 和 <span class="underline">ReplicaSet</span> ，在v1版本中仅支持根据 <span class="underline">Pod的CPU利用率</span> 扩缩容，在v1alpha版本中，支持根据 <span class="underline">内存</span> 和 <span class="underline">用户自定义的metric</span> 扩缩容 
 </p>
 
 
 
-<div class="figure">
+<div id="orgf2fadac" class="figure">
 <p><img src="../../pic/horizontal-pod-autoscaler.png" alt="horizontal-pod-autoscaler.png" width="80%" />
 </p>
 </div>
@@ -307,9 +296,9 @@ Horizontal Pod Autoscaling由API server和controller共同实现
 </p>
 </div>
 </div>
-<div id="outline-container-orge207b6f" class="outline-2">
-<h2 id="orge207b6f">Metrics</h2>
-<div class="outline-text-2" id="text-orge207b6f">
+<div id="outline-container-org7f4f34a" class="outline-2">
+<h2 id="org7f4f34a">Metrics</h2>
+<div class="outline-text-2" id="text-org7f4f34a">
 <p>
 在不同版本的API中，HPA autoscale时可以根据以下指标来判断：
 </p>
@@ -329,8 +318,8 @@ Horizontal Pod Autoscaling由API server和controller共同实现
 <li><p>
 <span class="underline">&#x2013;api-server</span> 指向kube-aggregator
 </p>
-<pre class="example">
-	    也可以使用heapster来实现，通过在启动heapster的时候指定--api-server=true
+<pre class="example" id="org05a5d2c">
+也可以使用heapster来实现，通过在启动heapster的时候指定--api-server=true
 </pre></li>
 </ul></li>
 </ul></li>
@@ -339,9 +328,9 @@ Horizontal Pod Autoscaling由API server和controller共同实现
 </ul>
 </div>
 </div>
-<div id="outline-container-org729d43a" class="outline-2">
-<h2 id="org729d43a">管理</h2>
-<div class="outline-text-2" id="text-org729d43a">
+<div id="outline-container-org105e303" class="outline-2">
+<h2 id="org105e303">管理</h2>
+<div class="outline-text-2" id="text-org105e303">
 <p>
 在不同版本的API中，HPA autoscale时可以根据以下指标来判断：
 </p>
@@ -361,8 +350,8 @@ Horizontal Pod Autoscaling由API server和controller共同实现
 <li><p>
 <span class="underline">&#x2013;api-server</span> 指向kube-aggregator
 </p>
-<pre class="example">
-	    也可以使用heapster来实现，通过在启动heapster的时候指定--api-server=true
+<pre class="example" id="orgef254d0">
+也可以使用heapster来实现，通过在启动heapster的时候指定--api-server=true
 </pre></li>
 </ul></li>
 </ul></li>
@@ -371,9 +360,9 @@ Horizontal Pod Autoscaling由API server和controller共同实现
 </ul>
 </div>
 </div>
-<div id="outline-container-org99bd0a7" class="outline-2">
-<h2 id="org99bd0a7">管理</h2>
-<div class="outline-text-2" id="text-org99bd0a7">
+<div id="outline-container-org01e7215" class="outline-2">
+<h2 id="org01e7215">管理</h2>
+<div class="outline-text-2" id="text-org01e7215">
 <p>
 Horizontal Pod Autoscaling作为API resource也可以像Pod、Deployment一样使用kubeclt命令管理，使用方法跟它们一样，资源名称为 <span class="underline">hpa</span> 
 </p>
@@ -390,7 +379,7 @@ $ kubectl delete hpa
 有一点不同的是，可以直接使用 <span class="underline">kubectl autoscale</span> 通过命令行的方式创建Horizontal Pod Autoscaler：
 </p>
 
-<pre class="example">
+<pre class="example" id="org6f96103">
 kubectl autoscale (-f FILENAME | TYPE NAME | TYPE/NAME) [--min=MINPODS] --max=MAXPODS
 [--cpu-percent=CPU] [flags] [options]
 </pre>
@@ -404,8 +393,8 @@ kubectl autoscale (-f FILENAME | TYPE NAME | TYPE/NAME) [--min=MINPODS] --max=MA
 </pre>
 </div>
 
-<pre class="example">
-    为Deployment foo创建 一个autoscaler，当Pod的CPU利用率达到80%的时候，RC的replica数在2到5之间
+<pre class="example" id="orgd2ff279">
+为Deployment foo创建 一个autoscaler，当Pod的CPU利用率达到80%的时候，RC的replica数在2到5之间
 </pre>
 
 <ul class="org-ul">
@@ -414,9 +403,9 @@ kubectl autoscale (-f FILENAME | TYPE NAME | TYPE/NAME) [--min=MINPODS] --max=MA
 </ul>
 </div>
 </div>
-<div id="outline-container-org28ac252" class="outline-2">
-<h2 id="org28ac252">定义</h2>
-<div class="outline-text-2" id="text-org28ac252">
+<div id="outline-container-org355efd0" class="outline-2">
+<h2 id="org355efd0">定义</h2>
+<div class="outline-text-2" id="text-org355efd0">
 <p>
 利用 Horizontal Pod Autoscaling，kubernetes 能够根据 <span class="underline">监测到</span> 的 <span class="underline">CPU 利用率</span> （或者在 alpha 版本中支持的应用提供的 metric） <b>自动的扩容</b> <span class="underline">replication controller</span> ， <span class="underline">deployment</span> 和 <span class="underline">replica set</span> 。Horizontal Pod Autoscaler 作为 <span class="underline">kubernetes API resource</span> 和 <span class="underline">controller</span> 的实现：
 </p>
@@ -426,9 +415,9 @@ kubectl autoscale (-f FILENAME | TYPE NAME | TYPE/NAME) [--min=MINPODS] --max=MA
 </ul>
 </div>
 </div>
-<div id="outline-container-org2128903" class="outline-2">
-<h2 id="org2128903">原理</h2>
-<div class="outline-text-2" id="text-org2128903">
+<div id="outline-container-org6f6d9f0" class="outline-2">
+<h2 id="org6f6d9f0">原理</h2>
+<div class="outline-text-2" id="text-org6f6d9f0">
 <ol class="org-ol">
 <li>Horizontal Pod Autoscaler 由一个 <b>控制循环</b> 实现，循环周期由 <span class="underline">controller manager</span> 中的 <span class="underline">&#x2013;horizontal-pod-autoscaler-sync-period</span> 标志指定（默认是 30 秒）</li>
 <li>在每个周期内， <span class="underline">controller manager</span> 会 <b>查询</b> <span class="underline">HorizontalPodAutoscaler</span> 中定义的 <span class="underline">metric</span> 的资源利用率。Controller manager从下面获取 metric :
@@ -439,12 +428,12 @@ kubectl autoscale (-f FILENAME | TYPE NAME | TYPE/NAME) [--min=MINPODS] --max=MA
 <li><p>
 如果 <b>设置</b> 了 <span class="underline">目标利用率</span> ，controller 计算利用的值与每个 Pod 的容器里的 resource request 值的百分比。如果 <b>设置</b> 了 <span class="underline">目标原始值</span> ，将直接使用该原始 metric 值
 </p>
-<pre class="example">
-       请注意，如果某些 Pod 的容器没有设置相关的 resource request ，则不会定义 Pod 的 CPU 利用率，并且 Aucoscaler 也不会对该 metric 采取任何操作
+<pre class="example" id="orgd108626">
+请注意，如果某些 Pod 的容器没有设置相关的 resource request ，则不会定义 Pod 的 CPU 利用率，并且 Aucoscaler 也不会对该 metric 采取任何操作
 
-       对于每个 Pod 自定义的 metric，controller 功能类似于每个 Pod 的 resource metric，只是它使用原始值而不是利用率值
+对于每个 Pod 自定义的 metric，controller 功能类似于每个 Pod 的 resource metric，只是它使用原始值而不是利用率值
 
-       对于 object metric，获取单个度量（描述有问题的对象），并与目标值进行比较，以产生如上所述的比率
+对于 object metric，获取单个度量（描述有问题的对象），并与目标值进行比较，以产生如上所述的比率
 </pre></li>
 <li>controller 计算所有目标 Pod 的利用率或原始值（取决于所指定的目标类型）的 <b>平均值</b> ，产生一个用于缩放所需 replica 数量的比率</li>
 <li>HorizontalPodAutoscaler 控制器可以以两种不同的方式获取 metric ：直接的 <span class="underline">Heapster</span> 访问和 <span class="underline">REST 客户端</span> 访问
@@ -452,8 +441,8 @@ kubectl autoscale (-f FILENAME | TYPE NAME | TYPE/NAME) [--min=MINPODS] --max=MA
 <li><p>
 当使用直接的 Heapster 访问时，HorizontalPodAutoscaler 直接通过 API 服务器的服务代理子资源查询 Heapster
 </p>
-<pre class="example">
-	 需要在集群上部署 Heapster 并在 kube-system namespace 中运行
+<pre class="example" id="orge8971e0">
+需要在集群上部署 Heapster 并在 kube-system namespace 中运行
 </pre></li>
 <li>Autoscaler 访问相应的 replication controller，deployment 或 replica set 来缩放子资源
 <ul class="org-ul">
@@ -463,17 +452,17 @@ kubectl autoscale (-f FILENAME | TYPE NAME | TYPE/NAME) [--min=MINPODS] --max=MA
 </ol>
 </div>
 </div>
-<div id="outline-container-orgf705062" class="outline-2">
-<h2 id="orgf705062">API</h2>
-<div class="outline-text-2" id="text-orgf705062">
+<div id="outline-container-org7b94f03" class="outline-2">
+<h2 id="org7b94f03">API</h2>
+<div class="outline-text-2" id="text-org7b94f03">
 <p>
 <span class="underline">Horizontal Pod Autoscaler</span> 是 kubernetes 的 <span class="underline">autoscaling API</span> 组中的 <b>API 资源</b> 
 </p>
 </div>
 </div>
-<div id="outline-container-org83b5c4f" class="outline-2">
-<h2 id="org83b5c4f">使用</h2>
-<div class="outline-text-2" id="text-org83b5c4f">
+<div id="outline-container-org455cf2d" class="outline-2">
+<h2 id="org455cf2d">使用</h2>
+<div class="outline-text-2" id="text-org455cf2d">
 <p>
 Horizontal Pod Autoscaler 和其他的所有 API 资源一样，通过 kubectl 以标准的方式支持。
 </p>
@@ -489,10 +478,10 @@ Horizontal Pod Autoscaler 和其他的所有 API 资源一样，通过 kubectl �
 </p>
 </div>
 
-<div id="outline-container-org3359645" class="outline-3">
-<h3 id="org3359645">滚动更新期间的自动扩缩容</h3>
-<div class="outline-text-3" id="text-org3359645">
-<pre class="example">
+<div id="outline-container-org5f16175" class="outline-3">
+<h3 id="org5f16175">滚动更新期间的自动扩缩容</h3>
+<div class="outline-text-3" id="text-org5f16175">
+<pre class="example" id="orgfbcee5f">
 目前在Kubernetes中，可以通过直接管理 replication controller 或使用 deployment 对象来执行 滚动更新
 
 deployment 对象会自动管理基础 replication controller
@@ -501,7 +490,7 @@ deployment 对象会自动管理基础 replication controller
 Horizontal Pod Autoscaler 仅支持后一种方法：Horizontal Pod Autoscaler 被绑定到 deployment 对象，它设置 deployment 对象的大小，deployment 负责设置底层 replication controller 的大小
 </p>
 
-<pre class="example">
+<pre class="example" id="orgf5b7e88">
 Horizontal Pod Autoscaler 不能使用直接操作 replication controller 进行滚动更新，即不能将 Horizontal Pod Autoscaler 绑定到 replication controller，并进行滚动更新（例如使用kubectl rolling-update）
 
 这不行的原因是，当滚动更新创建一个新的 replication controller 时，Horizontal Pod Autoscaler 将不会绑定到新的 replication controller 上
@@ -509,57 +498,57 @@ Horizontal Pod Autoscaler 不能使用直接操作 replication controller 进行
 </div>
 </div>
 
-<div id="outline-container-org4c0ab2f" class="outline-3">
-<h3 id="org4c0ab2f">多个 metric</h3>
-<div class="outline-text-3" id="text-org4c0ab2f">
+<div id="outline-container-org13db671" class="outline-3">
+<h3 id="org13db671">多个 metric</h3>
+<div class="outline-text-3" id="text-org13db671">
 <p>
 Kubernetes 1.6 中增加了支持基于多个 metric 的扩缩容
 </p>
 
-<pre class="example">
-     可以使用autoscaling/v2alpha1 API 版本来为 Horizontal Pod Autoscaler 指定多个 metric
+<pre class="example" id="org83a2338">
+可以使用autoscaling/v2alpha1 API 版本来为 Horizontal Pod Autoscaler 指定多个 metric
 
-     然后 Horizontal Pod Autoscaler controller 将权衡每一个 metric，并根据该 metric 提议一个新的 scale，在所有提议里最大的那个 scale 将作为最终的 scale
+然后 Horizontal Pod Autoscaler controller 将权衡每一个 metric，并根据该 metric 提议一个新的 scale，在所有提议里最大的那个 scale 将作为最终的 scale
 </pre>
 </div>
 </div>
 
-<div id="outline-container-org79d904d" class="outline-3">
-<h3 id="org79d904d">自定义 metric</h3>
-<div class="outline-text-3" id="text-org79d904d">
-<pre class="example">
+<div id="outline-container-org23ab2a5" class="outline-3">
+<h3 id="org23ab2a5">自定义 metric</h3>
+<div class="outline-text-3" id="text-org23ab2a5">
+<pre class="example" id="org7e4d3b4">
 kubernetes1.8版本以后的kubernetes中，使用 聚合的API server 来实现自定义指标的HPA
 </pre>
 </div>
 
-<div id="outline-container-org1eec7d0" class="outline-4">
-<h4 id="org1eec7d0">配置</h4>
-<div class="outline-text-4" id="text-org1eec7d0">
+<div id="outline-container-org8bb39c4" class="outline-4">
+<h4 id="org8bb39c4">配置</h4>
+<div class="outline-text-4" id="text-org8bb39c4">
 <ul class="org-ul">
 <li><p>
 将 <span class="underline">kube-controller-manager</span> 的启动参数中 <span class="underline">&#x2013;horizontal-pod-autoscaler-use-rest-clients</span> 设置为 <span class="underline">true</span> ，并指定 <span class="underline">&#x2013;master</span> 为 <b>API server地址</b> 
 </p>
-<pre class="example">
-	如--master=http://172.20.0.113:8080
+<pre class="example" id="org9961485">
+如--master=http://172.20.0.113:8080
 </pre></li>
 <li><p>
 修改 <span class="underline">kube-apiserver</span> 的配置文件 <span class="underline">apiserver</span> ，增加一条配置用来配置aggregator的CA证书 
 </p>
-<pre class="example">
+<pre class="example" id="org356b54b">
 --requestheader-client-ca-file=/etc/kubernetes/ssl/ca.pem --requestheader-allowed-names=aggregator --requestheader-extra-headers-prefix=X-Remote-Extra- --requestheader-group-headers=X-Remote-Group --requestheader-username-headers=X-Remote-User --proxy-client-cert-file=/etc/kubernetes/ssl/kubernetes.pem --proxy-client-key-file=/etc/kubernetes/ssl/kubernetes-key.pem
 </pre></li>
 </ul>
 </div>
 </div>
 
-<div id="outline-container-org4f24df8" class="outline-4">
-<h4 id="org4f24df8">定义APIService</h4>
-<div class="outline-text-4" id="text-org4f24df8">
+<div id="outline-container-orgecc7aae" class="outline-4">
+<h4 id="orgecc7aae">定义APIService</h4>
+<div class="outline-text-4" id="text-orgecc7aae">
 <p>
 已经内置了apiregistration.k8s.io/v1beta1 API，可以直接定义APIService，如：
 </p>
 
-<pre class="example">
+<pre class="example" id="org438e1e8">
 apiVersion: apiregistration.k8s.io/v1
 kind: APIService
 metadata:
@@ -577,9 +566,9 @@ spec:
 </div>
 </div>
 
-<div id="outline-container-orga7f6173" class="outline-4">
-<h4 id="orga7f6173">部署Prometheus</h4>
-<div class="outline-text-4" id="text-orga7f6173">
+<div id="outline-container-orgf04338c" class="outline-4">
+<h4 id="orgf04338c">部署Prometheus</h4>
+<div class="outline-text-4" id="text-orgf04338c">
 <p>
 最后使用prometheus-operator.yaml文件部署Prometheus operator
 </p>
@@ -590,7 +579,7 @@ spec:
 
 <div class="org-src-container">
 <pre class="src src-sh">$ kubectl get --raw=apis/custom-metrics.metrics.k8s.io/v1alpha1
-{<span style="color: #deb887;">"kind"</span>:<span style="color: #deb887;">"APIResourceList"</span>,<span style="color: #deb887;">"apiVersion"</span>:<span style="color: #deb887;">"v1"</span>,<span style="color: #deb887;">"groupVersion"</span>:<span style="color: #deb887;">"custom-metrics.metrics.k8s.io/v1alpha1"</span>,<span style="color: #deb887;">"resources"</span>:[{<span style="color: #deb887;">"name"</span>:<span style="color: #deb887;">"jobs.batch/http_requests"</span>,<span style="color: #deb887;">"singularName"</span>:<span style="color: #deb887;">""</span>,<span style="color: #deb887;">"namespaced"</span>:true,<span style="color: #deb887;">"kind"</span>:<span style="color: #deb887;">"MetricValueList"</span>,<span style="color: #deb887;">"verbs"</span>:[<span style="color: #deb887;">"get"</span>]},{<span style="color: #deb887;">"name"</span>:<span style="color: #deb887;">"namespaces/http_requests"</span>,<span style="color: #deb887;">"singularName"</span>:<span style="color: #deb887;">""</span>,<span style="color: #deb887;">"namespaced"</span>:false,<span style="color: #deb887;">"kind"</span>:<span style="color: #deb887;">"MetricValueList"</span>,<span style="color: #deb887;">"verbs"</span>:[<span style="color: #deb887;">"get"</span>]},{<span style="color: #deb887;">"name"</span>:<span style="color: #deb887;">"jobs.batch/up"</span>,<span style="color: #deb887;">"singularName"</span>:<span style="color: #deb887;">""</span>,<span style="color: #deb887;">"namespaced"</span>:true,<span style="color: #deb887;">"kind"</span>:<span style="color: #deb887;">"MetricValueList"</span>,<span style="color: #deb887;">"verbs"</span>:[<span style="color: #deb887;">"get"</span>]},{<span style="color: #deb887;">"name"</span>:<span style="color: #deb887;">"pods/up"</span>,<span style="color: #deb887;">"singularName"</span>:<span style="color: #deb887;">""</span>,<span style="color: #deb887;">"namespaced"</span>:true,<span style="color: #deb887;">"kind"</span>:<span style="color: #deb887;">"MetricValueList"</span>,<span style="color: #deb887;">"verbs"</span>:[<span style="color: #deb887;">"get"</span>]},{<span style="color: #deb887;">"name"</span>:<span style="color: #deb887;">"services/scrape_samples_scraped"</span>,<span style="color: #deb887;">"singularName"</span>:<span style="color: #deb887;">""</span>,<span style="color: #deb887;">"namespaced"</span>:true,<span style="color: #deb887;">"kind"</span>:<span style="color: #deb887;">"MetricValueList"</span>,<span style="color: #deb887;">"verbs"</span>:[<span style="color: #deb887;">"get"</span>]},{<span style="color: #deb887;">"name"</span>:<span style="color: #deb887;">"namespaces/scrape_samples_scraped"</span>,<span style="color: #deb887;">"singularName"</span>:<span style="color: #deb887;">""</span>,<span style="color: #deb887;">"namespaced"</span>:false,<span style="color: #deb887;">"kind"</span>:<span style="color: #deb887;">"MetricValueList"</span>,<span style="color: #deb887;">"verbs"</span>:[<span style="color: #deb887;">"get"</span>]},{<span style="color: #deb887;">"name"</span>:<span style="color: #deb887;">"pods/scrape_duration_seconds"</span>,<span style="color: #deb887;">"singularName"</span>:<span style="color: #deb887;">""</span>,<span style="color: #deb887;">"namespaced"</span>:true,<span style="color: #deb887;">"kind"</span>:<span style="color: #deb887;">"MetricValueList"</span>,<span style="color: #deb887;">"verbs"</span>:[<span style="color: #deb887;">"get"</span>]},{<span style="color: #deb887;">"name"</span>:<span style="color: #deb887;">"services/scrape_duration_seconds"</span>,<span style="color: #deb887;">"singularName"</span>:<span style="color: #deb887;">""</span>,<span style="color: #deb887;">"namespaced"</span>:true,<span style="color: #deb887;">"kind"</span>:<span style="color: #deb887;">"MetricValueList"</span>,<span style="color: #deb887;">"verbs"</span>:[<span style="color: #deb887;">"get"</span>]},{<span style="color: #deb887;">"name"</span>:<span style="color: #deb887;">"pods/http_requests"</span>,<span style="color: #deb887;">"singularName"</span>:<span style="color: #deb887;">""</span>,<span style="color: #deb887;">"namespaced"</span>:true,<span style="color: #deb887;">"kind"</span>:<span style="color: #deb887;">"MetricValueList"</span>,<span style="color: #deb887;">"verbs"</span>:[<span style="color: #deb887;">"get"</span>]},{<span style="color: #deb887;">"name"</span>:<span style="color: #deb887;">"pods/scrape_samples_post_metric_relabeling"</span>,<span style="color: #deb887;">"singularName"</span>:<span style="color: #deb887;">""</span>,<span style="color: #deb887;">"namespaced"</span>:true,<span style="color: #deb887;">"kind"</span>:<span style="color: #deb887;">"MetricValueList"</span>,<span style="color: #deb887;">"verbs"</span>:[<span style="color: #deb887;">"get"</span>]},{<span style="color: #deb887;">"name"</span>:<span style="color: #deb887;">"jobs.batch/scrape_samples_scraped"</span>,<span style="color: #deb887;">"singularName"</span>:<span style="color: #deb887;">""</span>,<span style="color: #deb887;">"namespaced"</span>:true,<span style="color: #deb887;">"kind"</span>:<span style="color: #deb887;">"MetricValueList"</span>,<span style="color: #deb887;">"verbs"</span>:[<span style="color: #deb887;">"get"</span>]},{<span style="color: #deb887;">"name"</span>:<span style="color: #deb887;">"jobs.batch/scrape_duration_seconds"</span>,<span style="color: #deb887;">"singularName"</span>:<span style="color: #deb887;">""</span>,<span style="color: #deb887;">"namespaced"</span>:true,<span style="color: #deb887;">"kind"</span>:<span style="color: #deb887;">"MetricValueList"</span>,<span style="color: #deb887;">"verbs"</span>:[<span style="color: #deb887;">"get"</span>]},{<span style="color: #deb887;">"name"</span>:<span style="color: #deb887;">"namespaces/scrape_duration_seconds"</span>,<span style="color: #deb887;">"singularName"</span>:<span style="color: #deb887;">""</span>,<span style="color: #deb887;">"namespaced"</span>:false,<span style="color: #deb887;">"kind"</span>:<span style="color: #deb887;">"MetricValueList"</span>,<span style="color: #deb887;">"verbs"</span>:[<span style="color: #deb887;">"get"</span>]},{<span style="color: #deb887;">"name"</span>:<span style="color: #deb887;">"namespaces/scrape_samples_post_metric_relabeling"</span>,<span style="color: #deb887;">"singularName"</span>:<span style="color: #deb887;">""</span>,<span style="color: #deb887;">"namespaced"</span>:false,<span style="color: #deb887;">"kind"</span>:<span style="color: #deb887;">"MetricValueList"</span>,<span style="color: #deb887;">"verbs"</span>:[<span style="color: #deb887;">"get"</span>]},{<span style="color: #deb887;">"name"</span>:<span style="color: #deb887;">"services/scrape_samples_post_metric_relabeling"</span>,<span style="color: #deb887;">"singularName"</span>:<span style="color: #deb887;">""</span>,<span style="color: #deb887;">"namespaced"</span>:true,<span style="color: #deb887;">"kind"</span>:<span style="color: #deb887;">"MetricValueList"</span>,<span style="color: #deb887;">"verbs"</span>:[<span style="color: #deb887;">"get"</span>]},{<span style="color: #deb887;">"name"</span>:<span style="color: #deb887;">"services/up"</span>,<span style="color: #deb887;">"singularName"</span>:<span style="color: #deb887;">""</span>,<span style="color: #deb887;">"namespaced"</span>:true,<span style="color: #deb887;">"kind"</span>:<span style="color: #deb887;">"MetricValueList"</span>,<span style="color: #deb887;">"verbs"</span>:[<span style="color: #deb887;">"get"</span>]},{<span style="color: #deb887;">"name"</span>:<span style="color: #deb887;">"pods/scrape_samples_scraped"</span>,<span style="color: #deb887;">"singularName"</span>:<span style="color: #deb887;">""</span>,<span style="color: #deb887;">"namespaced"</span>:true,<span style="color: #deb887;">"kind"</span>:<span style="color: #deb887;">"MetricValueList"</span>,<span style="color: #deb887;">"verbs"</span>:[<span style="color: #deb887;">"get"</span>]},{<span style="color: #deb887;">"name"</span>:<span style="color: #deb887;">"services/http_requests"</span>,<span style="color: #deb887;">"singularName"</span>:<span style="color: #deb887;">""</span>,<span style="color: #deb887;">"namespaced"</span>:true,<span style="color: #deb887;">"kind"</span>:<span style="color: #deb887;">"MetricValueList"</span>,<span style="color: #deb887;">"verbs"</span>:[<span style="color: #deb887;">"get"</span>]},{<span style="color: #deb887;">"name"</span>:<span style="color: #deb887;">"jobs.batch/scrape_samples_post_metric_relabeling"</span>,<span style="color: #deb887;">"singularName"</span>:<span style="color: #deb887;">""</span>,<span style="color: #deb887;">"namespaced"</span>:true,<span style="color: #deb887;">"kind"</span>:<span style="color: #deb887;">"MetricValueList"</span>,<span style="color: #deb887;">"verbs"</span>:[<span style="color: #deb887;">"get"</span>]},{<span style="color: #deb887;">"name"</span>:<span style="color: #deb887;">"namespaces/up"</span>,<span style="color: #deb887;">"singularName"</span>:<span style="color: #deb887;">""</span>,<span style="color: #deb887;">"namespaced"</span>:false,<span style="color: #deb887;">"kind"</span>:<span style="color: #deb887;">"MetricValueList"</span>,<span style="color: #deb887;">"verbs"</span>:[<span style="color: #deb887;">"get"</span>]}]}
+{<span style="color: #ffa07a;">"kind"</span>:<span style="color: #ffa07a;">"APIResourceList"</span>,<span style="color: #ffa07a;">"apiVersion"</span>:<span style="color: #ffa07a;">"v1"</span>,<span style="color: #ffa07a;">"groupVersion"</span>:<span style="color: #ffa07a;">"custom-metrics.metrics.k8s.io/v1alpha1"</span>,<span style="color: #ffa07a;">"resources"</span>:[{<span style="color: #ffa07a;">"name"</span>:<span style="color: #ffa07a;">"jobs.batch/http_requests"</span>,<span style="color: #ffa07a;">"singularName"</span>:<span style="color: #ffa07a;">""</span>,<span style="color: #ffa07a;">"namespaced"</span>:true,<span style="color: #ffa07a;">"kind"</span>:<span style="color: #ffa07a;">"MetricValueList"</span>,<span style="color: #ffa07a;">"verbs"</span>:[<span style="color: #ffa07a;">"get"</span>]},{<span style="color: #ffa07a;">"name"</span>:<span style="color: #ffa07a;">"namespaces/http_requests"</span>,<span style="color: #ffa07a;">"singularName"</span>:<span style="color: #ffa07a;">""</span>,<span style="color: #ffa07a;">"namespaced"</span>:false,<span style="color: #ffa07a;">"kind"</span>:<span style="color: #ffa07a;">"MetricValueList"</span>,<span style="color: #ffa07a;">"verbs"</span>:[<span style="color: #ffa07a;">"get"</span>]},{<span style="color: #ffa07a;">"name"</span>:<span style="color: #ffa07a;">"jobs.batch/up"</span>,<span style="color: #ffa07a;">"singularName"</span>:<span style="color: #ffa07a;">""</span>,<span style="color: #ffa07a;">"namespaced"</span>:true,<span style="color: #ffa07a;">"kind"</span>:<span style="color: #ffa07a;">"MetricValueList"</span>,<span style="color: #ffa07a;">"verbs"</span>:[<span style="color: #ffa07a;">"get"</span>]},{<span style="color: #ffa07a;">"name"</span>:<span style="color: #ffa07a;">"pods/up"</span>,<span style="color: #ffa07a;">"singularName"</span>:<span style="color: #ffa07a;">""</span>,<span style="color: #ffa07a;">"namespaced"</span>:true,<span style="color: #ffa07a;">"kind"</span>:<span style="color: #ffa07a;">"MetricValueList"</span>,<span style="color: #ffa07a;">"verbs"</span>:[<span style="color: #ffa07a;">"get"</span>]},{<span style="color: #ffa07a;">"name"</span>:<span style="color: #ffa07a;">"services/scrape_samples_scraped"</span>,<span style="color: #ffa07a;">"singularName"</span>:<span style="color: #ffa07a;">""</span>,<span style="color: #ffa07a;">"namespaced"</span>:true,<span style="color: #ffa07a;">"kind"</span>:<span style="color: #ffa07a;">"MetricValueList"</span>,<span style="color: #ffa07a;">"verbs"</span>:[<span style="color: #ffa07a;">"get"</span>]},{<span style="color: #ffa07a;">"name"</span>:<span style="color: #ffa07a;">"namespaces/scrape_samples_scraped"</span>,<span style="color: #ffa07a;">"singularName"</span>:<span style="color: #ffa07a;">""</span>,<span style="color: #ffa07a;">"namespaced"</span>:false,<span style="color: #ffa07a;">"kind"</span>:<span style="color: #ffa07a;">"MetricValueList"</span>,<span style="color: #ffa07a;">"verbs"</span>:[<span style="color: #ffa07a;">"get"</span>]},{<span style="color: #ffa07a;">"name"</span>:<span style="color: #ffa07a;">"pods/scrape_duration_seconds"</span>,<span style="color: #ffa07a;">"singularName"</span>:<span style="color: #ffa07a;">""</span>,<span style="color: #ffa07a;">"namespaced"</span>:true,<span style="color: #ffa07a;">"kind"</span>:<span style="color: #ffa07a;">"MetricValueList"</span>,<span style="color: #ffa07a;">"verbs"</span>:[<span style="color: #ffa07a;">"get"</span>]},{<span style="color: #ffa07a;">"name"</span>:<span style="color: #ffa07a;">"services/scrape_duration_seconds"</span>,<span style="color: #ffa07a;">"singularName"</span>:<span style="color: #ffa07a;">""</span>,<span style="color: #ffa07a;">"namespaced"</span>:true,<span style="color: #ffa07a;">"kind"</span>:<span style="color: #ffa07a;">"MetricValueList"</span>,<span style="color: #ffa07a;">"verbs"</span>:[<span style="color: #ffa07a;">"get"</span>]},{<span style="color: #ffa07a;">"name"</span>:<span style="color: #ffa07a;">"pods/http_requests"</span>,<span style="color: #ffa07a;">"singularName"</span>:<span style="color: #ffa07a;">""</span>,<span style="color: #ffa07a;">"namespaced"</span>:true,<span style="color: #ffa07a;">"kind"</span>:<span style="color: #ffa07a;">"MetricValueList"</span>,<span style="color: #ffa07a;">"verbs"</span>:[<span style="color: #ffa07a;">"get"</span>]},{<span style="color: #ffa07a;">"name"</span>:<span style="color: #ffa07a;">"pods/scrape_samples_post_metric_relabeling"</span>,<span style="color: #ffa07a;">"singularName"</span>:<span style="color: #ffa07a;">""</span>,<span style="color: #ffa07a;">"namespaced"</span>:true,<span style="color: #ffa07a;">"kind"</span>:<span style="color: #ffa07a;">"MetricValueList"</span>,<span style="color: #ffa07a;">"verbs"</span>:[<span style="color: #ffa07a;">"get"</span>]},{<span style="color: #ffa07a;">"name"</span>:<span style="color: #ffa07a;">"jobs.batch/scrape_samples_scraped"</span>,<span style="color: #ffa07a;">"singularName"</span>:<span style="color: #ffa07a;">""</span>,<span style="color: #ffa07a;">"namespaced"</span>:true,<span style="color: #ffa07a;">"kind"</span>:<span style="color: #ffa07a;">"MetricValueList"</span>,<span style="color: #ffa07a;">"verbs"</span>:[<span style="color: #ffa07a;">"get"</span>]},{<span style="color: #ffa07a;">"name"</span>:<span style="color: #ffa07a;">"jobs.batch/scrape_duration_seconds"</span>,<span style="color: #ffa07a;">"singularName"</span>:<span style="color: #ffa07a;">""</span>,<span style="color: #ffa07a;">"namespaced"</span>:true,<span style="color: #ffa07a;">"kind"</span>:<span style="color: #ffa07a;">"MetricValueList"</span>,<span style="color: #ffa07a;">"verbs"</span>:[<span style="color: #ffa07a;">"get"</span>]},{<span style="color: #ffa07a;">"name"</span>:<span style="color: #ffa07a;">"namespaces/scrape_duration_seconds"</span>,<span style="color: #ffa07a;">"singularName"</span>:<span style="color: #ffa07a;">""</span>,<span style="color: #ffa07a;">"namespaced"</span>:false,<span style="color: #ffa07a;">"kind"</span>:<span style="color: #ffa07a;">"MetricValueList"</span>,<span style="color: #ffa07a;">"verbs"</span>:[<span style="color: #ffa07a;">"get"</span>]},{<span style="color: #ffa07a;">"name"</span>:<span style="color: #ffa07a;">"namespaces/scrape_samples_post_metric_relabeling"</span>,<span style="color: #ffa07a;">"singularName"</span>:<span style="color: #ffa07a;">""</span>,<span style="color: #ffa07a;">"namespaced"</span>:false,<span style="color: #ffa07a;">"kind"</span>:<span style="color: #ffa07a;">"MetricValueList"</span>,<span style="color: #ffa07a;">"verbs"</span>:[<span style="color: #ffa07a;">"get"</span>]},{<span style="color: #ffa07a;">"name"</span>:<span style="color: #ffa07a;">"services/scrape_samples_post_metric_relabeling"</span>,<span style="color: #ffa07a;">"singularName"</span>:<span style="color: #ffa07a;">""</span>,<span style="color: #ffa07a;">"namespaced"</span>:true,<span style="color: #ffa07a;">"kind"</span>:<span style="color: #ffa07a;">"MetricValueList"</span>,<span style="color: #ffa07a;">"verbs"</span>:[<span style="color: #ffa07a;">"get"</span>]},{<span style="color: #ffa07a;">"name"</span>:<span style="color: #ffa07a;">"services/up"</span>,<span style="color: #ffa07a;">"singularName"</span>:<span style="color: #ffa07a;">""</span>,<span style="color: #ffa07a;">"namespaced"</span>:true,<span style="color: #ffa07a;">"kind"</span>:<span style="color: #ffa07a;">"MetricValueList"</span>,<span style="color: #ffa07a;">"verbs"</span>:[<span style="color: #ffa07a;">"get"</span>]},{<span style="color: #ffa07a;">"name"</span>:<span style="color: #ffa07a;">"pods/scrape_samples_scraped"</span>,<span style="color: #ffa07a;">"singularName"</span>:<span style="color: #ffa07a;">""</span>,<span style="color: #ffa07a;">"namespaced"</span>:true,<span style="color: #ffa07a;">"kind"</span>:<span style="color: #ffa07a;">"MetricValueList"</span>,<span style="color: #ffa07a;">"verbs"</span>:[<span style="color: #ffa07a;">"get"</span>]},{<span style="color: #ffa07a;">"name"</span>:<span style="color: #ffa07a;">"services/http_requests"</span>,<span style="color: #ffa07a;">"singularName"</span>:<span style="color: #ffa07a;">""</span>,<span style="color: #ffa07a;">"namespaced"</span>:true,<span style="color: #ffa07a;">"kind"</span>:<span style="color: #ffa07a;">"MetricValueList"</span>,<span style="color: #ffa07a;">"verbs"</span>:[<span style="color: #ffa07a;">"get"</span>]},{<span style="color: #ffa07a;">"name"</span>:<span style="color: #ffa07a;">"jobs.batch/scrape_samples_post_metric_relabeling"</span>,<span style="color: #ffa07a;">"singularName"</span>:<span style="color: #ffa07a;">""</span>,<span style="color: #ffa07a;">"namespaced"</span>:true,<span style="color: #ffa07a;">"kind"</span>:<span style="color: #ffa07a;">"MetricValueList"</span>,<span style="color: #ffa07a;">"verbs"</span>:[<span style="color: #ffa07a;">"get"</span>]},{<span style="color: #ffa07a;">"name"</span>:<span style="color: #ffa07a;">"namespaces/up"</span>,<span style="color: #ffa07a;">"singularName"</span>:<span style="color: #ffa07a;">""</span>,<span style="color: #ffa07a;">"namespaced"</span>:false,<span style="color: #ffa07a;">"kind"</span>:<span style="color: #ffa07a;">"MetricValueList"</span>,<span style="color: #ffa07a;">"verbs"</span>:[<span style="color: #ffa07a;">"get"</span>]}]}
 </pre>
 </div>
 
