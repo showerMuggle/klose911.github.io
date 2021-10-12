@@ -28,3 +28,99 @@ _Ingress_ 是从 _Kubernetes 集群外部_ 访问 _集群内部服务_ 的入口
 #+end_example
 
 * 定义
+通常情况下，service 和 pod 仅可在集群内部网络中通过 IP 地址访问。所有到达边界路由器的流量或被丢弃或被转发到其他地方。从概念上讲，可能像下面这样：
+#+begin_example
+      internet
+	  |
+    ------------
+    [Services]
+#+end_example
+
+_Ingress_ 是 *授权* _入站连接_ 到达 _集群服务_ 的 *规则集合*
+
+#+begin_example
+      internet
+	  |
+     [Ingress]
+     --|-----|--
+     [Services]
+#+end_example
+
+可以给 Ingress 配置提供外部可访问的 _URL_ 、 _负载均衡_ 、 _SSL_ 、 _基于名称的虚拟主机_ 等：
++ 用户通过 POST Ingress 资源到 API server 的方式来请求 ingress
++ _Ingress controller_ 负责实现 Ingress，通常使用 _负载均衡器_ 
+  + 还可以配置边界路由和其他前端，这有助于以高可用的方式处理流量 
+
+* 前提
+  在使用 Ingress 资源之前，有必要先了解下面几件事情：
+  + Ingress 资源对象在 Kubernetes 1.1 之前还没有
+  + 需要一个 Ingress Controller 来实现 Ingress，单纯的创建一个 Ingress 没有任何意义
+    + GCE/GKE 会在 master 节点上部署一个 ingress controller
+      + 可以在一个 pod 中部署任意个自定义的 ingress controller
+      + 必须正确地注解每个 ingress，比如运行多个 ingress controller 和关闭 glbc
+    + 在非 GCE/GKE 的环境中，需要在 pod 中 部署一个 controller，例如 Nginx Ingress Controller
+
+* Ingress 资源
+  最简化的 Ingress 配置如下：
+
+  #+begin_example
+	1: apiVersion: extensions/v1beta1
+	2: kind: Ingress
+	3: metadata:
+	4:   name: test-ingress
+	5: spec:
+	6:   rules:
+	7:   - http:
+	8:       paths:
+	9:       - path: /testpath
+	10:        backend:
+	11:           serviceName: test
+	12:           servicePort: 80
+  #+end_example
+
++ 1-4 行 ：跟 Kubernetes 的其他配置一样，ingress 的配置也需要 apiVersion，kind 和 metadata 字段
++ 5-7 行 : Ingress spec 中包含配置一个 _loadbalancer_ 或 _proxy server_ 的所有信息
+  + 最重要的是，它包含了一个匹配 _所有入站请求_ 的 *规则列表* 
+    #+begin_example
+      目前 ingress 只支持 http 规则
+    #+end_example
++ 8-9 行 ：每条 http 规则包含以下信息：
+  + 一个 _host_ 配置项
+    #+begin_example
+      比如 for.bar.com，在这个例子中默认是 *
+    #+end_example
+  + _path_ 列表
+    #+begin_example
+      比如：/testpath
+    #+end_example
+    + 每个 path 都关联一个 backend
+      #+begin_example
+	比如 test:80
+      #+end_example
+  + 在 loadbalancer 将流量转发到 backend 之前， _所有的入站请求_ 都要先 *匹配*  _host_ 和 _path_ 
++ 10-12 行 ：backend 是一个 service:port 的组合。Ingress 的流量被转发到它所匹配的 backend
+
+#+begin_example
+  如果没有配置 Ingress controller 就将其 POST 到 API server 不会有任何用处
+
+  为了简单起见，示例中没有全局参数：在所有请求都不能跟 spec 中的 path 匹配的情况下，请求被发送到 Ingress controller 的默认后端，可以指定全局缺省 backend
+#+end_example
+
+* Ingress controller
+为了使 Ingress 正常工作，集群中必须运行 Ingress controller：
++ Kubernetes 当前支持并维护 GCE 和 nginx 两种 controller
++ F5 公司 支持并维护 F5 BIG-IP Controller for Kubernetes
++ Kong 同时支持并维护 社区版 与 企业版 的 Kong Ingress Controller for Kubernetes
++ Traefik 是功能齐全的 ingress controller (Let’s Encrypt, secrets, http2, websocket…), Containous 也对其提供商业支持
++ Istio 使用 CRD Gateway 来 控制 Ingress 流量
+
+#+begin_example
+  这与其他类型的控制器不同，其他类型的控制器通常作为 kube-controller-manager 二进制文件的一部分运行，在集群启动时自动启动
+
+  用户需要选择最适合自己集群的 Ingress controller 或者自己实现一个
+
+  确保使用前查看控制器特定的文档，以便了解每个文档的注意事项
+#+end_example
+
+* Ingress 类型
+
