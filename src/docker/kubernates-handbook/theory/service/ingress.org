@@ -363,3 +363,62 @@ _Ingress_ 是从 _Kubernetes 集群外部_ 访问 _集群内部服务_ 的入口
 
 * Traefik 
 
+  如果部署了 _Traefik_ 作为 Ingress Controller，集群外部直接访问 Kubenetes 内部服务的话，可以直接创建 Ingress 如下所示：
+
+  #+begin_example
+    apiVersion: extensions/v1beta1
+    kind: Ingress
+    metadata:
+      name: traefik-ingress
+      namespace: default
+    spec:
+      rules:
+      - host: traefik.nginx.io
+	http:
+	  paths:
+	  - path: /
+	    backend:
+	      serviceName: my-nginx
+	      servicePort: 80
+  #+end_example
+
+** 与nginx 共存
+   当处于迁移应用到 Kubernetes 上的阶段时，可能有部分服务实例不在 Kubernetes上，服务的路由使用 Nginx 配置，这时处于 nginx 和 ingress 共存的状态。参考下面的配置：
+
+   #+begin_example
+     apiVersion: extensions/v1beta1
+     kind: Ingress
+     metadata:
+       name: td-ingress
+       namespace: default
+       annotations:
+	 traefik.frontend.rule.type: PathPrefixStrip
+	 kubernetes.io/ingress.class: traefik
+     spec:
+       rules:
+       - host: "*.jimmysong.io"
+	 http:
+	   paths:
+	   - path: /docGenerate
+	     backend:
+	       serviceName: td-sdmk-docgenerate
+	       servicePort: 80
+   #+end_example
+
+   annotation 的配置：
+   + _traefik.frontend.rule.type: PathPrefixStrip_ 表示将截掉 URL 中的 path
+   + _kubernetes.io/ingress.class：traefik_ 表示使用的 ingress 类型
+
+   在 Nginx 中增加配置：
+
+   #+begin_example
+     upstream docGenerate {
+	    server 172.20.0.119:80;
+	    keepalive 200;
+     }
+   #+end_example
+
+   _172.20.0.119_ 是 *边缘节点的 VIP* 
+
+
+   | [[file:api-object.org][Next: Service API]] | [[file:toplogy.org][Previous：拓扑感知路由]] | [[file:index.org][Home：服务发现和路由]] |
