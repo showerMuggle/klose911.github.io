@@ -10,3 +10,65 @@
   要启用 RBAC，请使用 --authorization-mode=RBAC 启动 API Server
 #+END_EXAMPLE
 * API 
+
+  接下来将介绍 RBAC API 所定义的四种顶级类型
+
+  #+BEGIN_EXAMPLE
+    用户可以像使用其他 Kubernetes API 资源一样 （例如通过 kubectl、API 调用等）与这些资源进行交互
+
+    例如，命令 kubectl create -f (resource).yml 可以被用于以下所有的例子
+  #+END_EXAMPLE
+** Role 与 ClusterRole
+   在 RBAC API 中，一个 _角色_ 包含了一套表示 _一组权限_ 的规则：
+   + 权限以纯粹的 *累加* 形式累积（没有” 否定” 的规则）
+     + 角色可以由 _namespace_ 内的 *Role* 对象定义
+     + 整个 _Kubernetes 集群_ 范围内有效的角色则通过 *ClusterRole* 对象实现 
+
+   一个 Role 对象只能用于授予对某一单一命名空间中资源的访问权限
+
+   #+BEGIN_SRC yaml 
+  kind: Role
+  metadata:
+    namespace: default
+    name: pod-reader
+  rules:
+  - apiGroups: [""] # 空字符串"" 表明使用 core API group
+    resources: ["pods"]
+    verbs: ["get", "watch", "list"]
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     以上示例描述了 _default_ 命名空间中的一个 Role 对象的定义，用于授予对 pod 的读访问权限
+   #+END_EXAMPLE
+
+   ClusterRole 对象可以授予与 Role 对象相同的权限，但由于它们属于集群范围对象， 用它们授予对以下几种资源的访问权限：
+   + 集群范围资源
+     #+BEGIN_EXAMPLE
+       例如节点，即 node
+     #+END_EXAMPLE
+   + 非资源类型 endpoint
+     #+BEGIN_EXAMPLE
+       例如”/healthz”
+     #+END_EXAMPLE
+   + 跨所有命名空间的命名空间范围资源
+     #+BEGIN_EXAMPLE
+       例如 pod，需要运行命令 kubectl get pods --all-namespaces 来查询集群中所有的 pod
+     #+END_EXAMPLE
+
+   #+BEGIN_SRC yaml
+  kind: ClusterRole
+  apiVersion: rbac.authorization.k8s.io/v1
+  metadata:
+    # 鉴于 ClusterRole 是集群范围对象，所以这里不需要定义 "namespace" 字段
+    name: secret-reader
+  rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "watch", "list"]
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     示例中的 ClusterRole 定义可用于授予用户对某一特定命名空间，或者所有命名空间中的 secret（取决于其 绑定 方式）的读访问权限
+   #+END_EXAMPLE
+** RoleBinding 与 ClusterRoleBinding
+

@@ -238,7 +238,12 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgf128f5b">API</a></li>
+<li><a href="#orgf128f5b">API</a>
+<ul>
+<li><a href="#orgb6933c8">Role 与 ClusterRole</a></li>
+<li><a href="#org1985e13">RoleBinding 与 ClusterRoleBinding</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
@@ -251,6 +256,96 @@ for the JavaScript code in this tag.
 </pre>
 <div id="outline-container-orgf128f5b" class="outline-2">
 <h2 id="orgf128f5b">API</h2>
+<div class="outline-text-2" id="text-orgf128f5b">
+<p>
+接下来将介绍 RBAC API 所定义的四种顶级类型
+</p>
+
+<pre class="example">
+    用户可以像使用其他 Kubernetes API 资源一样 （例如通过 kubectl、API 调用等）与这些资源进行交互
+
+    例如，命令 kubectl create -f (resource).yml 可以被用于以下所有的例子
+</pre>
+</div>
+<div id="outline-container-orgb6933c8" class="outline-3">
+<h3 id="orgb6933c8">Role 与 ClusterRole</h3>
+<div class="outline-text-3" id="text-orgb6933c8">
+<p>
+在 RBAC API 中，一个 <span class="underline">角色</span> 包含了一套表示 <span class="underline">一组权限</span> 的规则：
+</p>
+<ul class="org-ul">
+<li>权限以纯粹的 <b>累加</b> 形式累积（没有” 否定” 的规则）
+<ul class="org-ul">
+<li>角色可以由 <span class="underline">namespace</span> 内的 <b>Role</b> 对象定义</li>
+<li>整个 <span class="underline">Kubernetes 集群</span> 范围内有效的角色则通过 <b>ClusterRole</b> 对象实现</li>
+</ul></li>
+</ul>
+
+<p>
+一个 Role 对象只能用于授予对某一单一命名空间中资源的访问权限
+</p>
+
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #4eee94;">kind</span>: Role
+<span style="color: #4eee94;">metadata</span>:
+  <span style="color: #4eee94;">namespace</span>: default
+  <span style="color: #4eee94;">name</span>: pod-reader
+<span style="color: #4eee94;">rules</span>:
+- <span style="color: #4eee94;">apiGroups</span>: [<span style="color: #deb887;">""</span>] <span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">&#31354;&#23383;&#31526;&#20018;"" &#34920;&#26126;&#20351;&#29992; core API group</span>
+  <span style="color: #4eee94;">resources</span>: [<span style="color: #deb887;">"pods"</span>]
+  <span style="color: #4eee94;">verbs</span>: [<span style="color: #deb887;">"get"</span>, <span style="color: #deb887;">"watch"</span>, <span style="color: #deb887;">"list"</span>]
+</pre>
+</div>
+
+<pre class="example">
+     以上示例描述了 _default_ 命名空间中的一个 Role 对象的定义，用于授予对 pod 的读访问权限
+</pre>
+
+<p>
+ClusterRole 对象可以授予与 Role 对象相同的权限，但由于它们属于集群范围对象， 用它们授予对以下几种资源的访问权限：
+</p>
+<ul class="org-ul">
+<li><p>
+集群范围资源
+</p>
+<pre class="example">
+       例如节点，即 node
+</pre></li>
+<li><p>
+非资源类型 endpoint
+</p>
+<pre class="example">
+       例如”/healthz”
+</pre></li>
+<li><p>
+跨所有命名空间的命名空间范围资源
+</p>
+<pre class="example">
+       例如 pod，需要运行命令 kubectl get pods --all-namespaces 来查询集群中所有的 pod
+</pre></li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #4eee94;">kind</span>: ClusterRole
+<span style="color: #4eee94;">apiVersion</span>: rbac.authorization.k8s.io/v1
+<span style="color: #4eee94;">metadata</span>:
+  <span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">&#37492;&#20110; ClusterRole &#26159;&#38598;&#32676;&#33539;&#22260;&#23545;&#35937;&#65292;&#25152;&#20197;&#36825;&#37324;&#19981;&#38656;&#35201;&#23450;&#20041; "namespace" &#23383;&#27573;</span>
+  <span style="color: #4eee94;">name</span>: secret-reader
+<span style="color: #4eee94;">rules</span>:
+- <span style="color: #4eee94;">apiGroups</span>: [<span style="color: #deb887;">""</span>]
+  <span style="color: #4eee94;">resources</span>: [<span style="color: #deb887;">"secrets"</span>]
+  <span style="color: #4eee94;">verbs</span>: [<span style="color: #deb887;">"get"</span>, <span style="color: #deb887;">"watch"</span>, <span style="color: #deb887;">"list"</span>]
+</pre>
+</div>
+
+<pre class="example">
+     示例中的 ClusterRole 定义可用于授予用户对某一特定命名空间，或者所有命名空间中的 secret（取决于其 绑定 方式）的读访问权限
+</pre>
+</div>
+</div>
+<div id="outline-container-org1985e13" class="outline-3">
+<h3 id="org1985e13">RoleBinding 与 ClusterRoleBinding</h3>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
