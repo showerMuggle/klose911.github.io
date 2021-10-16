@@ -243,6 +243,7 @@ for the JavaScript code in this tag.
 <li><a href="#orgb6933c8">Role 与 ClusterRole</a></li>
 <li><a href="#org1985e13">RoleBinding 与 ClusterRoleBinding</a></li>
 <li><a href="#org6e34f3d">对资源的引用</a></li>
+<li><a href="#org0ce4372">例子</a></li>
 </ul>
 </li>
 </ul>
@@ -445,6 +446,77 @@ RoleBinding 对象也可以引用一个 ClusterRole 对象
 </div>
 <div id="outline-container-org6e34f3d" class="outline-3">
 <h3 id="org6e34f3d">对资源的引用</h3>
+<div class="outline-text-3" id="text-org6e34f3d">
+<p>
+大多数资源由代表其 <span class="underline">名字的字符串</span> 表示
+</p>
+<pre class="example">
+  例如”pods”，就像它们出现在相关 API endpoint 的 URL 中一样
+</pre>
+
+<p>
+然而，有一些 Kubernetes API 还 包含了 <span class="underline">子资源</span> 
+</p>
+
+<pre class="example">
+比如 pod 的 logs，在 Kubernetes 中 pod logs endpoint 的 URL 格式为：
+
+GET /api/v1/namespaces/{namespace}/pods/{name}/log
+</pre>
+
+<p>
+在这种情况下，”pods” 是 <span class="underline">命名空间资源</span> ，而 ”log” 是 pods 的子资源。为了在 RBAC 角色中表示出这一点，需要使用 <span class="underline">斜线</span> 来划分资源 与子资源。如果需要角色绑定主体读取 pods 以及 pod log，需要定义以下角色：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #4eee94;">kind</span>: Role
+<span style="color: #4eee94;">apiVersion</span>: rbac.authorization.k8s.io/v1beta1
+<span style="color: #4eee94;">metadata</span>:
+  <span style="color: #4eee94;">namespace</span>: default
+  <span style="color: #4eee94;">name</span>: pod-and-pod-logs-reader
+<span style="color: #4eee94;">rules</span>:
+- <span style="color: #4eee94;">apiGroups</span>: [<span style="color: #deb887;">""</span>]
+  <span style="color: #4eee94;">resources</span>: [<span style="color: #deb887;">"pods"</span>, <span style="color: #deb887;">"pods/log"</span>]
+  <span style="color: #4eee94;">verbs</span>: [<span style="color: #deb887;">"get"</span>, <span style="color: #deb887;">"list"</span>]
+</pre>
+</div>
+
+<p>
+通过 <span class="underline">resourceNames</span> 列表，角色可以针对不同种类的请求根据资源名引用资源实例。当指定了resourceNames列表时，不同 <span class="underline">动作</span> 种类的请求的权限将被 <b>限定</b> 到资源列表中所包含的资源实例上
+</p>
+<pre class="example">
+  如使用”get”、”delete”、”update” 以及”patch” 等动词的请求
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #4eee94;">kind</span>: Role
+<span style="color: #4eee94;">apiVersion</span>: rbac.authorization.k8s.io/v1
+<span style="color: #4eee94;">metadata</span>:
+  <span style="color: #4eee94;">namespace</span>: default
+  <span style="color: #4eee94;">name</span>: configmap-updater
+<span style="color: #4eee94;">rules</span>:
+- <span style="color: #4eee94;">apiGroups</span>: [<span style="color: #deb887;">""</span>]
+  <span style="color: #4eee94;">resources</span>: [<span style="color: #deb887;">"configmap"</span>]
+  <span style="color: #4eee94;">resourceNames</span>: [<span style="color: #deb887;">"my-configmap"</span>]
+  <span style="color: #4eee94;">verbs</span>: [<span style="color: #deb887;">"update"</span>, <span style="color: #deb887;">"get"</span>]
+</pre>
+</div>
+
+<pre class="example">
+  如果需要限定一个角色绑定主体只能”get” 或者”update” 一个 configmap 时，可以定义上面这个角色
+</pre>
+
+<p>
+注意：如果设置了 <span class="underline">resourceNames</span> ，则请求所使用的动词 <b>不能</b> 是 <span class="underline">list</span> 、 <span class="underline">watch</span> 、 <span class="underline">create</span> 或者 <span class="underline">deletecollection</span> 
+</p>
+
+<pre class="example">
+  由于资源名不会出现在 create、list、watch 和 deletecollection 等 API 请求的 URL 中，所以这些请求动词不会被设置了 resourceNames 的规则所允许，因为规则中的resourceNames 部分不会匹配这些请求
+</pre>
+</div>
+</div>
+<div id="outline-container-org0ce4372" class="outline-3">
+<h3 id="org0ce4372">例子</h3>
 </div>
 </div>
 </div>
