@@ -151,22 +151,22 @@
      示例中所定义的ClusterRoleBinding允许在用户组”manager” 中的任何用户都可以读取集群中任何命名空间中的 secret
    #+END_EXAMPLE
 ** 对资源的引用
-大多数资源由代表其 _名字的字符串_ 表示
-#+BEGIN_EXAMPLE
-  例如”pods”，就像它们出现在相关 API endpoint 的 URL 中一样
-#+END_EXAMPLE
+   大多数资源由代表其 _名字的字符串_ 表示
+   #+BEGIN_EXAMPLE
+     例如”pods”，就像它们出现在相关 API endpoint 的 URL 中一样
+   #+END_EXAMPLE
 
-然而，有一些 Kubernetes API 还 包含了 _子资源_ 
+   然而，有一些 Kubernetes API 还 包含了 _子资源_ 
 
-#+BEGIN_EXAMPLE
-  比如 pod 的 logs，在 Kubernetes 中 pod logs endpoint 的 URL 格式为：
+   #+BEGIN_EXAMPLE
+     比如 pod 的 logs，在 Kubernetes 中 pod logs endpoint 的 URL 格式为：
 
-  GET /api/v1/namespaces/{namespace}/pods/{name}/log
-#+END_EXAMPLE
+     GET /api/v1/namespaces/{namespace}/pods/{name}/log
+   #+END_EXAMPLE
 
-在这种情况下，”pods” 是 _命名空间资源_ ，而 ”log” 是 pods 的子资源。为了在 RBAC 角色中表示出这一点，需要使用 _斜线_ 来划分资源 与子资源。如果需要角色绑定主体读取 pods 以及 pod log，需要定义以下角色：
+   在这种情况下，”pods” 是 _命名空间资源_ ，而 ”log” 是 pods 的子资源。为了在 RBAC 角色中表示出这一点，需要使用 _斜线_ 来划分资源 与子资源。如果需要角色绑定主体读取 pods 以及 pod log，需要定义以下角色：
 
-#+BEGIN_SRC yaml 
+   #+BEGIN_SRC yaml 
   kind: Role
   apiVersion: rbac.authorization.k8s.io/v1beta1
   metadata:
@@ -176,14 +176,14 @@
   - apiGroups: [""]
     resources: ["pods", "pods/log"]
     verbs: ["get", "list"]
-#+END_SRC
+   #+END_SRC
 
-通过 _resourceNames_ 列表，角色可以针对不同种类的请求根据资源名引用资源实例。当指定了resourceNames列表时，不同 _动作_ 种类的请求的权限将被 *限定* 到资源列表中所包含的资源实例上
-#+BEGIN_EXAMPLE
-  如使用”get”、”delete”、”update” 以及”patch” 等动词的请求
-#+END_EXAMPLE
+   通过 _resourceNames_ 列表，角色可以针对不同种类的请求根据资源名引用资源实例。当指定了resourceNames列表时，不同 _动作_ 种类的请求的权限将被 *限定* 到资源列表中所包含的资源实例上
+   #+BEGIN_EXAMPLE
+     如使用”get”、”delete”、”update” 以及”patch” 等动词的请求
+   #+END_EXAMPLE
 
-#+BEGIN_SRC yaml 
+   #+BEGIN_SRC yaml 
   kind: Role
   apiVersion: rbac.authorization.k8s.io/v1
   metadata:
@@ -194,16 +194,145 @@
     resources: ["configmap"]
     resourceNames: ["my-configmap"]
     verbs: ["update", "get"]
-#+END_SRC
+   #+END_SRC
 
-#+BEGIN_EXAMPLE
-  如果需要限定一个角色绑定主体只能”get” 或者”update” 一个 configmap 时，可以定义上面这个角色
-#+END_EXAMPLE
+   #+BEGIN_EXAMPLE
+     如果需要限定一个角色绑定主体只能”get” 或者”update” 一个 configmap 时，可以定义上面这个角色
+   #+END_EXAMPLE
 
-注意：如果设置了 _resourceNames_ ，则请求所使用的动词 *不能* 是 _list_ 、 _watch_ 、 _create_ 或者 _deletecollection_ 
+   注意：如果设置了 _resourceNames_ ，则请求所使用的动词 *不能* 是 _list_ 、 _watch_ 、 _create_ 或者 _deletecollection_ 
 
-#+BEGIN_EXAMPLE
-  由于资源名不会出现在 create、list、watch 和 deletecollection 等 API 请求的 URL 中，所以这些请求动词不会被设置了 resourceNames 的规则所允许，因为规则中的resourceNames 部分不会匹配这些请求
-#+END_EXAMPLE
+   #+BEGIN_EXAMPLE
+     由于资源名不会出现在 create、list、watch 和 deletecollection 等 API 请求的 URL 中，所以这些请求动词不会被设置了 resourceNames 的规则所允许，因为规则中的resourceNames 部分不会匹配这些请求
+   #+END_EXAMPLE
 ** 例子
+*** 角色定义
+    允许读取 core API Group 中定义的资源”pods”：
 
+    #+BEGIN_SRC yaml 
+  rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+    #+END_SRC
+
+    允许读写在”extensions” 和”apps” API Group 中定义的”deployments”：
+
+    #+BEGIN_SRC yaml 
+  rules:
+  - apiGroups: ["extensions", "apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+    #+END_SRC
+
+    允许读取一个名为”my-config” 的ConfigMap实例（需要将其通过RoleBinding绑定从而限制针对某一个命名空间中定义的一个ConfigMap实例的访问）：
+    #+BEGIN_SRC yaml 
+  rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["my-config"]
+    verbs: ["get"]
+    #+END_SRC
+
+    允许读取 core API Group 中的”nodes” 资源（由于Node是集群级别资源，所以此ClusterRole定义需要与一个ClusterRoleBinding绑定才能有效）：
+    #+BEGIN_SRC yaml 
+  rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+    #+END_SRC
+
+    允许对非资源 endpoint “/healthz” 及其所有子路径的”GET” 和”POST” 请求（此ClusterRole定义需要与一个ClusterRoleBinding绑定才能有效）：
+    #+BEGIN_SRC yaml 
+  rules:
+  - nonResourceURLs: ["/healthz", "/healthz/*"] # 在非资源 URL 中，'*' 代表后缀通配符
+    verbs: ["get", "post"]
+    #+END_SRC
+
+*** 角色绑定
+    角色绑定主体 _Subject_ 可以是用户组 _Group_、用户 _User_ 或者服务账户 _Service Accounts_ 
+    + 用户：字符串表示
+      #+BEGIN_EXAMPLE
+	可以是纯粹的用户名，例如”alice”、电子邮件风格的名字，如 “bob@example.com” 或者是用字符串表示的数字 id
+
+	由 Kubernetes 管理员配置 认证模块 以产生所需格式的用户名，对于用户名，RBAC 授权系统不要求任何特定的格式
+
+	然而，前缀 system: 是 为 Kubernetes 系统使用而保留的，所以管理员应该确保用户名不会意外地包含这个前缀
+      #+END_EXAMPLE
+    + 用户组：信息由授权模块提供
+      #+BEGIN_EXAMPLE
+	用户组与用户一样由字符串表示。Kubernetes 对用户组 字符串没有格式要求，但前缀 system: 同样是被系统保留的
+      #+END_EXAMPLE
+    + 服务账户
+      #+BEGIN_EXAMPLE
+	拥有包含 system:serviceaccount: 前缀的用户名，并属于拥有 system:serviceaccounts: 前缀的用户组 
+      #+END_EXAMPLE
+
+    一个名为”alice@example.com” 的用户：
+
+    #+BEGIN_SRC yaml 
+  subjects:
+  - kind: User
+    name: "alice@example.com"
+    apiGroup: rbac.authorization.k8s.io
+    #+END_SRC
+
+    一个名为”frontend-admins” 的用户组：
+
+    #+BEGIN_SRC yaml 
+  subjects:
+  - kind: Group
+    name: "frontend-admins"
+    apiGroup: rbac.authorization.k8s.io
+    #+END_SRC
+
+    kube-system 命名空间中的默认服务账户：
+
+    #+BEGIN_SRC yaml 
+  subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: kube-system
+    #+END_SRC
+
+    名为”qa” 命名空间中的所有服务账户：
+
+    #+BEGIN_SRC yaml 
+  subjects:
+  - kind: Group
+    name: system:serviceaccounts:qa
+    apiGroup: rbac.authorization.k8s.io
+  ​```在集群中的所有服务账户：
+
+  ​```yaml
+  subjects:
+  - kind: Group
+    name: system:serviceaccounts
+    apiGroup: rbac.authorization.k8s.io
+    #+END_SRC
+
+    所有认证过的用户：
+    #+BEGIN_SRC yaml 
+  subjects:
+  - kind: Group
+    name: system:authenticated
+    apiGroup: rbac.authorization.k8s.io
+  ​```所有未认证的用户（version 1.5+）：
+
+  ​```yaml
+  subjects:
+  - kind: Group
+    name: system:unauthenticated
+    apiGroup: rbac.authorization.k8s.io
+    #+END_SRC
+
+    所有用户：
+    #+BEGIN_SRC yaml 
+  subjects:
+  - kind: Group
+    name: system:authenticated
+    apiGroup: rbac.authorization.k8s.io
+  - kind: Group
+    name: system:unauthenticated
+    apiGroup: rbac.authorization.k8s.io
+    #+END_SRC

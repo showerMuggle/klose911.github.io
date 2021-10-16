@@ -243,7 +243,12 @@ for the JavaScript code in this tag.
 <li><a href="#orgb6933c8">Role 与 ClusterRole</a></li>
 <li><a href="#org1985e13">RoleBinding 与 ClusterRoleBinding</a></li>
 <li><a href="#org6e34f3d">对资源的引用</a></li>
-<li><a href="#org0ce4372">例子</a></li>
+<li><a href="#org0ce4372">例子</a>
+<ul>
+<li><a href="#org6d49a50">角色定义</a></li>
+<li><a href="#org304ec40">角色绑定</a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -451,7 +456,7 @@ RoleBinding 对象也可以引用一个 ClusterRole 对象
 大多数资源由代表其 <span class="underline">名字的字符串</span> 表示
 </p>
 <pre class="example">
-  例如”pods”，就像它们出现在相关 API endpoint 的 URL 中一样
+     例如”pods”，就像它们出现在相关 API endpoint 的 URL 中一样
 </pre>
 
 <p>
@@ -485,7 +490,7 @@ GET /api/v1/namespaces/{namespace}/pods/{name}/log
 通过 <span class="underline">resourceNames</span> 列表，角色可以针对不同种类的请求根据资源名引用资源实例。当指定了resourceNames列表时，不同 <span class="underline">动作</span> 种类的请求的权限将被 <b>限定</b> 到资源列表中所包含的资源实例上
 </p>
 <pre class="example">
-  如使用”get”、”delete”、”update” 以及”patch” 等动词的请求
+     如使用”get”、”delete”、”update” 以及”patch” 等动词的请求
 </pre>
 
 <div class="org-src-container">
@@ -503,7 +508,7 @@ GET /api/v1/namespaces/{namespace}/pods/{name}/log
 </div>
 
 <pre class="example">
-  如果需要限定一个角色绑定主体只能”get” 或者”update” 一个 configmap 时，可以定义上面这个角色
+     如果需要限定一个角色绑定主体只能”get” 或者”update” 一个 configmap 时，可以定义上面这个角色
 </pre>
 
 <p>
@@ -511,12 +516,195 @@ GET /api/v1/namespaces/{namespace}/pods/{name}/log
 </p>
 
 <pre class="example">
-  由于资源名不会出现在 create、list、watch 和 deletecollection 等 API 请求的 URL 中，所以这些请求动词不会被设置了 resourceNames 的规则所允许，因为规则中的resourceNames 部分不会匹配这些请求
+     由于资源名不会出现在 create、list、watch 和 deletecollection 等 API 请求的 URL 中，所以这些请求动词不会被设置了 resourceNames 的规则所允许，因为规则中的resourceNames 部分不会匹配这些请求
 </pre>
 </div>
 </div>
 <div id="outline-container-org0ce4372" class="outline-3">
 <h3 id="org0ce4372">例子</h3>
+<div class="outline-text-3" id="text-org0ce4372">
+</div>
+<div id="outline-container-org6d49a50" class="outline-4">
+<h4 id="org6d49a50">角色定义</h4>
+<div class="outline-text-4" id="text-org6d49a50">
+<p>
+允许读取 core API Group 中定义的资源”pods”：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #4eee94;">rules</span>:
+- <span style="color: #4eee94;">apiGroups</span>: [<span style="color: #deb887;">""</span>]
+  <span style="color: #4eee94;">resources</span>: [<span style="color: #deb887;">"pods"</span>]
+  <span style="color: #4eee94;">verbs</span>: [<span style="color: #deb887;">"get"</span>, <span style="color: #deb887;">"list"</span>, <span style="color: #deb887;">"watch"</span>]
+</pre>
+</div>
+
+<p>
+允许读写在”extensions” 和”apps” API Group 中定义的”deployments”：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #4eee94;">rules</span>:
+- <span style="color: #4eee94;">apiGroups</span>: [<span style="color: #deb887;">"extensions"</span>, <span style="color: #deb887;">"apps"</span>]
+  <span style="color: #4eee94;">resources</span>: [<span style="color: #deb887;">"deployments"</span>]
+  <span style="color: #4eee94;">verbs</span>: [<span style="color: #deb887;">"get"</span>, <span style="color: #deb887;">"list"</span>, <span style="color: #deb887;">"watch"</span>, <span style="color: #deb887;">"create"</span>, <span style="color: #deb887;">"update"</span>, <span style="color: #deb887;">"patch"</span>, <span style="color: #deb887;">"delete"</span>]
+</pre>
+</div>
+
+<p>
+允许读取一个名为”my-config” 的ConfigMap实例（需要将其通过RoleBinding绑定从而限制针对某一个命名空间中定义的一个ConfigMap实例的访问）：
+</p>
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #4eee94;">rules</span>:
+- <span style="color: #4eee94;">apiGroups</span>: [<span style="color: #deb887;">""</span>]
+  <span style="color: #4eee94;">resources</span>: [<span style="color: #deb887;">"configmaps"</span>]
+  <span style="color: #4eee94;">resourceNames</span>: [<span style="color: #deb887;">"my-config"</span>]
+  <span style="color: #4eee94;">verbs</span>: [<span style="color: #deb887;">"get"</span>]
+</pre>
+</div>
+
+<p>
+允许读取 core API Group 中的”nodes” 资源（由于Node是集群级别资源，所以此ClusterRole定义需要与一个ClusterRoleBinding绑定才能有效）：
+</p>
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #4eee94;">rules</span>:
+- <span style="color: #4eee94;">apiGroups</span>: [<span style="color: #deb887;">""</span>]
+  <span style="color: #4eee94;">resources</span>: [<span style="color: #deb887;">"nodes"</span>]
+  <span style="color: #4eee94;">verbs</span>: [<span style="color: #deb887;">"get"</span>, <span style="color: #deb887;">"list"</span>, <span style="color: #deb887;">"watch"</span>]
+</pre>
+</div>
+
+<p>
+允许对非资源 endpoint “/healthz” 及其所有子路径的”GET” 和”POST” 请求（此ClusterRole定义需要与一个ClusterRoleBinding绑定才能有效）：
+</p>
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #4eee94;">rules</span>:
+- <span style="color: #4eee94;">nonResourceURLs</span>: [<span style="color: #deb887;">"/healthz"</span>, <span style="color: #deb887;">"/healthz/*"</span>] <span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">&#22312;&#38750;&#36164;&#28304; URL &#20013;&#65292;'*' &#20195;&#34920;&#21518;&#32512;&#36890;&#37197;&#31526;</span>
+  <span style="color: #4eee94;">verbs</span>: [<span style="color: #deb887;">"get"</span>, <span style="color: #deb887;">"post"</span>]
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org304ec40" class="outline-4">
+<h4 id="org304ec40">角色绑定</h4>
+<div class="outline-text-4" id="text-org304ec40">
+<p>
+角色绑定主体 <span class="underline">Subject</span> 可以是用户组 <span class="underline">Group_、用户 _User</span> 或者服务账户 <span class="underline">Service Accounts</span> 
+</p>
+<ul class="org-ul">
+<li><p>
+用户：字符串表示
+</p>
+<pre class="example">
+	可以是纯粹的用户名，例如”alice”、电子邮件风格的名字，如 “bob@example.com” 或者是用字符串表示的数字 id
+
+	由 Kubernetes 管理员配置 认证模块 以产生所需格式的用户名，对于用户名，RBAC 授权系统不要求任何特定的格式
+
+	然而，前缀 system: 是 为 Kubernetes 系统使用而保留的，所以管理员应该确保用户名不会意外地包含这个前缀
+</pre></li>
+<li><p>
+用户组：信息由授权模块提供
+</p>
+<pre class="example">
+	用户组与用户一样由字符串表示。Kubernetes 对用户组 字符串没有格式要求，但前缀 system: 同样是被系统保留的
+</pre></li>
+<li><p>
+服务账户
+</p>
+<pre class="example">
+	拥有包含 system:serviceaccount: 前缀的用户名，并属于拥有 system:serviceaccounts: 前缀的用户组 
+</pre></li>
+</ul>
+
+<p>
+一个名为”alice@example.com” 的用户：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #4eee94;">subjects</span>:
+- <span style="color: #4eee94;">kind</span>: User
+  <span style="color: #4eee94;">name</span>: <span style="color: #deb887;">"alice@example.com"</span>
+  <span style="color: #4eee94;">apiGroup</span>: rbac.authorization.k8s.io
+</pre>
+</div>
+
+<p>
+一个名为”frontend-admins” 的用户组：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #4eee94;">subjects</span>:
+- <span style="color: #4eee94;">kind</span>: Group
+  <span style="color: #4eee94;">name</span>: <span style="color: #deb887;">"frontend-admins"</span>
+  <span style="color: #4eee94;">apiGroup</span>: rbac.authorization.k8s.io
+</pre>
+</div>
+
+<p>
+kube-system 命名空间中的默认服务账户：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #4eee94;">subjects</span>:
+- <span style="color: #4eee94;">kind</span>: ServiceAccount
+  <span style="color: #4eee94;">name</span>: default
+  <span style="color: #4eee94;">namespace</span>: kube-system
+</pre>
+</div>
+
+<p>
+名为”qa” 命名空间中的所有服务账户：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #4eee94;">subjects</span>:
+- <span style="color: #4eee94;">kind</span>: Group
+  <span style="color: #4eee94;">name</span>: system:serviceaccounts:qa
+  <span style="color: #4eee94;">apiGroup</span>: rbac.authorization.k8s.io
+&#8203;```&#22312;&#38598;&#32676;&#20013;&#30340;&#25152;&#26377;&#26381;&#21153;&#36134;&#25143;&#65306;
+
+&#8203;```yaml
+<span style="color: #4eee94;">subjects</span>:
+- <span style="color: #4eee94;">kind</span>: Group
+  <span style="color: #4eee94;">name</span>: system:serviceaccounts
+  <span style="color: #4eee94;">apiGroup</span>: rbac.authorization.k8s.io
+</pre>
+</div>
+
+<p>
+所有认证过的用户：
+</p>
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #4eee94;">subjects</span>:
+- <span style="color: #4eee94;">kind</span>: Group
+  <span style="color: #4eee94;">name</span>: system:authenticated
+  <span style="color: #4eee94;">apiGroup</span>: rbac.authorization.k8s.io
+&#8203;```&#25152;&#26377;&#26410;&#35748;&#35777;&#30340;&#29992;&#25143;&#65288;version 1.5+&#65289;&#65306;
+
+&#8203;```yaml
+<span style="color: #4eee94;">subjects</span>:
+- <span style="color: #4eee94;">kind</span>: Group
+  <span style="color: #4eee94;">name</span>: system:unauthenticated
+  <span style="color: #4eee94;">apiGroup</span>: rbac.authorization.k8s.io
+</pre>
+</div>
+
+<p>
+所有用户：
+</p>
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #4eee94;">subjects</span>:
+- <span style="color: #4eee94;">kind</span>: Group
+  <span style="color: #4eee94;">name</span>: system:authenticated
+  <span style="color: #4eee94;">apiGroup</span>: rbac.authorization.k8s.io
+- <span style="color: #4eee94;">kind</span>: Group
+  <span style="color: #4eee94;">name</span>: system:unauthenticated
+  <span style="color: #4eee94;">apiGroup</span>: rbac.authorization.k8s.io
+</pre>
+</div>
+</div>
+</div>
 </div>
 </div>
 </div>
