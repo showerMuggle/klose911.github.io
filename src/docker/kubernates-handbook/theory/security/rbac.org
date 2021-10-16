@@ -71,4 +71,84 @@
      示例中的 ClusterRole 定义可用于授予用户对某一特定命名空间，或者所有命名空间中的 secret（取决于其 绑定 方式）的读访问权限
    #+END_EXAMPLE
 ** RoleBinding 与 ClusterRoleBinding
+   角色绑定将一个角色中定义的各种权限授予一个或者一组用户：
+   + 角色绑定包含了一组相关主体：
+     + 用户 User
+     + 用户组 Group
+     + 服务账户 Service Account
+     + 对被授予角色的引用
+   + 在命名空间中可以通过 RoleBinding 对象授予权限
+   + 集群范围的权限授予则通过 ClusterRoleBinding 对象完成 
+
+   RoleBinding 可以引用在同一命名空间内定义的 Role 对象
+   #+BEGIN_SRC yaml 
+  kind: RoleBinding
+  apiVersion: rbac.authorization.k8s.io/v1
+  metadata:
+    name: read-pods
+    namespace: default
+  subjects:
+  - kind: User
+    name: jane
+    apiGroup: rbac.authorization.k8s.io
+  roleRef:
+    kind: Role
+    name: pod-reader
+    apiGroup: rbac.authorization.k8s.io
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     示例中定义的 RoleBinding 对象在 ”default” 命名空间中将 ”pod-reader” 角色授予用户”jane”
+
+     这一授权将允许用户”jane” 从”default” 命名空间中读取 pod
+   #+END_EXAMPLE
+
+   RoleBinding 对象也可以引用一个 ClusterRole 对象
+
+   #+BEGIN_EXAMPLE
+     这一点允许管理员在整个集群范围内首先定义一组通用的角色，然后再在不同的命名空间中复用这些角色
+   #+END_EXAMPLE
+
+   #+BEGIN_SRC yaml 
+  # 以下角色绑定允许用户 "dave" 读取 "development" 命名空间中的 secret。
+  kind: RoleBinding
+  apiVersion: rbac.authorization.k8s.io/v1
+  metadata:
+    name: read-secrets
+    namespace: development # 这里表明仅授权读取 "development" 命名空间中的资源。
+  subjects:
+  - kind: User
+    name: dave
+    apiGroup: rbac.authorization.k8s.io
+  roleRef:
+    kind: ClusterRole
+    name: secret-reader
+    apiGroup: rbac.authorization.k8s.io
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     尽管示例中的 RoleBinding 引用的是一个 ClusterRole 对象，但是用户”dave”（即角色绑定主体）还是只能读取”development” 命名空间中的 secret（即 RoleBinding 所在的命名空间）
+   #+END_EXAMPLE
+
+   也可以使用ClusterRoleBinding在集群级别和所有命名空间中授予权限
+
+   #+BEGIN_SRC yaml 
+  kind: ClusterRoleBinding
+  apiVersion: rbac.authorization.k8s.io/v1
+  metadata:
+    name: read-secrets-global
+  subjects:
+  - kind: Group
+    name: manager
+    apiGroup: rbac.authorization.k8s.io
+  roleRef:
+    kind: ClusterRole
+    name: secret-reader
+    apiGroup: rbac.authorization.k8s.io
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     示例中所定义的ClusterRoleBinding允许在用户组”manager” 中的任何用户都可以读取集群中任何命名空间中的 secret
+   #+END_EXAMPLE
+** 对资源的引用
 

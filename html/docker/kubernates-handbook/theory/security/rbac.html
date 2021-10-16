@@ -242,6 +242,7 @@ for the JavaScript code in this tag.
 <ul>
 <li><a href="#orgb6933c8">Role 与 ClusterRole</a></li>
 <li><a href="#org1985e13">RoleBinding 与 ClusterRoleBinding</a></li>
+<li><a href="#org6e34f3d">对资源的引用</a></li>
 </ul>
 </li>
 </ul>
@@ -345,6 +346,105 @@ ClusterRole 对象可以授予与 Role 对象相同的权限，但由于它们�
 </div>
 <div id="outline-container-org1985e13" class="outline-3">
 <h3 id="org1985e13">RoleBinding 与 ClusterRoleBinding</h3>
+<div class="outline-text-3" id="text-org1985e13">
+<p>
+角色绑定将一个角色中定义的各种权限授予一个或者一组用户：
+</p>
+<ul class="org-ul">
+<li>角色绑定包含了一组相关主体：
+<ul class="org-ul">
+<li>用户 User</li>
+<li>用户组 Group</li>
+<li>服务账户 Service Account</li>
+<li>对被授予角色的引用</li>
+</ul></li>
+<li>在命名空间中可以通过 RoleBinding 对象授予权限</li>
+<li>集群范围的权限授予则通过 ClusterRoleBinding 对象完成</li>
+</ul>
+
+<p>
+RoleBinding 可以引用在同一命名空间内定义的 Role 对象
+</p>
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #4eee94;">kind</span>: RoleBinding
+<span style="color: #4eee94;">apiVersion</span>: rbac.authorization.k8s.io/v1
+<span style="color: #4eee94;">metadata</span>:
+  <span style="color: #4eee94;">name</span>: read-pods
+  <span style="color: #4eee94;">namespace</span>: default
+<span style="color: #4eee94;">subjects</span>:
+- <span style="color: #4eee94;">kind</span>: User
+  <span style="color: #4eee94;">name</span>: jane
+  <span style="color: #4eee94;">apiGroup</span>: rbac.authorization.k8s.io
+<span style="color: #4eee94;">roleRef</span>:
+  <span style="color: #4eee94;">kind</span>: Role
+  <span style="color: #4eee94;">name</span>: pod-reader
+  <span style="color: #4eee94;">apiGroup</span>: rbac.authorization.k8s.io
+</pre>
+</div>
+
+<pre class="example">
+     示例中定义的 RoleBinding 对象在 ”default” 命名空间中将 ”pod-reader” 角色授予用户”jane”
+
+     这一授权将允许用户”jane” 从”default” 命名空间中读取 pod
+</pre>
+
+<p>
+RoleBinding 对象也可以引用一个 ClusterRole 对象
+</p>
+
+<pre class="example">
+     这一点允许管理员在整个集群范围内首先定义一组通用的角色，然后再在不同的命名空间中复用这些角色
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">&#20197;&#19979;&#35282;&#33394;&#32465;&#23450;&#20801;&#35768;&#29992;&#25143; "dave" &#35835;&#21462; "development" &#21629;&#21517;&#31354;&#38388;&#20013;&#30340; secret&#12290;</span>
+<span style="color: #4eee94;">kind</span>: RoleBinding
+<span style="color: #4eee94;">apiVersion</span>: rbac.authorization.k8s.io/v1
+<span style="color: #4eee94;">metadata</span>:
+  <span style="color: #4eee94;">name</span>: read-secrets
+  <span style="color: #4eee94;">namespace</span>: development <span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">&#36825;&#37324;&#34920;&#26126;&#20165;&#25480;&#26435;&#35835;&#21462; "development" &#21629;&#21517;&#31354;&#38388;&#20013;&#30340;&#36164;&#28304;&#12290;</span>
+<span style="color: #4eee94;">subjects</span>:
+- <span style="color: #4eee94;">kind</span>: User
+  <span style="color: #4eee94;">name</span>: dave
+  <span style="color: #4eee94;">apiGroup</span>: rbac.authorization.k8s.io
+<span style="color: #4eee94;">roleRef</span>:
+  <span style="color: #4eee94;">kind</span>: ClusterRole
+  <span style="color: #4eee94;">name</span>: secret-reader
+  <span style="color: #4eee94;">apiGroup</span>: rbac.authorization.k8s.io
+</pre>
+</div>
+
+<pre class="example">
+     尽管示例中的 RoleBinding 引用的是一个 ClusterRole 对象，但是用户”dave”（即角色绑定主体）还是只能读取”development” 命名空间中的 secret（即 RoleBinding 所在的命名空间）
+</pre>
+
+<p>
+也可以使用ClusterRoleBinding在集群级别和所有命名空间中授予权限
+</p>
+
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #4eee94;">kind</span>: ClusterRoleBinding
+<span style="color: #4eee94;">apiVersion</span>: rbac.authorization.k8s.io/v1
+<span style="color: #4eee94;">metadata</span>:
+  <span style="color: #4eee94;">name</span>: read-secrets-global
+<span style="color: #4eee94;">subjects</span>:
+- <span style="color: #4eee94;">kind</span>: Group
+  <span style="color: #4eee94;">name</span>: manager
+  <span style="color: #4eee94;">apiGroup</span>: rbac.authorization.k8s.io
+<span style="color: #4eee94;">roleRef</span>:
+  <span style="color: #4eee94;">kind</span>: ClusterRole
+  <span style="color: #4eee94;">name</span>: secret-reader
+  <span style="color: #4eee94;">apiGroup</span>: rbac.authorization.k8s.io
+</pre>
+</div>
+
+<pre class="example">
+     示例中所定义的ClusterRoleBinding允许在用户组”manager” 中的任何用户都可以读取集群中任何命名空间中的 secret
+</pre>
+</div>
+</div>
+<div id="outline-container-org6e34f3d" class="outline-3">
+<h3 id="org6e34f3d">对资源的引用</h3>
 </div>
 </div>
 </div>
