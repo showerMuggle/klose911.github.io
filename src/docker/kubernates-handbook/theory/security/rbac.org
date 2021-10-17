@@ -531,3 +531,103 @@
     #+END_SRC
 
 * 服务账户权限
+  #+BEGIN_EXAMPLE
+    默认的 RBAC 策略将授予控制平面组件 control-plane component 、节点 node 和控制器 controller一组范围受限的权限
+
+    但对于 ”kube-system” 命名空间以外的服务账户，则 不授予任何权限 （超出授予所有认证用户的发现权限）
+  #+END_EXAMPLE
+  这一点允许根据需要向 _特定服务账号_ 授予 _特定权限_ 
+
+  #+BEGIN_EXAMPLE
+    细粒度的角色绑定将提供更好的安全性，但需要更多精力管理
+
+    更粗粒度的授权可能授予服务账号不需要的 API 访问权限（甚至导致潜在授权扩散），但更易于管理
+  #+END_EXAMPLE
+
+  从最安全到最不安全可以排序以下方法
+** 对某一特定应用程序的服务账户授予角色（最佳实践）
+
+   要求应用程序在其 pod spec 中指定 serviceAccountName 字段，并且要创建相应服务账户
+   #+BEGIN_EXAMPLE
+     例如，在”my-namespace” 命名空间中授予服务账户”my-sa” 只读权限
+   #+END_EXAMPLE
+
+   #+BEGIN_SRC sh 
+     $ kubectl create rolebinding my-sa-view \
+       --clusterrole=view \
+       --serviceaccount=my-namespace:my-sa \
+       --namespace=my-namespace
+   #+END_SRC
+** 在某一命名空间中授予 default 服务账号一个角色 
+
+   如果一个应用程序没有在其 pod 规范中指定 serviceAccountName，它将默认使用 _default_ 服务账号
+   #+BEGIN_EXAMPLE
+     注意：授予 default 服务账号的权限将可用于命名空间内任何没有指定 serviceAccountName 的 pod 
+
+     下面的例子将在”my-namespace” 命名空间内授予 ”default” 服务账号只读权限
+   #+END_EXAMPLE 
+
+   #+BEGIN_SRC sh 
+  kubectl create rolebinding default-view \
+    --clusterrole=view \
+    --serviceaccount=my-namespace:default \
+    --namespace=my-namespace
+   #+END_SRC
+
+   目前 许多 加载项（addon） 作为 _kube-system_ 命名空间中的 _default_ 服务帐户运行。 要允许这些加载项使用超级用户访问权限，请将 _cluster-admin_ 权限授予 _kube-system_ 命名空间中的 _default_ 服务帐户
+
+   #+BEGIN_SRC sh 
+     $ kubectl create clusterrolebinding add-on-cluster-admin \
+       --clusterrole=cluster-admin \
+       --serviceaccount=kube-system:default 
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     注意：启用上述操作意味着 ”kube-system” 命名空间将包含允许超级用户访问 API 的秘钥
+   #+END_EXAMPLE
+
+** 为命名空间中所有的服务账号授予角色
+
+   如果希望命名空间内的所有应用程序都拥有同一个角色，无论它们使用什么服务账户，可以为该命名空间的服务账户用户组授予角色 
+
+   #+BEGIN_EXAMPLE
+     下面的例子将授予 ”my-namespace” 命名空间中的所有服务账户只读权限
+   #+END_EXAMPLE
+
+   #+BEGIN_SRC sh 
+  $ kubectl create rolebinding serviceaccounts-view \
+    --clusterrole=view \
+    --group=system:serviceaccounts:my-namespace \
+    --namespace=my-namespace
+   #+END_SRC
+
+** 对集群范围内的所有服务账户授予一个受限角色（不鼓励）
+
+   如果不想管理每个命名空间的权限，则可以将集群范围角色授予所有服务帐户 
+
+   #+BEGIN_EXAMPLE
+     下面的例子将所有命名空间中的只读权限授予集群中的所有服务账户
+   #+END_EXAMPLE
+
+   #+BEGIN_SRC sh 
+  $ kubectl create clusterrolebinding serviceaccounts-view \
+    --clusterrole=view \
+    --group=system:serviceaccounts
+   #+END_SRC
+
+** 授予超级用户访问权限给集群范围内的所有服务帐户（强烈不鼓励）
+
+   如果根本不关心权限分块，可以对所有服务账户授予超级用户访问权限。
+
+   #+BEGIN_SRC sh 
+  $ kubectl create clusterrolebinding serviceaccounts-cluster-admin \
+    --clusterrole=cluster-admin \
+    --group=system:serviceaccounts
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     警告：这种做法将允许任何具有读取权限的用户访问 secret 或者通过创建一个容器的方式来访问超级用户的凭据
+   #+END_EXAMPLE
+
+
+   | [[file:network_policy.org][Next：网络策略]] | [[file:service_account.org][Previous: Service Account]] | [[file:security.org][Home：安全]] |

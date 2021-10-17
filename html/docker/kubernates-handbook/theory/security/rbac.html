@@ -263,7 +263,15 @@ for the JavaScript code in this tag.
 </li>
 <li><a href="#org30438cd">初始化与预防权限升级</a></li>
 <li><a href="#org244bbb7">命令行工具</a></li>
-<li><a href="#org55bdd88">服务账户权限</a></li>
+<li><a href="#org55bdd88">服务账户权限</a>
+<ul>
+<li><a href="#org78ecf11">对某一特定应用程序的服务账户授予角色（最佳实践）</a></li>
+<li><a href="#org74bd512">在某一命名空间中授予 default 服务账号一个角色</a></li>
+<li><a href="#org917bcda">为命名空间中所有的服务账号授予角色</a></li>
+<li><a href="#orge892630">对集群范围内的所有服务账户授予一个受限角色（不鼓励）</a></li>
+<li><a href="#orgdbeb4de">授予超级用户访问权限给集群范围内的所有服务帐户（强烈不鼓励）</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
@@ -1165,6 +1173,162 @@ $ kubectl create clusterrolebinding
 
 <div id="outline-container-org55bdd88" class="outline-2">
 <h2 id="org55bdd88">服务账户权限</h2>
+<div class="outline-text-2" id="text-org55bdd88">
+<pre class="example">
+    默认的 RBAC 策略将授予控制平面组件 control-plane component 、节点 node 和控制器 controller一组范围受限的权限
+
+    但对于 ”kube-system” 命名空间以外的服务账户，则 不授予任何权限 （超出授予所有认证用户的发现权限）
+</pre>
+<p>
+这一点允许根据需要向 <span class="underline">特定服务账号</span> 授予 <span class="underline">特定权限</span> 
+</p>
+
+<pre class="example">
+    细粒度的角色绑定将提供更好的安全性，但需要更多精力管理
+
+    更粗粒度的授权可能授予服务账号不需要的 API 访问权限（甚至导致潜在授权扩散），但更易于管理
+</pre>
+
+<p>
+从最安全到最不安全可以排序以下方法
+</p>
+</div>
+<div id="outline-container-org78ecf11" class="outline-3">
+<h3 id="org78ecf11">对某一特定应用程序的服务账户授予角色（最佳实践）</h3>
+<div class="outline-text-3" id="text-org78ecf11">
+<p>
+要求应用程序在其 pod spec 中指定 serviceAccountName 字段，并且要创建相应服务账户
+</p>
+<pre class="example">
+     例如，在”my-namespace” 命名空间中授予服务账户”my-sa” 只读权限
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl create rolebinding my-sa-view <span style="color: #deb887;">\</span>
+  --clusterrole=view <span style="color: #deb887;">\</span>
+  --serviceaccount=my-namespace:my-sa <span style="color: #deb887;">\</span>
+  --namespace=my-namespace
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org74bd512" class="outline-3">
+<h3 id="org74bd512">在某一命名空间中授予 default 服务账号一个角色</h3>
+<div class="outline-text-3" id="text-org74bd512">
+<p>
+如果一个应用程序没有在其 pod 规范中指定 serviceAccountName，它将默认使用 <span class="underline">default</span> 服务账号
+</p>
+<pre class="example">
+     注意：授予 default 服务账号的权限将可用于命名空间内任何没有指定 serviceAccountName 的 pod 
+
+     下面的例子将在”my-namespace” 命名空间内授予 ”default” 服务账号只读权限
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-sh">kubectl create rolebinding default-view <span style="color: #deb887;">\</span>
+  --clusterrole=view <span style="color: #deb887;">\</span>
+  --serviceaccount=my-namespace:default <span style="color: #deb887;">\</span>
+  --namespace=my-namespace
+</pre>
+</div>
+
+<p>
+目前 许多 加载项（addon） 作为 <span class="underline">kube-system</span> 命名空间中的 <span class="underline">default</span> 服务帐户运行。 要允许这些加载项使用超级用户访问权限，请将 <span class="underline">cluster-admin</span> 权限授予 <span class="underline">kube-system</span> 命名空间中的 <span class="underline">default</span> 服务帐户
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl create clusterrolebinding add-on-cluster-admin <span style="color: #deb887;">\</span>
+  --clusterrole=cluster-admin <span style="color: #deb887;">\</span>
+  --serviceaccount=kube-system:default 
+</pre>
+</div>
+
+<pre class="example">
+     注意：启用上述操作意味着 ”kube-system” 命名空间将包含允许超级用户访问 API 的秘钥
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org917bcda" class="outline-3">
+<h3 id="org917bcda">为命名空间中所有的服务账号授予角色</h3>
+<div class="outline-text-3" id="text-org917bcda">
+<p>
+如果希望命名空间内的所有应用程序都拥有同一个角色，无论它们使用什么服务账户，可以为该命名空间的服务账户用户组授予角色 
+</p>
+
+<pre class="example">
+     下面的例子将授予 ”my-namespace” 命名空间中的所有服务账户只读权限
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl create rolebinding serviceaccounts-view <span style="color: #deb887;">\</span>
+  --clusterrole=view <span style="color: #deb887;">\</span>
+  --group=system:serviceaccounts:my-namespace <span style="color: #deb887;">\</span>
+  --namespace=my-namespace
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orge892630" class="outline-3">
+<h3 id="orge892630">对集群范围内的所有服务账户授予一个受限角色（不鼓励）</h3>
+<div class="outline-text-3" id="text-orge892630">
+<p>
+如果不想管理每个命名空间的权限，则可以将集群范围角色授予所有服务帐户 
+</p>
+
+<pre class="example">
+     下面的例子将所有命名空间中的只读权限授予集群中的所有服务账户
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl create clusterrolebinding serviceaccounts-view <span style="color: #deb887;">\</span>
+  --clusterrole=view <span style="color: #deb887;">\</span>
+  --group=system:serviceaccounts
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgdbeb4de" class="outline-3">
+<h3 id="orgdbeb4de">授予超级用户访问权限给集群范围内的所有服务帐户（强烈不鼓励）</h3>
+<div class="outline-text-3" id="text-orgdbeb4de">
+<p>
+如果根本不关心权限分块，可以对所有服务账户授予超级用户访问权限。
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl create clusterrolebinding serviceaccounts-cluster-admin <span style="color: #deb887;">\</span>
+  --clusterrole=cluster-admin <span style="color: #deb887;">\</span>
+  --group=system:serviceaccounts
+</pre>
+</div>
+
+<pre class="example">
+     警告：这种做法将允许任何具有读取权限的用户访问 secret 或者通过创建一个容器的方式来访问超级用户的凭据
+</pre>
+
+
+<table border="2" cellspacing="0" cellpadding="6" rules="groups" frame="hsides">
+
+
+<colgroup>
+<col  class="org-left" />
+
+<col  class="org-left" />
+
+<col  class="org-left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="org-left"><a href="network_policy.html">Next：网络策略</a></td>
+<td class="org-left"><a href="service_account.html">Previous: Service Account</a></td>
+<td class="org-left"><a href="security.html">Home：安全</a></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
