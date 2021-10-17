@@ -251,6 +251,19 @@ for the JavaScript code in this tag.
 </li>
 </ul>
 </li>
+<li><a href="#orgd067db1">默认角色与默认角色绑定</a>
+<ul>
+<li><a href="#org39d88a0">自动更新</a></li>
+<li><a href="#org41d9f19">发现类角色</a></li>
+<li><a href="#orgf3363cf">面向用户的角色</a></li>
+<li><a href="#org4c1e13e">核心组件角色</a></li>
+<li><a href="#org268069e">其它组件角色</a></li>
+<li><a href="#org072648b">控制器角色</a></li>
+</ul>
+</li>
+<li><a href="#org30438cd">初始化与预防权限升级</a></li>
+<li><a href="#org244bbb7">命令行工具</a></li>
+<li><a href="#org55bdd88">服务账户权限</a></li>
 </ul>
 </div>
 </div>
@@ -706,6 +719,452 @@ kube-system 命名空间中的默认服务账户：
 </div>
 </div>
 </div>
+</div>
+
+<div id="outline-container-orgd067db1" class="outline-2">
+<h2 id="orgd067db1">默认角色与默认角色绑定</h2>
+<div class="outline-text-2" id="text-orgd067db1">
+<p>
+API Server 会创建一组默认的 ClusterRole 和 ClusterRoleBinding 对象。 这些默认对象中有许多包含 <span class="underline">system:</span> 前缀，表明这些资源由 Kubernetes 基础组件拥有
+</p>
+
+<pre class="example">
+    对这些资源的修改可能导致集群无法工作（non-functional cluster）
+
+    一个例子是 system:node ClusterRole 对象，这个角色定义了 kubelets 的权限。如果这个角色被修改，可能会导致 kubelets 无法正常工作
+</pre>
+
+<p>
+所有默认的 ClusterRole 和 ClusterRoleBinding 对象都会被标记为 <span class="underline">kubernetes.io/bootstrapping=rbac-defaults</span> 
+</p>
+</div>
+
+<div id="outline-container-org39d88a0" class="outline-3">
+<h3 id="org39d88a0">自动更新</h3>
+<div class="outline-text-3" id="text-org39d88a0">
+<p>
+每次启动时，API Server 都会更新默认 ClusterRole 所缺乏的各种权限，并更新默认 ClusterRoleBinding 所缺乏的各个角色绑定主体
+</p>
+
+<pre class="example">
+     这种自动更新机制允许集群修复一些意外的修改，由于权限和角色绑定主体在新的 Kubernetes 释出版本中可能变化，这也能够保证角色和角色 绑定始终保持是最新的
+</pre>
+
+<p>
+如果需要禁用自动更新，请将默认 ClusterRole 以及 ClusterRoleBinding 的 <span class="underline">rbac.authorization.kubernetes.io/autoupdate</span> 设置成为 false
+</p>
+
+<pre class="example">
+     注意，缺乏默认权限和角色绑定主体可能会导致非功能性集群问题
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org41d9f19" class="outline-3">
+<h3 id="org41d9f19">发现类角色</h3>
+<div class="outline-text-3" id="text-org41d9f19">
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 1:</span> 发现类角色</caption>
+
+<colgroup>
+<col  class="org-left" />
+
+<col  class="org-left" />
+
+<col  class="org-left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="org-left">默认 ClusterRole</td>
+<td class="org-left">默认 ClusterRoleBinding</td>
+<td class="org-left">描述</td>
+</tr>
+
+<tr>
+<td class="org-left">system:basic-user</td>
+<td class="org-left">system:authenticated and system:unauthenticatedgroups</td>
+<td class="org-left">允许用户只读访问有关自己的基本信息</td>
+</tr>
+
+<tr>
+<td class="org-left">system:discovery</td>
+<td class="org-left">system:authenticated and system:unauthenticatedgroups</td>
+<td class="org-left">允许只读访问 API discovery endpoints, 用于在 API 级别进行发现和协商</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+
+<div id="outline-container-orgf3363cf" class="outline-3">
+<h3 id="orgf3363cf">面向用户的角色</h3>
+<div class="outline-text-3" id="text-orgf3363cf">
+<p>
+一些默认角色并不包含 system: 前缀，它们是面向用户的角色。 这些角色包含 <span class="underline">超级用户</span> 角色（cluster-admin），即旨在利用 ClusterRoleBinding（cluster-status）在集群范围内授权的角色， 以及那些使用 RoleBinding（admin、edit 和 view）在特定命名空间中授权的角色 
+</p>
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 2:</span> 面向用户的角色</caption>
+
+<colgroup>
+<col  class="org-left" />
+
+<col  class="org-left" />
+
+<col  class="org-left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="org-left">默认 ClusterRole</td>
+<td class="org-left">默认 ClusterRoleBinding</td>
+<td class="org-left">描述</td>
+</tr>
+
+<tr>
+<td class="org-left">cluster-admin</td>
+<td class="org-left">system:masters group</td>
+<td class="org-left">超级用户权限，允许对任何资源执行任何操作。 在 ClusterRoleBinding 中使用时，可以完全控制集群和所有命名空间中的所有资源。 在 RoleBinding 中使用时，可以完全控制 RoleBinding 所在命名空间中的所有资源，包括命名空间自己</td>
+</tr>
+
+<tr>
+<td class="org-left">admin</td>
+<td class="org-left">None</td>
+<td class="org-left">管理员权限，利用 RoleBinding 在某一命名空间内部授予。 在 RoleBinding 中使用时，允许针对命名空间内大部分资源的读写访问， 包括在命名空间内创建角色与角色绑定的能力。 但不允许对资源配额（resource quota）或者命名空间本身的写访问</td>
+</tr>
+
+<tr>
+<td class="org-left">edit</td>
+<td class="org-left">None</td>
+<td class="org-left">允许对某一个命名空间内大部分对象的读写访问，但不允许查看或者修改角色或者角色绑定</td>
+</tr>
+
+<tr>
+<td class="org-left">view</td>
+<td class="org-left">None</td>
+<td class="org-left">允许对某一个命名空间内大部分对象的只读访问。 不允许查看角色或者角色绑定。 由于可扩散性等原因，不允许查看 secret 资源</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+
+<div id="outline-container-org4c1e13e" class="outline-3">
+<h3 id="org4c1e13e">核心组件角色</h3>
+<div class="outline-text-3" id="text-org4c1e13e">
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 3:</span> 核心组件角色</caption>
+
+<colgroup>
+<col  class="org-left" />
+
+<col  class="org-left" />
+
+<col  class="org-left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="org-left">默认 ClusterRole</td>
+<td class="org-left">默认 ClusterRoleBinding</td>
+<td class="org-left">描述</td>
+</tr>
+
+<tr>
+<td class="org-left">system:kube-scheduler</td>
+<td class="org-left">system:kube-scheduler user</td>
+<td class="org-left">允许访问 kube-scheduler 组件所需要的资源</td>
+</tr>
+
+<tr>
+<td class="org-left">system:kube-controller-manager</td>
+<td class="org-left">system:kube-controller-manager user</td>
+<td class="org-left">允许访问 kube-controller-manager 组件所需要的资源</td>
+</tr>
+
+<tr>
+<td class="org-left">system:node</td>
+<td class="org-left">system:nodes group (deprecated in 1.7)</td>
+<td class="org-left">允许对 kubelet 组件所需要的资源的访问，包括读取所有 secret 和对所有 pod 的写访问</td>
+</tr>
+
+<tr>
+<td class="org-left">system:node-proxier</td>
+<td class="org-left">system:kube-proxy user</td>
+<td class="org-left">允许对 kube-proxy 组件所需要资源的访问</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+
+<div id="outline-container-org268069e" class="outline-3">
+<h3 id="org268069e">其它组件角色</h3>
+<div class="outline-text-3" id="text-org268069e">
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 4:</span> 其他组件角色</caption>
+
+<colgroup>
+<col  class="org-left" />
+
+<col  class="org-left" />
+
+<col  class="org-left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="org-left">默认 ClusterRole</td>
+<td class="org-left">默认 ClusterRoleBinding</td>
+<td class="org-left">描述</td>
+</tr>
+
+<tr>
+<td class="org-left">system:auth-delegator</td>
+<td class="org-left">None</td>
+<td class="org-left">允许委托认证和授权检查。 通常由附加 API Server 用于统一认证和授权</td>
+</tr>
+
+<tr>
+<td class="org-left">system:heapster</td>
+<td class="org-left">None</td>
+<td class="org-left">Heapster 组件的角色</td>
+</tr>
+
+<tr>
+<td class="org-left">system:kube-aggregator</td>
+<td class="org-left">None</td>
+<td class="org-left">kube-aggregator 组件的角色</td>
+</tr>
+
+<tr>
+<td class="org-left">system:kube-dns</td>
+<td class="org-left">kube-dns service account in the kube-systemnamespace</td>
+<td class="org-left">kube-dns 组件的角色</td>
+</tr>
+
+<tr>
+<td class="org-left">system:node-bootstrapper</td>
+<td class="org-left">None</td>
+<td class="org-left">允许对执行 Kubelet TLS 引导（Kubelet TLS bootstrapping） 所需要资源的访问</td>
+</tr>
+
+<tr>
+<td class="org-left">system:node-problem-detector</td>
+<td class="org-left">None</td>
+<td class="org-left">node-problem-detector 组件的角色</td>
+</tr>
+
+<tr>
+<td class="org-left">system:persistent-volume-provisioner</td>
+<td class="org-left">None</td>
+<td class="org-left">允许对大部分动态存储卷创建组件（dynamic volume provisioner）所需要资源的访问</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+
+<div id="outline-container-org072648b" class="outline-3">
+<h3 id="org072648b">控制器角色</h3>
+<div class="outline-text-3" id="text-org072648b">
+<p>
+Kubernetes controller manager 负责运行核心控制循环：
+</p>
+<ul class="org-ul">
+<li>当使用 <span class="underline">&#x2013;use-service-account-credentials</span> 选项运行 controller manager 时，每个 <span class="underline">控制循环</span> 都将使用 <b>单独的服务账户</b> 启动。 而每个控制循环都存在对应的 <span class="underline">角色</span> ，前缀名为 <span class="underline">system:controller:</span></li>
+<li>如果不使用 &#x2013;use-service-account-credentials 选项时，controller manager 将会使用 <b>自己的凭证</b> 运行所有控制循环，而这些凭证必须被 <b>授予</b> 相关的角色</li>
+</ul>
+
+<p>
+这些控制器角色包括：
+</p>
+<ul class="org-ul">
+<li>system:controller:attachdetach-controller</li>
+<li>system:controller:certificate-controller</li>
+<li>system:controller:cronjob-controller</li>
+<li>system:controller:daemon-set-controller</li>
+<li>system:controller:deployment-controller</li>
+<li>system:controller:disruption-controller</li>
+<li>system:controller:endpoint-controller</li>
+<li>system:controller:generic-garbage-collector</li>
+<li>system:controller:horizontal-pod-autoscaler</li>
+<li>system:controller:job-controller</li>
+<li>system:controller:namespace-controller</li>
+<li>system:controller:node-controller</li>
+<li>system:controller:persistent-volume-binder</li>
+<li>system:controller:pod-garbage-collector</li>
+<li>system:controller:replicaset-controller</li>
+<li>system:controller:replication-controller</li>
+<li>system:controller:resourcequota-controller</li>
+<li>system:controller:route-controller</li>
+<li>system:controller:service-account-controller</li>
+<li>system:controller:service-controller</li>
+<li>system:controller:statefulset-controller</li>
+<li>system:controller:ttl-controller</li>
+</ul>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org30438cd" class="outline-2">
+<h2 id="org30438cd">初始化与预防权限升级</h2>
+<div class="outline-text-2" id="text-org30438cd">
+<p>
+RBAC API 会 <b>阻止</b> 用户通过 <span class="underline">编辑角色</span> 或者 <span class="underline">角色绑定</span> 来 <b>升级权限</b> 
+</p>
+<pre class="example">
+    由于这一点是在 API 级别实现的，所以在 RBAC 授权器（RBAC authorizer）未启用的状态下依然可以正常工作
+</pre>
+
+<p>
+用户只有在 <b>拥有</b> 了 <span class="underline">角色</span> 所包含的 <b>所有权限的条件</b> 下才能创建／更新一个 <span class="underline">角色</span> ，这些操作还必须在 <b>角色所处的相同范围</b> 内进行
+</p>
+<pre class="example">
+    对于 ClusterRole 来说是集群范围，对于 Role 来说是在与角色相同的命名空间或者集群范围
+
+    例如，如果用户”user-1” 没有权限读取集群范围内的 secret 列表，那么他也不能创建包含这种权限的 ClusterRole
+</pre>
+<p>
+为了能够让用户创建／更新角色，需要：
+</p>
+<ol class="org-ol">
+<li>授予用户一个角色以允许他们根据需要创建／更新 Role 或者 ClusterRole 对象</li>
+<li>授予用户一个角色包含他们在 Role 或者 ClusterRole 中所能够设置的所有权限
+<ul class="org-ul">
+<li>如果用户尝试创建或者修改 Role 或者 ClusterRole 以设置那些他们未被授权的权限时，这些 API 请求将被禁止</li>
+</ul></li>
+</ol>
+
+<p>
+用户只有在拥有 <span class="underline">所引用的角色</span> 中包含的 <b>所有权限</b> 时才可以创建／更新 <span class="underline">角色绑定</span> ，这些操作也必须在角色绑定所处的相同范围内进行 或者 用户被明确授权可以在所引用的角色上执行绑定操作
+</p>
+
+<pre class="example">
+    例如，如果用户”user-1” 没有权限读取集群范围内的 secret 列表，那么他将不能创建 ClusterRole 来引用那些授予了此项权限的角色
+</pre>
+
+<p>
+为了能够让用户创建／更新角色绑定，需要：
+</p>
+<ol class="org-ol">
+<li>授予用户一个角色以允许他们根据需要创建／更新 RoleBinding 或者 ClusterRoleBinding 对象</li>
+<li>授予用户绑定某一特定角色所需要的权限：
+<ul class="org-ul">
+<li>隐式地，通过授予用户所有所引用的角色中所包含的权限</li>
+<li>显式地，通过授予用户在特定 Role（或者 ClusterRole）对象上执行 bind 操作的权限</li>
+</ul></li>
+</ol>
+
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #4eee94;">apiVersion</span>: rbac.authorization.k8s.io/v1beta1
+<span style="color: #4eee94;">kind</span>: ClusterRole
+<span style="color: #4eee94;">metadata</span>:
+  <span style="color: #4eee94;">name</span>: role-grantor
+<span style="color: #4eee94;">rules</span>:
+- <span style="color: #4eee94;">apiGroups</span>: [<span style="color: #deb887;">"rbac.authorization.k8s.io"</span>]
+  <span style="color: #4eee94;">resources</span>: [<span style="color: #deb887;">"rolebindings"</span>]
+  <span style="color: #4eee94;">verbs</span>: [<span style="color: #deb887;">"create"</span>]
+- <span style="color: #4eee94;">apiGroups</span>: [<span style="color: #deb887;">"rbac.authorization.k8s.io"</span>]
+  <span style="color: #4eee94;">resources</span>: [<span style="color: #deb887;">"clusterroles"</span>]
+  <span style="color: #4eee94;">verbs</span>: [<span style="color: #deb887;">"bind"</span>]
+  <span style="color: #4eee94;">resourceNames</span>: [<span style="color: #deb887;">"admin"</span>,<span style="color: #deb887;">"edit"</span>,<span style="color: #deb887;">"view"</span>]
+<span style="color: #5f9ea0; font-style: italic;">---</span>
+<span style="color: #4eee94;">apiVersion</span>: rbac.authorization.k8s.io/v1beta1
+<span style="color: #4eee94;">kind</span>: RoleBinding
+<span style="color: #4eee94;">metadata</span>:
+  <span style="color: #4eee94;">name</span>: role-grantor-binding
+  <span style="color: #4eee94;">namespace</span>: user-1-namespace
+<span style="color: #4eee94;">roleRef</span>:
+  <span style="color: #4eee94;">apiGroup</span>: rbac.authorization.k8s.io
+  <span style="color: #4eee94;">kind</span>: ClusterRole
+  <span style="color: #4eee94;">name</span>: role-grantor
+<span style="color: #4eee94;">subjects</span>:
+- <span style="color: #4eee94;">apiGroup</span>: rbac.authorization.k8s.io
+  <span style="color: #4eee94;">kind</span>: User
+  <span style="color: #4eee94;">name</span>: user-1
+</pre>
+</div>
+
+<p>
+当初始化第一个角色和角色绑定时，初始用户需要能够授予他们尚未拥有的权限。 初始化初始角色和角色绑定时需要：
+</p>
+<ul class="org-ul">
+<li>使用包含 <span class="underline">system：masters</span> 用户组的 <b>凭证</b> ，该用户组通过默认绑定绑定到 <span class="underline">cluster-admin</span> <b>超级用户</b> 角色</li>
+<li>如果 API Server 在运行时启用了非安全端口 <span class="underline">&#x2013;insecure-port</span> ，也可以通过这个没有施行认证或者授权的端口发送角色或者角色绑定请求</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-org244bbb7" class="outline-2">
+<h2 id="org244bbb7">命令行工具</h2>
+<div class="outline-text-2" id="text-org244bbb7">
+<pre class="example">
+    有两个 kubectl 命令可以用于在命名空间内或者整个集群内授予角色
+</pre>
+
+<p>
+在某一特定命名空间内授予 Role 或者 ClusterRole 
+</p>
+<pre class="example">
+kubectl create rolebinding
+</pre>
+
+<p>
+示例如下：
+</p>
+<ul class="org-ul">
+<li><p>
+在名为”acme” 的命名空间中将 admin ClusterRole 授予用户”bob”：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl create rolebinding bob-admin-binding --clusterrole=admin --user=bob --namespace=acme
+</pre>
+</div></li>
+<li><p>
+在名为”acme” 的命名空间中将 view ClusterRole 授予服务账户”myapp”：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl create rolebinding myapp-view-binding --clusterrole=view --serviceaccount=acme:myapp --namespace=acme
+</pre>
+</div></li>
+</ul>
+
+<p>
+在整个集群中授予 ClusterRole，包括所有命名空间：
+</p>
+<pre class="example">
+$ kubectl create clusterrolebinding
+</pre>
+
+<p>
+示例如下：
+</p>
+<ul class="org-ul">
+<li><p>
+在整个集群范围内将 cluster-admin ClusterRole 授予用户”root”：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl create clusterrolebinding root-cluster-admin-binding --clusterrole=cluster-admin --user=root
+</pre>
+</div></li>
+<li><p>
+在整个集群范围内将 system:node ClusterRole 授予用户”kubelet”：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl create clusterrolebinding kubelet-node-binding --clusterrole=system:node --user=kubelet
+</pre>
+</div></li>
+<li><p>
+在整个集群范围内将 view ClusterRole 授予命名空间”acme” 内的服务账户”myapp”：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl create clusterrolebinding myapp-view-binding --clusterrole=view --serviceaccount=acme:myapp
+</pre>
+</div></li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-org55bdd88" class="outline-2">
+<h2 id="org55bdd88">服务账户权限</h2>
 </div>
 </div>
 <div id="postamble" class="status">
