@@ -39,7 +39,7 @@
   }
   pre.src {
     position: relative;
-    overflow: visible;
+    overflow: auto;
     padding-top: 1.2em;
   }
   pre.src:before {
@@ -51,7 +51,7 @@
     padding: 3px;
     border: 1px solid black;
   }
-  pre.src:hover:before { display: inline;}
+  pre.src:hover:before { display: inline; margin-top: 14px;}
   /* Languages per Org manual */
   pre.src-asymptote:before { content: 'Asymptote'; }
   pre.src-awk:before { content: 'Awk'; }
@@ -160,6 +160,19 @@
   .footdef  { margin-bottom: 1em; }
   .figure { padding: 1em; }
   .figure p { text-align: center; }
+  .equation-container {
+    display: table;
+    text-align: center;
+    width: 100%;
+  }
+  .equation {
+    vertical-align: middle;
+  }
+  .equation-label {
+    display: table-cell;
+    text-align: right;
+    vertical-align: middle;
+  }
   .inlinetask {
     padding: 10px;
     border: 2px solid gray;
@@ -181,50 +194,26 @@
 </style>
 <link rel="stylesheet" type="text/css" href="../../css/main.css" />
 <script type="text/javascript">
-/*
-@licstart  The following is the entire license notice for the
-JavaScript code in this tag.
-
-Copyright (C) 2012-2019 Free Software Foundation, Inc.
-
-The JavaScript code in this tag is free software: you can
-redistribute it and/or modify it under the terms of the GNU
-General Public License (GNU GPL) as published by the Free Software
-Foundation, either version 3 of the License, or (at your option)
-any later version.  The code is distributed WITHOUT ANY WARRANTY;
-without even the implied warranty of MERCHANTABILITY or FITNESS
-FOR A PARTICULAR PURPOSE.  See the GNU GPL for more details.
-
-As additional permission under GNU GPL version 3 section 7, you
-may distribute non-source (e.g., minimized or compacted) forms of
-that code without the copy of the GNU GPL normally required by
-section 4, provided you include this license notice and a URL
-through which recipients can access the Corresponding Source.
-
-
-@licend  The above is the entire license notice
-for the JavaScript code in this tag.
-*/
+// @license magnet:?xt=urn:btih:e95b018ef3580986a04669f1b5879592219e2a7a&dn=public-domain.txt Public Domain
 <!--/*--><![CDATA[/*><!--*/
- function CodeHighlightOn(elem, id)
- {
-   var target = document.getElementById(id);
-   if(null != target) {
-     elem.cacheClassElem = elem.className;
-     elem.cacheClassTarget = target.className;
-     target.className = "code-highlighted";
-     elem.className   = "code-highlighted";
-   }
- }
- function CodeHighlightOff(elem, id)
- {
-   var target = document.getElementById(id);
-   if(elem.cacheClassElem)
-     elem.className = elem.cacheClassElem;
-   if(elem.cacheClassTarget)
-     target.className = elem.cacheClassTarget;
- }
-/*]]>*///-->
+     function CodeHighlightOn(elem, id)
+     {
+       var target = document.getElementById(id);
+       if(null != target) {
+         elem.classList.add("code-highlighted");
+         target.classList.add("code-highlighted");
+       }
+     }
+     function CodeHighlightOff(elem, id)
+     {
+       var target = document.getElementById(id);
+       if(null != target) {
+         elem.classList.remove("code-highlighted");
+         target.classList.remove("code-highlighted");
+       }
+     }
+    /*]]>*///-->
+// @license-end
 </script>
 </head>
 <body>
@@ -234,6 +223,192 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="security.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">网络策略</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#org8984523">前提</a></li>
+<li><a href="#orgd44ad78">隔离的与未隔离的 Pod</a></li>
+<li><a href="#org097c0cb">NetworkPolicy 资源</a>
+<ul>
+<li><a href="#org9c227bc">默认策略</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<p>
+<span class="underline">网络策略</span> 说明一组 Pod 之间是如何被 <b>允许</b> <span class="underline">互相通信</span> ，以及如何与 <span class="underline">其它网络 Endpoint</span> 进行通信：
+</p>
+<ul class="org-ul">
+<li>NetworkPolicy 资源使用 <span class="underline">标签</span> 来选择 <span class="underline">Pod</span> ，并定义了一些规则，这些规则指明 <b>允许</b> 什么流量进入到选中的 Pod 上</li>
+<li>Network Policy 的作用对象是 Pod，也可以应用到 Namespace 和集群的 Ingress、Egress 流量</li>
+</ul>
+
+<pre class="example" id="org6b20390">
+Network Policy 是作用在 L3/4 层的，即限制的是对 IP 地址和端口的访问
+
+如果需要对应用层做访问限制需要使用如 Istio 这类 Service Mesh
+</pre>
+<div id="outline-container-org8984523" class="outline-2">
+<h2 id="org8984523">前提</h2>
+<div class="outline-text-2" id="text-org8984523">
+<p>
+网络策略通过 <span class="underline">网络插件</span> 来实现，所以必须使用一种支持 NetworkPolicy 的网络方案（如 calico）
+</p>
+<pre class="example" id="org093e750">
+另外 非 Controller 创建的资源，是不起作用的
+</pre>
+</div>
+</div>
+<div id="outline-container-orgd44ad78" class="outline-2">
+<h2 id="orgd44ad78">隔离的与未隔离的 Pod</h2>
+<div class="outline-text-2" id="text-orgd44ad78">
+<p>
+默认 Pod 是未隔离的，它们可以从任何的源接收请求。 具有一个可以选择 Pod 的网络策略后，Pod 就会变成隔离的。 一旦 Namespace 中配置的网络策略能够选择一个特定的 Pod，这个 Pod 将拒绝任何该网络策略不允许的连接
+</p>
+<pre class="example" id="orgef7e09e">
+Namespace 中其它未被网络策略选中的 Pod 将继续接收所有流量
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org097c0cb" class="outline-2">
+<h2 id="org097c0cb">NetworkPolicy 资源</h2>
+<div class="outline-text-2" id="text-org097c0cb">
+<p>
+一个 NetworkPolicy 的例子：
+</p>
+<pre class="example" id="orgd219c26">
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: test-network-policy
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      role: db
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - ipBlock:
+	cidr: 172.17.0.0/16
+	except:
+	- 172.17.1.0/24
+    - namespaceSelector:
+	matchLabels:
+	  project: myproject
+    - podSelector:
+	matchLabels:
+	  role: frontend
+    ports:
+    - protocol: TCP
+      port: 6379
+  egress:
+  - to:
+    - ipBlock:
+	cidr: 10.0.0.0/24
+    ports:
+    - protocol: TCP
+      port: 5978
+</pre>
+
+<ul class="org-ul">
+<li>必选字段：像所有其它 Kubernetes 配置一样，NetworkPolicy 需要 <span class="underline">apiVersion</span> 、 <span class="underline">kind</span>  和 <span class="underline">metadata</span> 这三个字段</li>
+<li>spec：NetworkPolicy spec 具有在给定 Namespace 中定义特定网络的全部信息
+<ul class="org-ul">
+<li><p>
+<span class="underline">podSelector</span> ：每个 NetworkPolicy 包含一个 podSelector，它可以 <b>选择</b> 一组 <b>应用</b> 了 <span class="underline">网络策略</span> 的 <span class="underline">Pod</span> 。由于 NetworkPolicy 当前只支持定义 ingress 规则，这个 podSelector 实际上为该策略定义了一组 <span class="underline">目标Pod</span> 
+</p>
+
+<pre class="example" id="orgcde8d8f">
+示例中的策略选择了标签为 “role=db” 的 Pod，一个空的 podSelector 选择了该 Namespace 中的所有 Pod
+</pre></li>
+<li><p>
+<span class="underline">ingress</span> ：每个NetworkPolicy 包含了一个白名单 ingress 规则列表。每个规则只允许能够 <b>匹配</b> 上 <span class="underline">from</span> 和 <span class="underline">ports</span> 配置段的流量
+</p>
+<pre class="example" id="org852392e">
+示例策略包含了单个规则，它从这两个源中匹配在单个端口上的流量，第一个是通过namespaceSelector 指定的，第二个是通过 podSelector 指定的
+</pre></li>
+<li><p>
+<span class="underline">egress</span> ：每个NetworkPolicy 包含了一个白名单 ingress 规则列表。每个规则只允许能够 <b>匹配</b> 上 <span class="underline">to</span> 和 <span class="underline">ports</span> 配置段的流量
+</p>
+<pre class="example" id="orgd3d51d0">
+示例策略包含了单个规则，它匹配目的地 10.0.0.0/24 单个端口的流量
+</pre>
+
+<p>
+因此，上面示例的 NetworkPolicy：
+</p></li>
+</ul></li>
+<li>在  <span class="underline">default</span> Namespace中 隔离了标签 <span class="underline">role=db</span> 的 Pod（如果他们还没有被隔离）</li>
+<li>在 <span class="underline">default</span> Namespace中，允许任何具有 <span class="underline">role=frontend</span> 的 Pod，IP 范围在 172.17.0.0–172.17.0.255 和 172.17.2.0–172.17.255.255（整个 172.17.0.0/16 段， 172.17.1.0/24 除外）连接到标签为 <span class="underline">role=db</span> 的 Pod 的 TCP 端口 <span class="underline">6379</span></li>
+<li><p>
+允许在 Namespace 中任何具有标签 <span class="underline">project=myproject</span> ，IP范围在 <span class="underline">10.0.0.0/24</span> 段的 Pod，连接到 <span class="underline">default</span> Namespace 中标签为 <span class="underline">role=db</span> 的 Pod 的 TCP 端口 <span class="underline">5978</span>
+</p>
+
+<pre class="example" id="orge7c28da">
+将上面配置 POST 到 API Server 可能不起任何作用，除非选择的网络方案支持网络策略。
+</pre></li>
+</ul>
+</div>
+
+<div id="outline-container-org9c227bc" class="outline-3">
+<h3 id="org9c227bc">默认策略</h3>
+<div class="outline-text-3" id="text-org9c227bc">
+<p>
+通过创建一个可以选择所有 Pod 但不允许任何流量的 NetworkPolicy，可以为一个 Namespace 创建一个 <span class="underline">默认的</span> <b>隔离</b> 策略，如下所示：
+</p>
+
+<pre class="example" id="org409d188">
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+spec:
+  podSelector:
+</pre>
+
+<pre class="example" id="org9316d95">
+这确保了即使是没有被任何 NetworkPolicy 选中的 Pod，将仍然是被隔离的
+</pre>
+
+<p>
+同样地，在 Namespace 中，如果想允许所有的流量进入到所有的 Pod（即使已经添加了某些策略，使一些 Pod 被处理为 “隔离的”），可以通过创建一个策略来显式地指定允许所有流量：
+</p>
+
+<pre class="example" id="orge704229">
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-all
+spec:
+  podSelector:
+  ingress:
+  - {}
+</pre>
+
+<table border="2" cellspacing="0" cellpadding="6" rules="groups" frame="hsides">
+
+
+<colgroup>
+<col  class="org-left" />
+
+<col  class="org-left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="org-left"><a href="rbac.html">Previous: RBAC</a></td>
+<td class="org-left"><a href="security.html">Home：安全</a></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
 </div>
 <div id="postamble" class="status">
 
