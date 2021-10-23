@@ -227,11 +227,19 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org3c80d11">Introduction</a></li>
+<li><a href="#orgfb5a481">概述</a></li>
+<li><a href="#org1c84512">创建</a>
+<ul>
+<li><a href="#org3d46d6f">目录</a></li>
+<li><a href="#org8ffa60d">文件</a></li>
+<li><a href="#org0509456">字面值</a></li>
+</ul>
+</li>
+<li><a href="#org9683721">使用</a></li>
 </ul>
 </div>
 </div>
-<pre class="example" id="org466697a">
+<pre class="example" id="orgb688ab3">
 其实ConfigMap功能在Kubernetes1.2版本的时候就有了
 
 许多应用程序会从配置文件、命令行参数或环境变量中读取配置信息
@@ -243,8 +251,261 @@
 ConfigMap API提供了向 <span class="underline">容器</span> 中 <b>注入</b> <span class="underline">配置信息</span> 的机制，ConfigMap可以被用来保存 <span class="underline">单个属性</span> ，也可以用来保存整个 <span class="underline">配置文件</span> 或者 <span class="underline">JSON二进制大对象</span>  
 </p>
 
-<div id="outline-container-org3c80d11" class="outline-2">
-<h2 id="org3c80d11">Introduction</h2>
+<div id="outline-container-orgfb5a481" class="outline-2">
+<h2 id="orgfb5a481">概述</h2>
+<div class="outline-text-2" id="text-orgfb5a481">
+<p>
+<span class="underline">ConfigMap</span> API资源用来保存 <span class="underline">key-value pair</span> <b>配置数据</b> ，这个数据可以在 <span class="underline">pods</span> 里使用，或者被用来为像 <span class="underline">controller</span> 一样的系统组件存储配置数据
+</p>
+
+<pre class="example" id="orga49cec4">
+虽然ConfigMap跟Secrets类似，但是ConfigMap更方便的处理不含敏感信息的字符串
+
+注意：ConfigMaps不是属性配置文件的替代品，ConfigMaps只是作为多个properties文件的引用
+
+可以把它理解为Linux系统中的/etc目录，专门用来存储配置文件的目录
+</pre>
+
+<p>
+比如使用ConfigMap配置来创建Kubernetes Volumes，ConfigMap中的每个 <span class="underline">data</span> 项都会成为一个 <b>新文件</b> ：
+</p>
+<pre class="example" id="orga4bc715">
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  creationTimestamp: 2016-02-18T19:14:38Z
+  name: example-config
+  namespace: default
+data:
+  example.property.1: hello
+  example.property.2: world
+  example.property.file: |-
+    property.1=value-1
+    property.2=value-2
+    property.3=value-3
+</pre>
+
+<p>
+data一栏包括了配置数据，ConfigMap可以被用来保存单个属性，也可以用来保存一个配置文件。 配置数据可以通过很多种方式在Pods里被使用。ConfigMaps可以被用来：
+</p>
+<ul class="org-ul">
+<li>设置 <span class="underline">环境变量</span> 的值</li>
+<li>在容器里设置 <span class="underline">命令行参数</span></li>
+<li>在数据卷里面创建 <span class="underline">config文件</span></li>
+</ul>
+
+<pre class="example" id="org3f1f577">
+用户和系统组件两者都可以在ConfigMap里面存储配置数据
+</pre>
+
+<p>
+从kubectl create configmap -h的帮助信息中就可以对ConfigMap究竟如何创建略知一二了：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">Examples:
+<span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">Create a new configmap named my-config based on folder bar</span>
+kubectl create configmap my-config --from-file=path/to/bar
+
+<span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">Create a new configmap named my-config with specified keys instead of file basenames on disk</span>
+kubectl create configmap my-config --from-file=<span style="color: #4eee94;">key1</span>=/path/to/bar/file1.txt --from-file=<span style="color: #4eee94;">key2</span>=/path/to/bar/file2.txt
+
+<span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">Create a new configmap named my-config with key1=config1 and key2=config2</span>
+kubectl create configmap my-config --from-literal=<span style="color: #4eee94;">key1</span>=config1 --from-literal=<span style="color: #4eee94;">key2</span>=config2
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org1c84512" class="outline-2">
+<h2 id="org1c84512">创建</h2>
+<div class="outline-text-2" id="text-org1c84512">
+<p>
+可以使用该命令，用给定值、文件或目录来创建ConfigMap：
+</p>
+<pre class="example" id="org7a4e07f">
+kubectl create configmap
+</pre>
+</div>
+
+<div id="outline-container-org3d46d6f" class="outline-3">
+<h3 id="org3d46d6f">目录</h3>
+<div class="outline-text-3" id="text-org3d46d6f">
+<p>
+比如已经有了一些配置文件，其中包含了想要设置的ConfigMap的值：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ ls docs/user-guide/configmap/kubectl/
+game.properties
+ui.properties
+
+$ cat docs/user-guide/configmap/kubectl/game.properties
+<span style="color: #4eee94;">enemies</span>=aliens
+<span style="color: #4eee94;">lives</span>=3
+enemies.cheat=true
+enemies.cheat.level=noGoodRotten
+secret.code.passphrase=UUDDLRLRBABAS
+secret.code.allowed=true
+secret.code.lives=30
+
+$ cat docs/user-guide/configmap/kubectl/ui.properties
+color.good=purple
+color.bad=yellow
+allow.textmode=true
+how.nice.to.look=fairlyNice
+</pre>
+</div>
+
+<p>
+使用下面的命令可以创建一个包含目录中所有文件的ConfigMap：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl create configmap game-config --from-file=docs/user-guide/configmap/kubectl
+</pre>
+</div>
+
+<p>
+<span class="underline">&#x2013;from-file</span> 指定在目录下的所有文件都会被用在ConfigMap里面创建一个键值对，键的名字就是文件名，值就是文件的内容。来看一下这个命令创建的ConfigMap：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl describe configmaps game-config
+Name:           game-config
+Namespace:      default
+Labels:         &lt;none&gt;
+Annotations:    &lt;none&gt;
+
+Data
+====
+game.properties:        158 bytes
+ui.properties:          83 bytes
+</pre>
+</div>
+
+<p>
+可以看到那两个key是从kubectl指定的目录中的文件名
+</p>
+
+<pre class="example" id="org64d78dc">
+这些key的内容可能会很大，所以在kubectl describe的输出中，只能够看到键的名字和他们的大小
+</pre>
+
+<p>
+如果想要看到键的值的话，可以使用kubectl get：
+</p>
+
+<pre class="example" id="orgd22b82a">
+apiVersion: v1
+data:
+  game.properties: |
+    enemies=aliens
+    lives=3
+    enemies.cheat=true
+    enemies.cheat.level=noGoodRotten
+    secret.code.passphrase=UUDDLRLRBABAS
+    secret.code.allowed=true
+    secret.code.lives=30
+  ui.properties: |
+    color.good=purple
+    color.bad=yellow
+    allow.textmode=true
+    how.nice.to.look=fairlyNice
+kind: ConfigMap
+metadata:
+  creationTimestamp: 2016-02-18T18:34:05Z
+  name: game-config
+  namespace: default
+  resourceVersion: "407"
+  selfLink: /api/v1/namespaces/default/configmaps/game-config
+  uid: 30944725-d66e-11e5-8cd0-68f728db1985
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org8ffa60d" class="outline-3">
+<h3 id="org8ffa60d">文件</h3>
+<div class="outline-text-3" id="text-org8ffa60d">
+<pre class="example" id="org018f134">
+刚才使用目录创建的时候--from-file指定的是一个目录
+</pre>
+<p>
+只要指定为一个文件就可以从单个文件中创建ConfigMap：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl create configmap game-config-2 --from-file=docs/user-guide/configmap/kubectl/game.properties 
+
+$ kubectl get configmaps game-config-2 -o yaml
+</pre>
+</div>
+
+<pre class="example" id="org78d21f0">
+apiVersion: v1
+data:
+  game-special-key: |
+    enemies=aliens
+    lives=3
+    enemies.cheat=true
+    enemies.cheat.level=noGoodRotten
+    secret.code.passphrase=UUDDLRLRBABAS
+    secret.code.allowed=true
+    secret.code.lives=30
+kind: ConfigMap
+metadata:
+  creationTimestamp: 2016-02-18T18:54:22Z
+  name: game-config-3
+  namespace: default
+  resourceVersion: "530"
+  selfLink: /api/v1/namespaces/default/configmaps/game-config-3
+  uid: 05f8da22-d671-11e5-8cd0-68f728db1985
+</pre>
+
+<p>
+<span class="underline">&#x2013;from-file</span> 这个参数可以使用多次
+</p>
+
+<pre class="example" id="orgc77655f">
+可以使用两次分别指定上个实例中的那两个配置文件，效果就跟指定整个目录是一样的
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org0509456" class="outline-3">
+<h3 id="org0509456">字面值</h3>
+<div class="outline-text-3" id="text-org0509456">
+<p>
+使用文字值创建，利用 <span class="underline">&#x2013;from-literal</span> 参数传递配置信息，该参数可以使用多次，格式如下；
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl create configmap special-config --from-literal=special.how=very --from-literal=special.type=charm
+
+$ kubectl get configmaps special-config -o yaml
+</pre>
+</div>
+
+<pre class="example" id="org7cb90b4">
+apiVersion: v1
+data:
+  special.how: very
+  special.type: charm
+kind: ConfigMap
+metadata:
+  creationTimestamp: 2016-02-18T19:14:38Z
+  name: special-config
+  namespace: default
+  resourceVersion: "651"
+  selfLink: /api/v1/namespaces/default/configmaps/special-config
+  uid: dadce046-d673-11e5-8cd0-68f728db1985
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org9683721" class="outline-2">
+<h2 id="org9683721">使用</h2>
 </div>
 </div>
 <div id="postamble" class="status">
