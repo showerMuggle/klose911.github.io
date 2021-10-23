@@ -235,11 +235,18 @@
 <li><a href="#org0509456">字面值</a></li>
 </ul>
 </li>
-<li><a href="#org9683721">使用</a></li>
+<li><a href="#org9683721">使用</a>
+<ul>
+<li><a href="#org2b13392">替代环境变量</a></li>
+<li><a href="#org33ff2ea">设置命令行参数</a></li>
+<li><a href="#orgb2d4434">数据卷插件使用ConfigMap</a></li>
+</ul>
+</li>
+<li><a href="#org011a066">热更新</a></li>
 </ul>
 </div>
 </div>
-<pre class="example" id="orgb688ab3">
+<pre class="example" id="org4da1c5d">
 其实ConfigMap功能在Kubernetes1.2版本的时候就有了
 
 许多应用程序会从配置文件、命令行参数或环境变量中读取配置信息
@@ -258,7 +265,7 @@ ConfigMap API提供了向 <span class="underline">容器</span> 中 <b>注入</b
 <span class="underline">ConfigMap</span> API资源用来保存 <span class="underline">key-value pair</span> <b>配置数据</b> ，这个数据可以在 <span class="underline">pods</span> 里使用，或者被用来为像 <span class="underline">controller</span> 一样的系统组件存储配置数据
 </p>
 
-<pre class="example" id="orga49cec4">
+<pre class="example" id="orge721898">
 虽然ConfigMap跟Secrets类似，但是ConfigMap更方便的处理不含敏感信息的字符串
 
 注意：ConfigMaps不是属性配置文件的替代品，ConfigMaps只是作为多个properties文件的引用
@@ -269,7 +276,7 @@ ConfigMap API提供了向 <span class="underline">容器</span> 中 <b>注入</b
 <p>
 比如使用ConfigMap配置来创建Kubernetes Volumes，ConfigMap中的每个 <span class="underline">data</span> 项都会成为一个 <b>新文件</b> ：
 </p>
-<pre class="example" id="orga4bc715">
+<pre class="example" id="org481064f">
 kind: ConfigMap
 apiVersion: v1
 metadata:
@@ -294,7 +301,7 @@ data一栏包括了配置数据，ConfigMap可以被用来保存单个属性，�
 <li>在数据卷里面创建 <span class="underline">config文件</span></li>
 </ul>
 
-<pre class="example" id="org3f1f577">
+<pre class="example" id="org4bdfce9">
 用户和系统组件两者都可以在ConfigMap里面存储配置数据
 </pre>
 
@@ -323,7 +330,7 @@ kubectl create configmap my-config --from-literal=<span style="color: #4eee94;">
 <p>
 可以使用该命令，用给定值、文件或目录来创建ConfigMap：
 </p>
-<pre class="example" id="org7a4e07f">
+<pre class="example" id="orgdb88164">
 kubectl create configmap
 </pre>
 </div>
@@ -388,7 +395,7 @@ ui.properties:          83 bytes
 可以看到那两个key是从kubectl指定的目录中的文件名
 </p>
 
-<pre class="example" id="org64d78dc">
+<pre class="example" id="org33ee147">
 这些key的内容可能会很大，所以在kubectl describe的输出中，只能够看到键的名字和他们的大小
 </pre>
 
@@ -396,7 +403,7 @@ ui.properties:          83 bytes
 如果想要看到键的值的话，可以使用kubectl get：
 </p>
 
-<pre class="example" id="orgd22b82a">
+<pre class="example" id="org708f5f4">
 apiVersion: v1
 data:
   game.properties: |
@@ -427,7 +434,7 @@ metadata:
 <div id="outline-container-org8ffa60d" class="outline-3">
 <h3 id="org8ffa60d">文件</h3>
 <div class="outline-text-3" id="text-org8ffa60d">
-<pre class="example" id="org018f134">
+<pre class="example" id="org5ee0a06">
 刚才使用目录创建的时候--from-file指定的是一个目录
 </pre>
 <p>
@@ -441,7 +448,7 @@ $ kubectl get configmaps game-config-2 -o yaml
 </pre>
 </div>
 
-<pre class="example" id="org78d21f0">
+<pre class="example" id="org2d27b52">
 apiVersion: v1
 data:
   game-special-key: |
@@ -466,7 +473,7 @@ metadata:
 <span class="underline">&#x2013;from-file</span> 这个参数可以使用多次
 </p>
 
-<pre class="example" id="orgc77655f">
+<pre class="example" id="org36911b7">
 可以使用两次分别指定上个实例中的那两个配置文件，效果就跟指定整个目录是一样的
 </pre>
 </div>
@@ -486,7 +493,7 @@ $ kubectl get configmaps special-config -o yaml
 </pre>
 </div>
 
-<pre class="example" id="org7cb90b4">
+<pre class="example" id="org0eb910e">
 apiVersion: v1
 data:
   special.how: very
@@ -506,6 +513,218 @@ metadata:
 
 <div id="outline-container-org9683721" class="outline-2">
 <h2 id="org9683721">使用</h2>
+<div class="outline-text-2" id="text-org9683721">
+</div>
+<div id="outline-container-org2b13392" class="outline-3">
+<h3 id="org2b13392">替代环境变量</h3>
+<div class="outline-text-3" id="text-org2b13392">
+<p>
+ConfigMap可以被用来填入环境变量：
+</p>
+<pre class="example" id="org330a9f6">
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: special-config
+  namespace: default
+data:
+  special.how: very
+  special.type: charm
+</pre>
+
+<pre class="example" id="orgb12e40f">
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: env-config
+  namespace: default
+data:
+  log_level: INFO
+</pre>
+
+<p>
+在Pod中这样使用ConfigMap：
+</p>
+
+<pre class="example" id="org3d84bcb">
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: dapi-test-pod
+spec:
+  containers:
+    - name: test-container
+      image: gcr.io/google_containers/busybox
+      command: [ "/bin/sh", "-c", "env" ]
+      env:
+	- name: SPECIAL_LEVEL_KEY
+	  valueFrom:
+	    configMapKeyRef:
+	      name: special-config
+	      key: special.how
+	- name: SPECIAL_TYPE_KEY
+	  valueFrom:
+	    configMapKeyRef:
+	      name: special-config
+	      key: special.type
+      envFrom:
+	- configMapRef:
+	    name: env-config
+  restartPolicy: Never
+</pre>
+
+<p>
+这个Pod运行后会输出如下几行：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh"><span style="color: #4eee94;">SPECIAL_LEVEL_KEY</span>=very
+<span style="color: #4eee94;">SPECIAL_TYPE_KEY</span>=charm
+<span style="color: #4eee94;">log_level</span>=INFO
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org33ff2ea" class="outline-3">
+<h3 id="org33ff2ea">设置命令行参数</h3>
+<div class="outline-text-3" id="text-org33ff2ea">
+<p>
+ConfigMap也可以被使用来设置容器中的命令或者参数值。它使用的是Kubernetes的 <span class="underline">$(VAR_NAME)</span> 替换语法：
+</p>
+
+<pre class="example" id="org5114ea4">
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: special-config
+  namespace: default
+data:
+  special.how: very
+  special.type: charm
+</pre>
+
+<p>
+为了将ConfigMap中的值注入到命令行的参数里面，还要像前面那个例子一样使用环境变量替换语法$(VAR_NAME)
+</p>
+
+<pre class="example" id="org061dbcf">
+apiVersion: v1
+kind: Pod
+metadata:
+  name: dapi-test-pod
+spec:
+  containers:
+    - name: test-container
+      image: gcr.io/google_containers/busybox
+      command: [ "/bin/sh", "-c", "echo $(SPECIAL_LEVEL_KEY) $(SPECIAL_TYPE_KEY)" ]
+      env:
+	- name: SPECIAL_LEVEL_KEY
+	  valueFrom:
+	    configMapKeyRef:
+	      name: special-config
+	      key: special.how
+	- name: SPECIAL_TYPE_KEY
+	  valueFrom:
+	    configMapKeyRef:
+	      name: special-config
+	      key: special.type
+  restartPolicy: Never
+</pre>
+<p>
+运行这个Pod后会输出：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">very charm
+</pre>
+</div>
+
+<pre class="example" id="orgc37404c">
+其实这个东西就是给Docker容器设置环境变量，通过：
+
+1. docker run的时候指定-e参数修改镜像里的环境变量
+2. docker的CMD命令再利用该$(VAR_NAME)通过sed来修改配置文件或者作为命令行启动参数
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orgb2d4434" class="outline-3">
+<h3 id="orgb2d4434">数据卷插件使用ConfigMap</h3>
+<div class="outline-text-3" id="text-orgb2d4434">
+<p>
+在数据卷里面使用这个ConfigMap，有不同的选项。最基本的就是将 <span class="underline">文件</span> <b>填入</b> <span class="underline">数据卷</span> ，在这个文件中，键就是文件名，键值就是文件内容：
+</p>
+
+<pre class="example" id="org8d46d52">
+apiVersion: v1
+kind: Pod
+metadata:
+  name: dapi-test-pod
+spec:
+  containers:
+    - name: test-container
+      image: gcr.io/google_containers/busybox
+      command: [ "/bin/sh", "-c", "cat /etc/config/special.how" ]
+      volumeMounts:
+      - name: config-volume
+	mountPath: /etc/config
+  volumes:
+    - name: config-volume
+      configMap:
+	name: special-config
+  restartPolicy: Never
+</pre>
+
+<p>
+运行这个Pod的输出：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">very
+</pre>
+</div>
+
+<p>
+也可以在ConfigMap值被映射的数据卷里控制路径：
+</p>
+
+<pre class="example" id="orgba1c20a">
+apiVersion: v1
+kind: Pod
+metadata:
+  name: dapi-test-pod
+spec:
+  containers:
+    - name: test-container
+      image: gcr.io/google_containers/busybox
+      command: [ "/bin/sh","-c","cat /etc/config/path/to/special-key" ]
+      volumeMounts:
+      - name: config-volume
+	mountPath: /etc/config
+  volumes:
+    - name: config-volume
+      configMap:
+	name: special-config
+	items:
+	- key: special.how
+	  path: path/to/special-key
+  restartPolicy: Never
+</pre>
+
+<p>
+输出结果仍然是：
+</p>
+<pre class="example">
+very
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org011a066" class="outline-2">
+<h2 id="org011a066">热更新</h2>
 </div>
 </div>
 <div id="postamble" class="status">

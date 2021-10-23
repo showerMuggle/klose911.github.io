@@ -216,3 +216,177 @@ ConfigMap API提供了向 _容器_ 中 *注入* _配置信息_ 的机制，Confi
 
 * 使用
   
+** 替代环境变量
+   ConfigMap可以被用来填入环境变量：
+   #+begin_example
+     apiVersion: v1
+     kind: ConfigMap
+     metadata:
+       name: special-config
+       namespace: default
+     data:
+       special.how: very
+       special.type: charm
+   #+end_example
+
+   #+begin_example
+     apiVersion: v1
+     kind: ConfigMap
+     metadata:
+       name: env-config
+       namespace: default
+     data:
+       log_level: INFO
+   #+end_example
+
+   在Pod中这样使用ConfigMap：
+
+   #+begin_example
+
+     apiVersion: v1
+     kind: Pod
+     metadata:
+       name: dapi-test-pod
+     spec:
+       containers:
+	 - name: test-container
+	   image: gcr.io/google_containers/busybox
+	   command: [ "/bin/sh", "-c", "env" ]
+	   env:
+	     - name: SPECIAL_LEVEL_KEY
+	       valueFrom:
+		 configMapKeyRef:
+		   name: special-config
+		   key: special.how
+	     - name: SPECIAL_TYPE_KEY
+	       valueFrom:
+		 configMapKeyRef:
+		   name: special-config
+		   key: special.type
+	   envFrom:
+	     - configMapRef:
+		 name: env-config
+       restartPolicy: Never
+   #+end_example
+
+   这个Pod运行后会输出如下几行：
+
+   #+begin_src sh 
+     SPECIAL_LEVEL_KEY=very
+     SPECIAL_TYPE_KEY=charm
+     log_level=INFO
+   #+end_src
+
+** 设置命令行参数
+   ConfigMap也可以被使用来设置容器中的命令或者参数值。它使用的是Kubernetes的 _$(VAR_NAME)_ 替换语法：
+
+   #+begin_example
+     apiVersion: v1
+     kind: ConfigMap
+     metadata:
+       name: special-config
+       namespace: default
+     data:
+       special.how: very
+       special.type: charm
+   #+end_example
+
+   为了将ConfigMap中的值注入到命令行的参数里面，还要像前面那个例子一样使用环境变量替换语法$(VAR_NAME)
+
+   #+begin_example
+     apiVersion: v1
+     kind: Pod
+     metadata:
+       name: dapi-test-pod
+     spec:
+       containers:
+	 - name: test-container
+	   image: gcr.io/google_containers/busybox
+	   command: [ "/bin/sh", "-c", "echo $(SPECIAL_LEVEL_KEY) $(SPECIAL_TYPE_KEY)" ]
+	   env:
+	     - name: SPECIAL_LEVEL_KEY
+	       valueFrom:
+		 configMapKeyRef:
+		   name: special-config
+		   key: special.how
+	     - name: SPECIAL_TYPE_KEY
+	       valueFrom:
+		 configMapKeyRef:
+		   name: special-config
+		   key: special.type
+       restartPolicy: Never
+   #+end_example
+   运行这个Pod后会输出：
+
+   #+begin_src sh 
+     very charm
+   #+end_src
+   
+   #+begin_example
+     其实这个东西就是给Docker容器设置环境变量，通过：
+
+     1. docker run的时候指定-e参数修改镜像里的环境变量
+     2. docker的CMD命令再利用该$(VAR_NAME)通过sed来修改配置文件或者作为命令行启动参数
+   #+end_example
+
+** 数据卷插件使用ConfigMap
+   
+   在数据卷里面使用这个ConfigMap，有不同的选项。最基本的就是将 _文件_ *填入* _数据卷_ ，在这个文件中，键就是文件名，键值就是文件内容：
+
+   #+begin_example
+     apiVersion: v1
+     kind: Pod
+     metadata:
+       name: dapi-test-pod
+     spec:
+       containers:
+	 - name: test-container
+	   image: gcr.io/google_containers/busybox
+	   command: [ "/bin/sh", "-c", "cat /etc/config/special.how" ]
+	   volumeMounts:
+	   - name: config-volume
+	     mountPath: /etc/config
+       volumes:
+	 - name: config-volume
+	   configMap:
+	     name: special-config
+       restartPolicy: Never
+   #+end_example
+
+   运行这个Pod的输出：
+
+   #+begin_src sh 
+     very
+   #+end_src
+
+   也可以在ConfigMap值被映射的数据卷里控制路径：
+
+   #+begin_example
+     apiVersion: v1
+     kind: Pod
+     metadata:
+       name: dapi-test-pod
+     spec:
+       containers:
+	 - name: test-container
+	   image: gcr.io/google_containers/busybox
+	   command: [ "/bin/sh","-c","cat /etc/config/path/to/special-key" ]
+	   volumeMounts:
+	   - name: config-volume
+	     mountPath: /etc/config
+       volumes:
+	 - name: config-volume
+	   configMap:
+	     name: special-config
+	     items:
+	     - key: special.how
+	       path: path/to/special-key
+       restartPolicy: Never
+   #+end_example
+
+   输出结果仍然是：
+   #+begin_src 
+very
+   #+end_src
+
+* 热更新
