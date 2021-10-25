@@ -74,29 +74,29 @@ Kubernetes 中的 Volume 抽象就很好的解决了这些问题
   + vsphereVolume
 
 ** awsElasticBlockStore
-awsElasticBlockStore 卷将 _AWS EBS Volume_ 挂载到容器中：
-+ 与 emptyDir 类型会在删除 Pod 时被清除不同，EBS 卷的的内容会保留下来，仅仅是被 *卸载*
-  #+begin_example
-    这意味着 EBS 卷可以预先填充数据，并且可以在数据包之间“切换”数据 
-  #+end_example
+   awsElasticBlockStore 卷将 _AWS EBS Volume_ 挂载到容器中：
+   + 与 emptyDir 类型会在删除 Pod 时被清除不同，EBS 卷的的内容会保留下来，仅仅是被 *卸载*
+     #+begin_example
+       这意味着 EBS 卷可以预先填充数据，并且可以在数据包之间“切换”数据 
+     #+end_example
 
-#+begin_example
-  必须使用 aws ec2 create-volume 或 AWS API 创建 EBS 卷，才能使用它
-#+end_example
+   #+begin_example
+     必须使用 aws ec2 create-volume 或 AWS API 创建 EBS 卷，才能使用它
+   #+end_example
 
-使用 awsElasticBlockStore 卷时有一些限制：
-+ 运行 Pod 的节点必须是 AWS EC2 实例
-+ 这些实例需要与 EBS 卷位于相同的区域和可用区域
-+ EBS 仅支持卷和 EC2 实例的一对一的挂载   
+   使用 awsElasticBlockStore 卷时有一些限制：
+   + 运行 Pod 的节点必须是 AWS EC2 实例
+   + 这些实例需要与 EBS 卷位于相同的区域和可用区域
+   + EBS 仅支持卷和 EC2 实例的一对一的挂载   
 
 *** 创建 EBS 卷
-在 pod 中使用的 EBS 卷之前，需要先创建它：
+    在 pod 中使用的 EBS 卷之前，需要先创建它：
 
-#+begin_src sh 
-  $ aws ec2 create-volume --availability-zone=eu-west-1a --size=10 --volume-type=gp2
-#+end_src
+    #+begin_src sh 
+      $ aws ec2 create-volume --availability-zone=eu-west-1a --size=10 --volume-type=gp2
+    #+end_src
 
-确保区域与您启动集群的区域相匹配（并且检查大小和 EBS 卷类型是否适合！）
+    确保区域与您启动集群的区域相匹配（并且检查大小和 EBS 卷类型是否适合！）
 
 *** 配置
     #+begin_example
@@ -120,42 +120,96 @@ awsElasticBlockStore 卷将 _AWS EBS Volume_ 挂载到容器中：
     #+end_example
  
 ** azureDisk
-AzureDisk 用于将 Microsoft Azure Data Disk 挂载到 Pod 中
+   AzureDisk 用于将 Microsoft Azure Data Disk 挂载到 Pod 中
 
 ** azureFile
-azureFile 用于将 Microsoft Azure File Volume（SMB 2.1 和 3.0）挂载到 Pod 中 
+   azureFile 用于将 Microsoft Azure File Volume（SMB 2.1 和 3.0）挂载到 Pod 中 
 
 ** cephfs
-cephfs 卷允许将现有的 CephFS 卷挂载到您的容器中：
-+ 不像 emptyDir，当删除 Pod 时被删除，cephfs 卷的内容将被保留，卷仅仅是被卸载
-  #+begin_example
-    这意味着 CephFS 卷可以预先填充数据，并且可以在数据包之间“切换”数据
-  #+end_example
-+ CephFS 可以被多个写设备同时挂载
+   cephfs 卷允许将现有的 CephFS 卷挂载到您的容器中：
+   + 不像 emptyDir，当删除 Pod 时被删除，cephfs 卷的内容将被保留，卷仅仅是被卸载
+     #+begin_example
+       这意味着 CephFS 卷可以预先填充数据，并且可以在数据包之间“切换”数据
+     #+end_example
+   + CephFS 可以被多个写设备同时挂载
 
-#+begin_example
-必须先拥有自己的 Ceph 服务器，然后才能使用它
-#+end_example
+   #+begin_example
+   必须先拥有自己的 Ceph 服务器，然后才能使用它
+   #+end_example
 
 ** csi
-_CSI_ 代表 *容器存储接口*
-#+begin_example
-  CSI 试图建立一个行业标准接口的规范，借助 CSI 容器编排系统可以将任意存储系统暴露给自己的容器工作负载
-#+end_example
+   _CSI_ 代表 *容器存储接口*
+   #+begin_example
+     CSI 试图建立一个行业标准接口的规范，借助 CSI 容器编排系统可以将任意存储系统暴露给自己的容器工作负载
+   #+end_example
 
-csi 卷类型是一种 _in-tree_ 的 _CSI 卷插件_ ，用于 Pod 与在 _同一节点_ 上运行的 _外部 CSI 卷驱动程序_ 交互。部署 CSI 兼容卷驱动后，用户可以使用 csi 作为卷类型来挂载驱动提供的存储
+   csi 卷类型是一种 _in-tree_ 的 _CSI 卷插件_ ，用于 Pod 与在 _同一节点_ 上运行的 _外部 CSI 卷驱动程序_ 交互。部署 CSI 兼容卷驱动后，用户可以使用 csi 作为卷类型来挂载驱动提供的存储
 
-#+begin_example
-  CSI 持久化卷支持是在 Kubernetes v1.9 中引入的，作为一个 alpha 特性，必须由集群管理员明确启用
+   #+begin_example
+     CSI 持久化卷支持是在 Kubernetes v1.9 中引入的，作为一个 alpha 特性，必须由集群管理员明确启用
 
-  换句话说，集群管理员需要在 apiserver、controller-manager 和 kubelet 组件的 “--feature-gates =” 标志中加上 “CSIPersistentVolume = true”
-#+end_example
-CSI 持久化卷具有以下字段可供用户指定：
-+ driver：一个字符串值，指定要使用的卷驱动程序的名称
-  + 必须少于 63 个字符，并以一个字符开头
-  + 驱动程序名称可以包含 “.”、“- ”、“_” 或数字
-+ volumeHandle：一个字符串值，唯一标识从 CSI 卷插件的 CreateVolume 调用返回的卷名。随后在卷驱动程序的所有后续调用中使用卷句柄来引用该卷
-+ readOnly：一个可选的布尔值，指示卷是否被发布为只读
-  + 默认是 false
+     换句话说，集群管理员需要在 apiserver、controller-manager 和 kubelet 组件的 “--feature-gates =” 标志中加上 “CSIPersistentVolume = true”
+   #+end_example
+   CSI 持久化卷具有以下字段可供用户指定：
+   + driver：一个字符串值，指定要使用的卷驱动程序的名称
+     + 必须少于 63 个字符，并以一个字符开头
+     + 驱动程序名称可以包含 “.”、“- ”、“_” 或数字
+   + volumeHandle：一个字符串值，唯一标识从 CSI 卷插件的 CreateVolume 调用返回的卷名。随后在卷驱动程序的所有后续调用中使用卷句柄来引用该卷
+   + readOnly：一个可选的布尔值，指示卷是否被发布为只读
+     + 默认是 false
 
-** 
+** downwardAPI
+   downwardAPI 卷用于使 _向下 API 数据_ 对应用程序可用。它挂载一个目录，并将请求的数据写入纯文本文件 
+
+** emptyDir
+   当 Pod 被分配给节点时，首先创建 emptyDir 卷，并且只要该 Pod 在该节点上运行，该卷就会存在：
+   + 正如卷的名字所述，它最初是空的
+   + Pod 中的容器可以读取和写入 emptyDir 卷中的相同文件，尽管该卷可以挂载到每个容器中的相同或不同路径上
+   + 当出于任何原因从节点中删除 Pod 时，emptyDir 中的数据将被 *永久* 删除 
+
+   #+begin_example
+     注意：容器崩溃不会从节点中移除 pod，因此 emptyDir 卷中的数据在容器崩溃时是安全的
+   #+end_example
+
+   emptyDir 的用法有：
+   + 暂存空间，例如用于基于磁盘的合并排序
+   + 用作长时间计算崩溃恢复时的检查点
+   + Web服务器容器提供数据时，保存内容管理器容器提取的文件
+
+*** 示例
+    #+begin_example
+      apiVersion: v1
+      kind: Pod
+      metadata:
+	name: test-pd
+      spec:
+	containers:
+	- image: k8s.gcr.io/test-webserver
+	  name: test-container
+	  volumeMounts:
+	  - mountPath: /cache
+	    name: cache-volume
+	volumes:
+	- name: cache-volume
+	  emptyDir: {}
+    #+end_example
+ 
+** fc
+   fc 卷允许将现有的 fc 卷挂载到 pod 中。可以使用卷配置中的 targetWWN 参数指定单个或多个目标全球通用名称( World Wide Name )：
+   + 如果指定了多个 WWN，则 targetWWN 期望这些 WWN 来自多路径连接 
+
+   #+begin_example
+     必须配置 FC SAN 区域划分，并预先将这些 LUN（卷）分配并屏蔽到目标 WWN，以便 Kubernetes 主机可以访问它们
+   #+end_example
+
+** flocker
+   Flocker 是一款开源的 _集群容器数据卷管理器_ 。它提供了由各种存储后端支持的数据卷的管理和编排。flocker 允许将 Flocker 数据集挂载到 pod 中：
+   + 如果数据集在 Flocker 中不存在，则需要先使用 Flocker CLI 或使用 Flocker API 创建数据集
+   + 如果数据集已经存在，它将被 Flocker 重新连接到 pod 被调度的节点上
+     #+begin_example
+       这意味着数据可以根据需要在数据包之间“切换” 
+     #+end_example
+
+   #+begin_example
+     重要提示：必须先运行自己的 Flocker 安装程序才能使用它
+   #+end_example
