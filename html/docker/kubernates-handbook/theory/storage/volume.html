@@ -227,11 +227,26 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org0f6151e">背景</a></li>
+<li><a href="#org1f65149">背景</a></li>
+<li><a href="#org9184648">类型</a>
+<ul>
+<li><a href="#org7771a6e">awsElasticBlockStore</a>
+<ul>
+<li><a href="#org8918ace">创建 EBS 卷</a></li>
+<li><a href="#org9fb2f81">配置</a></li>
+</ul>
+</li>
+<li><a href="#orgbc4a438">azureDisk</a></li>
+<li><a href="#orgf60d375">azureFile</a></li>
+<li><a href="#orgd63c2d1">cephfs</a></li>
+<li><a href="#orge2f1063">csi</a></li>
+<li><a href="#org9d95468"></a></li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
-<pre class="example" id="org1112cdb">
+<pre class="example" id="orgc808436">
 容器磁盘上的文件的生命周期是短暂的，这就使得在容器中运行重要应用时会出现一些问题
 
 首先，当容器崩溃时，kubelet 会重启它，但是容器中的文件将丢失——容器以干净的状态（镜像最初的状态）重新启动
@@ -242,8 +257,238 @@
 <p>
 Kubernetes 中的 Volume 抽象就很好的解决了这些问题
 </p>
-<div id="outline-container-org0f6151e" class="outline-2">
-<h2 id="org0f6151e">背景</h2>
+<div id="outline-container-org1f65149" class="outline-2">
+<h2 id="org1f65149">背景</h2>
+<div class="outline-text-2" id="text-org1f65149">
+<pre class="example" id="org615834e">
+Docker 中也有一个 volume 的概念，尽管它稍微宽松一些，管理也很少
+
+在 Docker 中，卷就像是磁盘或是另一个容器中的一个目录
+
+它的生命周期不受管理，直到最近才有了 local-disk-backed 卷
+
+Docker 现在提供了卷驱动程序，但是功能还非常有限。例如 Docker1.7只允许每个容器使用一个卷驱动，并且无法给卷传递参数
+</pre>
+<ul class="org-ul">
+<li><p>
+Kubernetes 中的卷有明确的寿命：与封装它的 Pod 相同。所以，卷的生命比 Pod 中的所有容器都长，当这个容器重启时数据仍然得以保存
+</p>
+<pre class="example" id="orgbda2bf0">
+当然，当 Pod 不再存在时，卷也将不复存在
+</pre></li>
+<li>更重要的是，Kubernetes 支持多种类型的卷，Pod 可以同时使用任意数量的卷</li>
+</ul>
+
+<p>
+卷的核心是目录，可能还包含了一些数据，可以通过 pod 中的容器来访问
+</p>
+<pre class="example" id="org1d1bf4c">
+该目录是如何形成的、支持该目录的介质以及其内容取决于所使用的特定卷类型
+</pre>
+
+<p>
+要使用卷，需要为 pod 指定为卷 <span class="underline">spec.volumes</span> 字段 以及将它挂载到容器的位置 <span class="underline">spec.containers.volumeMounts</span> 字段 
+</p>
+
+<pre class="example" id="org8594d95">
+容器中的进程看到的是由其 Docker 镜像和卷组成的文件系统视图
+
+Docker 镜像位于文件系统层次结构的根目录，任何卷都被挂载在镜像的指定路径中
+
+卷无法挂载到其他卷上或与其他卷有硬连接
+
+Pod 中的每个容器都必须独立指定每个卷的挂载位置
+</pre>
+</div>
+</div>
+<div id="outline-container-org9184648" class="outline-2">
+<h2 id="org9184648">类型</h2>
+<div class="outline-text-2" id="text-org9184648">
+<p>
+Kubernetes 支持以下类型的卷：
+</p>
+<ul class="org-ul">
+<li>awsElasticBlockStore</li>
+<li>azureDisk</li>
+<li>azureFile</li>
+<li>cephfs</li>
+<li>csi</li>
+<li>downwardAPI</li>
+<li>emptyDir</li>
+<li>fc (fibre channel)</li>
+<li>flocker</li>
+<li>gcePersistentDisk</li>
+<li>gitRepo</li>
+<li>glusterfs</li>
+<li>hostPath</li>
+<li>iscsi</li>
+<li>local</li>
+<li>nfs</li>
+<li>persistentVolumeClaim</li>
+<li>projected</li>
+<li>portworxVolume</li>
+<li>quobyte</li>
+<li>rbd</li>
+<li>scaleIO</li>
+<li>secret</li>
+<li>storageos</li>
+<li>vsphereVolume</li>
+</ul>
+</div>
+
+<div id="outline-container-org7771a6e" class="outline-3">
+<h3 id="org7771a6e">awsElasticBlockStore</h3>
+<div class="outline-text-3" id="text-org7771a6e">
+<p>
+awsElasticBlockStore 卷将 <span class="underline">AWS EBS Volume</span> 挂载到容器中：
+</p>
+<ul class="org-ul">
+<li><p>
+与 emptyDir 类型会在删除 Pod 时被清除不同，EBS 卷的的内容会保留下来，仅仅是被 <b>卸载</b>
+</p>
+<pre class="example" id="orgd2d576f">
+这意味着 EBS 卷可以预先填充数据，并且可以在数据包之间“切换”数据 
+</pre></li>
+</ul>
+
+<pre class="example" id="orgcded743">
+必须使用 aws ec2 create-volume 或 AWS API 创建 EBS 卷，才能使用它
+</pre>
+
+<p>
+使用 awsElasticBlockStore 卷时有一些限制：
+</p>
+<ul class="org-ul">
+<li>运行 Pod 的节点必须是 AWS EC2 实例</li>
+<li>这些实例需要与 EBS 卷位于相同的区域和可用区域</li>
+<li>EBS 仅支持卷和 EC2 实例的一对一的挂载</li>
+</ul>
+</div>
+
+<div id="outline-container-org8918ace" class="outline-4">
+<h4 id="org8918ace">创建 EBS 卷</h4>
+<div class="outline-text-4" id="text-org8918ace">
+<p>
+在 pod 中使用的 EBS 卷之前，需要先创建它：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ aws ec2 create-volume --availability-zone=eu-west-1a --size=10 --volume-type=gp2
+</pre>
+</div>
+
+<p>
+确保区域与您启动集群的区域相匹配（并且检查大小和 EBS 卷类型是否适合！）
+</p>
+</div>
+</div>
+
+<div id="outline-container-org9fb2f81" class="outline-4">
+<h4 id="org9fb2f81">配置</h4>
+<div class="outline-text-4" id="text-org9fb2f81">
+<pre class="example" id="orga7ad38d">
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-ebs
+spec:
+  containers:
+  - image: k8s.gcr.io/test-webserver
+    name: test-container
+    volumeMounts:
+    - mountPath: /test-ebs
+      name: test-volume
+  volumes:
+  - name: test-volume
+    # This AWS EBS volume must already exist.
+    awsElasticBlockStore:
+      volumeID: &lt;volume-id&gt;
+      fsType: ext4
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgbc4a438" class="outline-3">
+<h3 id="orgbc4a438">azureDisk</h3>
+<div class="outline-text-3" id="text-orgbc4a438">
+<p>
+AzureDisk 用于将 Microsoft Azure Data Disk 挂载到 Pod 中
+</p>
+</div>
+</div>
+
+<div id="outline-container-orgf60d375" class="outline-3">
+<h3 id="orgf60d375">azureFile</h3>
+<div class="outline-text-3" id="text-orgf60d375">
+<p>
+azureFile 用于将 Microsoft Azure File Volume（SMB 2.1 和 3.0）挂载到 Pod 中 
+</p>
+</div>
+</div>
+
+<div id="outline-container-orgd63c2d1" class="outline-3">
+<h3 id="orgd63c2d1">cephfs</h3>
+<div class="outline-text-3" id="text-orgd63c2d1">
+<p>
+cephfs 卷允许将现有的 CephFS 卷挂载到您的容器中：
+</p>
+<ul class="org-ul">
+<li><p>
+不像 emptyDir，当删除 Pod 时被删除，cephfs 卷的内容将被保留，卷仅仅是被卸载
+</p>
+<pre class="example" id="org8a001de">
+这意味着 CephFS 卷可以预先填充数据，并且可以在数据包之间“切换”数据
+</pre></li>
+<li>CephFS 可以被多个写设备同时挂载</li>
+</ul>
+
+<pre class="example" id="orgf9844f6">
+必须先拥有自己的 Ceph 服务器，然后才能使用它
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orge2f1063" class="outline-3">
+<h3 id="orge2f1063">csi</h3>
+<div class="outline-text-3" id="text-orge2f1063">
+<p>
+<span class="underline">CSI</span> 代表 <b>容器存储接口</b>
+</p>
+<pre class="example" id="orgf694131">
+CSI 试图建立一个行业标准接口的规范，借助 CSI 容器编排系统可以将任意存储系统暴露给自己的容器工作负载
+</pre>
+
+<p>
+csi 卷类型是一种 <span class="underline">in-tree</span> 的 <span class="underline">CSI 卷插件</span> ，用于 Pod 与在 <span class="underline">同一节点</span> 上运行的 <span class="underline">外部 CSI 卷驱动程序</span> 交互。部署 CSI 兼容卷驱动后，用户可以使用 csi 作为卷类型来挂载驱动提供的存储
+</p>
+
+<pre class="example" id="orgd4f9f11">
+CSI 持久化卷支持是在 Kubernetes v1.9 中引入的，作为一个 alpha 特性，必须由集群管理员明确启用
+
+换句话说，集群管理员需要在 apiserver、controller-manager 和 kubelet 组件的 “--feature-gates =” 标志中加上 “CSIPersistentVolume = true”
+</pre>
+<p>
+CSI 持久化卷具有以下字段可供用户指定：
+</p>
+<ul class="org-ul">
+<li>driver：一个字符串值，指定要使用的卷驱动程序的名称
+<ul class="org-ul">
+<li>必须少于 63 个字符，并以一个字符开头</li>
+<li>驱动程序名称可以包含 “.”、“- ”、“_” 或数字</li>
+</ul></li>
+<li>volumeHandle：一个字符串值，唯一标识从 CSI 卷插件的 CreateVolume 调用返回的卷名。随后在卷驱动程序的所有后续调用中使用卷句柄来引用该卷</li>
+<li>readOnly：一个可选的布尔值，指示卷是否被发布为只读
+<ul class="org-ul">
+<li>默认是 false</li>
+</ul></li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-org9d95468" class="outline-3">
+<h3 id="org9d95468"></h3>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
