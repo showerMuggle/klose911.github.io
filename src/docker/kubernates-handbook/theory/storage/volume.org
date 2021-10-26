@@ -215,34 +215,34 @@ Kubernetes 中的 Volume 抽象就很好的解决了这些问题
    #+end_example
 
 ** gcePersistentDisk
-gcePersistentDisk 卷将 _GCE Persistent Disk_ 挂载到容器中
-+ 与删除 Pod 时删除的 emptyDir 不同，PD 的内容被保留，只是卸载了卷
-  #+begin_example
-    这意味着 PD 可以预先填充数据，并且数据可以在 Pod 之间“切换”
-  #+end_example
+   gcePersistentDisk 卷将 _GCE Persistent Disk_ 挂载到容器中
+   + 与删除 Pod 时删除的 emptyDir 不同，PD 的内容被保留，只是卸载了卷
+     #+begin_example
+       这意味着 PD 可以预先填充数据，并且数据可以在 Pod 之间“切换”
+     #+end_example
 
-#+begin_example
-  必须先使用 gcloud 或 GCE API 或 UI 创建一个 PD，然后才能使用它
-#+end_example
+   #+begin_example
+     必须先使用 gcloud 或 GCE API 或 UI 创建一个 PD，然后才能使用它
+   #+end_example
 
-使用 gcePersistentDisk 时有一些限制：
-+ 运行 Pod 的节点必须是 GCE 虚拟机
-+ 那些虚拟机需要在与 PD 一样在 GCE 项目和区域中
+   使用 gcePersistentDisk 时有一些限制：
+   + 运行 Pod 的节点必须是 GCE 虚拟机
+   + 那些虚拟机需要在与 PD 一样在 GCE 项目和区域中
 
-PD 的一个特点是它们可以同时被多个用户以只读方式挂载。这意味着可以预先使用您的数据集填充 PD，然后根据需要给多个 Pod 中并行提供
+   PD 的一个特点是它们可以同时被多个用户以只读方式挂载。这意味着可以预先使用您的数据集填充 PD，然后根据需要给多个 Pod 中并行提供
 
-#+begin_example
-  不幸的是，只能由单个消费者以读写模式挂载 PD，而不允许同时写入
+   #+begin_example
+     不幸的是，只能由单个消费者以读写模式挂载 PD，而不允许同时写入
 
-  在由 ReplicationController 控制的 pod 上使用 PD 将会失败，除非 PD 是只读的或者副本数是 0 或 1
-#+end_example
+     在由 ReplicationController 控制的 pod 上使用 PD 将会失败，除非 PD 是只读的或者副本数是 0 或 1
+   #+end_example
 
 *** 创建 PD
-在 pod 中使用 GCE PD 之前，需要先创建它：
+    在 pod 中使用 GCE PD 之前，需要先创建它：
 
-#+begin_src sh 
-  $ gcloud compute disks create --size=500GB --zone=us-central1-a my-data-disk
-#+end_src
+    #+begin_src sh 
+      $ gcloud compute disks create --size=500GB --zone=us-central1-a my-data-disk
+    #+end_src
 
 *** 示例
 
@@ -268,6 +268,47 @@ PD 的一个特点是它们可以同时被多个用户以只读方式挂载。�
 
 ** gitRepo 
 
+   gitRepo 卷是一个可以演示卷插件功能的示例。它会 *挂载* 一个 _空目录_ 并将 _git 存储库_ *克隆* 到容器中
 
+   #+begin_example
+     将来，这样的卷可能会转移到一个更加分离的模型，而不是为每个这样的用例扩展 Kubernetes API
+   #+end_example
 
+   下面是 gitRepo 卷示例：
 
+   #+begin_example
+     apiVersion: v1
+     kind: Pod
+     metadata:
+       name: server
+     spec:
+       containers:
+       - image: nginx
+	 name: nginx
+	 volumeMounts:
+	 - mountPath: /mypath
+	   name: git-volume
+       volumes:
+       - name: git-volume
+	 gitRepo:
+	   repository: "git@somewhere:me/my-git-repository.git"
+	   revision: "22f1d8406d464b0c0874075539c1f2e96c253775"
+   #+end_example
+
+** glusterfs
+   #+begin_example
+     glusterfs 一个开放源代码的网络文件系统
+   #+end_example
+
+   glusterfs 卷允许将 _Glusterfs_ 卷挂载到的集群中：
+   + 与删除 Pod 时删除的 emptyDir 不同，glusterfs 卷的内容将被保留，而卷仅仅被卸载
+     #+begin_example
+       这意味着 glusterfs 卷可以预先填充数据，并且可以在数据包之间“切换”数据
+     #+end_example
+   + GlusterFS 可以同时由多个写入挂载 
+
+   #+begin_example
+     必须先自行安装 GlusterFS，才能使用它
+   #+end_example
+
+** hostPath

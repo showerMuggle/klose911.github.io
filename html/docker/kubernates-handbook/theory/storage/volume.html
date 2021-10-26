@@ -243,7 +243,7 @@
 <li><a href="#orgc96a796">downwardAPI</a></li>
 <li><a href="#org123b341">emptyDir</a>
 <ul>
-<li><a href="#org2ed5890">示例</a></li>
+<li><a href="#org9fe74dd">示例</a></li>
 </ul>
 </li>
 <li><a href="#org9e686a5">fc</a></li>
@@ -251,16 +251,18 @@
 <li><a href="#orgc52bf17">gcePersistentDisk</a>
 <ul>
 <li><a href="#org4f3ffb5">创建 PD</a></li>
-<li><a href="#org9fe74dd">示例</a></li>
+<li><a href="#org56f5ee8">示例</a></li>
 </ul>
 </li>
 <li><a href="#orgd7b237c">gitRepo</a></li>
+<li><a href="#org727a140">glusterfs</a></li>
+<li><a href="#org7233297">hostPath</a></li>
 </ul>
 </li>
 </ul>
 </div>
 </div>
-<pre class="example" id="org09438ee">
+<pre class="example" id="orgdacef85">
 容器磁盘上的文件的生命周期是短暂的，这就使得在容器中运行重要应用时会出现一些问题
 
 首先，当容器崩溃时，kubelet 会重启它，但是容器中的文件将丢失——容器以干净的状态（镜像最初的状态）重新启动
@@ -274,7 +276,7 @@ Kubernetes 中的 Volume 抽象就很好的解决了这些问题
 <div id="outline-container-org1f65149" class="outline-2">
 <h2 id="org1f65149">背景</h2>
 <div class="outline-text-2" id="text-org1f65149">
-<pre class="example" id="orgfe72c47">
+<pre class="example" id="org7837c1c">
 Docker 中也有一个 volume 的概念，尽管它稍微宽松一些，管理也很少
 
 在 Docker 中，卷就像是磁盘或是另一个容器中的一个目录
@@ -287,7 +289,7 @@ Docker 现在提供了卷驱动程序，但是功能还非常有限。例如 Doc
 <li><p>
 Kubernetes 中的卷有明确的寿命：与封装它的 Pod 相同。所以，卷的生命比 Pod 中的所有容器都长，当这个容器重启时数据仍然得以保存
 </p>
-<pre class="example" id="orgf5b4d6e">
+<pre class="example" id="orgb461b9b">
 当然，当 Pod 不再存在时，卷也将不复存在
 </pre></li>
 <li>更重要的是，Kubernetes 支持多种类型的卷，Pod 可以同时使用任意数量的卷</li>
@@ -296,7 +298,7 @@ Kubernetes 中的卷有明确的寿命：与封装它的 Pod 相同。所以，�
 <p>
 卷的核心是目录，可能还包含了一些数据，可以通过 pod 中的容器来访问
 </p>
-<pre class="example" id="orga796010">
+<pre class="example" id="orgb368aa6">
 该目录是如何形成的、支持该目录的介质以及其内容取决于所使用的特定卷类型
 </pre>
 
@@ -304,7 +306,7 @@ Kubernetes 中的卷有明确的寿命：与封装它的 Pod 相同。所以，�
 要使用卷，需要为 pod 指定为卷 <span class="underline">spec.volumes</span> 字段 以及将它挂载到容器的位置 <span class="underline">spec.containers.volumeMounts</span> 字段 
 </p>
 
-<pre class="example" id="org3cb5243">
+<pre class="example" id="orge9c704b">
 容器中的进程看到的是由其 Docker 镜像和卷组成的文件系统视图
 
 Docker 镜像位于文件系统层次结构的根目录，任何卷都被挂载在镜像的指定路径中
@@ -360,12 +362,12 @@ awsElasticBlockStore 卷将 <span class="underline">AWS EBS Volume</span> 挂载
 <li><p>
 与 emptyDir 类型会在删除 Pod 时被清除不同，EBS 卷的的内容会保留下来，仅仅是被 <b>卸载</b>
 </p>
-<pre class="example" id="orgcffcf4b">
+<pre class="example" id="org58a8c33">
 这意味着 EBS 卷可以预先填充数据，并且可以在数据包之间“切换”数据 
 </pre></li>
 </ul>
 
-<pre class="example" id="org4f346c3">
+<pre class="example" id="org5e4d9e4">
 必须使用 aws ec2 create-volume 或 AWS API 创建 EBS 卷，才能使用它
 </pre>
 
@@ -400,7 +402,7 @@ awsElasticBlockStore 卷将 <span class="underline">AWS EBS Volume</span> 挂载
 <div id="outline-container-org9fb2f81" class="outline-4">
 <h4 id="org9fb2f81">配置</h4>
 <div class="outline-text-4" id="text-org9fb2f81">
-<pre class="example" id="org11f38db">
+<pre class="example" id="org4de2617">
 apiVersion: v1
 kind: Pod
 metadata:
@@ -451,13 +453,13 @@ cephfs 卷允许将现有的 CephFS 卷挂载到您的容器中：
 <li><p>
 不像 emptyDir，当删除 Pod 时被删除，cephfs 卷的内容将被保留，卷仅仅是被卸载
 </p>
-<pre class="example" id="org261be8b">
+<pre class="example" id="orgb6b7812">
 这意味着 CephFS 卷可以预先填充数据，并且可以在数据包之间“切换”数据
 </pre></li>
 <li>CephFS 可以被多个写设备同时挂载</li>
 </ul>
 
-<pre class="example" id="org84ce668">
+<pre class="example" id="orgb78b2b0">
 必须先拥有自己的 Ceph 服务器，然后才能使用它
 </pre>
 </div>
@@ -469,7 +471,7 @@ cephfs 卷允许将现有的 CephFS 卷挂载到您的容器中：
 <p>
 <span class="underline">CSI</span> 代表 <b>容器存储接口</b>
 </p>
-<pre class="example" id="org458704e">
+<pre class="example" id="org11af9a7">
 CSI 试图建立一个行业标准接口的规范，借助 CSI 容器编排系统可以将任意存储系统暴露给自己的容器工作负载
 </pre>
 
@@ -477,7 +479,7 @@ CSI 试图建立一个行业标准接口的规范，借助 CSI 容器编排系�
 csi 卷类型是一种 <span class="underline">in-tree</span> 的 <span class="underline">CSI 卷插件</span> ，用于 Pod 与在 <span class="underline">同一节点</span> 上运行的 <span class="underline">外部 CSI 卷驱动程序</span> 交互。部署 CSI 兼容卷驱动后，用户可以使用 csi 作为卷类型来挂载驱动提供的存储
 </p>
 
-<pre class="example" id="org6e32a4f">
+<pre class="example" id="orge45bdc6">
 CSI 持久化卷支持是在 Kubernetes v1.9 中引入的，作为一个 alpha 特性，必须由集群管理员明确启用
 
 换句话说，集群管理员需要在 apiserver、controller-manager 和 kubelet 组件的 “--feature-gates =” 标志中加上 “CSIPersistentVolume = true”
@@ -521,7 +523,7 @@ downwardAPI 卷用于使 <span class="underline">向下 API 数据</span> 对应
 <li>当出于任何原因从节点中删除 Pod 时，emptyDir 中的数据将被 <b>永久</b> 删除</li>
 </ul>
 
-<pre class="example" id="orga52e70f">
+<pre class="example" id="org72905fd">
 注意：容器崩溃不会从节点中移除 pod，因此 emptyDir 卷中的数据在容器崩溃时是安全的
 </pre>
 
@@ -535,10 +537,10 @@ emptyDir 的用法有：
 </ul>
 </div>
 
-<div id="outline-container-org2ed5890" class="outline-4">
-<h4 id="org2ed5890">示例</h4>
-<div class="outline-text-4" id="text-org2ed5890">
-<pre class="example" id="orgd7ff62c">
+<div id="outline-container-org9fe74dd" class="outline-4">
+<h4 id="org9fe74dd">示例</h4>
+<div class="outline-text-4" id="text-org9fe74dd">
+<pre class="example" id="org9423c81">
 apiVersion: v1
 kind: Pod
 metadata:
@@ -568,7 +570,7 @@ fc 卷允许将现有的 fc 卷挂载到 pod 中。可以使用卷配置中的 t
 <li>如果指定了多个 WWN，则 targetWWN 期望这些 WWN 来自多路径连接</li>
 </ul>
 
-<pre class="example" id="orgd7365d0">
+<pre class="example" id="orgdb8b907">
 必须配置 FC SAN 区域划分，并预先将这些 LUN（卷）分配并屏蔽到目标 WWN，以便 Kubernetes 主机可以访问它们
 </pre>
 </div>
@@ -585,12 +587,12 @@ Flocker 是一款开源的 <span class="underline">集群容器数据卷管理�
 <li><p>
 如果数据集已经存在，它将被 Flocker 重新连接到 pod 被调度的节点上
 </p>
-<pre class="example" id="orgae9455a">
+<pre class="example" id="orga590029">
 这意味着数据可以根据需要在数据包之间“切换” 
 </pre></li>
 </ul>
 
-<pre class="example" id="org8de3cd9">
+<pre class="example" id="orgd94390a">
 重要提示：必须先运行自己的 Flocker 安装程序才能使用它
 </pre>
 </div>
@@ -606,12 +608,12 @@ gcePersistentDisk 卷将 <span class="underline">GCE Persistent Disk</span> 挂�
 <li><p>
 与删除 Pod 时删除的 emptyDir 不同，PD 的内容被保留，只是卸载了卷
 </p>
-<pre class="example" id="org5eb55a3">
+<pre class="example" id="org7bf3acd">
 这意味着 PD 可以预先填充数据，并且数据可以在 Pod 之间“切换”
 </pre></li>
 </ul>
 
-<pre class="example" id="orgbd8aded">
+<pre class="example" id="org11f651f">
 必须先使用 gcloud 或 GCE API 或 UI 创建一个 PD，然后才能使用它
 </pre>
 
@@ -627,7 +629,7 @@ gcePersistentDisk 卷将 <span class="underline">GCE Persistent Disk</span> 挂�
 PD 的一个特点是它们可以同时被多个用户以只读方式挂载。这意味着可以预先使用您的数据集填充 PD，然后根据需要给多个 Pod 中并行提供
 </p>
 
-<pre class="example" id="orge06cb4c">
+<pre class="example" id="org64575ca">
 不幸的是，只能由单个消费者以读写模式挂载 PD，而不允许同时写入
 
 在由 ReplicationController 控制的 pod 上使用 PD 将会失败，除非 PD 是只读的或者副本数是 0 或 1
@@ -648,10 +650,10 @@ PD 的一个特点是它们可以同时被多个用户以只读方式挂载。�
 </div>
 </div>
 
-<div id="outline-container-org9fe74dd" class="outline-4">
-<h4 id="org9fe74dd">示例</h4>
-<div class="outline-text-4" id="text-org9fe74dd">
-<pre class="example" id="org80f6320">
+<div id="outline-container-org56f5ee8" class="outline-4">
+<h4 id="org56f5ee8">示例</h4>
+<div class="outline-text-4" id="text-org56f5ee8">
+<pre class="example" id="orgb29e069">
 apiVersion: v1
 kind: Pod
 metadata:
@@ -676,6 +678,68 @@ spec:
 
 <div id="outline-container-orgd7b237c" class="outline-3">
 <h3 id="orgd7b237c">gitRepo</h3>
+<div class="outline-text-3" id="text-orgd7b237c">
+<p>
+gitRepo 卷是一个可以演示卷插件功能的示例。它会 <b>挂载</b> 一个 <span class="underline">空目录</span> 并将 <span class="underline">git 存储库</span> <b>克隆</b> 到容器中
+</p>
+
+<pre class="example" id="org70c217b">
+将来，这样的卷可能会转移到一个更加分离的模型，而不是为每个这样的用例扩展 Kubernetes API
+</pre>
+
+<p>
+下面是 gitRepo 卷示例：
+</p>
+
+<pre class="example" id="org937a6c4">
+apiVersion: v1
+kind: Pod
+metadata:
+  name: server
+spec:
+  containers:
+  - image: nginx
+    name: nginx
+    volumeMounts:
+    - mountPath: /mypath
+      name: git-volume
+  volumes:
+  - name: git-volume
+    gitRepo:
+      repository: "git@somewhere:me/my-git-repository.git"
+      revision: "22f1d8406d464b0c0874075539c1f2e96c253775"
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org727a140" class="outline-3">
+<h3 id="org727a140">glusterfs</h3>
+<div class="outline-text-3" id="text-org727a140">
+<pre class="example" id="org065bdaf">
+glusterfs 一个开放源代码的网络文件系统
+</pre>
+
+<p>
+glusterfs 卷允许将 <span class="underline">Glusterfs</span> 卷挂载到的集群中：
+</p>
+<ul class="org-ul">
+<li><p>
+与删除 Pod 时删除的 emptyDir 不同，glusterfs 卷的内容将被保留，而卷仅仅被卸载
+</p>
+<pre class="example" id="orgfb0dc4f">
+这意味着 glusterfs 卷可以预先填充数据，并且可以在数据包之间“切换”数据
+</pre></li>
+<li>GlusterFS 可以同时由多个写入挂载</li>
+</ul>
+
+<pre class="example" id="orga727856">
+必须先自行安装 GlusterFS，才能使用它
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org7233297" class="outline-3">
+<h3 id="org7233297">hostPath</h3>
 </div>
 </div>
 </div>
