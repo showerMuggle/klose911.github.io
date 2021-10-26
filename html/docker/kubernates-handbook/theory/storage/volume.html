@@ -248,12 +248,19 @@
 </li>
 <li><a href="#org9e686a5">fc</a></li>
 <li><a href="#orgf7a0398">flocker</a></li>
+<li><a href="#orgc52bf17">gcePersistentDisk</a>
+<ul>
+<li><a href="#org4f3ffb5">创建 PD</a></li>
+<li><a href="#org9fe74dd">示例</a></li>
+</ul>
+</li>
+<li><a href="#orgd7b237c">gitRepo</a></li>
 </ul>
 </li>
 </ul>
 </div>
 </div>
-<pre class="example" id="org7589658">
+<pre class="example" id="org09438ee">
 容器磁盘上的文件的生命周期是短暂的，这就使得在容器中运行重要应用时会出现一些问题
 
 首先，当容器崩溃时，kubelet 会重启它，但是容器中的文件将丢失——容器以干净的状态（镜像最初的状态）重新启动
@@ -267,7 +274,7 @@ Kubernetes 中的 Volume 抽象就很好的解决了这些问题
 <div id="outline-container-org1f65149" class="outline-2">
 <h2 id="org1f65149">背景</h2>
 <div class="outline-text-2" id="text-org1f65149">
-<pre class="example" id="org755825d">
+<pre class="example" id="orgfe72c47">
 Docker 中也有一个 volume 的概念，尽管它稍微宽松一些，管理也很少
 
 在 Docker 中，卷就像是磁盘或是另一个容器中的一个目录
@@ -280,7 +287,7 @@ Docker 现在提供了卷驱动程序，但是功能还非常有限。例如 Doc
 <li><p>
 Kubernetes 中的卷有明确的寿命：与封装它的 Pod 相同。所以，卷的生命比 Pod 中的所有容器都长，当这个容器重启时数据仍然得以保存
 </p>
-<pre class="example" id="org295a681">
+<pre class="example" id="orgf5b4d6e">
 当然，当 Pod 不再存在时，卷也将不复存在
 </pre></li>
 <li>更重要的是，Kubernetes 支持多种类型的卷，Pod 可以同时使用任意数量的卷</li>
@@ -289,7 +296,7 @@ Kubernetes 中的卷有明确的寿命：与封装它的 Pod 相同。所以，�
 <p>
 卷的核心是目录，可能还包含了一些数据，可以通过 pod 中的容器来访问
 </p>
-<pre class="example" id="orgcb9fcbc">
+<pre class="example" id="orga796010">
 该目录是如何形成的、支持该目录的介质以及其内容取决于所使用的特定卷类型
 </pre>
 
@@ -297,7 +304,7 @@ Kubernetes 中的卷有明确的寿命：与封装它的 Pod 相同。所以，�
 要使用卷，需要为 pod 指定为卷 <span class="underline">spec.volumes</span> 字段 以及将它挂载到容器的位置 <span class="underline">spec.containers.volumeMounts</span> 字段 
 </p>
 
-<pre class="example" id="org12f7d7f">
+<pre class="example" id="org3cb5243">
 容器中的进程看到的是由其 Docker 镜像和卷组成的文件系统视图
 
 Docker 镜像位于文件系统层次结构的根目录，任何卷都被挂载在镜像的指定路径中
@@ -353,12 +360,12 @@ awsElasticBlockStore 卷将 <span class="underline">AWS EBS Volume</span> 挂载
 <li><p>
 与 emptyDir 类型会在删除 Pod 时被清除不同，EBS 卷的的内容会保留下来，仅仅是被 <b>卸载</b>
 </p>
-<pre class="example" id="org69310f1">
+<pre class="example" id="orgcffcf4b">
 这意味着 EBS 卷可以预先填充数据，并且可以在数据包之间“切换”数据 
 </pre></li>
 </ul>
 
-<pre class="example" id="org80f062a">
+<pre class="example" id="org4f346c3">
 必须使用 aws ec2 create-volume 或 AWS API 创建 EBS 卷，才能使用它
 </pre>
 
@@ -393,7 +400,7 @@ awsElasticBlockStore 卷将 <span class="underline">AWS EBS Volume</span> 挂载
 <div id="outline-container-org9fb2f81" class="outline-4">
 <h4 id="org9fb2f81">配置</h4>
 <div class="outline-text-4" id="text-org9fb2f81">
-<pre class="example" id="org74a2488">
+<pre class="example" id="org11f38db">
 apiVersion: v1
 kind: Pod
 metadata:
@@ -444,13 +451,13 @@ cephfs 卷允许将现有的 CephFS 卷挂载到您的容器中：
 <li><p>
 不像 emptyDir，当删除 Pod 时被删除，cephfs 卷的内容将被保留，卷仅仅是被卸载
 </p>
-<pre class="example" id="org4ade89a">
+<pre class="example" id="org261be8b">
 这意味着 CephFS 卷可以预先填充数据，并且可以在数据包之间“切换”数据
 </pre></li>
 <li>CephFS 可以被多个写设备同时挂载</li>
 </ul>
 
-<pre class="example" id="org64fa65d">
+<pre class="example" id="org84ce668">
 必须先拥有自己的 Ceph 服务器，然后才能使用它
 </pre>
 </div>
@@ -462,7 +469,7 @@ cephfs 卷允许将现有的 CephFS 卷挂载到您的容器中：
 <p>
 <span class="underline">CSI</span> 代表 <b>容器存储接口</b>
 </p>
-<pre class="example" id="org6d541b1">
+<pre class="example" id="org458704e">
 CSI 试图建立一个行业标准接口的规范，借助 CSI 容器编排系统可以将任意存储系统暴露给自己的容器工作负载
 </pre>
 
@@ -470,7 +477,7 @@ CSI 试图建立一个行业标准接口的规范，借助 CSI 容器编排系�
 csi 卷类型是一种 <span class="underline">in-tree</span> 的 <span class="underline">CSI 卷插件</span> ，用于 Pod 与在 <span class="underline">同一节点</span> 上运行的 <span class="underline">外部 CSI 卷驱动程序</span> 交互。部署 CSI 兼容卷驱动后，用户可以使用 csi 作为卷类型来挂载驱动提供的存储
 </p>
 
-<pre class="example" id="org005c677">
+<pre class="example" id="org6e32a4f">
 CSI 持久化卷支持是在 Kubernetes v1.9 中引入的，作为一个 alpha 特性，必须由集群管理员明确启用
 
 换句话说，集群管理员需要在 apiserver、controller-manager 和 kubelet 组件的 “--feature-gates =” 标志中加上 “CSIPersistentVolume = true”
@@ -514,7 +521,7 @@ downwardAPI 卷用于使 <span class="underline">向下 API 数据</span> 对应
 <li>当出于任何原因从节点中删除 Pod 时，emptyDir 中的数据将被 <b>永久</b> 删除</li>
 </ul>
 
-<pre class="example" id="orgb93cbd6">
+<pre class="example" id="orga52e70f">
 注意：容器崩溃不会从节点中移除 pod，因此 emptyDir 卷中的数据在容器崩溃时是安全的
 </pre>
 
@@ -531,7 +538,7 @@ emptyDir 的用法有：
 <div id="outline-container-org2ed5890" class="outline-4">
 <h4 id="org2ed5890">示例</h4>
 <div class="outline-text-4" id="text-org2ed5890">
-<pre class="example" id="orga753692">
+<pre class="example" id="orgd7ff62c">
 apiVersion: v1
 kind: Pod
 metadata:
@@ -561,7 +568,7 @@ fc 卷允许将现有的 fc 卷挂载到 pod 中。可以使用卷配置中的 t
 <li>如果指定了多个 WWN，则 targetWWN 期望这些 WWN 来自多路径连接</li>
 </ul>
 
-<pre class="example" id="org6471d2b">
+<pre class="example" id="orgd7365d0">
 必须配置 FC SAN 区域划分，并预先将这些 LUN（卷）分配并屏蔽到目标 WWN，以便 Kubernetes 主机可以访问它们
 </pre>
 </div>
@@ -578,15 +585,97 @@ Flocker 是一款开源的 <span class="underline">集群容器数据卷管理�
 <li><p>
 如果数据集已经存在，它将被 Flocker 重新连接到 pod 被调度的节点上
 </p>
-<pre class="example" id="org98f9fea">
+<pre class="example" id="orgae9455a">
 这意味着数据可以根据需要在数据包之间“切换” 
 </pre></li>
 </ul>
 
-<pre class="example" id="org5367c3b">
+<pre class="example" id="org8de3cd9">
 重要提示：必须先运行自己的 Flocker 安装程序才能使用它
 </pre>
 </div>
+</div>
+
+<div id="outline-container-orgc52bf17" class="outline-3">
+<h3 id="orgc52bf17">gcePersistentDisk</h3>
+<div class="outline-text-3" id="text-orgc52bf17">
+<p>
+gcePersistentDisk 卷将 <span class="underline">GCE Persistent Disk</span> 挂载到容器中
+</p>
+<ul class="org-ul">
+<li><p>
+与删除 Pod 时删除的 emptyDir 不同，PD 的内容被保留，只是卸载了卷
+</p>
+<pre class="example" id="org5eb55a3">
+这意味着 PD 可以预先填充数据，并且数据可以在 Pod 之间“切换”
+</pre></li>
+</ul>
+
+<pre class="example" id="orgbd8aded">
+必须先使用 gcloud 或 GCE API 或 UI 创建一个 PD，然后才能使用它
+</pre>
+
+<p>
+使用 gcePersistentDisk 时有一些限制：
+</p>
+<ul class="org-ul">
+<li>运行 Pod 的节点必须是 GCE 虚拟机</li>
+<li>那些虚拟机需要在与 PD 一样在 GCE 项目和区域中</li>
+</ul>
+
+<p>
+PD 的一个特点是它们可以同时被多个用户以只读方式挂载。这意味着可以预先使用您的数据集填充 PD，然后根据需要给多个 Pod 中并行提供
+</p>
+
+<pre class="example" id="orge06cb4c">
+不幸的是，只能由单个消费者以读写模式挂载 PD，而不允许同时写入
+
+在由 ReplicationController 控制的 pod 上使用 PD 将会失败，除非 PD 是只读的或者副本数是 0 或 1
+</pre>
+</div>
+
+<div id="outline-container-org4f3ffb5" class="outline-4">
+<h4 id="org4f3ffb5">创建 PD</h4>
+<div class="outline-text-4" id="text-org4f3ffb5">
+<p>
+在 pod 中使用 GCE PD 之前，需要先创建它：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ gcloud compute disks create --size=500GB --zone=us-central1-a my-data-disk
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org9fe74dd" class="outline-4">
+<h4 id="org9fe74dd">示例</h4>
+<div class="outline-text-4" id="text-org9fe74dd">
+<pre class="example" id="org80f6320">
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-pd
+spec:
+  containers:
+  - image: k8s.gcr.io/test-webserver
+    name: test-container
+    volumeMounts:
+    - mountPath: /test-pd
+      name: test-volume
+  volumes:
+  - name: test-volume
+    # This GCE PD must already exist.
+    gcePersistentDisk:
+      pdName: my-data-disk
+      fsType: ext4
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgd7b237c" class="outline-3">
+<h3 id="orgd7b237c">gitRepo</h3>
 </div>
 </div>
 </div>
