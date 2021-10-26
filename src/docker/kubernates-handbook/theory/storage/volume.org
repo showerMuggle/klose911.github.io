@@ -337,16 +337,16 @@ Kubernetes 中的 Volume 抽象就很好的解决了这些问题
    | CharDevice        | 给定的路径下必须存在字符设备                                                                                             |
    | BlockDevice       | 给定的路径下必须存在块设备                                                                                               |
 
-使用这种卷类型是请注意，因为：
-+ 由于每个节点上的文件都不同，具有相同配置的 pod 在不同节点上的行为可能会有所不同
-  #+begin_example
-    例如从 podTemplate 创建的
-  #+end_example
-+ 当 Kubernetes 按照计划添加资源感知调度时，将无法考虑 hostPath 使用的资源
-+ 在底层主机上创建的文件或目录只能由 root 写入
-  #+begin_example
-    需要在特权容器中以 root 身份运行进程，或修改主机上的文件权限以便写入 hostPath 卷
-  #+end_example
+   使用这种卷类型是请注意，因为：
+   + 由于每个节点上的文件都不同，具有相同配置的 pod 在不同节点上的行为可能会有所不同
+     #+begin_example
+       例如从 podTemplate 创建的
+     #+end_example
+   + 当 Kubernetes 按照计划添加资源感知调度时，将无法考虑 hostPath 使用的资源
+   + 在底层主机上创建的文件或目录只能由 root 写入
+     #+begin_example
+       需要在特权容器中以 root 身份运行进程，或修改主机上的文件权限以便写入 hostPath 卷
+     #+end_example
 
 *** 示例
     #+begin_example
@@ -371,23 +371,92 @@ Kubernetes 中的 Volume 抽象就很好的解决了这些问题
     #+end_example
 
 ** iscsi
-iscsi 卷允许将现有的 _SCSI over IP_ 卷挂载到容器中
-+ 不像 emptyDir，删除 Pod 时 iscsi 卷的内容将被保留，卷仅仅是被卸载
-  #+begin_example
-    这意味着 iscsi 卷可以预先填充数据，并且这些数据可以在 pod 之间“切换”
-  #+end_example
+   iscsi 卷允许将现有的 ISCSI _SCSI over IP_ 卷挂载到容器中
+   + 不像 emptyDir，删除 Pod 时 iscsi 卷的内容将被保留，卷仅仅是被卸载
+     #+begin_example
+       这意味着 iscsi 卷可以预先填充数据，并且这些数据可以在 pod 之间“切换”
+     #+end_example
 
-#+begin_example
-  必须先创建自己的 iSCSI 服务器，然后才能使用它
-#+end_example
+   #+begin_example
+     必须先创建自己的 iSCSI 服务器，然后才能使用它
+   #+end_example
 
-iSCSI 的一个特点是它可以同时被多个用户以只读方式安装
+   iSCSI 的一个特点是它可以同时被多个用户以只读方式安装
 
-#+begin_example
-  这意味着可以预先使用数据集填充卷，然后根据需要向多个额 pod 同时提供
+   #+begin_example
+     这意味着可以预先使用数据集填充卷，然后根据需要向多个额 pod 同时提供
 
-  不幸的是，iSCSI 卷只能由单个使用者以读写模式挂载——不允许同时写入
-#+end_example
+     不幸的是，iSCSI 卷只能由单个使用者以读写模式挂载——不允许同时写入
+   #+end_example
 
 ** local
+   #+begin_example
+     这个 alpha 功能要求启用 PersistentLocalVolumes feature gate
 
+     注意：从 1.9 开始，VolumeScheduling feature gate 也必须启用
+   #+end_example
+
+   local 卷表示挂载的 _本地存储设备_ ，如磁盘、分区或目录。本地卷只能用作 *静态创建* 的 _PersistentVolume_ 
+
+   #+begin_example
+     与 HostPath 卷相比，local 卷可以以持久的方式使用，而无需手动将 pod 调度到节点上，因为系统会通过查看 PersistentVolume 上的节点关联性来了解卷的节点约束
+
+     但是，local 卷仍然受底层节点的可用性影响，并不适用于所有应用程序
+   #+end_example
+
+*** 示例
+    使用 local 卷的示例 PersistentVolume 规范：
+    #+begin_example
+      apiVersion: v1
+      kind: PersistentVolume
+      metadata:
+	name: example-pv
+	annotations:
+	      "volume.alpha.kubernetes.io/node-affinity": '{
+		  "requiredDuringSchedulingIgnoredDuringExecution": {
+		      "nodeSelectorTerms": [
+			  { "matchExpressions": [
+			      { "key": "kubernetes.io/hostname",
+				"operator": "In",
+				"values": ["example-node"]
+			      }
+			  ]}
+		       ]}
+		    }'
+      spec:
+	  capacity:
+	    storage: 100Gi
+	  accessModes:
+	  - ReadWriteOnce
+	  persistentVolumeReclaimPolicy: Delete
+	  storageClassName: local-storage
+	  local:
+	    path: /mnt/disks/ssd1
+    #+end_example
+
+    注意：本地 PersistentVolume _清理_ 和 _删除_ 需要 *手动干预* ，无外部提供程序
+
+    #+begin_example
+      从 1.9 开始，本地卷绑定可以被延迟，直到通过具有 StorageClass 中的 WaitForFirstConsumer 设置为volumeBindingMode 的 pod 开始调度
+    #+end_example
+
+** nfs
+   nfs 卷允许将现有的 NFS _网络文件系统_ 共享挂载到您的容器中：
+   + 不像 emptyDir，当删除 Pod 时，nfs 卷的内容被保留，卷仅仅是被卸载
+     #+begin_example
+       这意味着 NFS 卷可以预填充数据，并且可以在 pod 之间“切换”数据
+     #+end_example
+   + NFS 可以被多个写入者同时挂载
+
+   #+begin_example
+     必须先拥有自己的 NFS 服务器才能使用它，然后才能使用它
+   #+end_example
+
+** persistentVolumeClaim
+   persistentVolumeClaim 卷用于将 _PersistentVolume_ 挂载到容器中。PersistentVolumes 是在用户不知道特定云环境的细节的情况下“声明”持久化存储
+
+   #+begin_example
+     例如 GCE PersistentDisk 或 iSCSI 卷的一种方式
+   #+end_example
+
+** 
