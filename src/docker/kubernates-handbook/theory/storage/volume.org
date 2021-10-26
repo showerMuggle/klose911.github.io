@@ -459,4 +459,89 @@ Kubernetes 中的 Volume 抽象就很好的解决了这些问题
      例如 GCE PersistentDisk 或 iSCSI 卷的一种方式
    #+end_example
 
-** 
+** projected
+   projected 卷将几个 _现有的卷源_ *映射* 到同一个目录中。目前，可以映射以下类型的卷来源：
+   + secret
+   + downwardAPI
+   + configMap
+
+     所有来源都必须在与 pod 相同的命名空间中
+
+*** 带有 secret、downward API 和 configmap 的 pod
+    #+begin_example
+      apiVersion: v1
+      kind: Pod
+      metadata:
+	name: volume-test
+      spec:
+	containers:
+	- name: container-test
+	  image: busybox
+	  volumeMounts:
+	  - name: all-in-one
+	    mountPath: "/projected-volume"
+	    readOnly: true
+	volumes:
+	- name: all-in-one
+	  projected:
+	    sources:
+	    - secret:
+		name: mysecret
+		items:
+		  - key: username
+		    path: my-group/my-username
+	    - downwardAPI:
+		items:
+		  - path: "labels"
+		    fieldRef:
+		      fieldPath: metadata.labels
+		  - path: "cpu_limit"
+		    resourceFieldRef:
+		      containerName: container-test
+		      resource: limits.cpu
+	    - configMap:
+		name: myconfigmap
+		items:
+		  - key: config
+		    path: my-group/my-config
+    #+end_example
+
+*** 使用非默认权限模式设置多个 secret
+    #+begin_example
+      apiVersion: v1
+      kind: Pod
+      metadata:
+	name: volume-test
+      spec:
+	containers:
+	- name: container-test
+	  image: busybox
+	  volumeMounts:
+	  - name: all-in-one
+	    mountPath: "/projected-volume"
+	    readOnly: true
+	volumes:
+	- name: all-in-one
+	  projected:
+	    sources:
+	    - secret:
+		name: mysecret
+		items:
+		  - key: username
+		    path: my-group/my-username
+	    - secret:
+		name: mysecret2
+		items:
+		  - key: password
+		    path: my-group/my-password
+		    mode: 511
+    #+end_example
+
+    每个映射的卷来源在 sources 下的规格中列出。除了以下两个例外，参数几乎相同：
+    + 对于 secret，secretName 字段已经被更改为 name 以与 ConfigMap 命名一致
+    + defaultMode 只能在映射级别指定，而不能针对每个卷源指定
+      #+begin_example
+	但是，如上所述，可以明确设置每个映射的 mode
+      #+end_example
+
+** portworxVolume
