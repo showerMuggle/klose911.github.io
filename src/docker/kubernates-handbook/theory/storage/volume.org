@@ -734,5 +734,87 @@ Kubernetes 中的 Volume 抽象就很好的解决了这些问题
     #+end_example
 
     
-* 使用 subPath
+* subPath
 
+  有时，在 _单个容器_ 中 *共享* _一个卷_ 用于 _多个用途_ 是有用的， _volumeMounts.subPath_ 属性可用于在引用的卷内而不是其根目录中指定子路径。下面是一个使用单个共享卷的 LAMP 的示例。 HTML 内容被映射到它的 html 目录，数据库将被存储在它的 mysql 目录中：
+
+  #+begin_example
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: my-lamp-site
+    spec:
+	containers:
+	- name: mysql
+	  image: mysql
+	  env:
+	  - name: MYSQL_ROOT_PASSWORD
+	    value: "rootpasswd" 
+	  volumeMounts:
+	  - mountPath: /var/lib/mysql
+	    name: site-data
+	    subPath: mysql
+	- name: php
+	  image: php:7.0-apache
+	  volumeMounts:
+	  - mountPath: /var/www/html
+	    name: site-data
+	    subPath: html
+	volumes:
+	- name: site-data
+	  persistentVolumeClaim:
+	    claimName: my-lamp-site-data
+  #+end_example
+
+* 资源限制
+  emptyDir 卷的存储介质（磁盘、SSD 等）由保存在 kubelet 根目录的文件系统的介质（通常是 /var/lib/kubelet）决定。 emptyDir 或 hostPath 卷可占用多少空间并没有限制，容器之间或 Pod 之间也没有隔离
+
+  #+begin_example
+    将来，emptyDir 和 hostPath 卷将能够使用 resource 规范请求一定的空间，并选择要使用的介质，适用于具有多种媒体类型的集群
+  #+end_example
+
+* Out-of-Tree 卷插件
+  除了之前列出的卷类型之外，存储供应商可以创建自定义插件而不将其添加到 Kubernetes 存储库中。可以通过使用 _FlexVolume_ 插件来实现
+
+  #+begin_example
+    FlexVolume使用户能够将供应商卷挂载到容器中
+
+    供应商插件是使用驱动程序实现的，该驱动程序支持由 FlexVolume API定义的一系列卷命令
+
+    驱动程序必须安装在每个节点的预定义卷插件路径中
+  #+end_example
+
+* 挂载传播
+  #+begin_example
+    注意：挂载传播是 Kubernetes 1.8 中的一个 alpha 特性，在将来的版本中可能会重新设计甚至删除
+  #+end_example
+
+  挂载传播允许将由 _容器挂载的卷_ *共享* 到 _同一个 Pod_ 中的 _其他容器_ 上，甚至是 _同一节点_ 上的其他 Pod
+
+  #+begin_example
+    如果禁用 MountPropagation 功能，则不会传播 pod 中的卷挂载
+
+    也就是说，容器按照 Linux内核文档中所述的 private 挂载传播运行
+  #+end_example
+  要启用此功能，请在 _--feature-gates_ 命令行选项中指定 _MountPropagation = true_ 。启用时，容器的 _volumeMounts_ 字段有一个新的 _mountPropagation_ 子字段。它的值为：
+  + _HostToContainer_ ：此卷挂载将 *接收* _所有后续_ 挂载到此卷或其任何子目录的挂载。这是 MountPropagation 功能启用时的默认模式。
+    #+begin_example
+      同样的，如果任何带有 Bidirectional 挂载传播的 pod 挂载到同一个卷上，带有 HostToContainer 挂载传播的容器将会看到它
+
+      该模式等同于Linux内核文档中描述的 rslave 挂载传播
+    #+end_example
+  + _Bidirectional_ : 卷挂载与 HostToContainer 挂载相同。另外，由 _容器创建的所有卷挂载_ 将被 *传播回* _主机_ 和 _所有使用相同卷的容器_ 的所有容器
+    #+begin_example
+      此模式的一个典型用例是带有 Flex 卷驱动器或需要使用 HostPath 卷在主机上挂载某些内容的 pod
+
+      该模式等同于 Linux内核文档中所述的 rshared 挂载传播
+    #+end_example
+
+
+  #+begin_example
+    小心：双向挂载传播可能是危险的，它可能会损坏主机操作系统，因此只能在特权容器中使用，强烈建议熟悉 Linux 内核行为
+
+    另外，容器在 Pod 中创建的任何卷挂载必须在容器终止时销毁（卸载）
+  #+end_example
+
+  | [[file:persistent-volume.org][Next: Persistent Volume]] | [[file:config-map.org][Previous: ConfigMap]] | [[file:storage.org][Home：存储]] | 

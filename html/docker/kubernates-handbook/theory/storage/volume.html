@@ -243,7 +243,7 @@
 <li><a href="#orgc96a796">downwardAPI</a></li>
 <li><a href="#org123b341">emptyDir</a>
 <ul>
-<li><a href="#org18d1716">示例</a></li>
+<li><a href="#org68f61bd">示例</a></li>
 </ul>
 </li>
 <li><a href="#org9e686a5">fc</a></li>
@@ -251,20 +251,20 @@
 <li><a href="#orgc52bf17">gcePersistentDisk</a>
 <ul>
 <li><a href="#org4f3ffb5">创建 PD</a></li>
-<li><a href="#org73dbec5">示例</a></li>
+<li><a href="#org52c1ab8">示例</a></li>
 </ul>
 </li>
 <li><a href="#orgd7b237c">gitRepo</a></li>
 <li><a href="#org727a140">glusterfs</a></li>
 <li><a href="#org7233297">hostPath</a>
 <ul>
-<li><a href="#org0257c06">示例</a></li>
+<li><a href="#org0e265b1">示例</a></li>
 </ul>
 </li>
 <li><a href="#org3511ceb">iscsi</a></li>
 <li><a href="#org7c2b7bb">local</a>
 <ul>
-<li><a href="#orgcf840d7">示例</a></li>
+<li><a href="#orge93102c">示例</a></li>
 </ul>
 </li>
 <li><a href="#org101b7bb">nfs</a></li>
@@ -282,22 +282,25 @@
 <li><a href="#org76fa989">secret</a></li>
 <li><a href="#org6a4b831">storageOS</a>
 <ul>
-<li><a href="#org363fa70">示例</a></li>
+<li><a href="#org0d0c52d">示例</a></li>
 </ul>
 </li>
 <li><a href="#orgb4b9bbf">vsphereVolume</a>
 <ul>
 <li><a href="#orge4def98">创建 VMDK 卷</a></li>
-<li><a href="#org3716e2f">示例</a></li>
+<li><a href="#org9b5fe5c">示例</a></li>
 </ul>
 </li>
 </ul>
 </li>
-<li><a href="#org2876eda">使用 subPath</a></li>
+<li><a href="#orgea4ceaa">subPath</a></li>
+<li><a href="#orge67f522">资源限制</a></li>
+<li><a href="#orgda4239f">Out-of-Tree 卷插件</a></li>
+<li><a href="#orgb2270ab">挂载传播</a></li>
 </ul>
 </div>
 </div>
-<pre class="example" id="org8997dc5">
+<pre class="example" id="org57666dd">
 容器磁盘上的文件的生命周期是短暂的，这就使得在容器中运行重要应用时会出现一些问题
 
 首先，当容器崩溃时，kubelet 会重启它，但是容器中的文件将丢失——容器以干净的状态（镜像最初的状态）重新启动
@@ -311,7 +314,7 @@ Kubernetes 中的 Volume 抽象就很好的解决了这些问题
 <div id="outline-container-org1f65149" class="outline-2">
 <h2 id="org1f65149">背景</h2>
 <div class="outline-text-2" id="text-org1f65149">
-<pre class="example" id="orgcdd4ed8">
+<pre class="example" id="orga27398a">
 Docker 中也有一个 volume 的概念，尽管它稍微宽松一些，管理也很少
 
 在 Docker 中，卷就像是磁盘或是另一个容器中的一个目录
@@ -324,7 +327,7 @@ Docker 现在提供了卷驱动程序，但是功能还非常有限。例如 Doc
 <li><p>
 Kubernetes 中的卷有明确的寿命：与封装它的 Pod 相同。所以，卷的生命比 Pod 中的所有容器都长，当这个容器重启时数据仍然得以保存
 </p>
-<pre class="example" id="orgfe6f569">
+<pre class="example" id="orge780410">
 当然，当 Pod 不再存在时，卷也将不复存在
 </pre></li>
 <li>更重要的是，Kubernetes 支持多种类型的卷，Pod 可以同时使用任意数量的卷</li>
@@ -333,7 +336,7 @@ Kubernetes 中的卷有明确的寿命：与封装它的 Pod 相同。所以，�
 <p>
 卷的核心是目录，可能还包含了一些数据，可以通过 pod 中的容器来访问
 </p>
-<pre class="example" id="org26ee3d5">
+<pre class="example" id="org72dad3c">
 该目录是如何形成的、支持该目录的介质以及其内容取决于所使用的特定卷类型
 </pre>
 
@@ -341,7 +344,7 @@ Kubernetes 中的卷有明确的寿命：与封装它的 Pod 相同。所以，�
 要使用卷，需要为 pod 指定为卷 <span class="underline">spec.volumes</span> 字段 以及将它挂载到容器的位置 <span class="underline">spec.containers.volumeMounts</span> 字段 
 </p>
 
-<pre class="example" id="org648d3ca">
+<pre class="example" id="orgf413058">
 容器中的进程看到的是由其 Docker 镜像和卷组成的文件系统视图
 
 Docker 镜像位于文件系统层次结构的根目录，任何卷都被挂载在镜像的指定路径中
@@ -397,12 +400,12 @@ awsElasticBlockStore 卷将 <span class="underline">AWS EBS Volume</span> 挂载
 <li><p>
 与 emptyDir 类型会在删除 Pod 时被清除不同，EBS 卷的的内容会保留下来，仅仅是被 <b>卸载</b>
 </p>
-<pre class="example" id="org417f8bc">
+<pre class="example" id="orge547949">
 这意味着 EBS 卷可以预先填充数据，并且可以在数据包之间“切换”数据 
 </pre></li>
 </ul>
 
-<pre class="example" id="org48be654">
+<pre class="example" id="org7e67408">
 必须使用 aws ec2 create-volume 或 AWS API 创建 EBS 卷，才能使用它
 </pre>
 
@@ -437,7 +440,7 @@ awsElasticBlockStore 卷将 <span class="underline">AWS EBS Volume</span> 挂载
 <div id="outline-container-org9fb2f81" class="outline-4">
 <h4 id="org9fb2f81">配置</h4>
 <div class="outline-text-4" id="text-org9fb2f81">
-<pre class="example" id="org39cf7f7">
+<pre class="example" id="org764e5b8">
 apiVersion: v1
 kind: Pod
 metadata:
@@ -488,13 +491,13 @@ cephfs 卷允许将现有的 CephFS 卷挂载到您的容器中：
 <li><p>
 不像 emptyDir，当删除 Pod 时被删除，cephfs 卷的内容将被保留，卷仅仅是被卸载
 </p>
-<pre class="example" id="orgece6866">
+<pre class="example" id="orgb6dcd55">
 这意味着 CephFS 卷可以预先填充数据，并且可以在数据包之间“切换”数据
 </pre></li>
 <li>CephFS 可以被多个写设备同时挂载</li>
 </ul>
 
-<pre class="example" id="orgee8e952">
+<pre class="example" id="org5d71c98">
 必须先拥有自己的 Ceph 服务器，然后才能使用它
 </pre>
 </div>
@@ -506,7 +509,7 @@ cephfs 卷允许将现有的 CephFS 卷挂载到您的容器中：
 <p>
 <span class="underline">CSI</span> 代表 <b>容器存储接口</b>
 </p>
-<pre class="example" id="org9ac766a">
+<pre class="example" id="org58396df">
 CSI 试图建立一个行业标准接口的规范，借助 CSI 容器编排系统可以将任意存储系统暴露给自己的容器工作负载
 </pre>
 
@@ -514,7 +517,7 @@ CSI 试图建立一个行业标准接口的规范，借助 CSI 容器编排系�
 csi 卷类型是一种 <span class="underline">in-tree</span> 的 <span class="underline">CSI 卷插件</span> ，用于 Pod 与在 <span class="underline">同一节点</span> 上运行的 <span class="underline">外部 CSI 卷驱动程序</span> 交互。部署 CSI 兼容卷驱动后，用户可以使用 csi 作为卷类型来挂载驱动提供的存储
 </p>
 
-<pre class="example" id="orgd69fa10">
+<pre class="example" id="org5db9eb4">
 CSI 持久化卷支持是在 Kubernetes v1.9 中引入的，作为一个 alpha 特性，必须由集群管理员明确启用
 
 换句话说，集群管理员需要在 apiserver、controller-manager 和 kubelet 组件的 “--feature-gates =” 标志中加上 “CSIPersistentVolume = true”
@@ -558,7 +561,7 @@ downwardAPI 卷用于使 <span class="underline">向下 API 数据</span> 对应
 <li>当出于任何原因从节点中删除 Pod 时，emptyDir 中的数据将被 <b>永久</b> 删除</li>
 </ul>
 
-<pre class="example" id="orgac58019">
+<pre class="example" id="org573a83a">
 注意：容器崩溃不会从节点中移除 pod，因此 emptyDir 卷中的数据在容器崩溃时是安全的
 </pre>
 
@@ -572,10 +575,10 @@ emptyDir 的用法有：
 </ul>
 </div>
 
-<div id="outline-container-org18d1716" class="outline-4">
-<h4 id="org18d1716">示例</h4>
-<div class="outline-text-4" id="text-org18d1716">
-<pre class="example" id="org5d95999">
+<div id="outline-container-org68f61bd" class="outline-4">
+<h4 id="org68f61bd">示例</h4>
+<div class="outline-text-4" id="text-org68f61bd">
+<pre class="example" id="org8bf9d77">
 apiVersion: v1
 kind: Pod
 metadata:
@@ -605,7 +608,7 @@ fc 卷允许将现有的 fc 卷挂载到 pod 中。可以使用卷配置中的 t
 <li>如果指定了多个 WWN，则 targetWWN 期望这些 WWN 来自多路径连接</li>
 </ul>
 
-<pre class="example" id="org1b96949">
+<pre class="example" id="orgd30325e">
 必须配置 FC SAN 区域划分，并预先将这些 LUN（卷）分配并屏蔽到目标 WWN，以便 Kubernetes 主机可以访问它们
 </pre>
 </div>
@@ -622,12 +625,12 @@ Flocker 是一款开源的 <span class="underline">集群容器数据卷管理�
 <li><p>
 如果数据集已经存在，它将被 Flocker 重新连接到 pod 被调度的节点上
 </p>
-<pre class="example" id="org56f7790">
+<pre class="example" id="org5f6046c">
 这意味着数据可以根据需要在数据包之间“切换” 
 </pre></li>
 </ul>
 
-<pre class="example" id="orgfcd4887">
+<pre class="example" id="org67b6c18">
 重要提示：必须先运行自己的 Flocker 安装程序才能使用它
 </pre>
 </div>
@@ -643,12 +646,12 @@ gcePersistentDisk 卷将 <span class="underline">GCE Persistent Disk</span> 挂�
 <li><p>
 与删除 Pod 时删除的 emptyDir 不同，PD 的内容被保留，只是卸载了卷
 </p>
-<pre class="example" id="orga531f91">
+<pre class="example" id="org82394cf">
 这意味着 PD 可以预先填充数据，并且数据可以在 Pod 之间“切换”
 </pre></li>
 </ul>
 
-<pre class="example" id="orgd125d34">
+<pre class="example" id="org653ffbc">
 必须先使用 gcloud 或 GCE API 或 UI 创建一个 PD，然后才能使用它
 </pre>
 
@@ -664,7 +667,7 @@ gcePersistentDisk 卷将 <span class="underline">GCE Persistent Disk</span> 挂�
 PD 的一个特点是它们可以同时被多个用户以只读方式挂载。这意味着可以预先使用您的数据集填充 PD，然后根据需要给多个 Pod 中并行提供
 </p>
 
-<pre class="example" id="org7a6c9d5">
+<pre class="example" id="org3356e22">
 不幸的是，只能由单个消费者以读写模式挂载 PD，而不允许同时写入
 
 在由 ReplicationController 控制的 pod 上使用 PD 将会失败，除非 PD 是只读的或者副本数是 0 或 1
@@ -685,10 +688,10 @@ PD 的一个特点是它们可以同时被多个用户以只读方式挂载。�
 </div>
 </div>
 
-<div id="outline-container-org73dbec5" class="outline-4">
-<h4 id="org73dbec5">示例</h4>
-<div class="outline-text-4" id="text-org73dbec5">
-<pre class="example" id="orgd675108">
+<div id="outline-container-org52c1ab8" class="outline-4">
+<h4 id="org52c1ab8">示例</h4>
+<div class="outline-text-4" id="text-org52c1ab8">
+<pre class="example" id="orgc2c7822">
 apiVersion: v1
 kind: Pod
 metadata:
@@ -718,7 +721,7 @@ spec:
 gitRepo 卷是一个可以演示卷插件功能的示例。它会 <b>挂载</b> 一个 <span class="underline">空目录</span> 并将 <span class="underline">git 存储库</span> <b>克隆</b> 到容器中
 </p>
 
-<pre class="example" id="org15f6e3d">
+<pre class="example" id="org78e14fb">
 将来，这样的卷可能会转移到一个更加分离的模型，而不是为每个这样的用例扩展 Kubernetes API
 </pre>
 
@@ -726,7 +729,7 @@ gitRepo 卷是一个可以演示卷插件功能的示例。它会 <b>挂载</b> 
 下面是 gitRepo 卷示例：
 </p>
 
-<pre class="example" id="orgf449d68">
+<pre class="example" id="orgdf08d7a">
 apiVersion: v1
 kind: Pod
 metadata:
@@ -750,7 +753,7 @@ spec:
 <div id="outline-container-org727a140" class="outline-3">
 <h3 id="org727a140">glusterfs</h3>
 <div class="outline-text-3" id="text-org727a140">
-<pre class="example" id="org4d55e63">
+<pre class="example" id="orgdcb69d3">
 glusterfs 一个开放源代码的网络文件系统
 </pre>
 
@@ -761,13 +764,13 @@ glusterfs 卷允许将 <span class="underline">Glusterfs</span> 卷挂载到的�
 <li><p>
 与删除 Pod 时删除的 emptyDir 不同，glusterfs 卷的内容将被保留，而卷仅仅被卸载
 </p>
-<pre class="example" id="org131deb6">
+<pre class="example" id="org34c2ff1">
 这意味着 glusterfs 卷可以预先填充数据，并且可以在数据包之间“切换”数据
 </pre></li>
 <li>GlusterFS 可以同时由多个写入挂载</li>
 </ul>
 
-<pre class="example" id="org16505ae">
+<pre class="example" id="org55f06fd">
 必须先自行安装 GlusterFS，才能使用它
 </pre>
 </div>
@@ -780,7 +783,7 @@ glusterfs 卷允许将 <span class="underline">Glusterfs</span> 卷挂载到的�
 hostPath 卷将 <span class="underline">主机节点</span> 的 <span class="underline">文件系统</span> 中的文件或目录挂载到集群中
 </p>
 
-<pre class="example" id="org2f3e36d">
+<pre class="example" id="org0c43528">
 该功能大多数 Pod 都用不到，但它为某些应用程序提供了一个强大的解决方法
 </pre>
 
@@ -860,23 +863,23 @@ hostPath 的用途如下：
 <li><p>
 由于每个节点上的文件都不同，具有相同配置的 pod 在不同节点上的行为可能会有所不同
 </p>
-<pre class="example" id="org7ceded0">
+<pre class="example" id="orgff06ea0">
 例如从 podTemplate 创建的
 </pre></li>
 <li>当 Kubernetes 按照计划添加资源感知调度时，将无法考虑 hostPath 使用的资源</li>
 <li><p>
 在底层主机上创建的文件或目录只能由 root 写入
 </p>
-<pre class="example" id="orgf17a968">
+<pre class="example" id="org7edf1ff">
 需要在特权容器中以 root 身份运行进程，或修改主机上的文件权限以便写入 hostPath 卷
 </pre></li>
 </ul>
 </div>
 
-<div id="outline-container-org0257c06" class="outline-4">
-<h4 id="org0257c06">示例</h4>
-<div class="outline-text-4" id="text-org0257c06">
-<pre class="example" id="org7243f07">
+<div id="outline-container-org0e265b1" class="outline-4">
+<h4 id="org0e265b1">示例</h4>
+<div class="outline-text-4" id="text-org0e265b1">
+<pre class="example" id="orgb150a17">
 apiVersion: v1
 kind: Pod
 metadata:
@@ -910,12 +913,12 @@ iscsi 卷允许将现有的 ISCSI <span class="underline">SCSI over IP</span> �
 <li><p>
 不像 emptyDir，删除 Pod 时 iscsi 卷的内容将被保留，卷仅仅是被卸载
 </p>
-<pre class="example" id="org511ec31">
+<pre class="example" id="org62000aa">
 这意味着 iscsi 卷可以预先填充数据，并且这些数据可以在 pod 之间“切换”
 </pre></li>
 </ul>
 
-<pre class="example" id="org7a80daa">
+<pre class="example" id="org7e0a230">
 必须先创建自己的 iSCSI 服务器，然后才能使用它
 </pre>
 
@@ -923,7 +926,7 @@ iscsi 卷允许将现有的 ISCSI <span class="underline">SCSI over IP</span> �
 iSCSI 的一个特点是它可以同时被多个用户以只读方式安装
 </p>
 
-<pre class="example" id="org76caefd">
+<pre class="example" id="orgb773914">
 这意味着可以预先使用数据集填充卷，然后根据需要向多个额 pod 同时提供
 
 不幸的是，iSCSI 卷只能由单个使用者以读写模式挂载——不允许同时写入
@@ -934,7 +937,7 @@ iSCSI 的一个特点是它可以同时被多个用户以只读方式安装
 <div id="outline-container-org7c2b7bb" class="outline-3">
 <h3 id="org7c2b7bb">local</h3>
 <div class="outline-text-3" id="text-org7c2b7bb">
-<pre class="example" id="org947d73f">
+<pre class="example" id="org0c69a26">
 这个 alpha 功能要求启用 PersistentLocalVolumes feature gate
 
 注意：从 1.9 开始，VolumeScheduling feature gate 也必须启用
@@ -944,20 +947,20 @@ iSCSI 的一个特点是它可以同时被多个用户以只读方式安装
 local 卷表示挂载的 <span class="underline">本地存储设备</span> ，如磁盘、分区或目录。本地卷只能用作 <b>静态创建</b> 的 <span class="underline">PersistentVolume</span> 
 </p>
 
-<pre class="example" id="org8e4e5ea">
+<pre class="example" id="org2f6aedf">
 与 HostPath 卷相比，local 卷可以以持久的方式使用，而无需手动将 pod 调度到节点上，因为系统会通过查看 PersistentVolume 上的节点关联性来了解卷的节点约束
 
 但是，local 卷仍然受底层节点的可用性影响，并不适用于所有应用程序
 </pre>
 </div>
 
-<div id="outline-container-orgcf840d7" class="outline-4">
-<h4 id="orgcf840d7">示例</h4>
-<div class="outline-text-4" id="text-orgcf840d7">
+<div id="outline-container-orge93102c" class="outline-4">
+<h4 id="orge93102c">示例</h4>
+<div class="outline-text-4" id="text-orge93102c">
 <p>
 使用 local 卷的示例 PersistentVolume 规范：
 </p>
-<pre class="example" id="orgd906ab8">
+<pre class="example" id="orgbb1a4d1">
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -989,7 +992,7 @@ spec:
 注意：本地 PersistentVolume <span class="underline">清理</span> 和 <span class="underline">删除</span> 需要 <b>手动干预</b> ，无外部提供程序
 </p>
 
-<pre class="example" id="org056add4">
+<pre class="example" id="org2ee4984">
 从 1.9 开始，本地卷绑定可以被延迟，直到通过具有 StorageClass 中的 WaitForFirstConsumer 设置为volumeBindingMode 的 pod 开始调度
 </pre>
 </div>
@@ -1006,13 +1009,13 @@ nfs 卷允许将现有的 NFS <span class="underline">网络文件系统</span> 
 <li><p>
 不像 emptyDir，当删除 Pod 时，nfs 卷的内容被保留，卷仅仅是被卸载
 </p>
-<pre class="example" id="orgfc2bc0a">
+<pre class="example" id="org10ec20f">
 这意味着 NFS 卷可以预填充数据，并且可以在 pod 之间“切换”数据
 </pre></li>
 <li>NFS 可以被多个写入者同时挂载</li>
 </ul>
 
-<pre class="example" id="org1078a52">
+<pre class="example" id="org5f267af">
 必须先拥有自己的 NFS 服务器才能使用它，然后才能使用它
 </pre>
 </div>
@@ -1025,7 +1028,7 @@ nfs 卷允许将现有的 NFS <span class="underline">网络文件系统</span> 
 persistentVolumeClaim 卷用于将 <span class="underline">PersistentVolume</span> 挂载到容器中。PersistentVolumes 是在用户不知道特定云环境的细节的情况下“声明”持久化存储
 </p>
 
-<pre class="example" id="org6f1d17b">
+<pre class="example" id="orgdd0c928">
 例如 GCE PersistentDisk 或 iSCSI 卷的一种方式
 </pre>
 </div>
@@ -1053,7 +1056,7 @@ configMap
 <div id="outline-container-org939f00d" class="outline-4">
 <h4 id="org939f00d">带有 secret、downward API 和 configmap 的 pod</h4>
 <div class="outline-text-4" id="text-org939f00d">
-<pre class="example" id="org7c10748">
+<pre class="example" id="org699a158">
 apiVersion: v1
 kind: Pod
 metadata:
@@ -1096,7 +1099,7 @@ spec:
 <div id="outline-container-org4048123" class="outline-4">
 <h4 id="org4048123">使用非默认权限模式设置多个 secret</h4>
 <div class="outline-text-4" id="text-org4048123">
-<pre class="example" id="org6edf517">
+<pre class="example" id="orgf99958f">
 apiVersion: v1
 kind: Pod
 metadata:
@@ -1134,7 +1137,7 @@ spec:
 <li><p>
 defaultMode 只能在映射级别指定，而不能针对每个卷源指定
 </p>
-<pre class="example" id="org6f0deb2">
+<pre class="example" id="orge60ac64">
 但是，如上所述，可以明确设置每个映射的 mode
 </pre></li>
 </ul>
@@ -1158,7 +1161,7 @@ portworxVolume 是一个与 Kubernetes 一起，以 <span class="underline">超�
 以下是一个引用预先配置的 PortworxVolume 的示例 pod：
 </p>
 
-<pre class="example" id="orge0123bb">
+<pre class="example" id="org8c84cf5">
 apiVersion: v1
 kind: Pod
 metadata:
@@ -1187,7 +1190,7 @@ spec:
 quobyte 卷允许将现有的 <span class="underline">Quobyte 卷</span> 挂载到容器中 
 </p>
 
-<pre class="example" id="org7683fa2">
+<pre class="example" id="orgd4bdd85">
 必须先创建自己的 Quobyte 安装程序，然后才能使用它
 </pre>
 </div>
@@ -1203,12 +1206,12 @@ rbd 卷允许将 <span class="underline">Rados Block Device 卷</span> 挂载到
 <li><p>
 不像 emptyDir，删除 Pod 时 rbd卷的内容被保留，卷仅仅被卸载
 </p>
-<pre class="example" id="org13af637">
+<pre class="example" id="org0ca23f9">
 这意味着 RBD 卷可以预先填充数据，并且可以在 pod 之间“切换”数据
 </pre></li>
 </ul>
 
-<pre class="example" id="org770f3e7">
+<pre class="example" id="org6e89aa3">
 必须先自行安装 Ceph，然后才能使用 RBD
 </pre>
 
@@ -1216,7 +1219,7 @@ rbd 卷允许将 <span class="underline">Rados Block Device 卷</span> 挂载到
 RBD 的一个特点是它可以同时为多个用户以只读方式挂载
 </p>
 
-<pre class="example" id="orge95d4df">
+<pre class="example" id="org74cd547">
 这意味着可以预先使用您的数据集填充卷，然后根据需要同时为多个 pod 并行提供
 
 不幸的是，RBD 卷只能由单个用户以读写模式安装——不允许同时写入
@@ -1231,7 +1234,7 @@ RBD 的一个特点是它可以同时为多个用户以只读方式挂载
 ScaleIO 是一个 <span class="underline">基于软件</span> 的存储平台，可以使用现有的硬件来创建可扩展的共享块网络存储集群。scaleIO 卷插件允许已部署的 pod 访问现有的 ScaleIO 卷（或者它可以为持久性卷声明动态调配新卷） 
 </p>
 
-<pre class="example" id="org50a31a1">
+<pre class="example" id="org204b6f5">
 必须有一个已经配置好的 ScaleIO 集群，并和创建的卷一同运行，然后才能使用它们
 </pre>
 
@@ -1239,7 +1242,7 @@ ScaleIO 是一个 <span class="underline">基于软件</span> 的存储平台，
 使用 ScaleIO 的示例 pod 配置：
 </p>
 
-<pre class="example" id="org19efd4f">
+<pre class="example" id="orgb09b460">
 apiVersion: v1
 kind: Pod
 metadata:
@@ -1277,7 +1280,7 @@ secret 卷用于将 <span class="underline">敏感</span> 信息（如密码）�
 <li>secret 卷由 <span class="underline">tmpfs</span> （一个 RAM 支持的文件系统）支持，所以它们 <b>永远不会写入非易失性存储器</b></li>
 </ul>
 
-<pre class="example" id="orgb037b36">
+<pre class="example" id="org3060a75">
 必须先在 Kubernetes API 中创建一个 secret，然后才能使用它
 </pre>
 </div>
@@ -1298,17 +1301,17 @@ storageos 卷允许将现有的 <span class="underline">StorageOS 卷</span> 挂
 <li>StorageOS 的核心是为容器提供 <span class="underline">块存储</span> ，可以通过文件系统访问</li>
 </ul>
 
-<pre class="example" id="org686f942">
+<pre class="example" id="orga573921">
 StorageOS 容器需要 64 位 Linux，没有额外的依赖关系，可以使用免费的开发者许可证
 
 必须在每个要访问 StorageOS 卷的节点上运行 StorageOS 容器，或者为该池提供存储容量
 </pre>
 </div>
 
-<div id="outline-container-org363fa70" class="outline-4">
-<h4 id="org363fa70">示例</h4>
-<div class="outline-text-4" id="text-org363fa70">
-<pre class="example" id="org2058d3a">
+<div id="outline-container-org0d0c52d" class="outline-4">
+<h4 id="org0d0c52d">示例</h4>
+<div class="outline-text-4" id="text-org0d0c52d">
+<pre class="example" id="org004a06d">
 apiVersion: v1
 kind: Pod
 metadata:
@@ -1343,7 +1346,7 @@ spec:
 <div id="outline-container-orgb4b9bbf" class="outline-3">
 <h3 id="orgb4b9bbf">vsphereVolume</h3>
 <div class="outline-text-3" id="text-orgb4b9bbf">
-<pre class="example" id="org88935d2">
+<pre class="example" id="org390bb94">
 先决条件：配置了 vSphere Cloud Provider 的 Kubernetes
 </pre>
 
@@ -1355,7 +1358,7 @@ vsphereVolume 用于将 <span class="underline">vSphere VMDK 卷</span> 挂载�
 <li>支持 <span class="underline">VMFS</span> 和 <span class="underline">VSAN</span> 数据存储</li>
 </ul>
 
-<pre class="example" id="org0f02f33">
+<pre class="example" id="org8278ee2">
 在 Pod 中使用它之前，必须创建 VMDK
 </pre>
 </div>
@@ -1383,10 +1386,10 @@ vsphereVolume 用于将 <span class="underline">vSphere VMDK 卷</span> 挂载�
 </div>
 </div>
 
-<div id="outline-container-org3716e2f" class="outline-4">
-<h4 id="org3716e2f">示例</h4>
-<div class="outline-text-4" id="text-org3716e2f">
-<pre class="example" id="org8a20192">
+<div id="outline-container-org9b5fe5c" class="outline-4">
+<h4 id="org9b5fe5c">示例</h4>
+<div class="outline-text-4" id="text-org9b5fe5c">
+<pre class="example" id="org86791dd">
 apiVersion: v1
 kind: Pod
 metadata:
@@ -1411,8 +1414,137 @@ spec:
 </div>
 
 
-<div id="outline-container-org2876eda" class="outline-2">
-<h2 id="org2876eda">使用 subPath</h2>
+<div id="outline-container-orgea4ceaa" class="outline-2">
+<h2 id="orgea4ceaa">subPath</h2>
+<div class="outline-text-2" id="text-orgea4ceaa">
+<p>
+有时，在 <span class="underline">单个容器</span> 中 <b>共享</b> <span class="underline">一个卷</span> 用于 <span class="underline">多个用途</span> 是有用的， <span class="underline">volumeMounts.subPath</span> 属性可用于在引用的卷内而不是其根目录中指定子路径。下面是一个使用单个共享卷的 LAMP 的示例。 HTML 内容被映射到它的 html 目录，数据库将被存储在它的 mysql 目录中：
+</p>
+
+<pre class="example" id="org807b722">
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-lamp-site
+spec:
+    containers:
+    - name: mysql
+      image: mysql
+      env:
+      - name: MYSQL_ROOT_PASSWORD
+	value: "rootpasswd" 
+      volumeMounts:
+      - mountPath: /var/lib/mysql
+	name: site-data
+	subPath: mysql
+    - name: php
+      image: php:7.0-apache
+      volumeMounts:
+      - mountPath: /var/www/html
+	name: site-data
+	subPath: html
+    volumes:
+    - name: site-data
+      persistentVolumeClaim:
+	claimName: my-lamp-site-data
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orge67f522" class="outline-2">
+<h2 id="orge67f522">资源限制</h2>
+<div class="outline-text-2" id="text-orge67f522">
+<p>
+emptyDir 卷的存储介质（磁盘、SSD 等）由保存在 kubelet 根目录的文件系统的介质（通常是 /var/lib/kubelet）决定。 emptyDir 或 hostPath 卷可占用多少空间并没有限制，容器之间或 Pod 之间也没有隔离
+</p>
+
+<pre class="example" id="orgd4406a3">
+将来，emptyDir 和 hostPath 卷将能够使用 resource 规范请求一定的空间，并选择要使用的介质，适用于具有多种媒体类型的集群
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orgda4239f" class="outline-2">
+<h2 id="orgda4239f">Out-of-Tree 卷插件</h2>
+<div class="outline-text-2" id="text-orgda4239f">
+<p>
+除了之前列出的卷类型之外，存储供应商可以创建自定义插件而不将其添加到 Kubernetes 存储库中。可以通过使用 <span class="underline">FlexVolume</span> 插件来实现
+</p>
+
+<pre class="example" id="org1cf359f">
+FlexVolume使用户能够将供应商卷挂载到容器中
+
+供应商插件是使用驱动程序实现的，该驱动程序支持由 FlexVolume API定义的一系列卷命令
+
+驱动程序必须安装在每个节点的预定义卷插件路径中
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orgb2270ab" class="outline-2">
+<h2 id="orgb2270ab">挂载传播</h2>
+<div class="outline-text-2" id="text-orgb2270ab">
+<pre class="example" id="org554a879">
+注意：挂载传播是 Kubernetes 1.8 中的一个 alpha 特性，在将来的版本中可能会重新设计甚至删除
+</pre>
+
+<p>
+挂载传播允许将由 <span class="underline">容器挂载的卷</span> <b>共享</b> 到 <span class="underline">同一个 Pod</span> 中的 <span class="underline">其他容器</span> 上，甚至是 <span class="underline">同一节点</span> 上的其他 Pod
+</p>
+
+<pre class="example" id="orgba76024">
+如果禁用 MountPropagation 功能，则不会传播 pod 中的卷挂载
+
+也就是说，容器按照 Linux内核文档中所述的 private 挂载传播运行
+</pre>
+<p>
+要启用此功能，请在 <span class="underline">&#x2013;feature-gates</span> 命令行选项中指定 <span class="underline">MountPropagation = true</span> 。启用时，容器的 <span class="underline">volumeMounts</span> 字段有一个新的 <span class="underline">mountPropagation</span> 子字段。它的值为：
+</p>
+<ul class="org-ul">
+<li><p>
+<span class="underline">HostToContainer</span> ：此卷挂载将 <b>接收</b> <span class="underline">所有后续</span> 挂载到此卷或其任何子目录的挂载。这是 MountPropagation 功能启用时的默认模式。
+</p>
+<pre class="example" id="orgada907f">
+同样的，如果任何带有 Bidirectional 挂载传播的 pod 挂载到同一个卷上，带有 HostToContainer 挂载传播的容器将会看到它
+
+该模式等同于Linux内核文档中描述的 rslave 挂载传播
+</pre></li>
+<li><p>
+<span class="underline">Bidirectional</span> : 卷挂载与 HostToContainer 挂载相同。另外，由 <span class="underline">容器创建的所有卷挂载</span> 将被 <b>传播回</b> <span class="underline">主机</span> 和 <span class="underline">所有使用相同卷的容器</span> 的所有容器
+</p>
+<pre class="example" id="org4fba4d2">
+此模式的一个典型用例是带有 Flex 卷驱动器或需要使用 HostPath 卷在主机上挂载某些内容的 pod
+
+该模式等同于 Linux内核文档中所述的 rshared 挂载传播
+</pre></li>
+</ul>
+
+
+<pre class="example" id="org36bb20d">
+小心：双向挂载传播可能是危险的，它可能会损坏主机操作系统，因此只能在特权容器中使用，强烈建议熟悉 Linux 内核行为
+
+另外，容器在 Pod 中创建的任何卷挂载必须在容器终止时销毁（卸载）
+</pre>
+
+<table border="2" cellspacing="0" cellpadding="6" rules="groups" frame="hsides">
+
+
+<colgroup>
+<col  class="org-left" />
+
+<col  class="org-left" />
+
+<col  class="org-left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="org-left"><a href="persistent-volume.html">Next: Persistent Volume</a></td>
+<td class="org-left"><a href="config-map.html">Previous: ConfigMap</a></td>
+<td class="org-left"><a href="storage.html">Home：存储</a></td>
+</tr>
+</tbody>
+</table>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
