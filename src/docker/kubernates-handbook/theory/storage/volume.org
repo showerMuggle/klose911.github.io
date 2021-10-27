@@ -631,3 +631,108 @@ Kubernetes 中的 Volume 抽象就很好的解决了这些问题
 	     name: sio-secret
 	   fsType: xfs
    #+end_example
+
+** secret
+   secret 卷用于将 _敏感_ 信息（如密码）传递到 pod：
+   + 可以将 secret 存储在 Kubernetes API 中，并将它们挂载为文件，以供 Pod 使用，而无需直接连接到 Kubernetes
+   + secret 卷由 _tmpfs_ （一个 RAM 支持的文件系统）支持，所以它们 *永远不会写入非易失性存储器* 
+
+   #+begin_example
+     必须先在 Kubernetes API 中创建一个 secret，然后才能使用它
+   #+end_example
+
+** storageOS
+   storageos 卷允许将现有的 _StorageOS 卷_ 挂载到容器中：
+   + StorageOS 在 Kubernetes 环境中以 _容器_ 方式运行，使本地或附加存储可以从 Kubernetes 集群中的任何节点访问
+     + 可以复制数据以防止节点故障
+     + 精简配置和压缩可以提高利用率并降低成本
+   + StorageOS 的核心是为容器提供 _块存储_ ，可以通过文件系统访问
+
+   #+begin_example
+     StorageOS 容器需要 64 位 Linux，没有额外的依赖关系，可以使用免费的开发者许可证
+
+     必须在每个要访问 StorageOS 卷的节点上运行 StorageOS 容器，或者为该池提供存储容量
+   #+end_example
+
+*** 示例
+
+    #+begin_example
+      apiVersion: v1
+      kind: Pod
+      metadata:
+	labels:
+	  name: redis
+	  role: master
+	name: test-storageos-redis
+      spec:
+	containers:
+	  - name: master
+	    image: kubernetes/redis:v1
+	    env:
+	      - name: MASTER
+		value: "true"
+	    ports:
+	      - containerPort: 6379
+	    volumeMounts:
+	      - mountPath: /redis-master-data
+		name: redis-data
+	volumes:
+	  - name: redis-data
+	    storageos:
+	      # The `redis-vol01` volume must already exist within StorageOS in the `default` namespace.
+	      volumeName: redis-vol01
+	      fsType: ext4
+    #+end_example
+
+    
+** vsphereVolume
+   #+begin_example
+     先决条件：配置了 vSphere Cloud Provider 的 Kubernetes
+   #+end_example
+
+   vsphereVolume 用于将 _vSphere VMDK 卷_ 挂载到 Pod 中：
+   + 卷的内容在卸载时会被保留
+   + 支持 _VMFS_ 和 _VSAN_ 数据存储 
+
+   #+begin_example
+     在 Pod 中使用它之前，必须创建 VMDK
+   #+end_example
+   
+*** 创建 VMDK 卷
+    进入 ESX，然后使用以下命令创建一个 VMDK：
+
+    #+begin_src sh 
+      $ vmkfstools -c 2G /vmfs/volumes/DatastoreName/volumes/myDisk.vmdk
+    #+end_src
+
+    或者使用下列命令创建一个 VMDK：
+
+    #+begin_src sh 
+      vmware-vdiskmanager -c -t 0 -s 40GB -a lsilogic myDisk.vmdk
+    #+end_src
+
+*** 示例
+
+    #+begin_example
+      apiVersion: v1
+      kind: Pod
+      metadata:
+	name: test-vmdk
+      spec:
+	containers:
+	- image: k8s.gcr.io/test-webserver
+	  name: test-container
+	  volumeMounts:
+	  - mountPath: /test-vmdk
+	    name: test-volume
+	volumes:
+	- name: test-volume
+	  # This VMDK volume must already exist.
+	  vsphereVolume:
+	    volumePath: "[DatastoreName] volumes/myDisk"
+	    fsType: ext4
+    #+end_example
+
+    
+* 使用 subPath
+
