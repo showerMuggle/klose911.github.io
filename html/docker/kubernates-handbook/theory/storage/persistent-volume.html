@@ -238,10 +238,10 @@
 </li>
 <li><a href="#org4e01260">绑定</a></li>
 <li><a href="#org807c311">PVC 保护</a></li>
-<li><a href="#orgc292ca1">回收</a>
+<li><a href="#org3f28701">回收</a>
 <ul>
 <li><a href="#org15e094c">保留</a></li>
-<li><a href="#org3f28701">回收</a></li>
+<li><a href="#orga1961e0">回收</a></li>
 <li><a href="#org2b9c66e">删除</a></li>
 </ul>
 </li>
@@ -249,6 +249,18 @@
 </ul>
 </li>
 <li><a href="#org2f1a034">持久化卷类型</a></li>
+<li><a href="#org255f724">持久化卷</a>
+<ul>
+<li><a href="#orga95abaa">容量</a></li>
+<li><a href="#org3f96e00">卷模式</a></li>
+<li><a href="#org6286476">访问模式</a></li>
+<li><a href="#orgb73f8ee">类</a></li>
+<li><a href="#orgdd58aff">回收策略</a></li>
+<li><a href="#orgb0ea99f">挂载选项</a></li>
+<li><a href="#orgd94cc21">状态</a></li>
+</ul>
+</li>
+<li><a href="#org616b41c">PersistentVolumeClaim</a></li>
 </ul>
 </div>
 </div>
@@ -256,13 +268,13 @@
 接下来介绍 Kubernetes 中 PersistentVolume 的当前状态
 </p>
 
-<pre class="example" id="org34e4bc9">
+<pre class="example" id="org53d2dee">
 建议先熟悉 Volume
 </pre>
 <div id="outline-container-org04b83e9" class="outline-2">
 <h2 id="org04b83e9">介绍</h2>
 <div class="outline-text-2" id="text-org04b83e9">
-<pre class="example" id="org99c35a3">
+<pre class="example" id="org209096c">
 对于管理计算资源来说，管理存储资源明显是另一个问题
 </pre>
 
@@ -284,7 +296,7 @@ PersistentVolumeClaim <span class="underline">PVC</span> 是 <b>用户存储的�
 <li><p>
 Pod 可以请求特定级别的资源（CPU 和内存）。PVC 可以请求特定的大小和访问模式
 </p>
-<pre class="example" id="orgf0c4e5c">
+<pre class="example" id="org3f966af">
 例如，可以以读/写一次或 只读多次模式挂载
 </pre></li>
 </ul>
@@ -293,7 +305,7 @@ Pod 可以请求特定级别的资源（CPU 和内存）。PVC 可以请求特�
 虽然 PersistentVolumeClaims 允许用户使用抽象存储资源，但用户需要具有不同性质（例如性能）的 PersistentVolume 来解决不同的问题
 </p></li>
 </ul>
-<pre class="example" id="org43cb458">
+<pre class="example" id="org09ef279">
 集群管理员需要能够提供各种各样的 PersistentVolume，这些PersistentVolume 的大小和访问模式可以各有不同，但不需要向用户公开实现这些卷的细节
 
 对于这些需求，StorageClass 资源可以实现
@@ -344,7 +356,7 @@ PV 属于集群中的资源。PVC 是对这些资源的请求，也作为对资�
 <li>一旦 PV 和 PVC 绑定后，PersistentVolumeClaim 绑定是 <b>排他性</b> 的，不管它们是如何绑定的。 PVC 跟 PV 绑定是 <span class="underline">一对一</span> 的映射</li>
 </ol>
 
-<pre class="example" id="org84edfb1">
+<pre class="example" id="org285e80a">
 如果没有匹配的卷，声明将无限期地保持未绑定状态
 </pre>
 
@@ -352,7 +364,7 @@ PV 属于集群中的资源。PVC 是对这些资源的请求，也作为对资�
 随着匹配卷的可用，声明将被绑定
 </p>
 
-<pre class="example" id="org9963b51">
+<pre class="example" id="orgdb9b1e9">
 例如，配置了许多 50Gi PV的集群将不会匹配请求 100Gi 的PVC
 
 将100Gi PV 添加到群集时，可以绑定 PVC
@@ -366,14 +378,14 @@ PV 属于集群中的资源。PVC 是对这些资源的请求，也作为对资�
 PVC <span class="underline">保护</span> 的目的是确保由 pod <b>正在使用的 PVC 不会从系统中移除</b> ，因为如果被移除的话可能会导致数据丢失。
 </p>
 
-<pre class="example" id="org90498ba">
+<pre class="example" id="org2a63b0e">
 注意：当 pod 状态为 Pending 并且 pod 已经分配给节点或 pod 为 Running 状态时，PVC 处于活动状态
 </pre>
 
 <p>
 当启用PVC 保护 功能时，如果用户删除了一个 pod 正在使用的 PVC，则该 PVC 不会被立即删除
 </p>
-<pre class="example" id="orga68821c">
+<pre class="example" id="org50d4ec8">
 PVC 的删除将被推迟，直到 PVC 不再被任何 pod 使用
 </pre>
 
@@ -397,9 +409,9 @@ Finalizers:    [kubernetes.io/pvc-protection]
 </div>
 </div>
 </div>
-<div id="outline-container-orgc292ca1" class="outline-3">
-<h3 id="orgc292ca1">回收</h3>
-<div class="outline-text-3" id="text-orgc292ca1">
+<div id="outline-container-org3f28701" class="outline-3">
+<h3 id="org3f28701">回收</h3>
+<div class="outline-text-3" id="text-org3f28701">
 <p>
 用户用完 volume 后，可以从允许回收资源的 API 中删除 PVC 对象。PersistentVolume 的 <span class="underline">回收策略</span> 告诉集群在 <span class="underline">存储卷声明</span> <b>释放</b> 后应如何处理该卷。目前，volume 的处理策略有 <span class="underline">保留</span> 、 <span class="underline">回收</span> 或 <span class="underline">删除</span>
 </p>
@@ -410,7 +422,7 @@ Finalizers:    [kubernetes.io/pvc-protection]
 <p>
 保留回收策略允许手动回收资源
 </p>
-<pre class="example" id="org0220075">
+<pre class="example" id="org156065a">
 当 PersistentVolumeClaim 被删除时，PersistentVolume 仍然存在，volume 被视为“已释放”
 
 但是由于前一个声明人的数据仍然存在，所以还不能马上进行其他声明
@@ -423,7 +435,7 @@ Finalizers:    [kubernetes.io/pvc-protection]
 <li><p>
 删除 PersistentVolume。在删除 PV 后，外部基础架构中的关联存储资产仍然存在
 </p>
-<pre class="example" id="org9fa1eb9">
+<pre class="example" id="org5ae5ebe">
 如 AWS EBS、GCE PD、Azure Disk 或 Cinder 卷
 </pre></li>
 <li>手动清理相关存储资产上的数据</li>
@@ -431,14 +443,14 @@ Finalizers:    [kubernetes.io/pvc-protection]
 </ol>
 </div>
 </div>
-<div id="outline-container-org3f28701" class="outline-4">
-<h4 id="org3f28701">回收</h4>
-<div class="outline-text-4" id="text-org3f28701">
+<div id="outline-container-orga1961e0" class="outline-4">
+<h4 id="orga1961e0">回收</h4>
+<div class="outline-text-4" id="text-orga1961e0">
 <p>
 如果存储卷插件支持，回收策略会在 volume上执行基本擦除 <span class="underline">rm -rf / thevolume/*</span> ，可被再次声明使用。但是，管理员可以使用如此处所述的 Kubernetes controller manager 命令行参数来配置 <span class="underline">自定义回收站 pod 模板</span> 。自定义回收站 pod 模板必须 <b>包含</b> <span class="underline">volumes</span> ，如下面的示例所示：
 </p>
 
-<pre class="example" id="orgb36a7f1">
+<pre class="example" id="orgd144d6e">
 apiVersion: v1
 kind: Pod
 metadata:
@@ -459,7 +471,7 @@ spec:
       mountPath: /scrub
 </pre>
 
-<pre class="example" id="org145101b">
+<pre class="example" id="org498be52">
 volumes 部分的自定义回收站模块中指定的特定路径将被替换为正在回收的卷的特定路径
 </pre>
 </div>
@@ -472,7 +484,7 @@ volumes 部分的自定义回收站模块中指定的特定路径将被替换为
 对于支持删除回收策略的卷插件，删除操作将从 Kubernetes 中删除 PersistentVolume 对象，并删除外部基础架构中的关联存储资产
 </p>
 
-<pre class="example" id="org57a32ea">
+<pre class="example" id="orgd49d31d">
 如 AWS EBS、GCE PD、Azure Disk 或 Cinder 卷
 </pre>
 
@@ -480,7 +492,7 @@ volumes 部分的自定义回收站模块中指定的特定路径将被替换为
 动态配置的卷继承其 StorageClass，默认为 Delete
 </p>
 
-<pre class="example" id="orgfab9b08">
+<pre class="example" id="org4400e0d">
 管理员应该根据用户的期望来配置 StorageClass，否则就必须要在 PV 创建后进行编辑或修补
 </pre>
 </div>
@@ -490,7 +502,7 @@ volumes 部分的自定义回收站模块中指定的特定路径将被替换为
 <div id="outline-container-org9abf04e" class="outline-3">
 <h3 id="org9abf04e">扩展PVC</h3>
 <div class="outline-text-3" id="text-org9abf04e">
-<pre class="example" id="orgef624d8">
+<pre class="example" id="org082c6a6">
 Kubernetes 1.8 增加了对扩展持久化存储卷的 Alpha 支持
 </pre>
 <p>
@@ -503,7 +515,7 @@ Kubernetes 1.8 增加了对扩展持久化存储卷的 Alpha 支持
 <li>glusterfs</li>
 <li>rbd</li>
 </ul>
-<pre class="example" id="orgc82b38f">
+<pre class="example" id="org9fb9bda">
 管理员可以通过将 ExpandPersistentVolumes 特性门设置为true来允许扩展持久卷声明
 
 管理员还应该启用PersistentVolumeClaimResize 准入控制插件来执行对可调整大小的卷的其他验证
@@ -513,7 +525,7 @@ Kubernetes 1.8 增加了对扩展持久化存储卷的 Alpha 支持
 一旦 PersistentVolumeClaimResize 准入插件已打开，将只允许其 <span class="underline">allowVolumeExpansion</span> 字段设置为 <span class="underline">true</span> 的存储类进行大小调整
 </p>
 
-<pre class="example" id="orgb152d0b">
+<pre class="example" id="org87d8b27">
 kind: StorageClass
 apiVersion: storage.k8s.io/v1
 metadata:
@@ -531,7 +543,7 @@ allowVolumeExpansion: true
 一旦功能门和前述准入插件打开后，用户就可以通过简单地编辑声明以请求更大的 PersistentVolumeClaim 卷。这反过来将触发 PersistentVolume 后端的卷扩展
 </p>
 
-<pre class="example" id="org9eff55a">
+<pre class="example" id="orgcb3cbcf">
 在任何情况下都不会创建新的 PersistentVolume 来满足声明
 
 Kubernetes 将尝试调整现有 volume 来满足声明的要求
@@ -541,7 +553,7 @@ Kubernetes 将尝试调整现有 volume 来满足声明的要求
 对于扩展包含文件系统的卷，只有在 ReadWrite 模式下使用 PersistentVolumeClaim 启动新的 Pod 时，才会执行文件系统调整大小
 </p>
 
-<pre class="example" id="orgf2f32aa">
+<pre class="example" id="org9ddd422">
 换句话说，如果正在扩展的卷在 pod 或部署中使用，则需要删除并重新创建要进行文件系统调整大小的pod
 </pre>
 
@@ -554,7 +566,7 @@ Kubernetes 将尝试调整现有 volume 来满足声明的要求
 <li>Ext3、Ext4</li>
 </ul>
 
-<pre class="example" id="org5db3810">
+<pre class="example" id="org4be9118">
 注意：扩展 EBS 卷是一个耗时的操作
 
 另外，每6个小时有一个修改卷的配额
@@ -565,6 +577,415 @@ Kubernetes 将尝试调整现有 volume 来满足声明的要求
 
 <div id="outline-container-org2f1a034" class="outline-2">
 <h2 id="org2f1a034">持久化卷类型</h2>
+<div class="outline-text-2" id="text-org2f1a034">
+<p>
+PersistentVolume 类型以插件形式实现。Kubernetes 目前支持以下插件类型：
+</p>
+<ul class="org-ul">
+<li>GCEPersistentDisk</li>
+<li>AWSElasticBlockStore</li>
+<li>AzureFile</li>
+<li>AzureDisk</li>
+<li>FC (Fibre Channel)</li>
+<li>FlexVolume</li>
+<li>Flocker</li>
+<li>NFS</li>
+<li>iSCSI</li>
+<li>RBD (Ceph Block Device)</li>
+<li>CephFS</li>
+<li>Cinder (OpenStack block storage)</li>
+<li>Glusterfs</li>
+<li>VsphereVolume</li>
+<li>Quobyte Volumes</li>
+<li><p>
+HostPath
+</p>
+<pre class="example" id="org5738042">
+仅限于但节点测试：不会以任何方式支持本地存储，也无法在多节点集群中工作
+</pre></li>
+<li>VMware Photon</li>
+<li>Portworx Volumes</li>
+<li>ScaleIO Volumes</li>
+<li><p>
+StorageOS
+</p>
+
+<p>
+原始块支持仅适用于以上这些插件
+</p></li>
+</ul>
+</div>
+</div>
+<div id="outline-container-org255f724" class="outline-2">
+<h2 id="org255f724">持久化卷</h2>
+<div class="outline-text-2" id="text-org255f724">
+<p>
+每个 PV 配置中都包含一个 <span class="underline">sepc</span> 规格字段和一个 <span class="underline">status</span> 卷状态字段：
+</p>
+
+<pre class="example" id="org51c913f">
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv0003
+spec:
+  capacity:
+    storage: 5Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Recycle
+  storageClassName: slow
+  mountOptions:
+    - hard
+    - nfsvers=4.1
+  nfs:
+    path: /tmp
+    server: 172.17.0.2
+</pre>
+</div>
+<div id="outline-container-orga95abaa" class="outline-3">
+<h3 id="orga95abaa">容量</h3>
+<div class="outline-text-3" id="text-orga95abaa">
+<p>
+通常，PV 将具有特定的存储容量。这是使用 PV 的容量属性设置的
+</p>
+
+<pre class="example" id="org6cd9649">
+查看 Kubernetes 资源模型 以了解 capacity 预期
+
+目前，存储大小是可以设置或请求的唯一资源。未来的属性可能包括 IOPS、吞吐量等
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org3f96e00" class="outline-3">
+<h3 id="org3f96e00">卷模式</h3>
+<div class="outline-text-3" id="text-org3f96e00">
+<pre class="example" id="org2dd2545">
+在 v1.9 之前，所有卷插件的默认行为是在持久卷上创建一个文件系统
+</pre>
+<p>
+在 v1.9 中，用户可以指定一个 <span class="underline">volumeMode</span> ，除了文件系统之外，它现在将支持原始块设备
+</p>
+<ul class="org-ul">
+<li>volumeMode 的有效值可以是 <span class="underline">Filesystem</span> 或 <span class="underline">Block</span>
+<ul class="org-ul">
+<li>如果未指定，volumeMode 将默认为“Filesystem”，这是一个可选的 API 参数</li>
+</ul></li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-org6286476" class="outline-3">
+<h3 id="org6286476">访问模式</h3>
+<div class="outline-text-3" id="text-org6286476">
+<p>
+PersistentVolume 可以以资源提供者支持的任何方式挂载到主机上。如下表所示：
+</p>
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 1:</span> access mode of volume type</caption>
+
+<colgroup>
+<col  class="org-left" />
+
+<col  class="org-left" />
+
+<col  class="org-left" />
+
+<col  class="org-left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="org-left">Volume 插件</td>
+<td class="org-left">ReadWriteOnce</td>
+<td class="org-left">ReadOnlyMany</td>
+<td class="org-left">ReadWriteMany</td>
+</tr>
+
+<tr>
+<td class="org-left">AWSElasticBlockStore</td>
+<td class="org-left">✓</td>
+<td class="org-left">-</td>
+<td class="org-left">-</td>
+</tr>
+
+<tr>
+<td class="org-left">AzureFile</td>
+<td class="org-left">✓</td>
+<td class="org-left">✓</td>
+<td class="org-left">✓</td>
+</tr>
+
+<tr>
+<td class="org-left">AzureDisk</td>
+<td class="org-left">✓</td>
+<td class="org-left">-</td>
+<td class="org-left">-</td>
+</tr>
+
+<tr>
+<td class="org-left">CephFS</td>
+<td class="org-left">✓</td>
+<td class="org-left">✓</td>
+<td class="org-left">✓</td>
+</tr>
+
+<tr>
+<td class="org-left">Cinder</td>
+<td class="org-left">✓</td>
+<td class="org-left">-</td>
+<td class="org-left">-</td>
+</tr>
+
+<tr>
+<td class="org-left">FC</td>
+<td class="org-left">✓</td>
+<td class="org-left">✓</td>
+<td class="org-left">-</td>
+</tr>
+
+<tr>
+<td class="org-left">FlexVolume</td>
+<td class="org-left">✓</td>
+<td class="org-left">✓</td>
+<td class="org-left">-</td>
+</tr>
+
+<tr>
+<td class="org-left">Flocker</td>
+<td class="org-left">✓</td>
+<td class="org-left">-</td>
+<td class="org-left">-</td>
+</tr>
+
+<tr>
+<td class="org-left">GCEPersistentDisk</td>
+<td class="org-left">✓</td>
+<td class="org-left">✓</td>
+<td class="org-left">-</td>
+</tr>
+
+<tr>
+<td class="org-left">Glusterfs</td>
+<td class="org-left">✓</td>
+<td class="org-left">✓</td>
+<td class="org-left">✓</td>
+</tr>
+
+<tr>
+<td class="org-left">HostPath</td>
+<td class="org-left">✓</td>
+<td class="org-left">-</td>
+<td class="org-left">-</td>
+</tr>
+
+<tr>
+<td class="org-left">iSCSI</td>
+<td class="org-left">✓</td>
+<td class="org-left">✓</td>
+<td class="org-left">-</td>
+</tr>
+
+<tr>
+<td class="org-left">PhotonPersistentDisk</td>
+<td class="org-left">✓</td>
+<td class="org-left">-</td>
+<td class="org-left">-</td>
+</tr>
+
+<tr>
+<td class="org-left">Quobyte</td>
+<td class="org-left">✓</td>
+<td class="org-left">✓</td>
+<td class="org-left">✓</td>
+</tr>
+
+<tr>
+<td class="org-left">NFS</td>
+<td class="org-left">✓</td>
+<td class="org-left">✓</td>
+<td class="org-left">✓</td>
+</tr>
+
+<tr>
+<td class="org-left">RBD</td>
+<td class="org-left">✓</td>
+<td class="org-left">✓</td>
+<td class="org-left">-</td>
+</tr>
+
+<tr>
+<td class="org-left">VsphereVolume</td>
+<td class="org-left">✓</td>
+<td class="org-left">-</td>
+<td class="org-left">- （当 pod 并列时有效）</td>
+</tr>
+
+<tr>
+<td class="org-left">PortworxVolume</td>
+<td class="org-left">✓</td>
+<td class="org-left">-</td>
+<td class="org-left">✓</td>
+</tr>
+
+<tr>
+<td class="org-left">ScaleIO</td>
+<td class="org-left">✓</td>
+<td class="org-left">✓</td>
+<td class="org-left">-</td>
+</tr>
+
+<tr>
+<td class="org-left">StorageOS</td>
+<td class="org-left">✓</td>
+<td class="org-left">-</td>
+<td class="org-left">-</td>
+</tr>
+</tbody>
+</table>
+
+<p>
+存储模式包括：
+</p>
+<ul class="org-ul">
+<li><span class="underline">ReadWriteOnce</span> : 该卷可以被 <b>单个节点以读/写</b> 模式挂载</li>
+<li><span class="underline">ReadOnlyMany</span> : 该卷可以被 <b>多个节点以只读</b> 模式挂载</li>
+<li><p>
+<span class="underline">ReadWriteMany</span> : 该卷可以被 <b>多个节点以读/写</b> 模式挂载
+</p>
+
+<pre class="example" id="orgaf7157f">
+供应商具有不同的功能，每个 PV 的访问模式都将被设置为该卷支持的特定模式
+
+例如，NFS 可以支持多个读/写客户端，但特定的 NFS PV 可能以只读方式导出到服务器上
+
+每个 PV 都有一套自己的用来描述特定功能的访问模式
+</pre></li>
+</ul>
+
+<p>
+注意： <b>一个卷一次只能使用一种访问模式挂载</b> ，即使它支持很多访问模式
+</p>
+
+<pre class="example" id="orge7c1ccb">
+例如，GCEPersistentDisk 可以由单个节点作为 ReadWriteOnce 模式挂载，或由多个节点以 ReadOnlyMany 模式挂载，但不能同时挂载
+</pre>
+
+<p>
+在命令行中，访问模式缩写为：
+</p>
+<ul class="org-ul">
+<li><span class="underline">RWO</span> : ReadWriteOnce</li>
+<li><span class="underline">ROX</span> : ReadOnlyMany</li>
+<li><span class="underline">RWX</span> : ReadWriteMany</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-orgb73f8ee" class="outline-3">
+<h3 id="orgb73f8ee">类</h3>
+<div class="outline-text-3" id="text-orgb73f8ee">
+<p>
+PV 可以具有一个类，通过将 <span class="underline">storageClassName</span> 属性设置为 StorageClass 的名称来指定该类：
+</p>
+<ul class="org-ul">
+<li>一个特定类别的 PV 只能绑定到请求该类别的 PVC</li>
+<li>没有 storageClassName 的 PV 就没有类，它只能绑定到不需要特定类的 PVC</li>
+</ul>
+
+<pre class="example" id="orgbba3209">
+过去，使用的是 volume.beta.kubernetes.io/storage-class 注解而不是 storageClassName 属性
+
+这个注解仍然有效，但是将来的 Kubernetes 版本中将会完全弃用它
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orgdd58aff" class="outline-3">
+<h3 id="orgdd58aff">回收策略</h3>
+<div class="outline-text-3" id="text-orgdd58aff">
+<p>
+当前的回收策略包括：
+</p>
+<ul class="org-ul">
+<li><span class="underline">Retain</span> （保留）: 手动回收</li>
+<li><span class="underline">Recycle</span> （回收）: 基本擦除（rm -rf /thevolume/*）</li>
+<li><p>
+<span class="underline">Delete</span> （删除）: 关联的存储资产将被删除
+</p>
+
+<pre class="example" id="org621671d">
+当前，只有 NFS 和 HostPath 支持回收策略
+
+AWS EBS、GCE PD、Azure Disk 和 Cinder 卷支持删除策略
+</pre></li>
+</ul>
+</div>
+</div>
+<div id="outline-container-orgb0ea99f" class="outline-3">
+<h3 id="orgb0ea99f">挂载选项</h3>
+<div class="outline-text-3" id="text-orgb0ea99f">
+<p>
+Kubernetes 管理员可以指定在节点上为挂载持久卷指定挂载选项
+</p>
+
+<pre class="example" id="org61282b7">
+注意：不是所有的持久化卷类型都支持挂载选项
+</pre>
+
+<p>
+以下卷类型支持挂载选项：
+</p>
+<ul class="org-ul">
+<li>GCEPersistentDisk</li>
+<li>AWSElasticBlockStore</li>
+<li>AzureFile</li>
+<li>AzureDisk</li>
+<li>NFS</li>
+<li>iSCSI</li>
+<li>RBD (Ceph Block Device)</li>
+<li>CephFS</li>
+<li>Cinder （OpenStack 卷存储）</li>
+<li>Glusterfs</li>
+<li>VsphereVolume</li>
+<li>Quobyte Volumes</li>
+<li>VMware Photon</li>
+</ul>
+
+<p>
+挂载选项没有校验，如果挂载选项无效则挂载失败 
+</p>
+
+<pre class="example" id="orgbb374b0">
+过去，使用 volume.beta.kubernetes.io/mount-options 注解而不是 mountOptions 属性
+
+这个注解仍然有效，但在将来的 Kubernetes 版本中它将会被完全弃用
+</pre>
+</div>
+</div>
+<div id="outline-container-orgd94cc21" class="outline-3">
+<h3 id="orgd94cc21">状态</h3>
+<div class="outline-text-3" id="text-orgd94cc21">
+<p>
+卷可以处于以下的某种状态：
+</p>
+<ul class="org-ul">
+<li><span class="underline">Available</span> （可用）：一块空闲资源还没有被任何声明绑定</li>
+<li><span class="underline">Bound</span> （已绑定）：卷已经被声明绑定</li>
+<li><span class="underline">Released</span> （已释放）：声明被删除，但是资源还未被集群重新声明</li>
+<li><span class="underline">Failed</span> （失败）：该卷的自动回收失败</li>
+</ul>
+
+<p>
+命令行会显示绑定到 PV 的 PVC 的名称 
+</p>
+</div>
+</div>
+</div>
+<div id="outline-container-org616b41c" class="outline-2">
+<h2 id="org616b41c">PersistentVolumeClaim</h2>
 </div>
 </div>
 <div id="postamble" class="status">

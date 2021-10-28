@@ -202,3 +202,180 @@
 
 * 持久化卷类型
 
+  PersistentVolume 类型以插件形式实现。Kubernetes 目前支持以下插件类型：
+  + GCEPersistentDisk
+  + AWSElasticBlockStore
+  + AzureFile
+  + AzureDisk
+  + FC (Fibre Channel)
+  + FlexVolume
+  + Flocker
+  + NFS
+  + iSCSI
+  + RBD (Ceph Block Device)
+  + CephFS
+  + Cinder (OpenStack block storage)
+  + Glusterfs
+  + VsphereVolume
+  + Quobyte Volumes
+  + HostPath
+    #+begin_example
+      仅限于但节点测试：不会以任何方式支持本地存储，也无法在多节点集群中工作
+    #+end_example
+  + VMware Photon
+  + Portworx Volumes
+  + ScaleIO Volumes
+  + StorageOS
+
+    原始块支持仅适用于以上这些插件
+* 持久化卷
+  每个 PV 配置中都包含一个 _sepc_ 规格字段和一个 _status_ 卷状态字段：
+
+  #+begin_example
+    apiVersion: v1
+    kind: PersistentVolume
+    metadata:
+      name: pv0003
+    spec:
+      capacity:
+	storage: 5Gi
+      volumeMode: Filesystem
+      accessModes:
+	- ReadWriteOnce
+      persistentVolumeReclaimPolicy: Recycle
+      storageClassName: slow
+      mountOptions:
+	- hard
+	- nfsvers=4.1
+      nfs:
+	path: /tmp
+	server: 172.17.0.2
+  #+end_example
+** 容量
+   通常，PV 将具有特定的存储容量。这是使用 PV 的容量属性设置的
+
+   #+begin_example
+     查看 Kubernetes 资源模型 以了解 capacity 预期
+
+     目前，存储大小是可以设置或请求的唯一资源。未来的属性可能包括 IOPS、吞吐量等
+   #+end_example
+
+** 卷模式
+   #+begin_example
+     在 v1.9 之前，所有卷插件的默认行为是在持久卷上创建一个文件系统
+   #+end_example
+   在 v1.9 中，用户可以指定一个 _volumeMode_ ，除了文件系统之外，它现在将支持原始块设备
+   + volumeMode 的有效值可以是 _Filesystem_ 或 _Block_
+     + 如果未指定，volumeMode 将默认为“Filesystem”，这是一个可选的 API 参数
+
+** 访问模式
+   PersistentVolume 可以以资源提供者支持的任何方式挂载到主机上。如下表所示：
+
+   #+CAPTION: access mode of volume type 
+   #+ATTR_HTML: :border 1 :rules all :frame boader
+   | Volume 插件          | ReadWriteOnce | ReadOnlyMany | ReadWriteMany           |
+   | AWSElasticBlockStore | ✓             | -            | -                       |
+   | AzureFile            | ✓             | ✓            | ✓                       |
+   | AzureDisk            | ✓             | -            | -                       |
+   | CephFS               | ✓             | ✓            | ✓                       |
+   | Cinder               | ✓             | -            | -                       |
+   | FC                   | ✓             | ✓            | -                       |
+   | FlexVolume           | ✓             | ✓            | -                       |
+   | Flocker              | ✓             | -            | -                       |
+   | GCEPersistentDisk    | ✓             | ✓            | -                       |
+   | Glusterfs            | ✓             | ✓            | ✓                       |
+   | HostPath             | ✓             | -            | -                       |
+   | iSCSI                | ✓             | ✓            | -                       |
+   | PhotonPersistentDisk | ✓             | -            | -                       |
+   | Quobyte              | ✓             | ✓            | ✓                       |
+   | NFS                  | ✓             | ✓            | ✓                       |
+   | RBD                  | ✓             | ✓            | -                       |
+   | VsphereVolume        | ✓             | -            | - （当 pod 并列时有效） |
+   | PortworxVolume       | ✓             | -            | ✓                       |
+   | ScaleIO              | ✓             | ✓            | -                       |
+   | StorageOS            | ✓             | -            | -                       |
+
+   存储模式包括：
+   + _ReadWriteOnce_ : 该卷可以被 *单个节点以读/写* 模式挂载
+   + _ReadOnlyMany_ : 该卷可以被 *多个节点以只读* 模式挂载
+   + _ReadWriteMany_ : 该卷可以被 *多个节点以读/写* 模式挂载
+
+     #+begin_example
+       供应商具有不同的功能，每个 PV 的访问模式都将被设置为该卷支持的特定模式
+
+       例如，NFS 可以支持多个读/写客户端，但特定的 NFS PV 可能以只读方式导出到服务器上
+
+       每个 PV 都有一套自己的用来描述特定功能的访问模式
+     #+end_example
+
+   注意： *一个卷一次只能使用一种访问模式挂载* ，即使它支持很多访问模式
+
+   #+begin_example
+     例如，GCEPersistentDisk 可以由单个节点作为 ReadWriteOnce 模式挂载，或由多个节点以 ReadOnlyMany 模式挂载，但不能同时挂载
+   #+end_example
+
+   在命令行中，访问模式缩写为：
+   + _RWO_ : ReadWriteOnce
+   + _ROX_ : ReadOnlyMany
+   + _RWX_ : ReadWriteMany
+
+** 类
+   PV 可以具有一个类，通过将 _storageClassName_ 属性设置为 StorageClass 的名称来指定该类：
+   + 一个特定类别的 PV 只能绑定到请求该类别的 PVC
+   + 没有 storageClassName 的 PV 就没有类，它只能绑定到不需要特定类的 PVC 
+
+   #+begin_example
+     过去，使用的是 volume.beta.kubernetes.io/storage-class 注解而不是 storageClassName 属性
+
+     这个注解仍然有效，但是将来的 Kubernetes 版本中将会完全弃用它
+   #+end_example
+
+** 回收策略
+   当前的回收策略包括：
+   + _Retain_ （保留）: 手动回收
+   + _Recycle_ （回收）: 基本擦除（rm -rf /thevolume/*）
+   + _Delete_ （删除）: 关联的存储资产将被删除
+
+     #+begin_example
+       当前，只有 NFS 和 HostPath 支持回收策略
+
+       AWS EBS、GCE PD、Azure Disk 和 Cinder 卷支持删除策略
+     #+end_example
+** 挂载选项
+   Kubernetes 管理员可以指定在节点上为挂载持久卷指定挂载选项
+
+   #+begin_example
+     注意：不是所有的持久化卷类型都支持挂载选项
+   #+end_example
+
+   以下卷类型支持挂载选项：
+   + GCEPersistentDisk
+   + AWSElasticBlockStore
+   + AzureFile
+   + AzureDisk
+   + NFS
+   + iSCSI
+   + RBD (Ceph Block Device)
+   + CephFS
+   + Cinder （OpenStack 卷存储）
+   + Glusterfs
+   + VsphereVolume
+   + Quobyte Volumes
+   + VMware Photon
+
+   挂载选项没有校验，如果挂载选项无效则挂载失败 
+
+   #+begin_example
+     过去，使用 volume.beta.kubernetes.io/mount-options 注解而不是 mountOptions 属性
+
+     这个注解仍然有效，但在将来的 Kubernetes 版本中它将会被完全弃用
+   #+end_example
+** 状态
+   卷可以处于以下的某种状态：
+   + _Available_ （可用）：一块空闲资源还没有被任何声明绑定
+   + _Bound_ （已绑定）：卷已经被声明绑定
+   + _Released_ （已释放）：声明被删除，但是资源还未被集群重新声明
+   + _Failed_ （失败）：该卷的自动回收失败
+
+   命令行会显示绑定到 PV 的 PVC 的名称 
+* PersistentVolumeClaim
