@@ -228,6 +228,27 @@
 <div id="text-table-of-contents">
 <ul>
 <li><a href="#org04b83e9">介绍</a></li>
+<li><a href="#orgf15917c">生命周期</a>
+<ul>
+<li><a href="#org37140da">配置</a>
+<ul>
+<li><a href="#org99fa40c">静态</a></li>
+<li><a href="#org8cc5b37">动态</a></li>
+</ul>
+</li>
+<li><a href="#org4e01260">绑定</a></li>
+<li><a href="#org807c311">PVC 保护</a></li>
+<li><a href="#orgc292ca1">回收</a>
+<ul>
+<li><a href="#org15e094c">保留</a></li>
+<li><a href="#org3f28701">回收</a></li>
+<li><a href="#org2b9c66e">删除</a></li>
+</ul>
+</li>
+<li><a href="#org9abf04e">扩展PVC</a></li>
+</ul>
+</li>
+<li><a href="#org2f1a034">持久化卷类型</a></li>
 </ul>
 </div>
 </div>
@@ -235,11 +256,315 @@
 接下来介绍 Kubernetes 中 PersistentVolume 的当前状态
 </p>
 
-<pre class="example" id="orgf1f111e">
+<pre class="example" id="org34e4bc9">
 建议先熟悉 Volume
 </pre>
 <div id="outline-container-org04b83e9" class="outline-2">
 <h2 id="org04b83e9">介绍</h2>
+<div class="outline-text-2" id="text-org04b83e9">
+<pre class="example" id="org99c35a3">
+对于管理计算资源来说，管理存储资源明显是另一个问题
+</pre>
+
+<p>
+<span class="underline">PersistentVolume</span> 子系统为用户和管理员提供了一个 API，该 API 将如何提供存储的细节抽象了出来。为此，引入两个新的 API 资源： <span class="underline">PersistentVolume</span>  和 <span class="underline">PersistentVolumeClaim</span> ：
+</p>
+<ul class="org-ul">
+<li>PersistentVolume <span class="underline">PV</span> 是由 <b>管理员设置的存储</b> ，它是群集的一部分：
+<ul class="org-ul">
+<li>就像节点是集群中的资源一样，PV 也是集群中的资源</li>
+<li>PV 是 Volume 之类的卷插件，但具有独立于使用 PV 的 Pod 的生命周期</li>
+<li>此 API 对象包含存储实现的细节，即 NFS、iSCSI 或特定于云供应商的存储系统</li>
+</ul></li>
+<li><p>
+PersistentVolumeClaim <span class="underline">PVC</span> 是 <b>用户存储的请求</b> 。它与 Pod 相似：
+</p>
+<ul class="org-ul">
+<li>Pod 消耗节点资源，PVC 消耗 PV 资源</li>
+<li><p>
+Pod 可以请求特定级别的资源（CPU 和内存）。PVC 可以请求特定的大小和访问模式
+</p>
+<pre class="example" id="orgf0c4e5c">
+例如，可以以读/写一次或 只读多次模式挂载
+</pre></li>
+</ul>
+
+<p>
+虽然 PersistentVolumeClaims 允许用户使用抽象存储资源，但用户需要具有不同性质（例如性能）的 PersistentVolume 来解决不同的问题
+</p></li>
+</ul>
+<pre class="example" id="org43cb458">
+集群管理员需要能够提供各种各样的 PersistentVolume，这些PersistentVolume 的大小和访问模式可以各有不同，但不需要向用户公开实现这些卷的细节
+
+对于这些需求，StorageClass 资源可以实现
+</pre>
+</div>
+</div>
+<div id="outline-container-orgf15917c" class="outline-2">
+<h2 id="orgf15917c">生命周期</h2>
+<div class="outline-text-2" id="text-orgf15917c">
+<p>
+PV 属于集群中的资源。PVC 是对这些资源的请求，也作为对资源的请求的检查。 PV 和 PVC 之间的相互作用遵循这样的生命周期：
+</p>
+</div>
+<div id="outline-container-org37140da" class="outline-3">
+<h3 id="org37140da">配置</h3>
+<div class="outline-text-3" id="text-org37140da">
+<p>
+有两种方式来配置 PV： <span class="underline">静态</span> 或 <span class="underline">动态</span> 
+</p>
+</div>
+<div id="outline-container-org99fa40c" class="outline-4">
+<h4 id="org99fa40c">静态</h4>
+<div class="outline-text-4" id="text-org99fa40c">
+<p>
+集群管理员创建一些 PV。它们带有可供群集用户使用的实际存储的细节。它们存在于 Kubernetes API 中，可用于消费
+</p>
+</div>
+</div>
+<div id="outline-container-org8cc5b37" class="outline-4">
+<h4 id="org8cc5b37">动态</h4>
+<div class="outline-text-4" id="text-org8cc5b37">
+<p>
+根据 StorageClasses，当管理员创建的静态 PV 都不匹配用户的 PersistentVolumeClaim 时，集群可能会尝试动态地为 PVC 创建卷 
+</p>
+</div>
+</div>
+</div>
+<div id="outline-container-org4e01260" class="outline-3">
+<h3 id="org4e01260">绑定</h3>
+<div class="outline-text-3" id="text-org4e01260">
+<ol class="org-ol">
+<li>在 <span class="underline">动态</span> 配置的情况下，用户创建或已经创建了具有特定存储量的 PersistentVolumeClaim 以及某些访问模式</li>
+<li><span class="underline">master</span> 中的 <span class="underline">控制环路</span> <b>监视</b> 新的 <span class="underline">PVC</span> ，寻找匹配的 PV（如果可能），并将它们 <b>绑定</b> 在一起：
+<ul class="org-ul">
+<li>如果为新的 PVC 动态调配 PV，则该环路将始终将该 PV <b>绑定</b> 到 PVC</li>
+<li>否则，用户总会得到他们所请求的存储，但是容量可能超出要求的数量</li>
+</ul></li>
+<li>一旦 PV 和 PVC 绑定后，PersistentVolumeClaim 绑定是 <b>排他性</b> 的，不管它们是如何绑定的。 PVC 跟 PV 绑定是 <span class="underline">一对一</span> 的映射</li>
+</ol>
+
+<pre class="example" id="org84edfb1">
+如果没有匹配的卷，声明将无限期地保持未绑定状态
+</pre>
+
+<p>
+随着匹配卷的可用，声明将被绑定
+</p>
+
+<pre class="example" id="org9963b51">
+例如，配置了许多 50Gi PV的集群将不会匹配请求 100Gi 的PVC
+
+将100Gi PV 添加到群集时，可以绑定 PVC
+</pre>
+</div>
+</div>
+<div id="outline-container-org807c311" class="outline-3">
+<h3 id="org807c311">PVC 保护</h3>
+<div class="outline-text-3" id="text-org807c311">
+<p>
+PVC <span class="underline">保护</span> 的目的是确保由 pod <b>正在使用的 PVC 不会从系统中移除</b> ，因为如果被移除的话可能会导致数据丢失。
+</p>
+
+<pre class="example" id="org90498ba">
+注意：当 pod 状态为 Pending 并且 pod 已经分配给节点或 pod 为 Running 状态时，PVC 处于活动状态
+</pre>
+
+<p>
+当启用PVC 保护 功能时，如果用户删除了一个 pod 正在使用的 PVC，则该 PVC 不会被立即删除
+</p>
+<pre class="example" id="orga68821c">
+PVC 的删除将被推迟，直到 PVC 不再被任何 pod 使用
+</pre>
+
+<p>
+可以看到，当 PVC 的状态为 <span class="underline">Teminatiing</span> 时，PVC 受到保护，Finalizers 列表中包含 <span class="underline">kubernetes.io/pvc-protection</span> ：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl described pvc hostpath
+Name:          hostpath
+Namespace:     default
+StorageClass:  example-hostpath
+Status:        Terminating
+Volume:        
+Labels:        &lt;none&gt;
+Annotations:   volume.beta.kubernetes.io/storage-class=example-hostpath
+volume.beta.kubernetes.io/storage-provisioner=example.com/hostpath
+Finalizers:    [kubernetes.io/pvc-protection]
+...
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-orgc292ca1" class="outline-3">
+<h3 id="orgc292ca1">回收</h3>
+<div class="outline-text-3" id="text-orgc292ca1">
+<p>
+用户用完 volume 后，可以从允许回收资源的 API 中删除 PVC 对象。PersistentVolume 的 <span class="underline">回收策略</span> 告诉集群在 <span class="underline">存储卷声明</span> <b>释放</b> 后应如何处理该卷。目前，volume 的处理策略有 <span class="underline">保留</span> 、 <span class="underline">回收</span> 或 <span class="underline">删除</span>
+</p>
+</div>
+<div id="outline-container-org15e094c" class="outline-4">
+<h4 id="org15e094c">保留</h4>
+<div class="outline-text-4" id="text-org15e094c">
+<p>
+保留回收策略允许手动回收资源
+</p>
+<pre class="example" id="org0220075">
+当 PersistentVolumeClaim 被删除时，PersistentVolume 仍然存在，volume 被视为“已释放”
+
+但是由于前一个声明人的数据仍然存在，所以还不能马上进行其他声明
+</pre>
+
+<p>
+管理员可以通过以下步骤手动回收卷：
+</p>
+<ol class="org-ol">
+<li><p>
+删除 PersistentVolume。在删除 PV 后，外部基础架构中的关联存储资产仍然存在
+</p>
+<pre class="example" id="org9fa1eb9">
+如 AWS EBS、GCE PD、Azure Disk 或 Cinder 卷
+</pre></li>
+<li>手动清理相关存储资产上的数据</li>
+<li>手动删除关联的存储资产，或者如果要重新使用相同的存储资产，请使用存储资产定义创建新的 PersistentVolume</li>
+</ol>
+</div>
+</div>
+<div id="outline-container-org3f28701" class="outline-4">
+<h4 id="org3f28701">回收</h4>
+<div class="outline-text-4" id="text-org3f28701">
+<p>
+如果存储卷插件支持，回收策略会在 volume上执行基本擦除 <span class="underline">rm -rf / thevolume/*</span> ，可被再次声明使用。但是，管理员可以使用如此处所述的 Kubernetes controller manager 命令行参数来配置 <span class="underline">自定义回收站 pod 模板</span> 。自定义回收站 pod 模板必须 <b>包含</b> <span class="underline">volumes</span> ，如下面的示例所示：
+</p>
+
+<pre class="example" id="orgb36a7f1">
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pv-recycler
+  namespace: default
+spec:
+  restartPolicy: Never
+  volumes:
+  - name: vol
+    hostPath:
+      path: /any/path/it/will/be/replaced
+  containers:
+  - name: pv-recycler
+    image: "k8s.gcr.io/busybox"
+    command: ["/bin/sh", "-c", "test -e /scrub &amp;&amp; rm -rf /scrub/..?* /scrub/.[!.]* /scrub/*  &amp;&amp; test -z \"$(ls -A /scrub)\" || exit 1"]
+    volumeMounts:
+    - name: vol
+      mountPath: /scrub
+</pre>
+
+<pre class="example" id="org145101b">
+volumes 部分的自定义回收站模块中指定的特定路径将被替换为正在回收的卷的特定路径
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org2b9c66e" class="outline-4">
+<h4 id="org2b9c66e">删除</h4>
+<div class="outline-text-4" id="text-org2b9c66e">
+<p>
+对于支持删除回收策略的卷插件，删除操作将从 Kubernetes 中删除 PersistentVolume 对象，并删除外部基础架构中的关联存储资产
+</p>
+
+<pre class="example" id="org57a32ea">
+如 AWS EBS、GCE PD、Azure Disk 或 Cinder 卷
+</pre>
+
+<p>
+动态配置的卷继承其 StorageClass，默认为 Delete
+</p>
+
+<pre class="example" id="orgfab9b08">
+管理员应该根据用户的期望来配置 StorageClass，否则就必须要在 PV 创建后进行编辑或修补
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org9abf04e" class="outline-3">
+<h3 id="org9abf04e">扩展PVC</h3>
+<div class="outline-text-3" id="text-org9abf04e">
+<pre class="example" id="orgef624d8">
+Kubernetes 1.8 增加了对扩展持久化存储卷的 Alpha 支持
+</pre>
+<p>
+以下持久化卷支持扩展持久化卷声明：
+</p>
+<ul class="org-ul">
+<li>gcePersistentDisk</li>
+<li>awsElasticBlockStore</li>
+<li>Cinder</li>
+<li>glusterfs</li>
+<li>rbd</li>
+</ul>
+<pre class="example" id="orgc82b38f">
+管理员可以通过将 ExpandPersistentVolumes 特性门设置为true来允许扩展持久卷声明
+
+管理员还应该启用PersistentVolumeClaimResize 准入控制插件来执行对可调整大小的卷的其他验证
+</pre>
+
+<p>
+一旦 PersistentVolumeClaimResize 准入插件已打开，将只允许其 <span class="underline">allowVolumeExpansion</span> 字段设置为 <span class="underline">true</span> 的存储类进行大小调整
+</p>
+
+<pre class="example" id="orgb152d0b">
+kind: StorageClass
+apiVersion: storage.k8s.io/v1
+metadata:
+  name: gluster-vol-default
+provisioner: kubernetes.io/glusterfs
+parameters:
+  resturl: "http://192.168.10.100:8080"
+  restuser: ""
+  secretNamespace: ""
+  secretName: ""
+allowVolumeExpansion: true
+</pre>
+
+<p>
+一旦功能门和前述准入插件打开后，用户就可以通过简单地编辑声明以请求更大的 PersistentVolumeClaim 卷。这反过来将触发 PersistentVolume 后端的卷扩展
+</p>
+
+<pre class="example" id="org9eff55a">
+在任何情况下都不会创建新的 PersistentVolume 来满足声明
+
+Kubernetes 将尝试调整现有 volume 来满足声明的要求
+</pre>
+
+<p>
+对于扩展包含文件系统的卷，只有在 ReadWrite 模式下使用 PersistentVolumeClaim 启动新的 Pod 时，才会执行文件系统调整大小
+</p>
+
+<pre class="example" id="orgf2f32aa">
+换句话说，如果正在扩展的卷在 pod 或部署中使用，则需要删除并重新创建要进行文件系统调整大小的pod
+</pre>
+
+
+<p>
+文件系统调整大小仅适用于以下文件系统类型：
+</p>
+<ul class="org-ul">
+<li>XFS</li>
+<li>Ext3、Ext4</li>
+</ul>
+
+<pre class="example" id="org5db3810">
+注意：扩展 EBS 卷是一个耗时的操作
+
+另外，每6个小时有一个修改卷的配额
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org2f1a034" class="outline-2">
+<h2 id="org2f1a034">持久化卷类型</h2>
 </div>
 </div>
 <div id="postamble" class="status">
