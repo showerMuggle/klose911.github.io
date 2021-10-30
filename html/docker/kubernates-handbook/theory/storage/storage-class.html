@@ -5,7 +5,7 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>存储</title>
+<title>StorageClass</title>
 <meta name="generator" content="Org mode" />
 <meta name="author" content="Wu, Shanliang" />
 <style type="text/css">
@@ -229,23 +229,296 @@ for the JavaScript code in this tag.
 </head>
 <body>
 <div id="org-div-home-and-up">
- <a accesskey="h" href="../security/security.html"> UP </a>
+ <a accesskey="h" href="persistent-volume.html"> UP </a>
  |
- <a accesskey="H" href="../theory.html"> HOME </a>
+ <a accesskey="H" href="storage.html"> HOME </a>
 </div><div id="content">
-<h1 class="title">存储</h1>
+<h1 class="title">StorageClass</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#org5636f80">介绍</a></li>
+<li><a href="#orga4f936e">资源</a>
+<ul>
+<li><a href="#orga5a37d7">存储分配器</a></li>
+<li><a href="#org02ebfc8">回收策略</a></li>
+<li><a href="#orgefb97f0">挂载选项</a></li>
+</ul>
+</li>
+<li><a href="#org9d24cee">参数</a></li>
+</ul>
+</div>
+</div>
+<pre class="example">
+  接下来介绍了 Kubernetes 中 StorageClass 的概念
+
+  建议先熟悉 Volume 和 Persistent Volume
+</pre>
+<div id="outline-container-org5636f80" class="outline-2">
+<h2 id="org5636f80">介绍</h2>
+<div class="outline-text-2" id="text-org5636f80">
 <p>
-为了管理存储，Kubernetes提供了 <span class="underline">Secret</span> 用于管理敏感信息， <span class="underline">ConfigMap</span> 存储配置， <span class="underline">Volume</span> 、 <span class="underline">PV</span> 、 <span class="underline">PVC</span> 、 <span class="underline">StorageClass</span> 等用来管理存储卷
+<span class="underline">StorageClass</span> 为管理员提供了描述 <span class="underline">存储类型</span> 的方法：不同的 class 可能会映射到不同的服务质量等级或备份策略，或由群集管理员确定的任意策略
 </p>
 
+<pre class="example">
+Kubernetes 本身不清楚各种 class 代表的什么，这个概念在其他存储系统中有时被称为“配置文件”
+</pre>
+</div>
+</div>
+<div id="outline-container-orga4f936e" class="outline-2">
+<h2 id="orga4f936e">资源</h2>
+<div class="outline-text-2" id="text-orga4f936e">
+<p>
+StorageClass 中包含：
+</p>
 <ul class="org-ul">
-<li><a href="secret.html">Secret</a></li>
-<li><a href="config-map.html">ConfigMap</a></li>
-<li><a href="volume.html">Volume</a></li>
-<li><a href="persistent-volume.html">Persistent Volume</a></li>
-<li><a href="storage-class.html">StorageClass</a></li>
-<li><a href="local-storage.html">本地持久化存储</a></li>
+<li><span class="underline">provisioner</span> 、 <span class="underline">parameters</span> 和 <span class="underline">reclaimPolicy</span> 字段：当 class 需要动态分配 PersistentVolume 时会使用到</li>
+<li>StorageClass 对象的 <b>名称</b> 很重要，用户使用该类来请求一个特定的方法</li>
 </ul>
+
+<pre class="example">
+    当创建 StorageClass 对象时，管理员设置名称和其他参数，一旦创建了对象就不能再对其更新
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #4eee94;">kind</span>: StorageClass
+<span style="color: #4eee94;">apiVersion</span>: storage.k8s.io/v1
+<span style="color: #4eee94;">metadata</span>:
+  <span style="color: #4eee94;">name</span>: standard
+<span style="color: #4eee94;">provisioner</span>: kubernetes.io/aws-ebs
+<span style="color: #4eee94;">parameters</span>:
+  <span style="color: #4eee94;">type</span>: gp2
+<span style="color: #4eee94;">reclaimPolicy</span>: Retain
+<span style="color: #4eee94;">mountOptions</span>:
+  - debug
+</pre>
+</div>
+
+<pre class="example">
+    管理员可以为没有申请绑定到特定 class 的 PVC 指定一个默认的 StorageClass
+</pre>
+</div>
+<div id="outline-container-orga5a37d7" class="outline-3">
+<h3 id="orga5a37d7">存储分配器</h3>
+<div class="outline-text-3" id="text-orga5a37d7">
+<p>
+Storage class 有一个分配器，用来决定使用哪个卷插件分配 PV。该字段必须指定：
+</p>
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 1:</span> provisioner of storage class</caption>
+
+<colgroup>
+<col  class="org-left" />
+
+<col  class="org-left" />
+
+<col  class="org-left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="org-left">Volume Plugin</td>
+<td class="org-left">Internal Provisioner</td>
+<td class="org-left">Config Example</td>
+</tr>
+
+<tr>
+<td class="org-left">AWSElasticBlockStore</td>
+<td class="org-left">✓</td>
+<td class="org-left">AWS</td>
+</tr>
+
+<tr>
+<td class="org-left">AzureFile</td>
+<td class="org-left">✓</td>
+<td class="org-left">Azure File</td>
+</tr>
+
+<tr>
+<td class="org-left">AzureDisk</td>
+<td class="org-left">✓</td>
+<td class="org-left">Azure Disk</td>
+</tr>
+
+<tr>
+<td class="org-left">CephFS</td>
+<td class="org-left">-</td>
+<td class="org-left">-</td>
+</tr>
+
+<tr>
+<td class="org-left">Cinder</td>
+<td class="org-left">✓</td>
+<td class="org-left">OpenStack Cinder</td>
+</tr>
+
+<tr>
+<td class="org-left">FC</td>
+<td class="org-left">-</td>
+<td class="org-left">-</td>
+</tr>
+
+<tr>
+<td class="org-left">FlexVolume</td>
+<td class="org-left">-</td>
+<td class="org-left">-</td>
+</tr>
+
+<tr>
+<td class="org-left">Flocker</td>
+<td class="org-left">✓</td>
+<td class="org-left">-</td>
+</tr>
+
+<tr>
+<td class="org-left">GCEPersistentDisk</td>
+<td class="org-left">✓</td>
+<td class="org-left">GCE</td>
+</tr>
+
+<tr>
+<td class="org-left">Glusterfs</td>
+<td class="org-left">✓</td>
+<td class="org-left">Glusterfs</td>
+</tr>
+
+<tr>
+<td class="org-left">iSCSI</td>
+<td class="org-left">-</td>
+<td class="org-left">-</td>
+</tr>
+
+<tr>
+<td class="org-left">PhotonPersistentDisk</td>
+<td class="org-left">✓</td>
+<td class="org-left">-</td>
+</tr>
+
+<tr>
+<td class="org-left">Quobyte</td>
+<td class="org-left">✓</td>
+<td class="org-left">Quobyte</td>
+</tr>
+
+<tr>
+<td class="org-left">NFS</td>
+<td class="org-left">-</td>
+<td class="org-left">-</td>
+</tr>
+
+<tr>
+<td class="org-left">RBD</td>
+<td class="org-left">✓</td>
+<td class="org-left">Ceph RBD</td>
+</tr>
+
+<tr>
+<td class="org-left">VsphereVolume</td>
+<td class="org-left">✓</td>
+<td class="org-left">vSphere</td>
+</tr>
+
+<tr>
+<td class="org-left">PortworxVolume</td>
+<td class="org-left">✓</td>
+<td class="org-left">Portworx Volume</td>
+</tr>
+
+<tr>
+<td class="org-left">ScaleIO</td>
+<td class="org-left">✓</td>
+<td class="org-left">ScaleIO</td>
+</tr>
+
+<tr>
+<td class="org-left">StorageOS</td>
+<td class="org-left">✓</td>
+<td class="org-left">StorageOS</td>
+</tr>
+</tbody>
+</table>
+
+<p>
+除了此处列出的"内置"分配器（其名称前缀为 kubernetes.io 并打包在 Kubernetes 中）。还可以运行和指定外部分配器，只要这些独立的程序遵循由 Kubernetes 定义的 规范
+</p>
+
+<pre class="example">
+     外部供应商的作者完全可以自由决定他们的代码保存于何处、打包方式、运行方式、使用的插件（包括Flex）等
+
+     代码仓库 kubernetes-incubator/external-storage 包含一个用于为外部分配器编写功能实现的类库，以及各种社区维护的外部分配器
+
+     例如，NFS 没有内部分配器，但可以使用外部分配器
+
+     一些外部分配器在代码仓库 kubernetes-incubator/external-storage 中。 也有第三方存储供应商提供自己的外部分配器
+</pre>
+</div>
+</div>
+<div id="outline-container-org02ebfc8" class="outline-3">
+<h3 id="org02ebfc8">回收策略</h3>
+<div class="outline-text-3" id="text-org02ebfc8">
+<p>
+由 storage class 动态创建的 Persistent Volume 会在的 reclaimPolicy 字段中指定回收策略，可以是 <span class="underline">Delete</span> 或者 <span class="underline">Retain</span> 
+</p>
+
+<pre class="example">
+     如果 StorageClass 对象被创建时没有指定 reclaimPolicy ，它将默认为 Delete
+</pre>
+
+<p>
+通过 storage class 手动创建并管理的 Persistent Volume 会使用它们被创建时指定的回收政策
+</p>
+</div>
+</div>
+<div id="outline-container-orgefb97f0" class="outline-3">
+<h3 id="orgefb97f0">挂载选项</h3>
+<div class="outline-text-3" id="text-orgefb97f0">
+<p>
+由 storage class 动态创建的 Persistent Volume 将使用 <span class="underline">class</span> 中 <span class="underline">mountOptions</span> 字段指定的挂载选项
+</p>
+
+<pre class="example">
+     如果卷插件不支持挂载选项，却指定了该选项，则分配操作失败
+
+     安装选项在 class 和 PV 上都不会做验证，所以如果挂载选项无效，那么这个 PV 就会失败
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org9d24cee" class="outline-2">
+<h2 id="org9d24cee">参数</h2>
+<div class="outline-text-2" id="text-org9d24cee">
+<p>
+Storage class 具有描述属于 storage class 卷的参数。取决于分配器，可以接受不同的参数
+</p>
+
+<pre class="example">
+    例如，参数 type 的值 io1 和参数 iopsPerGB 特定于 EBS PV
+
+    当参数被省略时，会使用默认值
+</pre>
+
+<table border="2" cellspacing="0" cellpadding="6" rules="groups" frame="hsides">
+
+
+<colgroup>
+<col  class="org-left" />
+
+<col  class="org-left" />
+
+<col  class="org-left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="org-left"><a href="local-storage.html">Next：本地持久化存储</a></td>
+<td class="org-left"><a href="persistent-volume.html">Previous：Persistent Volume</a></td>
+<td class="org-left"><a href="storage.html">Home：存储</a></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 </div>
 <div id="postamble" class="status">
 
