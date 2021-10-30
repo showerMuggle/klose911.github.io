@@ -200,7 +200,7 @@
      另外，每6个小时有一个修改卷的配额
    #+end_example
 
-* 持久化卷类型
+* 类型
 
   PersistentVolume 类型以插件形式实现。Kubernetes 目前支持以下插件类型：
   + GCEPersistentDisk
@@ -228,7 +228,7 @@
   + StorageOS
 
     原始块支持仅适用于以上这些插件
-* 持久化卷
+* PV
   每个 PV 配置中都包含一个 _sepc_ 规格字段和一个 _status_ 卷状态字段：
 
   #+begin_example
@@ -378,7 +378,7 @@
    + _Failed_ （失败）：该卷的自动回收失败
 
    命令行会显示绑定到 PV 的 PVC 的名称 
-* PersistentVolumeClaim
+* PVC
   每个 PVC 中都包含一个 _spec_ 规格字段和一个 _status_ 声明状态字段：
 
   #+BEGIN_EXAMPLE
@@ -442,4 +442,133 @@
 
      过去，使用注解 volume.beta.kubernetes.io/storage-class 而不是 storageClassName 属性，这个注解仍然有效，但是在未来的 Kubernetes 版本中不会支持
    #+END_EXAMPLE
+* 声明作为卷
+  通过将声明用作卷来访问存储
 
+  #+BEGIN_EXAMPLE
+    声明必须与使用声明的 pod 存在于相同的命名空间中
+  #+END_EXAMPLE
+
+  集群在 pod 的命名空间中查找声明，并使用它来获取支持声明的 PersistentVolume，该卷然后被挂载到主机的 pod 上
+
+  #+BEGIN_EXAMPLE
+    kind: Pod
+    apiVersion: v1
+    metadata:
+      name: mypod
+    spec:
+      containers:
+	- name: myfrontend
+	  image: dockerfile/nginx
+	  volumeMounts:
+	  - mountPath: "/var/www/html"
+	    name: mypd
+      volumes:
+	- name: mypd
+	  persistentVolumeClaim:
+	    claimName: myclaim
+  #+END_EXAMPLE
+** 命名空间 
+   PersistentVolumes 绑定是唯一的，并且由于 PersistentVolumeClaims 是命名空间对象，因此只能在一个 _命名空间_ 内挂载具有 *多个* 模式（ROX、RWX）的声明 
+* 原始块卷
+  #+BEGIN_EXAMPLE
+    原始块卷的静态配置在 v1.9 中作为 alpha 功能引入
+
+    由于这个改变，需要一些新的 API 字段来使用该功能
+
+    目前，Fibre Channl 是支持该功能的唯一插件
+  #+END_EXAMPLE
+** 使用原始块卷作为pv 
+   #+BEGIN_EXAMPLE
+     apiVersion: v1
+     kind: PersistentVolume
+     metadata:
+       name: block-pv
+     spec:
+       capacity:
+	 storage: 10Gi
+       accessModes:
+	 - ReadWriteOnce
+       volumeMode: Block
+       persistentVolumeReclaimPolicy: Retain
+       fc:
+	 targetWWNs: ["50060e801049cfd1"]
+	 lun: 0
+	 readOnly: false
+   #+END_EXAMPLE
+** pvc请求原始块卷
+   #+BEGIN_EXAMPLE
+     apiVersion: v1
+     kind: PersistentVolumeClaim
+     metadata:
+       name: block-pvc
+     spec:
+       accessModes:
+	 - ReadWriteOnce
+       volumeMode: Block
+       resources:
+	 requests:
+	   storage: 10Gi
+   #+END_EXAMPLE
+** 在 Pod 规格配置中为容器添加原始块设备
+   #+BEGIN_EXAMPLE
+     apiVersion: v1
+     kind: Pod
+     metadata:
+       name: pod-with-block-volume
+     spec:
+       containers:
+	 - name: fc-container
+	   image: fedora:26
+	   command: ["/bin/sh", "-c"]
+	   args: [ "tail -f /dev/null" ]
+	   volumeDevices:
+	     - name: data
+	       devicePath: /dev/xvda
+       volumes:
+	 - name: data
+	   persistentVolumeClaim:
+	     claimName: block-pvc
+   #+END_EXAMPLE
+
+   注意：当为 Pod 增加原始块设备时，在容器中指定 _设备_ 路径而不是挂载路径 
+** 绑定块卷
+   如果用户通过使用 _PersistentVolumeClaim_ 规范中的 _volumeMode_ 字段指示此请求来请求 _原始块卷_ ，则绑定规则与以前不认为该模式为规范一部分的版本略有不同。下面是用户和管理员指定请求原始块设备的可能组合的表格。该表指示卷是否将被绑定或未给定组合。静态设置的卷的卷绑定矩阵：
+
+   | PV volumeMode	 | PVC volumeMode | 结果   |
+   | unspecified           | unspecified    | 绑定   |
+   | unspecified           | Block          | 不绑定 |
+   | unspecified           | Filesystem     | 绑定   |
+   | Block	         | unspecified    | 不绑定 |
+   | Block	         | Block	  | 绑定   |
+   | Block	         | Filesystem     | 不绑定 |
+   | Filesystem            | Filesystem     | 绑定   |
+   | Filesystem            | Block          | 不绑定 |
+   | Filesystem            | unspecified    | 绑定   |
+
+   #+BEGIN_EXAMPLE
+     注意：alpha 版本只支持静态配置卷。使用原始块设备时，管理员应该注意考虑这些值
+   #+END_EXAMPLE
+* 编写可移植配置
+  如果正在编写在多种集群上运行并需要持久存储的配置模板或示例，建议使用以下模式：
+  + *要* 在配置组合中包含 _PersistentVolumeClaim_ 对象（与 Deployment、ConfigMap等一起）
+  + *不要* 在配置中包含 _PersistentVolume_ 对象，因为用户实例化配置可能没有创建 PersistentVolume 的权限
+  + 给用户在实例化模板时 *提供* _存储类_ 名称的选项：
+    + 如果用户提供存储类名称，则将该值放入 _persistentVolumeClaim.storageClassName_ 字段中
+      #+BEGIN_EXAMPLE
+	如果集群具有由管理员启用的 StorageClass，这仍将导致 PVC 匹配正确的存储类别
+      #+END_EXAMPLE
+    + 如果用户未提供存储类名称，则将 _persistentVolumeClaim.storageClassName_ 字段保留为 _nil_
+      + 这将导致使用集群中默认的 StorageClass 为用户自动配置 PV
+	#+BEGIN_EXAMPLE
+	  许多集群环境都有默认的 StorageClass，或者管理员可以创建自己的默认 StorageClass
+	#+END_EXAMPLE
+  + 请注意一段时间之后仍未绑定的 PVC，并向用户展示它们，因为这表示：
+    + 集群可能没有动态存储支持
+      #+BEGIN_EXAMPLE
+	在这种情况下用户应创建匹配的 PV
+      #+END_EXAMPLE
+    + 或集群没有存储系统
+      #+BEGIN_EXAMPLE
+	在这种情况下用户不能部署需要 PVC 的配置
+      #+END_EXAMPLE
