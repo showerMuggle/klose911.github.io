@@ -379,3 +379,67 @@
 
    命令行会显示绑定到 PV 的 PVC 的名称 
 * PersistentVolumeClaim
+  每个 PVC 中都包含一个 _spec_ 规格字段和一个 _status_ 声明状态字段：
+
+  #+BEGIN_EXAMPLE
+    kind: PersistentVolumeClaim
+    apiVersion: v1
+    metadata:
+      name: myclaim
+    spec:
+      accessModes:
+	- ReadWriteOnce
+      volumeMode: Filesystem
+      resources:
+	requests:
+	  storage: 8Gi
+      storageClassName: slow
+      selector:
+	matchLabels:
+	  release: "stable"
+	matchExpressions:
+	  - {key: environment, operator: In, values: [dev]}
+  #+END_EXAMPLE
+** 访问模式
+   在请求具有特定访问模式的存储时，声明使用与卷相同的约定
+** 卷模式
+   声明使用与卷相同的约定，指示将卷作为 _文件系统_ 或 _块设备_ 使用 
+** 资源
+   像 pod 一样，声明可以请求特定数量的资源。在这种情况下，请求是用于存储的。相同的资源模型适用于卷和声明 
+** 选择器
+   可以指定一个标签选择器来进一步过滤该组卷。只有标签与选择器匹配的卷可以绑定到声明。选择器由两个字段组成：
+   + _matchLabels_ ：volume 必须有具有该值的标签
+   + _matchExpressions_ ：这是一个要求列表，通过指定关键字，值列表以及与关键字和值相关的运算符组成
+     + 有效的运算符包括 In、NotIn、Exists 和 DoesNotExist 
+
+   所有来自 matchLabels 和 matchExpressions 的要求都被 *与* 在一起——它们必须全部满足才能匹配 
+** 类
+   可以通过使用属性 storageClassName 指定 StorageClass 的名称来请求特定的类。只有所请求的类与 PVC 具有相同 storageClassName 的 PV 才能绑定到 PVC。
+   #+BEGIN_EXAMPLE
+     PVC 不一定要请求类。其 storageClassName 设置为 "" 的 PVC 始终被解释为没有请求类的 PV，因此只能绑定到没有类的 PV（没有注解或 ""）
+   #+END_EXAMPLE
+   没有 storageClassName 的 PVC 根据是否打开DefaultStorageClass 准入控制插件，集群对其进行不同处理：
+   + 如果打开了准入控制插件：
+     + 管理员可以指定一个默认的 StorageClass，所有没有 StorageClassName 的 PVC 将被绑定到该默认的 PV
+       #+BEGIN_EXAMPLE
+	 通过在 StorageClass 对象中将注解 storageclass.kubernetes.io/is-default-class 设置为 “true” 来指定默认的 StorageClass
+       #+END_EXAMPLE
+     + 如果管理员没有指定缺省值，那么集群会响应 PVC 创建，就好像关闭了准入控制插件一样
+     + 如果指定了多个默认值，则准入控制插件将禁止所有 PVC 创建
+   + 如果准入控制插件被关闭，则没有默认 StorageClass 的概念：
+     + 所有没有 storageClassName 的 PVC 只能绑定到没有类的 PV
+       #+BEGIN_EXAMPLE
+	 在这种情况下，没有 storageClassName 的 PVC 的处理方式与 storageClassName 设置为 "" 的 PVC 的处理方式相同
+       #+END_EXAMPLE
+
+   #+BEGIN_EXAMPLE
+     根据安装方法的不同，默认的 StorageClass 可以在安装过程中通过插件管理器部署到 Kubernetes 集群
+   #+END_EXAMPLE
+
+   当 PVC 指定了 selector，除了请求一个 StorageClass 之外，这些需求被“与”在一起：只有被请求的类的 PV 具有和被请求的标签才可以被绑定到 PVC。
+   #+BEGIN_EXAMPLE
+     注意：目前，具有非空 selector 的 PVC 不能为其动态配置 PV
+
+     过去，使用注解 volume.beta.kubernetes.io/storage-class 而不是 storageClassName 属性，这个注解仍然有效，但是在未来的 Kubernetes 版本中不会支持
+   #+END_EXAMPLE
+
