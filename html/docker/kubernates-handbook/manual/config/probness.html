@@ -231,10 +231,12 @@
 <li><a href="#orge6f2d18">定义一个liveness HTTP请求</a></li>
 <li><a href="#org7841208">定义TCP liveness探针</a></li>
 <li><a href="#orgcc1e34c">使用命名的端口</a></li>
+<li><a href="#orgf9a8c25">定义readiness探针</a></li>
+<li><a href="#org3cbcc8b">配置Probe</a></li>
 </ul>
 </div>
 </div>
-<pre class="example" id="orgf2299ff">
+<pre class="example" id="org9bd7260">
 使用kubernetes的时候，有没有遇到过Pod在启动后一会就挂掉然后又重新启动这样的恶性循环？
 
 有没有想过kubernetes是如何检测pod是否还存活？
@@ -246,7 +248,7 @@
 Kubelet使用 <span class="underline">liveness probe</span> （存活探针）来确定何时 <b>重启容器</b> 
 </p>
 
-<pre class="example" id="orgf7eef8e">
+<pre class="example" id="org6a6cd49">
 例如，当应用程序处于运行状态但无法做进一步操作，liveness探针将捕获到deadlock，重启处于该状态下的容器，使应用程序在存在bug的情况下依然能够继续运行下去（谁的程序还没几个bug呢）
 </pre>
 
@@ -265,7 +267,7 @@ Kubelet使用 <span class="underline">readiness probe</span> （就绪探针）�
 许多长时间运行的应用程序最终会转换到broken状态，除非重新启动，否则无法恢复。Kubernetes提供了liveness probe来检测和补救这种情况 
 </p>
 
-<pre class="example" id="orgafa7c31">
+<pre class="example" id="org8646928">
 在本次练习将基于 gcr.io/google_containers/busybox镜像创建运行一个容器的Pod
 </pre>
 
@@ -273,7 +275,7 @@ Kubelet使用 <span class="underline">readiness probe</span> （就绪探针）�
 以下是Pod的配置文件exec-liveness.yaml：
 </p>
 
-<pre class="example" id="orgda14c5c">
+<pre class="example" id="org0ab8bf8">
 apiVersion: v1
 kind: Pod
 metadata:
@@ -297,7 +299,7 @@ spec:
       periodSeconds: 5
 </pre>
 
-<pre class="example" id="orgf773ae3">
+<pre class="example" id="org3a2fdbe">
 该配置文件给Pod配置了一个容器
 
 periodSeconds 规定kubelet要每隔5秒执行一次liveness probe
@@ -318,7 +320,7 @@ initialDelaySeconds 告诉kubelet在第一次执行probe之前要的等待5秒�
 </pre>
 </div>
 
-<pre class="example" id="org1fa94f6">
+<pre class="example" id="orgc4468f0">
 在容器生命的最初30秒内有一个 /tmp/healthy 文件，在这30秒内 cat /tmp/healthy命令会返回一个成功的返回码
 
 30秒后， cat /tmp/healthy 将返回失败的返回码
@@ -410,7 +412,7 @@ liveness-exec   1/1       Running   1          1m
 可以使用 <span class="underline">HTTP GET请求</span> 作为liveness probe。下面是一个基于gcr.io/google_containers/liveness镜像运行了一个容器的Pod的例子http-liveness.yaml
 </p>
 
-<pre class="example" id="org45ecb1d">
+<pre class="example" id="orgd1e55d8">
 apiVersion: v1
 kind: Pod
 metadata:
@@ -434,7 +436,7 @@ spec:
       periodSeconds: 3
 </pre>
 
-<pre class="example" id="org6f21235">
+<pre class="example" id="org45ccac2">
 该配置文件只定义了一个容器，livenessProbe 指定kubelet需要每隔3秒执行一次liveness probe
 
 initialDelaySeconds 指定kubelet在该执行第一次探测之前需要等待3秒钟
@@ -466,7 +468,7 @@ initialDelaySeconds 指定kubelet在该执行第一次探测之前需要等待3�
 </pre>
 </div>
 
-<pre class="example" id="orgace4029">
+<pre class="example" id="orgc8c24f2">
 容器启动3秒后，kubelet开始执行健康检查：第一次健康监测会成功，但是10秒后，健康检查将失败，kubelet将杀掉和重启容器
 </pre>
 
@@ -501,7 +503,7 @@ initialDelaySeconds 指定kubelet在该执行第一次探测之前需要等待3�
 <li>如果不能就认为是失败的</li>
 </ul>
 
-<pre class="example" id="orga3e7ce0">
+<pre class="example" id="org296af25">
 apiVersion: v1
 kind: Pod
 metadata:
@@ -526,7 +528,7 @@ spec:
       periodSeconds: 20
 </pre>
 
-<pre class="example" id="org0f94075">
+<pre class="example" id="org392195c">
 TCP检查的配置与HTTP检查非常相似。 此示例同时使用了readiness和liveness probe
 
 容器启动后5秒钟，kubelet将发送第一个readiness probe。 这将尝试连接到端口8080上的goproxy容器
@@ -547,7 +549,7 @@ TCP检查的配置与HTTP检查非常相似。 此示例同时使用了readiness
 可以使用命名的ContainerPort作为HTTP或TCP liveness检查：
 </p>
 
-<pre class="example" id="orgb233a50">
+<pre class="example" id="orgcca2fda">
 ports:
 - name: liveness-port
   containerPort: 8080
@@ -558,6 +560,118 @@ livenessProbe:
   path: /healthz
   port: liveness-port
 </pre>
+</div>
+</div>
+
+<div id="outline-container-orgf9a8c25" class="outline-2">
+<h2 id="orgf9a8c25">定义readiness探针</h2>
+<div class="outline-text-2" id="text-orgf9a8c25">
+<p>
+有时，应用程序暂时无法对外部流量提供服务
+</p>
+
+<pre class="example" id="org13003a1">
+例如，应用程序可能需要在启动期间加载大量数据或配置文件，在这种情况下，不能杀死应用程序，但也不能发送请求
+
+Kubernetes提供了readiness probe来检测和减轻这些情况：Pod中的容器可以报告自己还没有准备，不能处理Kubernetes服务发送过来的流量。
+</pre>
+
+<p>
+Readiness probe的配置跟liveness probe很像。唯一的不同是使用 <span class="underline">readinessProbe</span> 而不是livenessProbe
+</p>
+
+<pre class="example" id="org6e10d92">
+readinessProbe:
+  exec:
+    command:
+    - cat
+    - /tmp/healthy
+  initialDelaySeconds: 5
+  periodSeconds: 5
+</pre>
+
+<pre class="example" id="org96476b8">
+Readiness probe的HTTP和TCP的探测器配置跟liveness probe一样
+</pre>
+
+<p>
+Readiness和livenss probe可以并行用于同一容器。 使用两者可以确保流量无法到达未准备好的容器，并且容器在失败时重新启动
+</p>
+</div>
+</div>
+
+<div id="outline-container-org3cbcc8b" class="outline-2">
+<h2 id="org3cbcc8b">配置Probe</h2>
+<div class="outline-text-2" id="text-org3cbcc8b">
+<p>
+Probe 中有很多精确和详细的配置，通过它们能准确的控制liveness和readiness检查：
+</p>
+<ul class="org-ul">
+<li>initialDelaySeconds：容器启动后第一次执行探测是需要等待多少秒</li>
+<li>periodSeconds：执行探测的频率
+<ul class="org-ul">
+<li>默认是10秒</li>
+<li>最小1秒</li>
+</ul></li>
+<li>timeoutSeconds：探测超时时间
+<ul class="org-ul">
+<li>默认1秒</li>
+<li>最小1秒</li>
+</ul></li>
+<li>successThreshold：探测失败后，最少连续探测成功多少次才被认定为成功
+<ul class="org-ul">
+<li>默认是1</li>
+<li>对于liveness必须是1</li>
+<li>最小值是1</li>
+</ul></li>
+<li>failureThreshold：探测成功后，最少连续探测失败多少次才被认定为失败
+<ul class="org-ul">
+<li>默认是3</li>
+<li>最小值是1</li>
+</ul></li>
+</ul>
+
+<p>
+HTTP probe 中可以给 httpGet设置其他配置项：
+</p>
+<ul class="org-ul">
+<li><p>
+host：连接的主机名，默认连接到pod的IP
+</p>
+<pre class="example" id="org7a9dc16">
+可能想在http header中设置"Host"而不是使用IP
+</pre></li>
+<li>scheme：连接使用的schema，默认HTTP</li>
+<li>path: 访问的HTTP server的path</li>
+<li>httpHeaders：自定义请求的header。HTTP运行重复的header</li>
+<li>port：访问的容器的端口名字或者端口号。端口号必须介于1和65535之间</li>
+</ul>
+
+<pre class="example" id="org63e65c0">
+对于HTTP探测器，kubelet向指定的路径和端口发送HTTP请求以执行检查
+
+Kubelet将probe发送到容器的IP地址，除非地址被httpGet中的可选host字段覆盖，在大多数情况下，不想设置主机字段
+
+有一种情况下可以设置它：假设容器在127.0.0.1上侦听，并且Pod的hostNetwork字段为true。 然后，在httpGet下的host应该设置为127.0.0.1
+
+如果pod依赖于虚拟主机，这可能是更常见的情况，不应该是用host，而是应该在httpHeaders中设置Host头
+</pre>
+
+<table border="2" cellspacing="0" cellpadding="6" rules="groups" frame="hsides">
+
+
+<colgroup>
+<col  class="org-left" />
+
+<col  class="org-left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="org-left"><a href="service-account.html">Next: Service Account</a></td>
+<td class="org-left"><a href="config.html">Home：配置</a></td>
+</tr>
+</tbody>
+</table>
 </div>
 </div>
 </div>
