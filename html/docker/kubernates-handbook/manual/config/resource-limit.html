@@ -234,6 +234,153 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="config.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">管理namespace中的资源配额</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#org814b4f1">开启</a></li>
+<li><a href="#org15cc912">示例</a>
+<ul>
+<li><a href="#org35aa52f">配置计算资源配额</a></li>
+<li><a href="#org2b3424f">配置对象数量限制</a></li>
+<li><a href="#org63d7591">配置CPU和内存LimitRange</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<p>
+当用多个团队或者用户共用同一个集群的时候难免会有资源竞争的情况发生，这时候就需要对不同团队或用户的资源使用配额做出限制 
+</p>
+<div id="outline-container-org814b4f1" class="outline-2">
+<h2 id="org814b4f1">开启</h2>
+<div class="outline-text-2" id="text-org814b4f1">
+<pre class="example">
+    目前有两种资源分配管理相关的控制策略插件 ResourceQuota 和 LimitRange
+</pre>
+
+<p>
+要启用它们只要 API Server 的启动配置的 <span class="underline">KUBE_ADMISSION_CONTROL</span> 参数中：
+</p>
+<ul class="org-ul">
+<li>加入了 <span class="underline">ResourceQuota</span> 的设置，这样就给集群开启了资源配额限制功能</li>
+<li>加入 <span class="underline">LimitRange</span> 可以用来限制一个资源申请的范围限制</li>
+</ul>
+
+<pre class="example">
+两种控制策略的作用范围都是对于某 namespace：
+
+ResourceQuota 用来限制 namespace 中所有的 Pod 占用的总的资源 request 和 limit
+
+LimitRange 是用来设置 namespace 中 Pod 的默认的资源 request 和 limit 值
+</pre>
+<p>
+资源配额分为三种类型：
+</p>
+<ul class="org-ul">
+<li><span class="underline">计算</span> 资源配额</li>
+<li><span class="underline">存储</span> 资源配额</li>
+<li><span class="underline">对象</span> 数量配额</li>
+</ul>
+</div>
+</div>
+<div id="outline-container-org15cc912" class="outline-2">
+<h2 id="org15cc912">示例</h2>
+<div class="outline-text-2" id="text-org15cc912">
+<pre class="example">
+    假设已经为 spark-cluster 这个 namespace 设置 ResouceQuota 和 LimitRange
+</pre>
+</div>
+<div id="outline-container-org35aa52f" class="outline-3">
+<h3 id="org35aa52f">配置计算资源配额</h3>
+<div class="outline-text-3" id="text-org35aa52f">
+<pre class="example">
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: compute-resources
+  namespace: spark-cluster
+spec:
+  hard:
+    pods: "20"
+    requests.cpu: "20"
+    requests.memory: 100Gi
+    limits.cpu: "40"
+    limits.memory: 200Gi
+</pre>
+
+<p>
+要想查看该配置只要执行：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">kubectl -n spark-cluster describe resourcequota compute-resources
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org2b3424f" class="outline-3">
+<h3 id="org2b3424f">配置对象数量限制</h3>
+<div class="outline-text-3" id="text-org2b3424f">
+<pre class="example">
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: object-counts
+  namespace: spark-cluster
+spec:
+  hard:
+    configmaps: "10"
+    persistentvolumeclaims: "4"
+    replicationcontrollers: "20"
+    secrets: "10"
+    services: "10"
+    services.loadbalancers: "2"
+</pre>
+</div>
+</div>
+<div id="outline-container-org63d7591" class="outline-3">
+<h3 id="org63d7591">配置CPU和内存LimitRange</h3>
+<div class="outline-text-3" id="text-org63d7591">
+<pre class="example">
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: mem-limit-range
+spec:
+  limits:
+  - default:
+      memory: 50Gi
+      cpu: 5
+    defaultRequest:
+      memory: 1Gi
+      cpu: 1
+    type: Container
+</pre>
+
+<ul class="org-ul">
+<li>default: limit 的值</li>
+<li>defaultRequest: request 的值</li>
+</ul>
+
+<table border="2" cellspacing="0" cellpadding="6" rules="groups" frame="hsides">
+
+
+<colgroup>
+<col  class="org-left" />
+
+<col  class="org-left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="org-left"><a href="secret.html">Previous: Secret</a></td>
+<td class="org-left"><a href="config.html">Home：配置</a></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
 </div>
 <div id="postamble" class="status">
 
