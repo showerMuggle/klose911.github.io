@@ -229,3 +229,84 @@ Kubectl的子命令主要分为8个类别：
      更多信息请查看 获取运行中容器的 Shell 环境 https://kubernetes.io/docs/tasks/debug-application-cluster/get-shell-running-container/
    #+end_example
 
+** docker logs
+   #+begin_example
+     如何查看运行中进程的 stdout/stderr？查看 kubectl logs
+   #+end_example
+
+   使用 docker 命令：
+   #+begin_src sh 
+     $ docker logs -f a9e
+     192.168.9.1 - - [14/Jul/2015:01:04:02 +0000] "GET / HTTP/1.1" 200 612 "-" "curl/7.35.0" "-"
+     192.168.9.1 - - [14/Jul/2015:01:04:03 +0000] "GET / HTTP/1.1" 200 612 "-" "curl/7.35.0" "-"
+   #+end_src
+
+   使用 kubectl 命令：
+
+   #+begin_src sh 
+     $ kubectl logs -f nginx-app-zibvs
+     10.240.63.110 - - [14/Jul/2015:01:09:01 +0000] "GET / HTTP/1.1" 200 612 "-" "curl/7.26.0" "-"
+     10.240.63.110 - - [14/Jul/2015:01:09:02 +0000] "GET / HTTP/1.1" 200 612 "-" "curl/7.26.0" "-"
+   #+end_src
+
+   默认情况下如果 pod 中的进程退出 pod 也不会终止，相反它将会重启该进程
+
+   #+begin_example
+     这类似于 docker run 时的 --restart=always 选项， 这是和容器之间的主要差别
+
+     在 docker 中，进程的每个调用的输出都是被连接起来的，但是对于 kubernetes，每个调用都是分开的
+   #+end_example
+
+   要查看以前在 kubernetes 中执行的输出，请执行以下操作：
+
+   #+begin_src sh 
+     $ kubectl logs --previous nginx-app-zibvs
+     10.240.63.110 - - [14/Jul/2015:01:09:01 +0000] "GET / HTTP/1.1" 200 612 "-" "curl/7.26.0" "-"
+     10.240.63.110 - - [14/Jul/2015:01:09:02 +0000] "GET / HTTP/1.1" 200 612 "-" "curl/7.26.0" "-"
+   #+end_src
+
+** docker stop 和 docker rm
+   #+begin_example
+     如何停止和删除运行中的进程？查看 kubectl delete
+   #+end_example
+
+   使用 docker 命令：
+   #+begin_src sh 
+     $ docker ps
+     CONTAINER ID        IMAGE               COMMAND                CREATED             STATUS              PORTS                         NAMES
+     a9ec34d98787        nginx               "nginx -g 'daemon of   22 hours ago        Up 22 hours         0.0.0.0:80->80/tcp, 443/tcp   nginx-app
+     $ docker stop a9ec34d98787
+     a9ec34d98787
+     $ docker rm a9ec34d98787
+     a9ec34d98787
+   #+end_src
+
+   使用 kubectl 命令：
+
+   #+begin_src sh 
+     $ kubectl get deployment nginx-app
+     NAME        DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+     nginx-app   1         1         1            1           2m
+     $ kubectl get po -l run=nginx-app
+     NAME                         READY     STATUS    RESTARTS   AGE
+     nginx-app-2883164633-aklf7   1/1       Running   0          2m
+     $ kubectl delete deployment nginx-app
+     deployment "nginx-app" deleted
+     $ kubectl get po -l run=nginx-app
+     # Return nothing
+   #+end_src
+
+   #+begin_example
+     请注意，不直接删除 pod
+
+     使用 kubectl 命令，要删除拥有该 pod 的 Deployment。如果直接删除pod，Deployment 将会重新创建该 pod
+   #+end_example
+
+** docker login
+   在 kubectl 中没有对 docker login 的直接模拟
+
+   #+begin_example
+     如果有兴趣在私有镜像仓库中使用 Kubernetes，请参阅 使用私有镜像仓库 https://kubernetes.io/docs/concepts/containers/images/#using-a-private-registry
+   #+end_example
+
+** 
