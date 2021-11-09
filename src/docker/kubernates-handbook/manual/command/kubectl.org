@@ -497,3 +497,27 @@ Kubernetes 的清单文件可以使用 json 或 yaml 格式定义：
      # 列出当前 Pod 中使用的 Secret
      $ kubectl get pods -o json | jq '.items[].spec.containers[].env[]?.valueFrom.secretKeyRef.name' | grep -v null | sort | uniq
    #+end_src
+
+** 更新资源
+   #+begin_src sh 
+     $ kubectl rolling-update frontend-v1 -f frontend-v2.json           # 滚动更新 pod frontend-v1
+     $ kubectl rolling-update frontend-v1 frontend-v2 --image=image:v2  # 更新资源名称并更新镜像
+     $ kubectl rolling-update frontend --image=image:v2                 # 更新 frontend pod 中的镜像
+     $ kubectl rolling-update frontend-v1 frontend-v2 --rollback        # 退出已存在的进行中的滚动更新
+     $ cat pod.json | kubectl replace -f -                              # 基于 stdin 输入的 JSON 替换 pod
+
+     # 强制替换，删除后重新创建资源。会导致服务中断。
+     $ kubectl replace --force -f ./pod.json
+
+     # 为 nginx RC 创建服务，启用本地 80 端口连接到容器上的 8000 端口
+     $ kubectl expose rc nginx --port=80 --target-port=8000
+
+     # 更新单容器 pod 的镜像版本（tag）到 v4
+     $ kubectl get pod mypod -o yaml | sed 's/\(image: myimage\):.*$/\1:v4/' | kubectl replace -f -
+
+     $ kubectl label pods my-pod new-label=awesome                      # 添加标签
+     $ kubectl annotate pods my-pod icon-url=http://goo.gl/XXBTWq       # 添加注解
+     $ kubectl autoscale deployment foo --min=2 --max=10                # 自动扩展 deployment “foo”
+   #+end_src
+
+** 修补资源
