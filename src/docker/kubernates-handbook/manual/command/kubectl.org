@@ -74,3 +74,158 @@ Kubectl的子命令主要分为8个类别：
    #+end_example
 
    保存后重启终端即可生效
+
+* docker用户过渡到kubectl命令行
+  kubectl，被设计成 docker-cli 用户所熟悉的样子，但是它们之间又存在一些必要的差异。接下来将展示每个 docker 子命令和 kubectl 与其等效的命令
+  #+begin_example
+    在使用 kubernetes 集群的时候，docker 命令通常情况是不需要用到的，只有在调试程序或者容器的时候用到
+
+    基本上使用 kubectl 命令即可，所以在操作 kubernetes 的时候抛弃原先使用 docker 时的一些观念
+  #+end_example
+
+  
+** docker run
+   #+begin_example
+     如何运行一个 nginx Deployment 并将其暴露出来？ 查看 kubectl run 
+   #+end_example
+
+   使用 docker 命令：
+
+   #+begin_src sh 
+     $ docker run -d --restart=always -e DOMAIN=cluster --name nginx-app -p 80:80 nginx
+     a9ec34d9878748d2f33dc20cb25c714ff21da8d40558b45bfaec9955859075d0
+     $ docker ps
+     CONTAINER ID        IMAGE               COMMAND                CREATED             STATUS              PORTS                         NAMES
+     a9ec34d98787        nginx               "nginx -g 'daemon of   2 seconds ago       Up 2 seconds        0.0.0.0:80->80/tcp, 443/tcp   nginx-app
+   #+end_src
+
+   使用 kubectl 命令：
+
+   #+begin_src sh 
+     # start the pod running nginx
+     $ kubectl run --image=nginx nginx-app --port=80 --env="DOMAIN=cluster"
+     deployment "nginx-app" created
+   #+end_src
+
+   使用kubectl run 命令将创建一个名为 "nginx-app" 的 Deployment，这将保证有 N 个运行 nginx 的 pod（N 代表 spec 中声明的 replica 数，默认为 1）
+
+   #+begin_example
+     如果您运行的是老版本，将会创建一个 replication controller
+
+     如果想沿用旧的行为，使用 --generation=run/v1 参数，这样就会创建 replication controller
+   #+end_example
+
+   接下来创建一个 service，使用 selector 匹配具有相应的 selector 的 Deployment：
+   #+begin_src sh 
+     # expose a port through with a service
+     $ kubectl expose deployment nginx-app --port=80 --name=nginx-http
+     service "nginx-http" exposed
+   #+end_src
+
+   默认情况下镜像会在后台运行，与docker run -d ... 类似，如果想在前台运行，使用：
+
+   #+begin_example
+     kubectl run [-i] [--tty] --attach <name> --image=<image>
+   #+end_example
+
+   与 docker run ... 不同的是，如果指定了 --attach ，将连接到 stdin，stdout 和 stderr，而不能控制具体连接到哪个输出流（docker -a ...）。
+
+   #+begin_example
+     因为使用 Deployment 启动了容器，如果终止了连接到的进程（例如 ctrl-c），容器将会重启，这跟 docker run -it不同
+
+     如果销毁该 Deployment（和它的 pod），必须需要运行 kubectl delete deployment <name>
+   #+end_example
+
+** docker ps 
+   #+begin_example
+     如何列出哪些正在运行？查看 kubectl get
+   #+end_example
+
+   使用 docker 命令：
+
+   #+begin_src sh 
+     $ docker ps
+     CONTAINER ID        IMAGE               COMMAND                CREATED             STATUS              PORTS                         NAMES
+     a9ec34d98787        nginx               "nginx -g 'daemon of   About an hour ago   Up About an hour    0.0.0.0:80->80/tcp, 443/tcp   nginx-app
+   #+end_src
+
+   使用 kubectl 命令：
+
+   #+begin_src sh 
+     $ kubectl get po
+     NAME              READY     STATUS    RESTARTS   AGE
+     nginx-app-5jyvm   1/1       Running   0          1h
+   #+end_src
+
+** docker attach
+
+   #+begin_example
+     如何连接到已经运行在容器中的进程？查看 kubectl attach
+   #+end_example
+
+   使用 docker 命令：
+
+   #+begin_src sh 
+     $ docker ps
+     CONTAINER ID        IMAGE               COMMAND                CREATED             STATUS              PORTS                         NAMES
+     a9ec34d98787        nginx               "nginx -g 'daemon of   8 minutes ago       Up 8 minutes        0.0.0.0:80->80/tcp, 443/tcp   nginx-app
+     $ docker attach a9ec34d98787
+     ...
+   #+end_src
+
+   使用 kubectl 命令：
+
+   #+begin_src sh 
+     $ kubectl get pods
+     NAME              READY     STATUS    RESTARTS   AGE
+     nginx-app-5jyvm   1/1       Running   0          10m
+     $ kubectl attach -it nginx-app-5jyvm
+   #+end_src
+
+** docker exec
+   #+begin_example
+     如何在容器中执行命令？查看 kubectl exec
+   #+end_example
+
+   使用 docker 命令：
+
+   #+begin_src sh 
+     $ docker ps
+     CONTAINER ID        IMAGE               COMMAND                CREATED             STATUS              PORTS                         NAMES
+     a9ec34d98787        nginx               "nginx -g 'daemon of   8 minutes ago       Up 8 minutes        0.0.0.0:80->80/tcp, 443/tcp   nginx-app
+     $ docker exec a9ec34d98787 cat /etc/hostname
+     a9ec34d98787
+   #+end_src
+
+   使用 kubectl 命令：
+
+   #+begin_src sh 
+     $ kubectl get po
+     NAME              READY     STATUS    RESTARTS   AGE
+     nginx-app-5jyvm   1/1       Running   0          10m
+     $ kubectl exec nginx-app-5jyvm -- cat /etc/hostname
+     nginx-app-5jyvm
+   #+end_src
+
+   #+begin_example
+     执行交互式命令怎么办？
+   #+end_example
+
+   使用 docker 命令：
+
+   #+begin_src sh 
+     $ docker exec -ti a9ec34d98787 /bin/sh
+     # exit
+   #+end_src
+
+   使用 kubectl 命令：
+
+   #+begin_src sh 
+     $ kubectl exec -ti nginx-app-5jyvm -- /bin/sh      
+     # exit
+   #+end_src
+
+   #+begin_example
+     更多信息请查看 获取运行中容器的 Shell 环境 https://kubernetes.io/docs/tasks/debug-application-cluster/get-shell-running-container/
+   #+end_example
+
