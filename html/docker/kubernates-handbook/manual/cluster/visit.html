@@ -234,13 +234,20 @@
 <li><a href="#orgda356a9">不使用 kubectl proxy</a></li>
 </ul>
 </li>
+<li><a href="#orge424483">源码里访问 API</a>
+<ul>
+<li><a href="#org7f54159">Go 客户端</a></li>
+<li><a href="#org047a0d2">Python 客户端</a></li>
+<li><a href="#org83a1584">其他语言</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
 <div id="outline-container-orged39f55" class="outline-2">
 <h2 id="orged39f55">第一次使用 kubectl 访问</h2>
 <div class="outline-text-2" id="text-orged39f55">
-<pre class="example" id="orgd0069d4">
+<pre class="example" id="org51334b9">
 如果是第一次访问 Kubernetes API 的话，建议使用 Kubernetes 命令行工具：kubectl
 
 为了访问集群，需要知道集群的地址，并且需要有访问它的凭证
@@ -268,7 +275,7 @@ Kubectl 处理对 apiserver 的定位和认证。如果想直接访问 REST API�
 <li><p>
 以 proxy 模式运行 kubectl
 </p>
-<pre class="example" id="orgd930320">
+<pre class="example" id="org6e7818f">
 推荐方法，使用已保存的 apiserver 位置信息，使用自签名证书验证 apiserver 的身份。没有 MITM（中间人攻击）的可能
 
 认证到 apiserver，将来，可能会做智能的客户端负载均衡和故障转移
@@ -276,7 +283,7 @@ Kubectl 处理对 apiserver 的定位和认证。如果想直接访问 REST API�
 <li><p>
 直接向 http 客户端提供位置和凭据
 </p>
-<pre class="example" id="orgb1efe36">
+<pre class="example" id="org695fbc7">
 替代方法，适用于通过使用代理而混淆的某些类型的客户端代码，需要将根证书导入浏览器以防止 MITM
 </pre></li>
 </ul>
@@ -302,9 +309,9 @@ Kubectl 处理对 apiserver 的定位和认证。如果想直接访问 REST API�
 <pre class="src src-sh">$ curl http://localhost:8080/api/
 
 {
-  <span style="color: #ffa07a;">"versions"</span>: [
-    <span style="color: #ffa07a;">"v1"</span>
-  ]
+    <span style="color: #ffa07a;">"versions"</span>: [
+        <span style="color: #ffa07a;">"v1"</span>
+    ]
 }
 </pre>
 </div>
@@ -324,21 +331,21 @@ $ <span style="color: #eedd82;">TOKEN</span>=$(<span style="color: #fa8072;">kub
 
 $ curl $<span style="color: #eedd82;">APISERVER</span>/api --header <span style="color: #ffa07a;">"Authorization: Bearer $TOKEN"</span> --insecure
 {
-  <span style="color: #ffa07a;">"kind"</span>: <span style="color: #ffa07a;">"APIVersions"</span>,
-  <span style="color: #ffa07a;">"versions"</span>: [
-    <span style="color: #ffa07a;">"v1"</span>
-  ],
-  <span style="color: #ffa07a;">"serverAddressByClientCIDRs"</span>: [
-    {
-      <span style="color: #ffa07a;">"clientCIDR"</span>: <span style="color: #ffa07a;">"0.0.0.0/0"</span>,
-      <span style="color: #ffa07a;">"serverAddress"</span>: <span style="color: #ffa07a;">"10.0.1.149:443"</span>
-    }
-  ]
+    <span style="color: #ffa07a;">"kind"</span>: <span style="color: #ffa07a;">"APIVersions"</span>,
+    <span style="color: #ffa07a;">"versions"</span>: [
+        <span style="color: #ffa07a;">"v1"</span>
+    ],
+    <span style="color: #ffa07a;">"serverAddressByClientCIDRs"</span>: [
+        {
+            <span style="color: #ffa07a;">"clientCIDR"</span>: <span style="color: #ffa07a;">"0.0.0.0/0"</span>,
+            <span style="color: #ffa07a;">"serverAddress"</span>: <span style="color: #ffa07a;">"10.0.1.149:443"</span>
+        }
+    ]
 }
 </pre>
 </div>
 
-<pre class="example" id="orgdb920dc">
+<pre class="example" id="orgfc5d518">
 以上示例使用--insecure 标志。 这使得它容易受到 MITM 攻击
 
 当 kubectl 访问集群时，它使用存储的根证书和客户端证书来访问服务器，这些安装在~/.kube目录中
@@ -350,8 +357,71 @@ $ curl $<span style="color: #eedd82;">APISERVER</span>/api --header <span style=
 对于某些群集，apiserver 可能不需要身份验证；可以选择在本地主机上服务，或者使用防火墙保护
 </p>
 
-<pre class="example" id="orgbc04e44">
+<pre class="example" id="orgb1b2d7f">
 对此还没有一个标准配置，这种方法可能与未来的高可用性支持相冲突
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orge424483" class="outline-2">
+<h2 id="orge424483">源码里访问 API</h2>
+<div class="outline-text-2" id="text-orge424483">
+<p>
+Kubernetes 支持 <span class="underline">Go</span> 和 <span class="underline">Python</span> 客户端库
+</p>
+</div>
+
+<div id="outline-container-org7f54159" class="outline-3">
+<h3 id="org7f54159">Go 客户端</h3>
+<div class="outline-text-3" id="text-org7f54159">
+<ul class="org-ul">
+<li><p>
+要获取该库，请运行以下命令：go get k8s.io/client-go/&lt;version number&gt;/kubernetes
+</p>
+<pre class="example" id="orge6d20bf">
+请参阅 https://github.com/kubernetes/client-go 以查看支持哪些版本
+</pre></li>
+<li><p>
+使用 client-go 客户端编程
+</p>
+<pre class="example" id="orge07c161">
+请注意，client-go 定义了自己的 API 对象
+
+因此如果需要，请从 client-go 而不是从主存储库导入 API 定义，例如导入 k8s.io/client-go/1.4/pkg/api/v1 是正确的
+</pre>
+
+<p>
+Go 客户端可以使用与 kubectl 命令行工具相同的 kubeconfig 文件 来定位和验证 apiserver
+</p></li>
+</ul>
+</div>
+</div>
+<div id="outline-container-org047a0d2" class="outline-3">
+<h3 id="org047a0d2">Python 客户端</h3>
+<div class="outline-text-3" id="text-org047a0d2">
+<p>
+要使用 Python client，请运行以下命令：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">$ pip install kubernetes
+</pre>
+</div>
+
+<pre class="example" id="org3865829">
+查看 Python 客户端库页面 获取更多的安装选择
+</pre>
+
+<p>
+Python 客户端可以使用与 kubectl 命令行工具相同的 kubeconfig 文件 来定位和验证 apiserver
+</p>
+</div>
+</div>
+<div id="outline-container-org83a1584" class="outline-3">
+<h3 id="org83a1584">其他语言</h3>
+<div class="outline-text-3" id="text-org83a1584">
+<pre class="example" id="orgdf263be">
+还有更多的客户端库可以用来访问 API。有关其他库的验证方式，请参阅文档
 </pre>
 </div>
 </div>
