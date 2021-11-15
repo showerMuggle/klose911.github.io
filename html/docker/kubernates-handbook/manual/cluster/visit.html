@@ -223,6 +223,139 @@
  <a accesskey="H" href="cluster.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">访问集群</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#orged39f55">第一次使用 kubectl 访问</a></li>
+<li><a href="#org8d7022f">直接访问 REST API</a>
+<ul>
+<li><a href="#org3d1e36f">使用 kubectl proxy</a></li>
+<li><a href="#orgda356a9">不使用 kubectl proxy</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<div id="outline-container-orged39f55" class="outline-2">
+<h2 id="orged39f55">第一次使用 kubectl 访问</h2>
+<div class="outline-text-2" id="text-orged39f55">
+<pre class="example" id="orgd0069d4">
+如果是第一次访问 Kubernetes API 的话，建议使用 Kubernetes 命令行工具：kubectl
+
+为了访问集群，需要知道集群的地址，并且需要有访问它的凭证
+
+通常，如果手动安装了集群那么这些将会自动设置，或者其他人部署的集群会提供并给凭证和集群地址
+</pre>
+
+<p>
+使用下面的命令检查 kubectl 已知的集群的地址和凭证：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl config view
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org8d7022f" class="outline-2">
+<h2 id="org8d7022f">直接访问 REST API</h2>
+<div class="outline-text-2" id="text-org8d7022f">
+<p>
+Kubectl 处理对 apiserver 的定位和认证。如果想直接访问 REST API，可以使用像 curl、wget 或浏览器这样的 http 客户端，有以下几种方式来定位和认证：
+</p>
+<ul class="org-ul">
+<li><p>
+以 proxy 模式运行 kubectl
+</p>
+<pre class="example" id="orgd930320">
+推荐方法，使用已保存的 apiserver 位置信息，使用自签名证书验证 apiserver 的身份。没有 MITM（中间人攻击）的可能
+
+认证到 apiserver，将来，可能会做智能的客户端负载均衡和故障转移
+</pre></li>
+<li><p>
+直接向 http 客户端提供位置和凭据
+</p>
+<pre class="example" id="orgb1efe36">
+替代方法，适用于通过使用代理而混淆的某些类型的客户端代码，需要将根证书导入浏览器以防止 MITM
+</pre></li>
+</ul>
+</div>
+
+<div id="outline-container-org3d1e36f" class="outline-3">
+<h3 id="org3d1e36f">使用 kubectl proxy</h3>
+<div class="outline-text-3" id="text-org3d1e36f">
+<p>
+以下命令作为反向代理的模式运行 kubectl，它处理对 apiserver 的定位并进行认证：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl proxy --port=8080 &amp;
+</pre>
+</div>
+
+<p>
+然后可以使用 curl、wget 或者浏览器来访问 API，如下所示：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ curl http://localhost:8080/api/
+
+{
+  <span style="color: #ffa07a;">"versions"</span>: [
+    <span style="color: #ffa07a;">"v1"</span>
+  ]
+}
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgda356a9" class="outline-3">
+<h3 id="orgda356a9">不使用 kubectl proxy</h3>
+<div class="outline-text-3" id="text-orgda356a9">
+<p>
+kubectl config view 不再显示 token。 使用 kubectl describe secret … 获取 default service account 的 token，如下所示：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">$ <span style="color: #eedd82;">APISERVER</span>=$(<span style="color: #fa8072;">kubectl</span> config view | grep server | cut -f 2- -d <span style="color: #ffa07a;">":"</span> | tr -d <span style="color: #ffa07a;">" "</span>)
+
+$ <span style="color: #eedd82;">TOKEN</span>=$(<span style="color: #fa8072;">kubectl</span> describe secret $(<span style="color: #fa8072;">kubectl</span> get secrets | grep default | cut -f1 -d <span style="color: #ffa07a;">' '</span>) | grep -E <span style="color: #ffa07a;">'^token'</span> | cut -f2 -d<span style="color: #ffa07a;">':'</span> | tr -d <span style="color: #ffa07a;">'\t'</span>)
+
+$ curl $<span style="color: #eedd82;">APISERVER</span>/api --header <span style="color: #ffa07a;">"Authorization: Bearer $TOKEN"</span> --insecure
+{
+  <span style="color: #ffa07a;">"kind"</span>: <span style="color: #ffa07a;">"APIVersions"</span>,
+  <span style="color: #ffa07a;">"versions"</span>: [
+    <span style="color: #ffa07a;">"v1"</span>
+  ],
+  <span style="color: #ffa07a;">"serverAddressByClientCIDRs"</span>: [
+    {
+      <span style="color: #ffa07a;">"clientCIDR"</span>: <span style="color: #ffa07a;">"0.0.0.0/0"</span>,
+      <span style="color: #ffa07a;">"serverAddress"</span>: <span style="color: #ffa07a;">"10.0.1.149:443"</span>
+    }
+  ]
+}
+</pre>
+</div>
+
+<pre class="example" id="orgdb920dc">
+以上示例使用--insecure 标志。 这使得它容易受到 MITM 攻击
+
+当 kubectl 访问集群时，它使用存储的根证书和客户端证书来访问服务器，这些安装在~/.kube目录中
+
+由于集群证书通常是自签名的，因此可能需要特殊配置才能让 http 客户端使用根证书
+</pre>
+
+<p>
+对于某些群集，apiserver 可能不需要身份验证；可以选择在本地主机上服务，或者使用防火墙保护
+</p>
+
+<pre class="example" id="orgbc04e44">
+对此还没有一个标准配置，这种方法可能与未来的高可用性支持相冲突
+</pre>
+</div>
+</div>
+</div>
 </div>
 <div id="postamble" class="status">
 

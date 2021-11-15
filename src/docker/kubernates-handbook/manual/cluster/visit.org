@@ -2,3 +2,89 @@
 #+HTML_HEAD: <link rel="stylesheet" type="text/css" href="../../css/main.css" />
 #+HTML_LINK_HOME: cluster.html
 #+OPTIONS: num:nil timestamp:nil ^:nil
+* 第一次使用 kubectl 访问
+  #+begin_example
+    如果是第一次访问 Kubernetes API 的话，建议使用 Kubernetes 命令行工具：kubectl
+
+    为了访问集群，需要知道集群的地址，并且需要有访问它的凭证
+
+    通常，如果手动安装了集群那么这些将会自动设置，或者其他人部署的集群会提供并给凭证和集群地址
+  #+end_example
+
+使用下面的命令检查 kubectl 已知的集群的地址和凭证：
+
+#+begin_src sh 
+  $ kubectl config view
+#+end_src
+* 直接访问 REST API
+Kubectl 处理对 apiserver 的定位和认证。如果想直接访问 REST API，可以使用像 curl、wget 或浏览器这样的 http 客户端，有以下几种方式来定位和认证：
++ 以 proxy 模式运行 kubectl
+  #+begin_example
+    推荐方法，使用已保存的 apiserver 位置信息，使用自签名证书验证 apiserver 的身份。没有 MITM（中间人攻击）的可能
+
+    认证到 apiserver，将来，可能会做智能的客户端负载均衡和故障转移
+  #+end_example
++ 直接向 http 客户端提供位置和凭据
+  #+begin_example
+    替代方法，适用于通过使用代理而混淆的某些类型的客户端代码，需要将根证书导入浏览器以防止 MITM
+  #+end_example
+
+** 使用 kubectl proxy
+以下命令作为反向代理的模式运行 kubectl，它处理对 apiserver 的定位并进行认证：
+
+#+begin_src sh 
+  $ kubectl proxy --port=8080 &
+#+end_src
+
+然后可以使用 curl、wget 或者浏览器来访问 API，如下所示：
+
+#+begin_src sh 
+  $ curl http://localhost:8080/api/
+
+  {
+    "versions": [
+      "v1"
+    ]
+  }
+#+end_src
+
+** 不使用 kubectl proxy
+   kubectl config view 不再显示 token。 使用 kubectl describe secret … 获取 default service account 的 token，如下所示：
+   #+begin_src sh 
+     $ APISERVER=$(kubectl config view | grep server | cut -f 2- -d ":" | tr -d " ")
+
+     $ TOKEN=$(kubectl describe secret $(kubectl get secrets | grep default | cut -f1 -d ' ') | grep -E '^token' | cut -f2 -d':' | tr -d '\t')
+
+     $ curl $APISERVER/api --header "Authorization: Bearer $TOKEN" --insecure
+     {
+       "kind": "APIVersions",
+       "versions": [
+	 "v1"
+       ],
+       "serverAddressByClientCIDRs": [
+	 {
+	   "clientCIDR": "0.0.0.0/0",
+	   "serverAddress": "10.0.1.149:443"
+	 }
+       ]
+     }
+   #+end_src
+
+   #+begin_example
+     以上示例使用--insecure 标志。 这使得它容易受到 MITM 攻击
+
+     当 kubectl 访问集群时，它使用存储的根证书和客户端证书来访问服务器，这些安装在~/.kube目录中
+
+     由于集群证书通常是自签名的，因此可能需要特殊配置才能让 http 客户端使用根证书
+   #+end_example
+   
+对于某些群集，apiserver 可能不需要身份验证；可以选择在本地主机上服务，或者使用防火墙保护
+
+#+begin_example
+  对此还没有一个标准配置，这种方法可能与未来的高可用性支持相冲突
+#+end_example
+
+
+
+
+
