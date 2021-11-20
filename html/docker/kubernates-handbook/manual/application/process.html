@@ -39,7 +39,7 @@
   }
   pre.src {
     position: relative;
-    overflow: auto;
+    overflow: visible;
     padding-top: 1.2em;
   }
   pre.src:before {
@@ -51,7 +51,7 @@
     padding: 3px;
     border: 1px solid black;
   }
-  pre.src:hover:before { display: inline; margin-top: 14px;}
+  pre.src:hover:before { display: inline;}
   /* Languages per Org manual */
   pre.src-asymptote:before { content: 'Asymptote'; }
   pre.src-awk:before { content: 'Awk'; }
@@ -160,19 +160,6 @@
   .footdef  { margin-bottom: 1em; }
   .figure { padding: 1em; }
   .figure p { text-align: center; }
-  .equation-container {
-    display: table;
-    text-align: center;
-    width: 100%;
-  }
-  .equation {
-    vertical-align: middle;
-  }
-  .equation-label {
-    display: table-cell;
-    text-align: right;
-    vertical-align: middle;
-  }
   .inlinetask {
     padding: 10px;
     border: 2px solid gray;
@@ -194,26 +181,50 @@
 </style>
 <link rel="stylesheet" type="text/css" href="../../css/main.css" />
 <script type="text/javascript">
-// @license magnet:?xt=urn:btih:e95b018ef3580986a04669f1b5879592219e2a7a&dn=public-domain.txt Public Domain
+/*
+@licstart  The following is the entire license notice for the
+JavaScript code in this tag.
+
+Copyright (C) 2012-2019 Free Software Foundation, Inc.
+
+The JavaScript code in this tag is free software: you can
+redistribute it and/or modify it under the terms of the GNU
+General Public License (GNU GPL) as published by the Free Software
+Foundation, either version 3 of the License, or (at your option)
+any later version.  The code is distributed WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU GPL for more details.
+
+As additional permission under GNU GPL version 3 section 7, you
+may distribute non-source (e.g., minimized or compacted) forms of
+that code without the copy of the GNU GPL normally required by
+section 4, provided you include this license notice and a URL
+through which recipients can access the Corresponding Source.
+
+
+@licend  The above is the entire license notice
+for the JavaScript code in this tag.
+*/
 <!--/*--><![CDATA[/*><!--*/
-     function CodeHighlightOn(elem, id)
-     {
-       var target = document.getElementById(id);
-       if(null != target) {
-         elem.classList.add("code-highlighted");
-         target.classList.add("code-highlighted");
-       }
-     }
-     function CodeHighlightOff(elem, id)
-     {
-       var target = document.getElementById(id);
-       if(null != target) {
-         elem.classList.remove("code-highlighted");
-         target.classList.remove("code-highlighted");
-       }
-     }
-    /*]]>*///-->
-// @license-end
+ function CodeHighlightOn(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(null != target) {
+     elem.cacheClassElem = elem.className;
+     elem.cacheClassTarget = target.className;
+     target.className = "code-highlighted";
+     elem.className   = "code-highlighted";
+   }
+ }
+ function CodeHighlightOff(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(elem.cacheClassElem)
+     elem.className = elem.cacheClassElem;
+   if(elem.cacheClassTarget)
+     target.className = elem.cacheClassTarget;
+ }
+/*]]>*///-->
 </script>
 </head>
 <body>
@@ -223,7 +234,328 @@
  <a accesskey="H" href="application.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">适用于kubernetes的应用开发部署流程</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#org461ced0">服务发现</a></li>
+<li><a href="#orga180172">持续集成</a></li>
+<li><a href="#org0b80803">本地测试</a></li>
+<li><a href="#org8145bca">发布</a>
+<ul>
+<li><a href="#orgbdb11a7">方式一</a></li>
+<li><a href="#org77320b0">方式二</a></li>
+</ul>
+</li>
+<li><a href="#org5316dac">集成Istio</a></li>
+<li><a href="#orgbba4648">验证</a></li>
+</ul>
+</div>
+</div>
+<p>
+本文讲解了如何开发容器化应用：
+</p>
+<ol class="org-ol">
+<li>使用Wercker持续集成工具构建docker镜像上传到docker镜像仓库中</li>
+<li>在本地使用docker-compose测试后</li>
+<li>使用kompose自动生成kubernetes的yaml文件</li>
+<li>再将注入Envoy sidecar容器，集成Istio service mesh中</li>
+</ol>
 
+<p>
+整个过程如下图所示：
+</p>
+
+
+<div class="figure">
+<p><img src="../../pic/how-to-use-kubernetes-with-istio.jpg" alt="how-to-use-kubernetes-with-istio.jpg" width="70%" />
+</p>
+</div>
+
+<p>
+为了讲解详细流程，写了用Go语言开发的示例程序放在GitHub中，模拟监控流程：
+</p>
+<ul class="org-ul">
+<li><a href="https://github.com/rootsongjc/k8s-app-monitor-test">k8s-app-monitor-test</a> ：生成模拟的监控数据，在接收到http请求返回json格式的metrics信息</li>
+<li><a href="https://github.com/rootsongjc/k8s-app-monitor-agent">k8s-app-monitor-agent</a>：获取监控metrics信息并绘图，访问该服务将获得监控图表</li>
+</ul>
+
+<p>
+API文档 <span class="underline">见k8s-app-monitor-test</span> 中的 <span class="underline">api.html</span> 文件，该文档在API blueprint中定义，使用aglio生成，打开后如图所示：
+</p>
+
+
+<div class="figure">
+<p><img src="../../pic/k8s-app-monitor-test-api-doc.jpg" alt="k8s-app-monitor-test-api-doc.jpg" width="70%" />
+</p>
+</div>
+<div id="outline-container-org461ced0" class="outline-2">
+<h2 id="org461ced0">服务发现</h2>
+<div class="outline-text-2" id="text-org461ced0">
+<p>
+K8s-app-monitor-agent服务需要访问k8s-app-monitor-test服务，这就涉及到服务发现的问题，在代码中直接写死了要访问的服务的内网DNS地址
+</p>
+<pre class="example">
+kubedns中的地址，即k8s-app-monitor-test.default.svc.cluster.local
+</pre>
+
+<p>
+Kubernetes在启动Pod的时候为容器注入环境变量，这些环境变量在所有的 namespace 中共享
+</p>
+<pre class="example">
+    环境变量是不断追加的，新启动的Pod中将拥有老的Pod中所有的环境变量，而老的Pod中的环境变量不变
+</pre>
+
+<p>
+但是既然使用这些环境变量就已经可以访问到对应的service
+</p>
+
+<pre class="example">
+    那么获取应用的地址信息，究竟是使用变量呢？还是直接使用DNS解析来发现？
+</pre>
+
+<p>
+答案是 <b>使用DNS</b> 
+</p>
+</div>
+</div>
+<div id="outline-container-orga180172" class="outline-2">
+<h2 id="orga180172">持续集成</h2>
+<div class="outline-text-2" id="text-orga180172">
+<p>
+这里使用wercker自动构建，构建完成后自动打包成docker镜像并上传到docker hub中
+</p>
+<pre class="example">
+    需要先在docker hub中创建repo
+</pre>
+
+<p>
+构建流程见：<a href="https://app.wercker.com/jimmysong/k8s-app-monitor-agent/">https://app.wercker.com/jimmysong/k8s-app-monitor-agent/</a>
+</p>
+
+
+<div class="figure">
+<p><img src="../../pic/k8s-app-monitor-agent-wercker.jpg" alt="k8s-app-monitor-agent-wercker.jpg" width="70%" />
+</p>
+</div>
+
+<p>
+生成了如下两个docker镜像：
+</p>
+<ul class="org-ul">
+<li>jimmysong/k8s-app-monitor-test:9c935dd</li>
+<li>jimmysong/k8s-app-monitor-agent:234d51c</li>
+</ul>
+</div>
+</div>
+<div id="outline-container-org0b80803" class="outline-2">
+<h2 id="org0b80803">本地测试</h2>
+<div class="outline-text-2" id="text-org0b80803">
+<p>
+在将服务发布到线上之前，可以先使用docker-compose在本地测试一下，这两个应用的docker-compose.yaml文件如下：
+</p>
+
+<pre class="example">
+version: '2'
+services:
+  k8s-app-monitor-agent:
+    image: jimmysong/k8s-app-monitor-agent:234d51c
+    container_name: monitor-agent
+    depends_on:
+      - k8s-app-monitor-test
+    ports:
+      - 8888:8888
+    environment:
+      - SERVICE_NAME=k8s-app-monitor-test
+  k8s-app-monitor-test:
+    image: jimmysong/k8s-app-monitor-test:9c935dd
+    container_name: monitor-test
+    ports:
+      - 3000:3000
+</pre>
+
+<p>
+执行下面的命令运行测试：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ docker-compose up
+</pre>
+</div>
+
+<p>
+在浏览器中访问 <a href="http://localhost:8888/k8s-app-monitor-test">http://localhost:8888/k8s-app-monitor-test</a> 就可以看到监控页面 
+</p>
+</div>
+</div>
+<div id="outline-container-org8145bca" class="outline-2">
+<h2 id="org8145bca">发布</h2>
+<div class="outline-text-2" id="text-org8145bca">
+<pre class="example">
+    所有 kubernetes 应用启动所用的yaml配置文件都保存在那两个GitHub仓库的manifest.yaml文件中
+
+    也可以使用kompose这个工具，将docker-compose的YAML文件转换成kubernetes规格的YAML文件
+</pre>
+
+<ul class="org-ul">
+<li>在两个GitHub目录下执行 <span class="underline">kubectl create -f manifest.yaml</span> 即可启动服务</li>
+<li>也可以直接在 <span class="underline">k8s-app-monitor-agent</span> 代码库的k8s目录下执行 <span class="underline">kubectl apply -f kompose</span></li>
+</ul>
+
+<pre class="example">
+    在以上YAML文件中有包含了Ingress配置，是为了将k8s-app-monitor-agent服务暴露给集群外部访问
+</pre>
+</div>
+<div id="outline-container-orgbdb11a7" class="outline-3">
+<h3 id="orgbdb11a7">方式一</h3>
+<div class="outline-text-3" id="text-orgbdb11a7">
+<p>
+服务启动后需要更新ingress配置，在ingress.yaml文件中增加以下几行：
+</p>
+
+<pre class="example">
+- host: k8s-app-monitor-agent.jimmysong.io
+  http:
+    paths:
+    - path: /k8s-app-monitor-agent
+      backend:
+	serviceName: k8s-app-monitor-agent
+	servicePort: 8888
+</pre>
+
+<p>
+保存后，然后执行 <span class="underline">kubectl replace -f ingress.yaml</span> 即可刷新ingress 
+</p>
+
+
+<p>
+修改本机的/etc/hosts文件，在其中加入以下一行：
+</p>
+
+<pre class="example">
+172.20.0.119 k8s-app-monitor-agent.jimmysong.io
+</pre>
+
+<pre class="example">
+     当然也可以将该域名加入到内网的DNS中，为了简单起见使用hosts
+</pre>
+</div>
+</div>
+<div id="outline-container-org77320b0" class="outline-3">
+<h3 id="org77320b0">方式二</h3>
+<div class="outline-text-3" id="text-org77320b0">
+<p>
+不修改已有的Ingress，而是为该队外暴露的服务单独创建一个Ingress，如下：
+</p>
+
+<pre class="example">
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: k8s-app-monitor-agent-ingress
+  annotations:
+    kubernetes.io/ingress.class: "treafik"
+spec:
+  rules:
+  - host: k8s-app-monitor-agent.jimmysong.io
+    http:
+      paths:
+      - path: /
+	backend:
+	  serviceName: k8s-app-monitor-agent
+	  servicePort: 8888
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org5316dac" class="outline-2">
+<h2 id="org5316dac">集成Istio</h2>
+<div class="outline-text-2" id="text-org5316dac">
+<pre class="example">
+    上一步中生成了kubernetes可读取的应用的YAML配置文件，可以将所有的YAML配置和并到同一个YAML文件中
+</pre>
+<p>
+假如文件名为 k8s-app-monitor-istio-all-in-one.yaml，如果要将其集成到Istio service mesh，只需要执行下面的命令：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">kubectl apply -n default -f &lt;(istioctl kube-inject -f k8s-app-monitor-istio-all-in-one.yaml)
+</pre>
+</div>
+
+<p>
+这样就会在每个Pod中注入一个sidecar容器。
+</p>
+</div>
+</div>
+<div id="outline-container-orgbba4648" class="outline-2">
+<h2 id="orgbba4648">验证</h2>
+<div class="outline-text-2" id="text-orgbba4648">
+<p>
+如果使用的是Traefik ingress来暴露的服务，那么在浏览器中访问<a href="http://k8s-app-monitor-agent.jimmysong.io/k8s-app-monitor-agent">http://k8s-app-monitor-agent.jimmysong.io/k8s-app-monitor-agent</a> ，可以看到如下的画面，每次刷新页面将看到新的柱状图：
+</p>
+
+
+<div class="figure">
+<p><img src="../../pic/k8s-app-monitor-agent.jpg" alt="k8s-app-monitor-agent.jpg" width="70%" /> 
+</p>
+</div>
+
+<pre class="example">
+    该应用集成了Istio service mesh后可以通过http://172.17.8.101:32000/k8s-app-monitor-agent来访问
+</pre>
+
+<p>
+在对k8s-app-monitor-agent服务进行了N此访问之后，再访问 <a href="http://grafana.istio.jimmysong.io">http://grafana.istio.jimmysong.io</a> 可以看到Service Mesh的监控信息：
+</p>
+
+
+<div class="figure">
+<p><img src="../../pic/k8s-app-monitor-istio-grafana.png" alt="k8s-app-monitor-istio-grafana.png" width="70%" /> 
+</p>
+</div>
+
+<p>
+访问 <a href="http://servicegraph.istio.jimmysong.io/dotviz">http://servicegraph.istio.jimmysong.io/dotviz</a> 可以看到服务的依赖和QPS信息：
+</p>
+
+
+<div class="figure">
+<p><img src="../../pic/k8s-app-monitor-istio-servicegraph-dotviz.png" alt="k8s-app-monitor-istio-servicegraph-dotviz.png" width="70%" /> 
+</p>
+</div>
+
+<p>
+访问 <a href="http://zipkin.istio.jimmysong.io">http://zipkin.istio.jimmysong.io</a> 可以选择查看k8s-app-monitor-agent应用的追踪信息：
+</p>
+
+
+<div class="figure">
+<p><img src="../../pic/k8s-app-monitor-istio-zipkin.png" alt="k8s-app-monitor-istio-zipkin.png" width="70%" /> 
+</p>
+</div>
+
+<pre class="example">
+    至此从代码提交到上线到Kubernetes集群上并集成Istio service mesh的过程就全部完成了
+</pre>
+
+<table border="2" cellspacing="0" cellpadding="6" rules="groups" frame="hsides">
+
+
+<colgroup>
+<col  class="org-left" />
+
+<col  class="org-left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="org-left"><a href="migration.html">Next：迁移</a></td>
+<td class="org-left"><a href="application.html">Home：应用</a></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 </div>
 <div id="postamble" class="status">
 
