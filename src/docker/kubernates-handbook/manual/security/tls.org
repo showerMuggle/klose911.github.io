@@ -10,3 +10,24 @@
 #+END_EXAMPLE
 * 概览
 
+  每个Kubernetes集群都有一个集群根证书颁发机构 _CA_ ：
+  + 集群中的 *组件* 通常使用CA来 *验证* _API server_ 的证书
+  + _API Server_ *验证* kubelet客户端证书等
+
+  #+begin_example
+    为了支持这一点，CA证书包被分发到集群中的每个节点，并作为一个secret附加分发到默认service account上
+
+    workload可以使用此CA建立信任，应用程序可以使用类似于ACME草案的协议，使用certificates.k8s.io API请求证书签名
+  #+end_example
+* TLS信任
+  让Pod中运行的应用程序信任集群根CA通常需要一些额外的应用程序配置：
+  + 将需要将CA证书包添加到 _TLS客户端_ 或 _服务器信任的CA证书列表_ 中
+    #+begin_example
+      例如，可以使用golang TLS配置通过解析证书链并将解析的证书添加到tls.Config结构中的Certificates字段中
+    #+end_example
+  + CA证书捆绑包将使用 _默认服务账户_ 自动 *加载* 到 _pod_ 中，路径为 _/var/run/secrets/kubernetes.io/serviceaccount/ca.crt_
+    #+begin_example
+      如果没有使用默认服务账户，需要请求集群管理员构建包含有权访问使用的证书包的configmap
+    #+end_example
+* 请求认证
+
