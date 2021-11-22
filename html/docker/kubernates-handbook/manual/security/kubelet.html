@@ -223,6 +223,207 @@
  <a accesskey="H" href="security.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">Kublet的认证授权</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#orgc8dc286">概览</a></li>
+<li><a href="#orgf8b2740">认证</a></li>
+<li><a href="#org6ddccc9">授权</a></li>
+</ul>
+</div>
+</div>
+<div id="outline-container-orgc8dc286" class="outline-2">
+<h2 id="orgc8dc286">概览</h2>
+<div class="outline-text-2" id="text-orgc8dc286">
+<p>
+Kubelet 的 <span class="underline">HTTPS 端点</span> 对外 <b>暴露</b> 了用于 <span class="underline">访问不同敏感程度数据的 API</span> ，并允许在节点或者容器内执行不同权限级别的操作
+</p>
+
+<pre class="example" id="org55b371b">
+接下来描述如何通过认证授权来访问 kubelet 的 HTTPS 端点
+</pre>
+</div>
+</div>
+<div id="outline-container-orgf8b2740" class="outline-2">
+<h2 id="orgf8b2740">认证</h2>
+<div class="outline-text-2" id="text-orgf8b2740">
+<p>
+默认情况下，所有未被配置的其他身份验证方法会被拒绝的，对 kubelet 的 HTTPS 端点的请求将被视为 <span class="underline">匿名请求</span> ，并被授予 <span class="underline">system:anonymous</span> 用户名和 <span class="underline">system:unauthenticated</span> 组：
+</p>
+<ul class="org-ul">
+<li>如果要禁用匿名访问并发送 401 Unauthorized 的未经身份验证的请求的响应：
+<ul class="org-ul">
+<li>启动 kubelet 时指定 <span class="underline">&#x2013;anonymous-auth=false</span> 标志</li>
+</ul></li>
+<li>如果要对 kubelet 的 HTTPS 端点启用 <span class="underline">X509 客户端证书</span> 身份验证：
+<ul class="org-ul">
+<li>启动 kubelet 时指定 <span class="underline">&#x2013;client-ca-file</span> 标志， <b>提供</b>  <span class="underline">CA bundle</span> 以验证客户端证书</li>
+<li>启动 apiserver 时指定 <span class="underline">&#x2013;kubelet-client-certificate</span> 和 <span class="underline">&#x2013;kubelet-client-key</span> 标志</li>
+</ul></li>
+<li>启用 <span class="underline">API bearer token</span> （包括 service account token）用于向 kubelet 的 HTTPS 端点进行身份验证：
+<ul class="org-ul">
+<li>确保在 API server 中 <b>开启</b> 了 <span class="underline">authentication.k8s.io/v1beta1 API 组</span></li>
+<li>启动 kubelet 时指定 <span class="underline">&#x2013;authentication-token-webhook</span> ，  <span class="underline">&#x2013;kubeconfig</span> 和 <span class="underline">&#x2013;require-kubeconfig</span> 标志</li>
+<li>Kubelet 在配置的 API server 上调用 <span class="underline">TokenReview API</span> 以确定来自 bearer token 的用户信息</li>
+</ul></li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-org6ddccc9" class="outline-2">
+<h2 id="org6ddccc9">授权</h2>
+<div class="outline-text-2" id="text-org6ddccc9">
+<p>
+对任何成功验证的请求（包括匿名请求）授权。默认授权模式为 <span class="underline">AlwaysAllow</span> ，允许所有请求
+</p>
+
+<pre class="example" id="orgd9357b1">
+需要细分访问 kubelet API 有很多原因：
+
+启用匿名认证，但匿名用户调用 kubelet API 的能力应受到限制
+启动 bearer token 认证，但是 API 用户（如 service account）调用 kubelet API 的能力应受到限制
+客户端证书身份验证已启用，但只有那些配置了 CA 签名的客户端证书的用户才可以使用 kubelet API
+</pre>
+
+<p>
+如果要细分访问 kubelet API，将授权委托给 API server：
+</p>
+<ul class="org-ul">
+<li>确保 API server 中启用了 <span class="underline">authorization.k8s.io/v1beta1 API</span> 组</li>
+<li>启动 kubelet 时指定 <span class="underline">&#x2013;authorization-mode=Webhook</span> 、  <span class="underline">&#x2013;kubeconfig</span> 和 <span class="underline">&#x2013;require-kubeconfig</span> 标志</li>
+<li>kubelet 在配置的 API server 上调用 <span class="underline">SubjectAccessReview API</span> ，以确定每个请求是否被授权</li>
+</ul>
+
+<p>
+kubelet 使用与 apiserver 相同的 请求属性 方法来授权 API 请求：
+</p>
+<ul class="org-ul">
+<li><p>
+Verb（动词）是根据传入的请求的 HTTP 动词确定的：
+</p>
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+
+
+<colgroup>
+<col  class="org-left" />
+
+<col  class="org-left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="org-left">HTTP 动词</td>
+<td class="org-left">request 动词</td>
+</tr>
+
+<tr>
+<td class="org-left">POST</td>
+<td class="org-left">create</td>
+</tr>
+
+<tr>
+<td class="org-left">GET, HEAD</td>
+<td class="org-left">get</td>
+</tr>
+
+<tr>
+<td class="org-left">PUT</td>
+<td class="org-left">update</td>
+</tr>
+
+<tr>
+<td class="org-left">PATCH</td>
+<td class="org-left">patch</td>
+</tr>
+
+<tr>
+<td class="org-left">DELETE</td>
+<td class="org-left">delete</td>
+</tr>
+</tbody>
+</table></li>
+<li><p>
+资源和子资源根据传入请求的路径确定：
+</p>
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+
+
+<colgroup>
+<col  class="org-left" />
+
+<col  class="org-left" />
+
+<col  class="org-left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="org-left">Kubelet</td>
+<td class="org-left">API 资源</td>
+<td class="org-left">子资源</td>
+</tr>
+
+<tr>
+<td class="org-left">/stats/*</td>
+<td class="org-left">nodes</td>
+<td class="org-left">stats</td>
+</tr>
+
+<tr>
+<td class="org-left">/metrics/*</td>
+<td class="org-left">nodes</td>
+<td class="org-left">metrics</td>
+</tr>
+
+<tr>
+<td class="org-left">/logs/*</td>
+<td class="org-left">nodes</td>
+<td class="org-left">log</td>
+</tr>
+
+<tr>
+<td class="org-left">/spec/*</td>
+<td class="org-left">nodes</td>
+<td class="org-left">spec</td>
+</tr>
+
+<tr>
+<td class="org-left">all others</td>
+<td class="org-left">nodes</td>
+<td class="org-left">proxy</td>
+</tr>
+</tbody>
+</table></li>
+<li>Namespace 和 API 组属性总是空字符串，资源的名字总是 kubelet 的 Node API 对象的名字</li>
+<li>当以该模式运行时，请确保用户为 apiserver 指定了 &#x2013;kubelet-client-certificate 和 &#x2013;kubelet-client-key 标志并授权了如下属性：
+<ul class="org-ul">
+<li>verb=*, resource=nodes, subresource=proxy</li>
+<li>verb=*, resource=nodes, subresource=stats</li>
+<li>verb=*, resource=nodes, subresource=log</li>
+<li>verb=*, resource=nodes, subresource=spec</li>
+<li>verb=*, resource=nodes, subresource=metrics</li>
+</ul></li>
+</ul>
+
+<table border="2" cellspacing="0" cellpadding="6" rules="groups" frame="hsides">
+
+
+<colgroup>
+<col  class="org-left" />
+
+<col  class="org-left" />
+
+<col  class="org-left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="org-left"><a href="tls_bootstrap.html">Next: TLS Bootstrap</a></td>
+<td class="org-left"><a href="tls.html">Previous: TLS</a></td>
+<td class="org-left"><a href="security.html">Home：安全</a></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 </div>
 <div id="postamble" class="status">
 
