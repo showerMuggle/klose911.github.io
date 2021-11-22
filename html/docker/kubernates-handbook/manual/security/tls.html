@@ -229,7 +229,17 @@
 <ul>
 <li><a href="#org055b984">概览</a></li>
 <li><a href="#orgdaad742">TLS信任</a></li>
-<li><a href="#orgb2aaafb">请求认证</a></li>
+<li><a href="#orgb2aaafb">请求认证</a>
+<ul>
+<li><a href="#orgb4d1331">步骤0：下载安装SSL</a></li>
+<li><a href="#orgbe560a9">步骤1：创建证书签名请求</a></li>
+<li><a href="#org77a27d9">步骤2：创建证书签名请求对象以发送到Kubernetes API</a></li>
+<li><a href="#orgb333698">步骤3：获取证书签名请求</a></li>
+<li><a href="#org9cfe6d4">步骤4：下载签名并使用</a></li>
+</ul>
+</li>
+<li><a href="#org4e1c05f">批准证书签名请求</a></li>
+<li><a href="#orgb1dbcc0">建议</a></li>
 </ul>
 </div>
 </div>
@@ -237,7 +247,7 @@
 部署了kuberentes集群，其中最开始又重要的一步就是 <b>创建</b> <span class="underline">TLS认证</span> 的，查看创建TLS证书和秘钥
 </p>
 
-<pre class="example" id="orgec51852">
+<pre class="example" id="orgb91eced">
 很多人在进行到这一步时都会遇到各种各样千奇百怪的问题，这一步是创建集群的基础，有必要详细了解一下其背后的流程和原理
 </pre>
 <div id="outline-container-org055b984" class="outline-2">
@@ -251,7 +261,7 @@
 <li><span class="underline">API Server</span> <b>验证</b> kubelet客户端证书等</li>
 </ul>
 
-<pre class="example" id="orga8d1601">
+<pre class="example" id="orgc2a1edc">
 为了支持这一点，CA证书包被分发到集群中的每个节点，并作为一个secret附加分发到默认service account上
 
 workload可以使用此CA建立信任，应用程序可以使用类似于ACME草案的协议，使用certificates.k8s.io API请求证书签名
@@ -268,13 +278,13 @@ workload可以使用此CA建立信任，应用程序可以使用类似于ACME草
 <li><p>
 将需要将CA证书包添加到 <span class="underline">TLS客户端</span> 或 <span class="underline">服务器信任的CA证书列表</span> 中
 </p>
-<pre class="example" id="orgab1ff14">
+<pre class="example" id="org0189b8f">
 例如，可以使用golang TLS配置通过解析证书链并将解析的证书添加到tls.Config结构中的Certificates字段中
 </pre></li>
 <li><p>
 CA证书捆绑包将使用 <span class="underline">默认服务账户</span> 自动 <b>加载</b> 到 <span class="underline">pod</span> 中，路径为 <span class="underline">/var/run/secrets/kubernetes.io/serviceaccount/ca.crt</span>
 </p>
-<pre class="example" id="orgc034fb9">
+<pre class="example" id="org83062c0">
 如果没有使用默认服务账户，需要请求集群管理员构建包含有权访问使用的证书包的configmap
 </pre></li>
 </ul>
@@ -282,6 +292,232 @@ CA证书捆绑包将使用 <span class="underline">默认服务账户</span> 自
 </div>
 <div id="outline-container-orgb2aaafb" class="outline-2">
 <h2 id="orgb2aaafb">请求认证</h2>
+<div class="outline-text-2" id="text-orgb2aaafb">
+<pre class="example" id="org356efd4">
+以下演示如何为通过DNS访问的Kubernetes服务创建TLS证书
+</pre>
+</div>
+<div id="outline-container-orgb4d1331" class="outline-3">
+<h3 id="orgb4d1331">步骤0：下载安装SSL</h3>
+<div class="outline-text-3" id="text-orgb4d1331">
+<p>
+下载cfssl工具：<a href="https://pkg.cfssl.org/">https://pkg.cfssl.org/</a>
+</p>
+</div>
+</div>
+<div id="outline-container-orgbe560a9" class="outline-3">
+<h3 id="orgbe560a9">步骤1：创建证书签名请求</h3>
+<div class="outline-text-3" id="text-orgbe560a9">
+<p>
+运行以下命令生成私钥和证书签名请求（或CSR）：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ cat &lt;&lt;EOF | cfssl genkey - | cfssljson -bare server
+<span style="color: #ffff00; font-weight: bold;">{</span>
+<span style="color: #ffff00; font-weight: bold;">  "hosts": [</span>
+<span style="color: #ffff00; font-weight: bold;">    "my-svc.my-namespace.svc.cluster.local",</span>
+<span style="color: #ffff00; font-weight: bold;">    "my-pod.my-namespace.pod.cluster.local",</span>
+<span style="color: #ffff00; font-weight: bold;">    "172.168.0.24",</span>
+<span style="color: #ffff00; font-weight: bold;">    "10.0.34.2"</span>
+<span style="color: #ffff00; font-weight: bold;">  ],</span>
+<span style="color: #ffff00; font-weight: bold;">  "CN": "my-pod.my-namespace.pod.cluster.local",</span>
+<span style="color: #ffff00; font-weight: bold;">  "key": {</span>
+<span style="color: #ffff00; font-weight: bold;">    "algo": "ecdsa",</span>
+<span style="color: #ffff00; font-weight: bold;">    "size": 256</span>
+<span style="color: #ffff00; font-weight: bold;">  }</span>
+<span style="color: #ffff00; font-weight: bold;">}</span>
+<span style="color: #ffff00; font-weight: bold;">EOF</span>
+</pre>
+</div>
+
+<pre class="example" id="org8a7c078">
+172.168.0.24 是 service 的 cluster IP
+
+my-svc.my-namespace.svc.cluster.local 是 service 的 DNS 名称
+
+10.0.34.2 是 Pod 的 IP
+
+my-pod.my-namespace.pod.cluster.local 是pod 的 DNS 名称
+</pre>
+<p>
+可以看到以下输出：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">2017/03/21 06:48:17 [INFO] generate received request
+2017/03/21 06:48:17 [INFO] received CSR
+2017/03/21 06:48:17 [INFO] generating key: ecdsa-256
+2017/03/21 06:48:17 [INFO] encoded CSR
+</pre>
+</div>
+
+<p>
+此命令生成两个文件:
+</p>
+<ul class="org-ul">
+<li>生成包含 <span class="underline">PEM</span> 编码的 <span class="underline">pkcs #10</span> 认证请求的 <span class="underline">server.csr</span></li>
+<li>包含仍然要创建的证书的PEM编码密钥的 <span class="underline">server-key.pem</span></li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-org77a27d9" class="outline-3">
+<h3 id="org77a27d9">步骤2：创建证书签名请求对象以发送到Kubernetes API</h3>
+<div class="outline-text-3" id="text-org77a27d9">
+<p>
+使用以下命令创建CSR yaml文件，并发送到API server：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ cat &lt;&lt;EOF | kubectl create -f -
+<span style="color: #ffff00; font-weight: bold;">apiVersion: certificates.k8s.io/v1beta1</span>
+<span style="color: #ffff00; font-weight: bold;">kind: CertificateSigningRequest</span>
+<span style="color: #ffff00; font-weight: bold;">metadata:</span>
+<span style="color: #ffff00; font-weight: bold;">  name: my-svc.my-namespace</span>
+<span style="color: #ffff00; font-weight: bold;">spec:</span>
+<span style="color: #ffff00; font-weight: bold;">  groups:</span>
+<span style="color: #ffff00; font-weight: bold;">  - system:authenticated</span>
+<span style="color: #ffff00; font-weight: bold;">  request: $(</span><span style="color: #fa8072;">cat</span><span style="color: #ffff00; font-weight: bold;"> server.csr | base64 | tr -d '\n')</span>
+<span style="color: #ffff00; font-weight: bold;">  usages:</span>
+<span style="color: #ffff00; font-weight: bold;">  - digital signature</span>
+<span style="color: #ffff00; font-weight: bold;">  - key encipherment</span>
+<span style="color: #ffff00; font-weight: bold;">  - server auth</span>
+<span style="color: #ffff00; font-weight: bold;">EOF</span>
+</pre>
+</div>
+
+<pre class="example" id="orge2fff71">
+请注意，在步骤1中创建的server.csr文件是base64编码并存储在.spec.request字段中
+
+还要求提供“数字签名”，“密钥加密”和“服务器身份验证”密钥用途的证书
+</pre>
+
+<p>
+在API server中可以看到这些CSR处于 <span class="underline">pending状态</span> 。执行下面的命令将可以看到：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl describe csr my-svc.my-namespace
+Name:                   my-svc.my-namespace
+Labels:                 &lt;none&gt;
+Annotations:            &lt;none&gt;
+CreationTimestamp:      Tue, 21 Mar 2017 07:03:51 -0700
+Requesting User:        yourname@example.com
+Status:                 Pending
+Subject:
+Common Name:    my-svc.my-namespace.svc.cluster.local
+Serial Number:
+Subject Alternative Names:
+DNS Names:      my-svc.my-namespace.svc.cluster.local
+IP Addresses:   172.168.0.24
+10.0.34.2
+Events: &lt;none&gt;
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgb333698" class="outline-3">
+<h3 id="orgb333698">步骤3：获取证书签名请求</h3>
+<div class="outline-text-3" id="text-orgb333698">
+<p>
+批准证书签名请求是通过自动批准过程完成的，或由集群管理员一次完成
+</p>
+</div>
+</div>
+
+<div id="outline-container-org9cfe6d4" class="outline-3">
+<h3 id="org9cfe6d4">步骤4：下载签名并使用</h3>
+<div class="outline-text-3" id="text-org9cfe6d4">
+<p>
+一旦CSR被签署并获得批准，应该看到以下内容：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl get csr
+NAME                  AGE       REQUESTOR               CONDITION
+my-svc.my-namespace   10m       yourname@example.com    Approved,Issued
+</pre>
+</div>
+
+<p>
+可以通过运行以下命令下载颁发的证书并将其保存到server.crt文件中：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl get csr my-svc.my-namespace -o <span style="color: #eedd82;">jsonpath</span>=<span style="color: #ffa07a;">'{.status.certificate}'</span> <span style="color: #ffa07a;">\</span>
+    | base64 -d &gt; server.crt
+</pre>
+</div>
+
+<pre class="example" id="orgdd52675">
+现在可以用 server.crt 和 server-key.pem 来做为keypair来启动HTTPS server
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org4e1c05f" class="outline-2">
+<h2 id="org4e1c05f">批准证书签名请求</h2>
+<div class="outline-text-2" id="text-org4e1c05f">
+<p>
+Kubernetes 管理员（具有适当权限）可以使用 <span class="underline">kubectl certificate approve</span> 和 <span class="underline">kubectl certificate deny</span> 命令手动 <b>批准</b> 或 <b>拒绝</b> <span class="underline">证书签名请求</span>
+</p>
+
+<pre class="example" id="org6f1ad76">
+但是，如果打算大量使用此 API，则可以考虑编写自动化的证书控制器
+</pre>
+
+<p>
+如果上述机器或人类使用 kubectl，批准者的作用是验证 CSR 满足如下两个要求：
+</p>
+<ol class="org-ol">
+<li><p>
+<span class="underline">CSR 的主体控制</span> 用于 <b>签署</b> <span class="underline">CSR 的私钥</span> 。这解决了 <b>伪装</b> 成 <span class="underline">授权主体的第三方</span> 的威胁
+</p>
+<pre class="example" id="org5229398">
+在上述示例中，此步骤将验证该 pod 控制了用于生成 CSR 的私钥
+</pre></li>
+<li><p>
+CSR 的主体被 <b>授权</b> 在 <span class="underline">请求的上下文</span> 中执行。这解决了 <b>加入群集的不期望的主体</b> 的威胁
+</p>
+<pre class="example" id="org583ded0">
+在上述示例中，此步骤将是验证该 pod 是否被允许加入到所请求的服务中
+</pre></li>
+</ol>
+
+<p>
+当且仅当满足这两个要求时，审批者应该批准 CSR，否则拒绝 CSR
+</p>
+</div>
+</div>
+
+<div id="outline-container-orgb1dbcc0" class="outline-2">
+<h2 id="orgb1dbcc0">建议</h2>
+<div class="outline-text-2" id="text-orgb1dbcc0">
+<pre class="example" id="org694fede">
+这里假设将signer设置为服务证书API。Kubernetes controller manager提供了一个signer的默认实现
+
+要启用它，请将--cluster-signing-cert-file和--cluster-signing-key-file参数传递给controller manager，并配置具有证书颁发机构的密钥对的路径
+</pre>
+
+<table border="2" cellspacing="0" cellpadding="6" rules="groups" frame="hsides">
+
+
+<colgroup>
+<col  class="org-left" />
+
+<col  class="org-left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="org-left"><a href="kubelet.html">Next: Kubelet</a></td>
+<td class="org-left"><a href="security.html">Home：安全</a></td>
+</tr>
+</tbody>
+</table>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
