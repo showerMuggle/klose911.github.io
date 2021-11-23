@@ -227,7 +227,23 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org85cbdad">kube-apiserver 配置</a></li>
+<li><a href="#org85cbdad">kube-apiserver 配置</a>
+<ul>
+<li><a href="#org3d34a32">Token 认证文件</a></li>
+<li><a href="#org5a50ba7">客户端证书 CA 包</a></li>
+</ul>
+</li>
+<li><a href="#org083beb3">kube-controller-manager 配置</a>
+<ul>
+<li><a href="#org1a668cd">签名文件</a></li>
+<li><a href="#orgebd8688">审批控制器</a></li>
+</ul>
+</li>
+<li><a href="#org57e22d8">kubelet 配置</a>
+<ul>
+<li><a href="#org93acfde">kubectl 审批</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
@@ -236,6 +252,342 @@
 </p>
 <div id="outline-container-org85cbdad" class="outline-2">
 <h2 id="org85cbdad">kube-apiserver 配置</h2>
+<div class="outline-text-2" id="text-org85cbdad">
+<p>
+必须提供一个 token 文件，该文件中指定了至少一个分配给 kubelet 特定 bootstrap 组的 <span class="underline">bootstrap token</span>
+</p>
+
+<pre class="example" id="orge7d9a03">
+该组将作为 controller manager 配置中的默认批准控制器而用于审批
+
+随着此功能的成熟，应该确保 token 被绑定到基于角色的访问控制(RBAC)策略上，该策略严格限制了与证书配置相关的客户端请求（使用 bootstrap token）
+
+使用 RBAC，将 token 范围划分为组可以带来很大的灵活性（例如，当您配置完成节点后，您可以禁用特定引导组的访问）
+</pre>
+</div>
+<div id="outline-container-org3d34a32" class="outline-3">
+<h3 id="org3d34a32">Token 认证文件</h3>
+<div class="outline-text-3" id="text-org3d34a32">
+<p>
+Token 可以是任意的，但应该从安全随机数生成器（例如大多数现代操作系统中的 /dev/urandom）导出的至少128位熵。生成 token 有很多中方式。例如：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">head -c 16 /dev/urandom | od -An -t x | tr -d <span style="color: #ffa07a;">' '</span>
+</pre>
+</div>
+
+<p>
+产生的 token 类似于这样：
+</p>
+
+<pre class="example" id="orgf19fb73">
+02b50b05283e98dd0fd71db496ef01e8
+</pre>
+
+<p>
+Token 文件应该类似于以下示例，其中前三个值可以是任何值，引用的组名称应如下所示：
+</p>
+
+<pre class="example" id="org82b4370">
+02b50b05283e98dd0fd71db496ef01e8,kubelet-bootstrap,10001,system:kubelet-bootstrap
+</pre>
+
+<p>
+注意：system:kubelet-bootstrap 的配置，当只有一个组时，不需要加引号
+</p>
+
+<p>
+在 kube-apiserver 命令中添加 <span class="underline">&#x2013;token-auth-file=FILENAME</span> 标志（可能在 systemd unit 文件中）来启用 token 文件 
+</p>
+</div>
+</div>
+<div id="outline-container-org5a50ba7" class="outline-3">
+<h3 id="org5a50ba7">客户端证书 CA 包</h3>
+<div class="outline-text-3" id="text-org5a50ba7">
+<p>
+在 kube-apiserver 命令中添加 <span class="underline">&#x2013;client-ca-file=FILENAME</span> 标志 <b>启用</b> <span class="underline">客户端证书认证</span> ，指定包含签名证书的证书颁发机构包
+</p>
+
+<pre class="example" id="org23acfad">
+例如 --client-ca-file=/var/lib/kubernetes/ca.pem
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org083beb3" class="outline-2">
+<h2 id="org083beb3">kube-controller-manager 配置</h2>
+<div class="outline-text-2" id="text-org083beb3">
+<p>
+请求证书的 API 向 Kubernetes controller manager 中 <b>添加</b> <span class="underline">证书颁发</span> <b>控制循环</b> ，使用磁盘上的 <span class="underline">cfssl</span> 本地签名文件的形式
+</p>
+
+<pre class="example" id="orgf53c0db">
+目前，所有发行的证书均为一年有效期和并具有一系列关键用途
+</pre>
+</div>
+<div id="outline-container-org1a668cd" class="outline-3">
+<h3 id="org1a668cd">签名文件</h3>
+<div class="outline-text-3" id="text-org1a668cd">
+<pre class="example" id="orgc1e880a">
+必须提供证书颁发机构，这样才能提供颁发证书所需的密码资料
+</pre>
+
+<p>
+kube-apiserver 通过指定的 <span class="underline">&#x2013;client-ca-file=FILENAME</span> 标志来认证和采信该 CA
+</p>
+
+<pre class="example" id="orgc3807f3">
+CA 的管理超出了本文档的范围，但建议您为 Kubernetes 生成专用的 CA
+</pre>
+
+<p>
+假定证书和密钥都是 PEM 编码的。Kube-controller-manager 标志为：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">--cluster-signing-cert-file=<span style="color: #ffa07a;">"/etc/path/to/kubernetes/ca/ca.crt"</span> --cluster-signing-key-file=<span style="color: #ffa07a;">"/etc/path/to/kubernetes/ca/ca.key"</span>
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-orgebd8688" class="outline-3">
+<h3 id="orgebd8688">审批控制器</h3>
+<div class="outline-text-3" id="text-orgebd8688">
+<pre class="example" id="org6f28024">
+在 kubernetes 1.7 版本中，实验性的 “组自动批准” 控制器被弃用，新的 csrapproving 控制器将作为 kube-controller-manager 的一部分，被默认启用
+</pre>
+
+<p>
+控制器使用 _SubjectAccessReview AP_I 来确定给定用户是否已被授权允许请求 CSR，然后根据授权结果进行批准
+</p>
+<pre class="example" id="orgacf0ed2">
+为了防止与其他批准者冲突，内置审批者没有明确地拒绝 CSR，只是忽略未经授权的请求
+</pre>
+
+<p>
+控制器将 CSR 分为三个子资源：
+</p>
+<ul class="org-ul">
+<li>nodeclient ：用户的客户端认证请求 O=system:nodes， CN=system:node:(node name)</li>
+<li>selfnodeclient：更新具有相同 O 和 CN 的客户端证书的节点</li>
+<li><p>
+selfnodeserver：更新服务证书的节点（ALPHA，需要 feature gate）
+</p>
+
+<p>
+当前，确定 CSR 是否为 selfnodeserver 请求的检查与 kubelet 的凭据轮换实现（Alpha 功能）相关联
+</p>
+<pre class="example" id="org872bde1">
+因此 selfnodeserver 的定义将来可能会改变，并且需要 Controller Manager 上的RotateKubeletServerCertificate feature gate
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-sh">--feature-gates=<span style="color: #eedd82;">RotateKubeletServerCertificate</span>=true
+</pre>
+</div>
+
+<p>
+以下 RBAC ClusterRoles 代表 nodeClient、selfnodeclient 和 selfnodeserver 功能
+</p>
+
+<pre class="example" id="orgbc37a59">
+# A ClusterRole which instructs the CSR approver to approve a user requesting
+# node client credentials.
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: approve-node-client-csr
+rules:
+- apiGroups: ["certificates.k8s.io"]
+  resources: ["certificatesigningrequests/nodeclient"]
+  verbs: ["create"]
+---
+# A ClusterRole which instructs the CSR approver to approve a node renewing its
+# own client credentials.
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: approve-node-client-renewal-csr
+rules:
+- apiGroups: ["certificates.k8s.io"]
+  resources: ["certificatesigningrequests/selfnodeclient"]
+  verbs: ["create"]
+---
+# A ClusterRole which instructs the CSR approver to approve a node requesting a
+# serving cert matching its client cert.
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: approve-node-server-renewal-csr
+rules:
+- apiGroups: ["certificates.k8s.io"]
+  resources: ["certificatesigningrequests/selfnodeserver"]
+  verbs: ["create"]
+</pre>
+
+<p>
+这些权力可以授予给凭证，如 bootstrap token
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh"><span style="color: #ff4500;"># </span><span style="color: #ff4500;">REMOVED: This flag no longer works as of 1.7.</span>
+--insecure-experimental-approve-all-kubelet-csrs-for-group=<span style="color: #ffa07a;">"kubelet-bootstrap-token"</span>
+</pre>
+</div>
+
+<pre class="example" id="orgb15cc3e">
+例如，要复制由已被移除的自动批准标志提供的行为，由单个组批准所有的 CSR
+</pre>
+
+<p>
+管理员将创建一个 ClusterRoleBinding 来定位该组：
+</p>
+
+<pre class="example" id="org2301429">
+# Approve all CSRs for the group "kubelet-bootstrap-token"
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: auto-approve-csrs-for-group
+subjects:
+- kind: Group
+  name: kubelet-bootstrap-token
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: approve-node-client-csr
+  apiGroup: rbac.authorization.k8s.io
+</pre>
+
+<p>
+要让节点更新自己的凭据，管理员可以构造一个 ClusterRoleBinding 来定位该节点的凭据：
+</p>
+
+<pre class="example" id="org1512ca4">
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: node1-client-cert-renewal
+subjects:
+- kind: User
+  name: system:node:node-1 # Let "node-1" renew its client certificate.
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: approve-node-client-renewal-csr
+  apiGroup: rbac.authorization.k8s.io
+</pre>
+
+<p>
+删除该绑定将会阻止节点更新客户端凭据，一旦其证书到期，实际上就会将其从集群中删除
+</p></li>
+</ul>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org57e22d8" class="outline-2">
+<h2 id="org57e22d8">kubelet 配置</h2>
+<div class="outline-text-2" id="text-org57e22d8">
+<p>
+要向 kube-apiserver 请求客户端证书：kubelet 首先需要一个包含 bootstrap 身份验证 token 的 kubeconfig 文件路径
+</p>
+<pre class="example" id="org354c8f4">
+可以使用 kubectl config set-cluster，set-credentials 和 set-context 来构建此 kubeconfig 文件
+</pre>
+
+<p>
+为 kubectl config set-credentials 提供 kubelet-bootstrap 的名称，并包含 &#x2013;token = &lt;token-value&gt;，如下所示：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl config set-credentials kubelet-bootstrap --token=${<span style="color: #eedd82;">BOOTSTRAP_TOKEN</span>} --kubeconfig=bootstrap.kubeconfig
+</pre>
+</div>
+
+<p>
+启动 kubelet 时，如果 &#x2013;kubeconfig 指定的文件不存在，则使用 bootstrap kubeconfig 向 API server 请求客户端证书：
+</p>
+<ul class="org-ul">
+<li>在批准 kubelet 的证书请求和回执时，将包含了生成的密钥和证书的 kubeconfig 文件写入由 -kubeconfig 指定的路径</li>
+<li>证书和密钥文件将被放置在由 &#x2013;cert-dir 指定的目录中</li>
+</ul>
+
+<p>
+启动 kubelet 时启用 bootstrap 用到的标志：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">--experimental-bootstrap-kubeconfig=<span style="color: #ffa07a;">"/path/to/bootstrap/kubeconfig"</span>
+</pre>
+</div>
+
+<pre class="example" id="orgba4cf12">
+此外，在1.7中，kubelet 实现了 Alpha 功能，使其客户端和/或服务器都能轮转提供证书
+</pre>
+
+<p>
+可以分别通过 kubelet 中的 RotateKubeletClientCertificate 和 RotateKubeletServerCertificate 功能标志启用此功能
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">--feature-gates=<span style="color: #eedd82;">RotateKubeletClientCertificate</span>=true,<span style="color: #eedd82;">RotateKubeletServerCertificate</span>=true
+</pre>
+</div>
+
+<ul class="org-ul">
+<li>RotateKubeletClientCertificate 可以让 kubelet 在其现有凭据到期时通过创建新的 CSR 来轮换其客户端证书</li>
+<li><p>
+RotateKubeletServerCertificate 可以让 kubelet 在其引导客户端凭据后还可以请求服务证书，并轮换该证书
+</p>
+
+<pre class="example" id="org029acde">
+服务证书目前不要求 DNS 或 IP SANs
+</pre></li>
+</ul>
+</div>
+
+<div id="outline-container-org93acfde" class="outline-3">
+<h3 id="org93acfde">kubectl 审批</h3>
+<div class="outline-text-3" id="text-org93acfde">
+<p>
+签名控制器不会立即签署所有证书请求。相反，它会一直等待直到适当特权的用户被标记为 “已批准” 状态
+</p>
+
+<pre class="example" id="org5c82e4e">
+这最终将是由外部审批控制器来处理的自动化过程，但是对于 alpha 版本的 API 来说，可以由集群管理员通过 kubectl 命令手动完成
+</pre>
+
+<p>
+管理员可以使用：
+</p>
+<ul class="org-ul">
+<li><span class="underline">kubectl get csr</span> 命令列出所有的 CSR</li>
+<li><span class="underline">kubectl describe csr &lt;name&gt;</span> 命令描述某个 CSR的详细信息</li>
+<li><span class="underline">kubectl certificate approve &lt;name&gt;</span> 和 <span class="underline">kubectl certificate deny &lt;name&gt;</span></li>
+</ul>
+
+<table border="2" cellspacing="0" cellpadding="6" rules="groups" frame="hsides">
+
+
+<colgroup>
+<col  class="org-left" />
+
+<col  class="org-left" />
+
+<col  class="org-left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="org-left"><a href="kubeconfig.html">Next: Kubeconfig</a></td>
+<td class="org-left"><a href="kubelet.html">Previous: Kubelet</a></td>
+<td class="org-left"><a href="security.html">Home：安全</a></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
