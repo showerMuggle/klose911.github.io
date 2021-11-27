@@ -145,26 +145,112 @@
      可以使用用户名和组（kubeadm 使用）来制定适当的授权策略以支持引导集群
    #+END_EXAMPLE
 ** 静态密码文件
-通过将 _--basic-auth-file=SOMEFILE_ 选项传递给 API server 来启用基本身份验证
+   通过将 _--basic-auth-file=SOMEFILE_ 选项传递给 API server 来启用基本身份验证
 
-#+BEGIN_EXAMPLE
-  目前，基本身份验证凭证将无限期地保留，并且密码在不重新启动API服务器的情况下无法更改
+   #+BEGIN_EXAMPLE
+     目前，基本身份验证凭证将无限期地保留，并且密码在不重新启动API服务器的情况下无法更改
 
-  请注意，目前支持基本身份验证只是为了方便使用，而其他模式更安全 
-#+END_EXAMPLE
+     请注意，目前支持基本身份验证只是为了方便使用，而其他模式更安全 
+   #+END_EXAMPLE
 
-基本身份认证是一个 csv 文件，至少包含3列：密码、用户名和用户 ID
+   基本身份认证是一个 csv 文件，至少包含3列：密码、用户名和用户 ID
 
-#+BEGIN_SRC sh 
+   #+BEGIN_SRC sh 
   password,user,uid,"group1,group2,group3"
-#+END_SRC
+   #+END_SRC
 
-#+BEGIN_EXAMPLE
-  可以指定包含以逗号分隔的组名称的可选第四列
+   #+BEGIN_EXAMPLE
+     可以指定包含以逗号分隔的组名称的可选第四列
 
-  如果有多个组，则必须将第四列值用双引号括起来
-#+END_EXAMPLE
+     如果有多个组，则必须将第四列值用双引号括起来
+   #+END_EXAMPLE
 
-当使用来自 HTTP 客户端的基本身份验证时，API server 需要Authorization header 中包含 Basic BASE64ENCODED(USER:PASSWORD) 的值
+   当使用来自 HTTP 客户端的基本身份验证时，API server 需要Authorization header 中包含 Basic BASE64ENCODED(USER:PASSWORD) 的值
+** Service Account Token
+   Service account 是一个 *自动启用* 的 _验证器_ ，它使用签名的 bearer token 来验证请求。该插件包括两个可选的标志：
+   + _--service-account-key-file_ : 一个包含签名 bearer token 的 PEM 编码文件
+     #+BEGIN_EXAMPLE
+       如果未指定，将使用 API server 的 TLS 私钥
+     #+END_EXAMPLE
+   + _--service-account-lookup_ : 如果启用，从 API 中删除掉的 token 将被撤销
 
+   Service account:
+   + 通常 API server 自动创建，
+   + 通过 ServiceAccount 注入控制器 关联到集群中运行的 Pod 上
+   + Bearer token 挂载到 pod 中，并允许集群进程与 API server 通信
+   + 可以使用 PodSpec 的 serviceAccountName 字段显式地与Pod关联 
 
+   #+BEGIN_EXAMPLE
+     注意： serviceAccountName 通常被省略，因为这会自动生成
+   #+END_EXAMPLE
+
+   #+BEGIN_SRC yaml 
+  apiVersion: apps/v1beta2
+  kind: Deployment
+  metadata:
+    name: nginx-deployment
+    namespace: default
+  spec:
+    replicas: 3
+    template:
+      metadata:
+      # ...
+      spec:
+	containers:
+	- name: nginx
+	  image: nginx:1.7.9
+	  serviceAccountName: bob-the-bot
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     Service account bearer token 在集群外使用也是完全有效的，并且可以用于为希望与 Kubernetes 通信的长期运行作业创建身份
+   #+END_EXAMPLE
+
+   要手动创建 service account，只需要使用 _kubectl create serviceaccount_ (NAME) 命令。这将在当前的 namespace 和相关连的 secret 中创建一个 service account:
+
+   #+BEGIN_SRC sh 
+  $ kubectl create serviceaccount jenkins
+  serviceaccount "jenkins" created
+  $ kubectl get serviceaccounts jenkins -o yaml
+  apiVersion: v1
+  kind: ServiceAccount
+  metadata:
+    # ...
+  secrets:
+  - name: jenkins-token-1yvwg
+   #+END_SRC
+
+   创建出的 secret 中拥有 API server 的公共 CA 和前面的 JSON Web Token（JWT）:
+
+   #+BEGIN_SRC sh 
+  $ kubectl get secret jenkins-token-1yvwg -o yaml
+  apiVersion: v1
+  data:
+    ca.crt: (APISERVER'S CA BASE64 ENCODED)
+    namespace: ZGVmYXVsdA==
+    token: (BEARER TOKEN BASE64 ENCODED)
+  kind: Secret
+  metadata:
+    # ...
+  type: kubernetes.io/service-account-token
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     注意：所有值是基于 base64 编码的，因为 secret 总是基于 base64 编码
+   #+END_EXAMPLE
+
+   经过签名的 JWT 可以用作 bearer token 与给定的 service account 进行身份验证
+
+   #+BEGIN_EXAMPLE
+     通常情况下，这些 secret 被挂载到 pod 中，以便对集群内的 API server 进行访问，但也可以从集群外访问
+   #+END_EXAMPLE
+
+   Service account 被验证后：
+   + 用户名: _system:serviceaccount:(NAMESPACE):(SERVICEACCOUNT)_ 
+   + 被指定到组 _system:serviceaccounts_ 和 _system:serviceaccounts:(NAMESPACE)_ 
+
+   #+BEGIN_EXAMPLE
+     由于 service account 的 token 存储在 secret 中，所以具有对这些 secret 的读取权限的任何用户都可以作为 service account 进行身份验证
+
+     授予 service account 权限和读取 secret 功能时要谨慎
+   #+END_EXAMPLE

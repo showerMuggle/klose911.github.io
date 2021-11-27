@@ -249,6 +249,7 @@ for the JavaScript code in this tag.
 </li>
 <li><a href="#orgb02106d">Bootstrap Token</a></li>
 <li><a href="#org25600ef">静态密码文件</a></li>
+<li><a href="#org3644de3">Service Account Token</a></li>
 </ul>
 </li>
 </ul>
@@ -486,9 +487,9 @@ token,user,uid,"group1,group2,group3"
 </p>
 
 <pre class="example">
-  目前，基本身份验证凭证将无限期地保留，并且密码在不重新启动API服务器的情况下无法更改
+     目前，基本身份验证凭证将无限期地保留，并且密码在不重新启动API服务器的情况下无法更改
 
-  请注意，目前支持基本身份验证只是为了方便使用，而其他模式更安全 
+     请注意，目前支持基本身份验证只是为了方便使用，而其他模式更安全 
 </pre>
 
 <p>
@@ -501,14 +502,129 @@ token,user,uid,"group1,group2,group3"
 </div>
 
 <pre class="example">
-  可以指定包含以逗号分隔的组名称的可选第四列
+     可以指定包含以逗号分隔的组名称的可选第四列
 
-  如果有多个组，则必须将第四列值用双引号括起来
+     如果有多个组，则必须将第四列值用双引号括起来
 </pre>
 
 <p>
 当使用来自 HTTP 客户端的基本身份验证时，API server 需要Authorization header 中包含 Basic BASE64ENCODED(USER:PASSWORD) 的值
 </p>
+</div>
+</div>
+<div id="outline-container-org3644de3" class="outline-3">
+<h3 id="org3644de3">Service Account Token</h3>
+<div class="outline-text-3" id="text-org3644de3">
+<p>
+Service account 是一个 <b>自动启用</b> 的 <span class="underline">验证器</span> ，它使用签名的 bearer token 来验证请求。该插件包括两个可选的标志：
+</p>
+<ul class="org-ul">
+<li><p>
+<span class="underline">&#x2013;service-account-key-file</span> : 一个包含签名 bearer token 的 PEM 编码文件
+</p>
+<pre class="example">
+       如果未指定，将使用 API server 的 TLS 私钥
+</pre></li>
+<li><span class="underline">&#x2013;service-account-lookup</span> : 如果启用，从 API 中删除掉的 token 将被撤销</li>
+</ul>
+
+<p>
+Service account:
+</p>
+<ul class="org-ul">
+<li>通常 API server 自动创建，</li>
+<li>通过 ServiceAccount 注入控制器 关联到集群中运行的 Pod 上</li>
+<li>Bearer token 挂载到 pod 中，并允许集群进程与 API server 通信</li>
+<li>可以使用 PodSpec 的 serviceAccountName 字段显式地与Pod关联</li>
+</ul>
+
+<pre class="example">
+     注意： serviceAccountName 通常被省略，因为这会自动生成
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #4eee94;">apiVersion</span>: apps/v1beta2
+<span style="color: #4eee94;">kind</span>: Deployment
+<span style="color: #4eee94;">metadata</span>:
+  <span style="color: #4eee94;">name</span>: nginx-deployment
+  <span style="color: #4eee94;">namespace</span>: default
+<span style="color: #4eee94;">spec</span>:
+  <span style="color: #4eee94;">replicas</span>: 3
+  <span style="color: #4eee94;">template</span>:
+    <span style="color: #4eee94;">metadata</span>:
+    <span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">...</span>
+    <span style="color: #4eee94;">spec</span>:
+      <span style="color: #4eee94;">containers</span>:
+      - <span style="color: #4eee94;">name</span>: nginx
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">image</span>: nginx:1.7.9
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">serviceAccountName</span>: bob-the-bot
+</pre>
+</div>
+
+<pre class="example">
+Service account bearer token 在集群外使用也是完全有效的，并且可以用于为希望与 Kubernetes 通信的长期运行作业创建身份
+</pre>
+
+<p>
+要手动创建 service account，只需要使用 <span class="underline">kubectl create serviceaccount</span> (NAME) 命令。这将在当前的 namespace 和相关连的 secret 中创建一个 service account:
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl create serviceaccount jenkins
+serviceaccount <span style="color: #deb887;">"jenkins"</span> created
+$ kubectl get serviceaccounts jenkins -o yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  <span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">...</span>
+secrets:
+- name: jenkins-token-1yvwg
+</pre>
+</div>
+
+<p>
+创建出的 secret 中拥有 API server 的公共 CA 和前面的 JSON Web Token（JWT）:
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl get secret jenkins-token-1yvwg -o yaml
+apiVersion: v1
+data:
+  ca.crt: (APISERVER<span style="color: #deb887;">'S CA BASE64 ENCODED)</span>
+<span style="color: #deb887;">  namespace: ZGVmYXVsdA==</span>
+<span style="color: #deb887;">  token: (BEARER TOKEN BASE64 ENCODED)</span>
+<span style="color: #deb887;">kind: Secret</span>
+<span style="color: #deb887;">metadata:</span>
+<span style="color: #deb887;">  # ...</span>
+<span style="color: #deb887;">type: kubernetes.io/service-account-token</span>
+</pre>
+</div>
+
+<pre class="example">
+     注意：所有值是基于 base64 编码的，因为 secret 总是基于 base64 编码
+</pre>
+
+<p>
+经过签名的 JWT 可以用作 bearer token 与给定的 service account 进行身份验证
+</p>
+
+<pre class="example">
+     通常情况下，这些 secret 被挂载到 pod 中，以便对集群内的 API server 进行访问，但也可以从集群外访问
+</pre>
+
+<p>
+Service account 被验证后：
+</p>
+<ul class="org-ul">
+<li>用户名: <span class="underline">system:serviceaccount:(NAMESPACE):(SERVICEACCOUNT)</span></li>
+<li>被指定到组 <span class="underline">system:serviceaccounts</span> 和 <span class="underline">system:serviceaccounts:(NAMESPACE)</span></li>
+</ul>
+
+<pre class="example">
+     由于 service account 的 token 存储在 secret 中，所以具有对这些 secret 的读取权限的任何用户都可以作为 service account 进行身份验证
+
+     授予 service account 权限和读取 secret 功能时要谨慎
+</pre>
 </div>
 </div>
 </div>
