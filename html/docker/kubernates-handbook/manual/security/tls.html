@@ -39,7 +39,7 @@
   }
   pre.src {
     position: relative;
-    overflow: auto;
+    overflow: visible;
     padding-top: 1.2em;
   }
   pre.src:before {
@@ -51,7 +51,7 @@
     padding: 3px;
     border: 1px solid black;
   }
-  pre.src:hover:before { display: inline; margin-top: 14px;}
+  pre.src:hover:before { display: inline;}
   /* Languages per Org manual */
   pre.src-asymptote:before { content: 'Asymptote'; }
   pre.src-awk:before { content: 'Awk'; }
@@ -160,19 +160,6 @@
   .footdef  { margin-bottom: 1em; }
   .figure { padding: 1em; }
   .figure p { text-align: center; }
-  .equation-container {
-    display: table;
-    text-align: center;
-    width: 100%;
-  }
-  .equation {
-    vertical-align: middle;
-  }
-  .equation-label {
-    display: table-cell;
-    text-align: right;
-    vertical-align: middle;
-  }
   .inlinetask {
     padding: 10px;
     border: 2px solid gray;
@@ -194,26 +181,50 @@
 </style>
 <link rel="stylesheet" type="text/css" href="../../css/main.css" />
 <script type="text/javascript">
-// @license magnet:?xt=urn:btih:e95b018ef3580986a04669f1b5879592219e2a7a&dn=public-domain.txt Public Domain
+/*
+@licstart  The following is the entire license notice for the
+JavaScript code in this tag.
+
+Copyright (C) 2012-2019 Free Software Foundation, Inc.
+
+The JavaScript code in this tag is free software: you can
+redistribute it and/or modify it under the terms of the GNU
+General Public License (GNU GPL) as published by the Free Software
+Foundation, either version 3 of the License, or (at your option)
+any later version.  The code is distributed WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU GPL for more details.
+
+As additional permission under GNU GPL version 3 section 7, you
+may distribute non-source (e.g., minimized or compacted) forms of
+that code without the copy of the GNU GPL normally required by
+section 4, provided you include this license notice and a URL
+through which recipients can access the Corresponding Source.
+
+
+@licend  The above is the entire license notice
+for the JavaScript code in this tag.
+*/
 <!--/*--><![CDATA[/*><!--*/
-     function CodeHighlightOn(elem, id)
-     {
-       var target = document.getElementById(id);
-       if(null != target) {
-         elem.classList.add("code-highlighted");
-         target.classList.add("code-highlighted");
-       }
-     }
-     function CodeHighlightOff(elem, id)
-     {
-       var target = document.getElementById(id);
-       if(null != target) {
-         elem.classList.remove("code-highlighted");
-         target.classList.remove("code-highlighted");
-       }
-     }
-    /*]]>*///-->
-// @license-end
+ function CodeHighlightOn(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(null != target) {
+     elem.cacheClassElem = elem.className;
+     elem.cacheClassTarget = target.className;
+     target.className = "code-highlighted";
+     elem.className   = "code-highlighted";
+   }
+ }
+ function CodeHighlightOff(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(elem.cacheClassElem)
+     elem.className = elem.cacheClassElem;
+   if(elem.cacheClassTarget)
+     target.className = elem.cacheClassTarget;
+ }
+/*]]>*///-->
 </script>
 </head>
 <body>
@@ -227,19 +238,19 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org055b984">概览</a></li>
-<li><a href="#orgdaad742">TLS信任</a></li>
-<li><a href="#orgb2aaafb">请求认证</a>
+<li><a href="#orgf6b9d4c">概览</a></li>
+<li><a href="#org852cb03">TLS信任</a></li>
+<li><a href="#orgf2ddd20">请求认证</a>
 <ul>
-<li><a href="#orgb4d1331">步骤0：下载安装SSL</a></li>
-<li><a href="#orgbe560a9">步骤1：创建证书签名请求</a></li>
-<li><a href="#org77a27d9">步骤2：创建证书签名请求对象以发送到Kubernetes API</a></li>
-<li><a href="#orgb333698">步骤3：获取证书签名请求</a></li>
-<li><a href="#org9cfe6d4">步骤4：下载签名并使用</a></li>
+<li><a href="#org00ce460">步骤0：下载安装SSL</a></li>
+<li><a href="#orge80f3dc">步骤1：创建证书签名请求</a></li>
+<li><a href="#orgf356916">步骤2：创建证书签名请求对象以发送到Kubernetes API</a></li>
+<li><a href="#orge642ce8">步骤3：获取证书签名请求</a></li>
+<li><a href="#org9ee585d">步骤4：下载签名并使用</a></li>
 </ul>
 </li>
-<li><a href="#org4e1c05f">批准证书签名请求</a></li>
-<li><a href="#orgb1dbcc0">建议</a></li>
+<li><a href="#orge17a1a3">批准证书签名请求</a></li>
+<li><a href="#orgd43637f">建议</a></li>
 </ul>
 </div>
 </div>
@@ -247,12 +258,12 @@
 部署了kuberentes集群，其中最开始又重要的一步就是 <b>创建</b> <span class="underline">TLS认证</span> 的，查看创建TLS证书和秘钥
 </p>
 
-<pre class="example" id="orgd5038ab">
-很多人在进行到这一步时都会遇到各种各样千奇百怪的问题，这一步是创建集群的基础，有必要详细了解一下其背后的流程和原理
+<pre class="example">
+  很多人在进行到这一步时都会遇到各种各样千奇百怪的问题，这一步是创建集群的基础，有必要详细了解一下其背后的流程和原理
 </pre>
-<div id="outline-container-org055b984" class="outline-2">
-<h2 id="org055b984">概览</h2>
-<div class="outline-text-2" id="text-org055b984">
+<div id="outline-container-orgf6b9d4c" class="outline-2">
+<h2 id="orgf6b9d4c">概览</h2>
+<div class="outline-text-2" id="text-orgf6b9d4c">
 <p>
 每个Kubernetes集群都有一个集群根证书颁发机构 <span class="underline">CA</span> ：
 </p>
@@ -261,16 +272,16 @@
 <li><span class="underline">API Server</span> <b>验证</b> kubelet客户端证书等</li>
 </ul>
 
-<pre class="example" id="org1b94662">
+<pre class="example">
 为了支持这一点，CA证书包被分发到集群中的每个节点，并作为一个secret附加分发到默认service account上
 
 workload可以使用此CA建立信任，应用程序可以使用类似于ACME草案的协议，使用certificates.k8s.io API请求证书签名
 </pre>
 </div>
 </div>
-<div id="outline-container-orgdaad742" class="outline-2">
-<h2 id="orgdaad742">TLS信任</h2>
-<div class="outline-text-2" id="text-orgdaad742">
+<div id="outline-container-org852cb03" class="outline-2">
+<h2 id="org852cb03">TLS信任</h2>
+<div class="outline-text-2" id="text-org852cb03">
 <p>
 让Pod中运行的应用程序信任集群根CA通常需要一些额外的应用程序配置：
 </p>
@@ -278,36 +289,36 @@ workload可以使用此CA建立信任，应用程序可以使用类似于ACME草
 <li><p>
 将需要将CA证书包添加到 <span class="underline">TLS客户端</span> 或 <span class="underline">服务器信任的CA证书列表</span> 中
 </p>
-<pre class="example" id="org5633051">
-例如，可以使用golang TLS配置通过解析证书链并将解析的证书添加到tls.Config结构中的Certificates字段中
+<pre class="example">
+      例如，可以使用golang TLS配置通过解析证书链并将解析的证书添加到tls.Config结构中的Certificates字段中
 </pre></li>
 <li><p>
 CA证书捆绑包将使用 <span class="underline">默认服务账户</span> 自动 <b>加载</b> 到 <span class="underline">pod</span> 中，路径为 <span class="underline">/var/run/secrets/kubernetes.io/serviceaccount/ca.crt</span>
 </p>
-<pre class="example" id="org3f81c53">
-如果没有使用默认服务账户，需要请求集群管理员构建包含有权访问使用的证书包的configmap
+<pre class="example">
+      如果没有使用默认服务账户，需要请求集群管理员构建包含有权访问使用的证书包的configmap
 </pre></li>
 </ul>
 </div>
 </div>
-<div id="outline-container-orgb2aaafb" class="outline-2">
-<h2 id="orgb2aaafb">请求认证</h2>
-<div class="outline-text-2" id="text-orgb2aaafb">
-<pre class="example" id="orgce81596">
-以下演示如何为通过DNS访问的Kubernetes服务创建TLS证书
+<div id="outline-container-orgf2ddd20" class="outline-2">
+<h2 id="orgf2ddd20">请求认证</h2>
+<div class="outline-text-2" id="text-orgf2ddd20">
+<pre class="example">
+    以下演示如何为通过DNS访问的Kubernetes服务创建TLS证书
 </pre>
 </div>
-<div id="outline-container-orgb4d1331" class="outline-3">
-<h3 id="orgb4d1331">步骤0：下载安装SSL</h3>
-<div class="outline-text-3" id="text-orgb4d1331">
+<div id="outline-container-org00ce460" class="outline-3">
+<h3 id="org00ce460">步骤0：下载安装SSL</h3>
+<div class="outline-text-3" id="text-org00ce460">
 <p>
 下载cfssl工具：<a href="https://pkg.cfssl.org/">https://pkg.cfssl.org/</a>
 </p>
 </div>
 </div>
-<div id="outline-container-orgbe560a9" class="outline-3">
-<h3 id="orgbe560a9">步骤1：创建证书签名请求</h3>
-<div class="outline-text-3" id="text-orgbe560a9">
+<div id="outline-container-orge80f3dc" class="outline-3">
+<h3 id="orge80f3dc">步骤1：创建证书签名请求</h3>
+<div class="outline-text-3" id="text-orge80f3dc">
 <p>
 运行以下命令生成私钥和证书签名请求（或CSR）：
 </p>
@@ -331,7 +342,7 @@ CA证书捆绑包将使用 <span class="underline">默认服务账户</span> 自
 </pre>
 </div>
 
-<pre class="example" id="orgac44f61">
+<pre class="example">
 172.168.0.24 是 service 的 cluster IP
 
 my-svc.my-namespace.svc.cluster.local 是 service 的 DNS 名称
@@ -362,9 +373,9 @@ my-pod.my-namespace.pod.cluster.local 是pod 的 DNS 名称
 </div>
 </div>
 
-<div id="outline-container-org77a27d9" class="outline-3">
-<h3 id="org77a27d9">步骤2：创建证书签名请求对象以发送到Kubernetes API</h3>
-<div class="outline-text-3" id="text-org77a27d9">
+<div id="outline-container-orgf356916" class="outline-3">
+<h3 id="orgf356916">步骤2：创建证书签名请求对象以发送到Kubernetes API</h3>
+<div class="outline-text-3" id="text-orgf356916">
 <p>
 使用以下命令创建CSR yaml文件，并发送到API server：
 </p>
@@ -387,10 +398,10 @@ my-pod.my-namespace.pod.cluster.local 是pod 的 DNS 名称
 </pre>
 </div>
 
-<pre class="example" id="org75ce962">
-请注意，在步骤1中创建的server.csr文件是base64编码并存储在.spec.request字段中
+<pre class="example">
+     请注意，在步骤1中创建的server.csr文件是base64编码并存储在.spec.request字段中
 
-还要求提供“数字签名”，“密钥加密”和“服务器身份验证”密钥用途的证书
+     还要求提供“数字签名”，“密钥加密”和“服务器身份验证”密钥用途的证书
 </pre>
 
 <p>
@@ -418,18 +429,18 @@ Events: &lt;none&gt;
 </div>
 </div>
 
-<div id="outline-container-orgb333698" class="outline-3">
-<h3 id="orgb333698">步骤3：获取证书签名请求</h3>
-<div class="outline-text-3" id="text-orgb333698">
+<div id="outline-container-orge642ce8" class="outline-3">
+<h3 id="orge642ce8">步骤3：获取证书签名请求</h3>
+<div class="outline-text-3" id="text-orge642ce8">
 <p>
 批准证书签名请求是通过自动批准过程完成的，或由集群管理员一次完成
 </p>
 </div>
 </div>
 
-<div id="outline-container-org9cfe6d4" class="outline-3">
-<h3 id="org9cfe6d4">步骤4：下载签名并使用</h3>
-<div class="outline-text-3" id="text-org9cfe6d4">
+<div id="outline-container-org9ee585d" class="outline-3">
+<h3 id="org9ee585d">步骤4：下载签名并使用</h3>
+<div class="outline-text-3" id="text-org9ee585d">
 <p>
 一旦CSR被签署并获得批准，应该看到以下内容：
 </p>
@@ -446,27 +457,27 @@ my-svc.my-namespace   10m       yourname@example.com    Approved,Issued
 </p>
 
 <div class="org-src-container">
-<pre class="src src-sh">$ kubectl get csr my-svc.my-namespace -o <span style="color: #eedd82;">jsonpath</span>=<span style="color: #ffa07a;">'{.status.certificate}'</span> <span style="color: #ffa07a;">\</span>
+<pre class="src src-sh">$ kubectl get csr my-svc.my-namespace -o <span style="color: #4eee94;">jsonpath</span>=<span style="color: #deb887;">'{.status.certificate}'</span> <span style="color: #deb887;">\</span>
     | base64 -d &gt; server.crt
 </pre>
 </div>
 
-<pre class="example" id="orgc908dfd">
-现在可以用 server.crt 和 server-key.pem 来做为keypair来启动HTTPS server
+<pre class="example">
+     现在可以用 server.crt 和 server-key.pem 来做为keypair来启动HTTPS server
 </pre>
 </div>
 </div>
 </div>
 
-<div id="outline-container-org4e1c05f" class="outline-2">
-<h2 id="org4e1c05f">批准证书签名请求</h2>
-<div class="outline-text-2" id="text-org4e1c05f">
+<div id="outline-container-orge17a1a3" class="outline-2">
+<h2 id="orge17a1a3">批准证书签名请求</h2>
+<div class="outline-text-2" id="text-orge17a1a3">
 <p>
 Kubernetes 管理员（具有适当权限）可以使用 <span class="underline">kubectl certificate approve</span> 和 <span class="underline">kubectl certificate deny</span> 命令手动 <b>批准</b> 或 <b>拒绝</b> <span class="underline">证书签名请求</span>
 </p>
 
-<pre class="example" id="org43ca464">
-但是，如果打算大量使用此 API，则可以考虑编写自动化的证书控制器
+<pre class="example">
+    但是，如果打算大量使用此 API，则可以考虑编写自动化的证书控制器
 </pre>
 
 <p>
@@ -476,14 +487,14 @@ Kubernetes 管理员（具有适当权限）可以使用 <span class="underline"
 <li><p>
 <span class="underline">CSR 的主体控制</span> 用于 <b>签署</b> <span class="underline">CSR 的私钥</span> 。这解决了 <b>伪装</b> 成 <span class="underline">授权主体的第三方</span> 的威胁
 </p>
-<pre class="example" id="org85ac49f">
-在上述示例中，此步骤将验证该 pod 控制了用于生成 CSR 的私钥
+<pre class="example">
+       在上述示例中，此步骤将验证该 pod 控制了用于生成 CSR 的私钥
 </pre></li>
 <li><p>
 CSR 的主体被 <b>授权</b> 在 <span class="underline">请求的上下文</span> 中执行。这解决了 <b>加入群集的不期望的主体</b> 的威胁
 </p>
-<pre class="example" id="org4931ff2">
-在上述示例中，此步骤将是验证该 pod 是否被允许加入到所请求的服务中
+<pre class="example">
+       在上述示例中，此步骤将是验证该 pod 是否被允许加入到所请求的服务中
 </pre></li>
 </ol>
 
@@ -493,13 +504,13 @@ CSR 的主体被 <b>授权</b> 在 <span class="underline">请求的上下文</s
 </div>
 </div>
 
-<div id="outline-container-orgb1dbcc0" class="outline-2">
-<h2 id="orgb1dbcc0">建议</h2>
-<div class="outline-text-2" id="text-orgb1dbcc0">
-<pre class="example" id="orgbc2f04d">
-这里假设将signer设置为服务证书API。Kubernetes controller manager提供了一个signer的默认实现
+<div id="outline-container-orgd43637f" class="outline-2">
+<h2 id="orgd43637f">建议</h2>
+<div class="outline-text-2" id="text-orgd43637f">
+<pre class="example">
+    这里假设将signer设置为服务证书API。Kubernetes controller manager提供了一个signer的默认实现
 
-要启用它，请将--cluster-signing-cert-file和--cluster-signing-key-file参数传递给controller manager，并配置具有证书颁发机构的密钥对的路径
+    要启用它，请将--cluster-signing-cert-file和--cluster-signing-key-file参数传递给controller manager，并配置具有证书颁发机构的密钥对的路径
 </pre>
 
 <table border="2" cellspacing="0" cellpadding="6" rules="groups" frame="hsides">

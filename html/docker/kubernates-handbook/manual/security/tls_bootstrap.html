@@ -39,7 +39,7 @@
   }
   pre.src {
     position: relative;
-    overflow: auto;
+    overflow: visible;
     padding-top: 1.2em;
   }
   pre.src:before {
@@ -51,7 +51,7 @@
     padding: 3px;
     border: 1px solid black;
   }
-  pre.src:hover:before { display: inline; margin-top: 14px;}
+  pre.src:hover:before { display: inline;}
   /* Languages per Org manual */
   pre.src-asymptote:before { content: 'Asymptote'; }
   pre.src-awk:before { content: 'Awk'; }
@@ -160,19 +160,6 @@
   .footdef  { margin-bottom: 1em; }
   .figure { padding: 1em; }
   .figure p { text-align: center; }
-  .equation-container {
-    display: table;
-    text-align: center;
-    width: 100%;
-  }
-  .equation {
-    vertical-align: middle;
-  }
-  .equation-label {
-    display: table-cell;
-    text-align: right;
-    vertical-align: middle;
-  }
   .inlinetask {
     padding: 10px;
     border: 2px solid gray;
@@ -194,26 +181,50 @@
 </style>
 <link rel="stylesheet" type="text/css" href="../../css/main.css" />
 <script type="text/javascript">
-// @license magnet:?xt=urn:btih:e95b018ef3580986a04669f1b5879592219e2a7a&dn=public-domain.txt Public Domain
+/*
+@licstart  The following is the entire license notice for the
+JavaScript code in this tag.
+
+Copyright (C) 2012-2019 Free Software Foundation, Inc.
+
+The JavaScript code in this tag is free software: you can
+redistribute it and/or modify it under the terms of the GNU
+General Public License (GNU GPL) as published by the Free Software
+Foundation, either version 3 of the License, or (at your option)
+any later version.  The code is distributed WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU GPL for more details.
+
+As additional permission under GNU GPL version 3 section 7, you
+may distribute non-source (e.g., minimized or compacted) forms of
+that code without the copy of the GNU GPL normally required by
+section 4, provided you include this license notice and a URL
+through which recipients can access the Corresponding Source.
+
+
+@licend  The above is the entire license notice
+for the JavaScript code in this tag.
+*/
 <!--/*--><![CDATA[/*><!--*/
-     function CodeHighlightOn(elem, id)
-     {
-       var target = document.getElementById(id);
-       if(null != target) {
-         elem.classList.add("code-highlighted");
-         target.classList.add("code-highlighted");
-       }
-     }
-     function CodeHighlightOff(elem, id)
-     {
-       var target = document.getElementById(id);
-       if(null != target) {
-         elem.classList.remove("code-highlighted");
-         target.classList.remove("code-highlighted");
-       }
-     }
-    /*]]>*///-->
-// @license-end
+ function CodeHighlightOn(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(null != target) {
+     elem.cacheClassElem = elem.className;
+     elem.cacheClassTarget = target.className;
+     target.className = "code-highlighted";
+     elem.className   = "code-highlighted";
+   }
+ }
+ function CodeHighlightOff(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(elem.cacheClassElem)
+     elem.className = elem.cacheClassElem;
+   if(elem.cacheClassTarget)
+     target.className = elem.cacheClassTarget;
+ }
+/*]]>*///-->
 </script>
 </head>
 <body>
@@ -227,21 +238,21 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org85cbdad">kube-apiserver 配置</a>
+<li><a href="#orgc22827e">kube-apiserver 配置</a>
 <ul>
-<li><a href="#org3d34a32">Token 认证文件</a></li>
-<li><a href="#org5a50ba7">客户端证书 CA 包</a></li>
+<li><a href="#org01d6543">Token 认证文件</a></li>
+<li><a href="#org7206753">客户端证书 CA 包</a></li>
 </ul>
 </li>
-<li><a href="#org083beb3">kube-controller-manager 配置</a>
+<li><a href="#org32e7462">kube-controller-manager 配置</a>
 <ul>
-<li><a href="#org1a668cd">签名文件</a></li>
-<li><a href="#orgebd8688">审批控制器</a></li>
+<li><a href="#org241a762">签名文件</a></li>
+<li><a href="#org1a9df8b">审批控制器</a></li>
 </ul>
 </li>
-<li><a href="#org57e22d8">kubelet 配置</a>
+<li><a href="#org2eb164d">kubelet 配置</a>
 <ul>
-<li><a href="#org93acfde">kubectl 审批</a></li>
+<li><a href="#org7301ac5">kubectl 审批</a></li>
 </ul>
 </li>
 </ul>
@@ -250,30 +261,30 @@
 <p>
 接下来介绍如何为 kubelet 设置 <b>TLS 客户端证书引导</b> <span class="underline">bootstrap</span> 
 </p>
-<div id="outline-container-org85cbdad" class="outline-2">
-<h2 id="org85cbdad">kube-apiserver 配置</h2>
-<div class="outline-text-2" id="text-org85cbdad">
+<div id="outline-container-orgc22827e" class="outline-2">
+<h2 id="orgc22827e">kube-apiserver 配置</h2>
+<div class="outline-text-2" id="text-orgc22827e">
 <p>
 必须提供一个 token 文件，该文件中指定了至少一个分配给 kubelet 特定 bootstrap 组的 <span class="underline">bootstrap token</span>
 </p>
 
-<pre class="example" id="orge7d9a03">
-该组将作为 controller manager 配置中的默认批准控制器而用于审批
+<pre class="example">
+    该组将作为 controller manager 配置中的默认批准控制器而用于审批
 
-随着此功能的成熟，应该确保 token 被绑定到基于角色的访问控制(RBAC)策略上，该策略严格限制了与证书配置相关的客户端请求（使用 bootstrap token）
+    随着此功能的成熟，应该确保 token 被绑定到基于角色的访问控制(RBAC)策略上，该策略严格限制了与证书配置相关的客户端请求（使用 bootstrap token）
 
-使用 RBAC，将 token 范围划分为组可以带来很大的灵活性（例如，当您配置完成节点后，您可以禁用特定引导组的访问）
+    使用 RBAC，将 token 范围划分为组可以带来很大的灵活性（例如，当您配置完成节点后，您可以禁用特定引导组的访问）
 </pre>
 </div>
-<div id="outline-container-org3d34a32" class="outline-3">
-<h3 id="org3d34a32">Token 认证文件</h3>
-<div class="outline-text-3" id="text-org3d34a32">
+<div id="outline-container-org01d6543" class="outline-3">
+<h3 id="org01d6543">Token 认证文件</h3>
+<div class="outline-text-3" id="text-org01d6543">
 <p>
 Token 可以是任意的，但应该从安全随机数生成器（例如大多数现代操作系统中的 /dev/urandom）导出的至少128位熵。生成 token 有很多中方式。例如：
 </p>
 
 <div class="org-src-container">
-<pre class="src src-sh">head -c 16 /dev/urandom | od -An -t x | tr -d <span style="color: #ffa07a;">' '</span>
+<pre class="src src-sh">head -c 16 /dev/urandom | od -An -t x | tr -d <span style="color: #deb887;">' '</span>
 </pre>
 </div>
 
@@ -281,7 +292,7 @@ Token 可以是任意的，但应该从安全随机数生成器（例如大多�
 产生的 token 类似于这样：
 </p>
 
-<pre class="example" id="orgf19fb73">
+<pre class="example">
 02b50b05283e98dd0fd71db496ef01e8
 </pre>
 
@@ -289,7 +300,7 @@ Token 可以是任意的，但应该从安全随机数生成器（例如大多�
 Token 文件应该类似于以下示例，其中前三个值可以是任何值，引用的组名称应如下所示：
 </p>
 
-<pre class="example" id="org82b4370">
+<pre class="example">
 02b50b05283e98dd0fd71db496ef01e8,kubelet-bootstrap,10001,system:kubelet-bootstrap
 </pre>
 
@@ -302,42 +313,42 @@ Token 文件应该类似于以下示例，其中前三个值可以是任何值�
 </p>
 </div>
 </div>
-<div id="outline-container-org5a50ba7" class="outline-3">
-<h3 id="org5a50ba7">客户端证书 CA 包</h3>
-<div class="outline-text-3" id="text-org5a50ba7">
+<div id="outline-container-org7206753" class="outline-3">
+<h3 id="org7206753">客户端证书 CA 包</h3>
+<div class="outline-text-3" id="text-org7206753">
 <p>
 在 kube-apiserver 命令中添加 <span class="underline">&#x2013;client-ca-file=FILENAME</span> 标志 <b>启用</b> <span class="underline">客户端证书认证</span> ，指定包含签名证书的证书颁发机构包
 </p>
 
-<pre class="example" id="org23acfad">
-例如 --client-ca-file=/var/lib/kubernetes/ca.pem
+<pre class="example">
+     例如 --client-ca-file=/var/lib/kubernetes/ca.pem
 </pre>
 </div>
 </div>
 </div>
-<div id="outline-container-org083beb3" class="outline-2">
-<h2 id="org083beb3">kube-controller-manager 配置</h2>
-<div class="outline-text-2" id="text-org083beb3">
+<div id="outline-container-org32e7462" class="outline-2">
+<h2 id="org32e7462">kube-controller-manager 配置</h2>
+<div class="outline-text-2" id="text-org32e7462">
 <p>
 请求证书的 API 向 Kubernetes controller manager 中 <b>添加</b> <span class="underline">证书颁发</span> <b>控制循环</b> ，使用磁盘上的 <span class="underline">cfssl</span> 本地签名文件的形式
 </p>
 
-<pre class="example" id="orgf53c0db">
-目前，所有发行的证书均为一年有效期和并具有一系列关键用途
+<pre class="example">
+    目前，所有发行的证书均为一年有效期和并具有一系列关键用途
 </pre>
 </div>
-<div id="outline-container-org1a668cd" class="outline-3">
-<h3 id="org1a668cd">签名文件</h3>
-<div class="outline-text-3" id="text-org1a668cd">
-<pre class="example" id="orgc1e880a">
-必须提供证书颁发机构，这样才能提供颁发证书所需的密码资料
+<div id="outline-container-org241a762" class="outline-3">
+<h3 id="org241a762">签名文件</h3>
+<div class="outline-text-3" id="text-org241a762">
+<pre class="example">
+     必须提供证书颁发机构，这样才能提供颁发证书所需的密码资料
 </pre>
 
 <p>
 kube-apiserver 通过指定的 <span class="underline">&#x2013;client-ca-file=FILENAME</span> 标志来认证和采信该 CA
 </p>
 
-<pre class="example" id="orgc3807f3">
+<pre class="example">
 CA 的管理超出了本文档的范围，但建议您为 Kubernetes 生成专用的 CA
 </pre>
 
@@ -346,23 +357,23 @@ CA 的管理超出了本文档的范围，但建议您为 Kubernetes 生成专�
 </p>
 
 <div class="org-src-container">
-<pre class="src src-sh">--cluster-signing-cert-file=<span style="color: #ffa07a;">"/etc/path/to/kubernetes/ca/ca.crt"</span> --cluster-signing-key-file=<span style="color: #ffa07a;">"/etc/path/to/kubernetes/ca/ca.key"</span>
+<pre class="src src-sh">--cluster-signing-cert-file=<span style="color: #deb887;">"/etc/path/to/kubernetes/ca/ca.crt"</span> --cluster-signing-key-file=<span style="color: #deb887;">"/etc/path/to/kubernetes/ca/ca.key"</span>
 </pre>
 </div>
 </div>
 </div>
-<div id="outline-container-orgebd8688" class="outline-3">
-<h3 id="orgebd8688">审批控制器</h3>
-<div class="outline-text-3" id="text-orgebd8688">
-<pre class="example" id="org6f28024">
-在 kubernetes 1.7 版本中，实验性的 “组自动批准” 控制器被弃用，新的 csrapproving 控制器将作为 kube-controller-manager 的一部分，被默认启用
+<div id="outline-container-org1a9df8b" class="outline-3">
+<h3 id="org1a9df8b">审批控制器</h3>
+<div class="outline-text-3" id="text-org1a9df8b">
+<pre class="example">
+     在 kubernetes 1.7 版本中，实验性的 “组自动批准” 控制器被弃用，新的 csrapproving 控制器将作为 kube-controller-manager 的一部分，被默认启用
 </pre>
 
 <p>
 控制器使用 _SubjectAccessReview AP_I 来确定给定用户是否已被授权允许请求 CSR，然后根据授权结果进行批准
 </p>
-<pre class="example" id="orgacf0ed2">
-为了防止与其他批准者冲突，内置审批者没有明确地拒绝 CSR，只是忽略未经授权的请求
+<pre class="example">
+     为了防止与其他批准者冲突，内置审批者没有明确地拒绝 CSR，只是忽略未经授权的请求
 </pre>
 
 <p>
@@ -378,12 +389,12 @@ selfnodeserver：更新服务证书的节点（ALPHA，需要 feature gate）
 <p>
 当前，确定 CSR 是否为 selfnodeserver 请求的检查与 kubelet 的凭据轮换实现（Alpha 功能）相关联
 </p>
-<pre class="example" id="org872bde1">
-因此 selfnodeserver 的定义将来可能会改变，并且需要 Controller Manager 上的RotateKubeletServerCertificate feature gate
+<pre class="example">
+       因此 selfnodeserver 的定义将来可能会改变，并且需要 Controller Manager 上的RotateKubeletServerCertificate feature gate
 </pre>
 
 <div class="org-src-container">
-<pre class="src src-sh">--feature-gates=<span style="color: #eedd82;">RotateKubeletServerCertificate</span>=true
+<pre class="src src-sh">--feature-gates=<span style="color: #4eee94;">RotateKubeletServerCertificate</span>=true
 </pre>
 </div>
 
@@ -391,7 +402,7 @@ selfnodeserver：更新服务证书的节点（ALPHA，需要 feature gate）
 以下 RBAC ClusterRoles 代表 nodeClient、selfnodeclient 和 selfnodeserver 功能
 </p>
 
-<pre class="example" id="orgbc37a59">
+<pre class="example">
 # A ClusterRole which instructs the CSR approver to approve a user requesting
 # node client credentials.
 kind: ClusterRole
@@ -431,20 +442,20 @@ rules:
 </p>
 
 <div class="org-src-container">
-<pre class="src src-sh"><span style="color: #ff4500;"># </span><span style="color: #ff4500;">REMOVED: This flag no longer works as of 1.7.</span>
---insecure-experimental-approve-all-kubelet-csrs-for-group=<span style="color: #ffa07a;">"kubelet-bootstrap-token"</span>
+<pre class="src src-sh"><span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">REMOVED: This flag no longer works as of 1.7.</span>
+--insecure-experimental-approve-all-kubelet-csrs-for-group=<span style="color: #deb887;">"kubelet-bootstrap-token"</span>
 </pre>
 </div>
 
-<pre class="example" id="orgb15cc3e">
-例如，要复制由已被移除的自动批准标志提供的行为，由单个组批准所有的 CSR
+<pre class="example">
+       例如，要复制由已被移除的自动批准标志提供的行为，由单个组批准所有的 CSR
 </pre>
 
 <p>
 管理员将创建一个 ClusterRoleBinding 来定位该组：
 </p>
 
-<pre class="example" id="org2301429">
+<pre class="example">
 # Approve all CSRs for the group "kubelet-bootstrap-token"
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1beta1
@@ -464,7 +475,7 @@ roleRef:
 要让节点更新自己的凭据，管理员可以构造一个 ClusterRoleBinding 来定位该节点的凭据：
 </p>
 
-<pre class="example" id="org1512ca4">
+<pre class="example">
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1beta1
 metadata:
@@ -487,14 +498,14 @@ roleRef:
 </div>
 </div>
 
-<div id="outline-container-org57e22d8" class="outline-2">
-<h2 id="org57e22d8">kubelet 配置</h2>
-<div class="outline-text-2" id="text-org57e22d8">
+<div id="outline-container-org2eb164d" class="outline-2">
+<h2 id="org2eb164d">kubelet 配置</h2>
+<div class="outline-text-2" id="text-org2eb164d">
 <p>
 要向 kube-apiserver 请求客户端证书：kubelet 首先需要一个包含 bootstrap 身份验证 token 的 kubeconfig 文件路径
 </p>
-<pre class="example" id="org354c8f4">
-可以使用 kubectl config set-cluster，set-credentials 和 set-context 来构建此 kubeconfig 文件
+<pre class="example">
+    可以使用 kubectl config set-cluster，set-credentials 和 set-context 来构建此 kubeconfig 文件
 </pre>
 
 <p>
@@ -502,7 +513,7 @@ roleRef:
 </p>
 
 <div class="org-src-container">
-<pre class="src src-sh">$ kubectl config set-credentials kubelet-bootstrap --token=${<span style="color: #eedd82;">BOOTSTRAP_TOKEN</span>} --kubeconfig=bootstrap.kubeconfig
+<pre class="src src-sh">$ kubectl config set-credentials kubelet-bootstrap --token=${<span style="color: #4eee94;">BOOTSTRAP_TOKEN</span>} --kubeconfig=bootstrap.kubeconfig
 </pre>
 </div>
 
@@ -519,12 +530,12 @@ roleRef:
 </p>
 
 <div class="org-src-container">
-<pre class="src src-sh">--experimental-bootstrap-kubeconfig=<span style="color: #ffa07a;">"/path/to/bootstrap/kubeconfig"</span>
+<pre class="src src-sh">--experimental-bootstrap-kubeconfig=<span style="color: #deb887;">"/path/to/bootstrap/kubeconfig"</span>
 </pre>
 </div>
 
-<pre class="example" id="orgba4cf12">
-此外，在1.7中，kubelet 实现了 Alpha 功能，使其客户端和/或服务器都能轮转提供证书
+<pre class="example">
+    此外，在1.7中，kubelet 实现了 Alpha 功能，使其客户端和/或服务器都能轮转提供证书
 </pre>
 
 <p>
@@ -532,7 +543,7 @@ roleRef:
 </p>
 
 <div class="org-src-container">
-<pre class="src src-sh">--feature-gates=<span style="color: #eedd82;">RotateKubeletClientCertificate</span>=true,<span style="color: #eedd82;">RotateKubeletServerCertificate</span>=true
+<pre class="src src-sh">--feature-gates=<span style="color: #4eee94;">RotateKubeletClientCertificate</span>=true,<span style="color: #4eee94;">RotateKubeletServerCertificate</span>=true
 </pre>
 </div>
 
@@ -542,21 +553,21 @@ roleRef:
 RotateKubeletServerCertificate 可以让 kubelet 在其引导客户端凭据后还可以请求服务证书，并轮换该证书
 </p>
 
-<pre class="example" id="org029acde">
-服务证书目前不要求 DNS 或 IP SANs
+<pre class="example">
+      服务证书目前不要求 DNS 或 IP SANs
 </pre></li>
 </ul>
 </div>
 
-<div id="outline-container-org93acfde" class="outline-3">
-<h3 id="org93acfde">kubectl 审批</h3>
-<div class="outline-text-3" id="text-org93acfde">
+<div id="outline-container-org7301ac5" class="outline-3">
+<h3 id="org7301ac5">kubectl 审批</h3>
+<div class="outline-text-3" id="text-org7301ac5">
 <p>
 签名控制器不会立即签署所有证书请求。相反，它会一直等待直到适当特权的用户被标记为 “已批准” 状态
 </p>
 
-<pre class="example" id="org5c82e4e">
-这最终将是由外部审批控制器来处理的自动化过程，但是对于 alpha 版本的 API 来说，可以由集群管理员通过 kubectl 命令手动完成
+<pre class="example">
+     这最终将是由外部审批控制器来处理的自动化过程，但是对于 alpha 版本的 API 来说，可以由集群管理员通过 kubectl 命令手动完成
 </pre>
 
 <p>
