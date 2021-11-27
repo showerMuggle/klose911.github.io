@@ -247,6 +247,7 @@ for the JavaScript code in this tag.
 <li><a href="#org4ae10d3">在请求中放置 Bearer Token</a></li>
 </ul>
 </li>
+<li><a href="#orgb02106d">Bootstrap Token</a></li>
 </ul>
 </li>
 </ul>
@@ -366,7 +367,7 @@ API server 不会保证认证的顺序
 客户端证书还可以使用证书的 <span class="underline">organization</span> 字段来指示用户的 <span class="underline">组成员</span> 身份
 </p>
 <pre class="example">
-    要为用户包含多个组成员身份，请在证书中包含多个 organization 字段
+       要为用户包含多个组成员身份，请在证书中包含多个 organization 字段
 </pre></li>
 </ul>
 
@@ -379,7 +380,7 @@ API server 不会保证认证的顺序
 </div>
 
 <pre class="example">
-  这将为一个用户名为 ”jbeda“ 的 CSR，属于两个组“app1”和“app2”
+     这将为一个用户名为 ”jbeda“ 的 CSR，属于两个组“app1”和“app2”
 </pre>
 </div>
 </div>
@@ -391,7 +392,7 @@ API server 不会保证认证的顺序
 </p>
 
 <pre class="example">
-  目前，token 会无限期地持续下去，并且不重新启动 API server 的话就无法更改令牌列表 
+     目前，token 会无限期地持续下去，并且不重新启动 API server 的话就无法更改令牌列表 
 </pre>
 
 <p>
@@ -413,7 +414,7 @@ token,user,uid,"group1,group2,group3"
 </p>
 
 <pre class="example">
-  例如：如果 bearer token 是 31ada4fd-adec-460c-809a-9e56ceb75269
+      例如：如果 bearer token 是 31ada4fd-adec-460c-809a-9e56ceb75269
 </pre>
 
 <p>
@@ -425,6 +426,55 @@ token,user,uid,"group1,group2,group3"
 </pre>
 </div>
 </div>
+</div>
+</div>
+<div id="outline-container-orgb02106d" class="outline-3">
+<h3 id="orgb02106d">Bootstrap Token</h3>
+<div class="outline-text-3" id="text-orgb02106d">
+<p>
+为了简化新集群的初始化引导过程，Kubernetes 中包含了一个名为 Bootstrap Token 的动态管理的 bearer token：
+</p>
+<ul class="org-ul">
+<li>这些 token 使用 Secret 存储在 kube-system namespace 中，在那里它们可以被动态管理和创建</li>
+<li>Controller Manager 中包含了一个 TokenCleaner 控制器，用于在 bootstrap token 过期时删除将其删除。</li>
+</ul>
+
+<p>
+这些 token 的形式是 <span class="underline">[a-z0-9]{6}.[a-z0-9]{16}</span> ：
+</p>
+<ol class="org-ol">
+<li>第一部分是 Token ID</li>
+<li>第二部分是 Token Secret</li>
+</ol>
+
+<p>
+在 HTTP header 中指定的 token 如下所示：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">Authorization: Bearer 781292.db7bc3a58fc5f07e
+</pre>
+</div>
+
+<p>
+在 API server 的启动参数中加上 <span class="underline">&#x2013;experimental-bootstrap-token-auth</span> 标志以启用 Bootstrap Token Authenticator
+</p>
+
+<pre class="example">
+     必须通过 Controller Manager 上的 --controllers 标志启用 TokenCleaner 控制器，如 --controllers=*,tokencleaner
+
+     如果使用它来引导集群， kubeadm 会自己完成
+</pre>
+
+<p>
+用户被认证为 <span class="underline">system:bootstrap:&lt;Token ID&gt;</span> 。被包含在 <span class="underline">system:bootstrappers</span> 组中
+</p>
+
+<pre class="example">
+     命名和组是有意限制用户使用过去的 bootstap token
+
+     可以使用用户名和组（kubeadm 使用）来制定适当的授权策略以支持引导集群
+</pre>
 </div>
 </div>
 </div>
