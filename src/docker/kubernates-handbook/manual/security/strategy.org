@@ -15,3 +15,62 @@
 #+END_EXAMPLE
 
 重点查看 bearer token 和 HTTP 认证中的 token 如 [[file:authentication.org][身份认证]]
+* 用户
+  Kubernetes 集群中包含两类用户：
+  + 由 Kubernetes 管理的 service account：
+    + service account 是由 Kubernetes API 管理的帐户
+    + 绑定到了特定的 namespace
+    + 由 API server 自动创建，或者通过 API 调用手动创建
+    + 关联了一套凭证，存储在 Secret，这些凭证同时被挂载到 pod 中，从而允许 pod 与 kubernetes API 之间的调用 
+  + 普通用户：普通用户被假定为由外部独立服务管理
+    #+BEGIN_EXAMPLE
+      管理员分发私钥，用户存储（如 Keystone 或 Google 帐户），甚至包含用户名和密码列表的文件
+
+      在这方面，Kubernetes 没有代表普通用户帐户的对象，无法通过 API 调用的方式向集群中添加普通用户
+    #+END_EXAMPLE
+
+
+  API 请求被绑定到普通用户或 serivce account 上，或者作为匿名请求对待
+
+  #+BEGIN_EXAMPLE
+    这意味着集群内部或外部的每个进程，无论从：
+    1. 在工作站上输入 kubectl 的人类用户
+    2. 节点上的 kubelet
+    3. 控制平面的成员
+
+    都必须在向 API Server 发出请求时进行身份验证，或者被视为匿名用户 
+  #+END_EXAMPLE
+* 策略
+  Kubernetes 使用 _客户端证书_ 、 _bearer token_ 、 _身份验证代理_ 或者 _HTTP 基本身份验证_ 等 *身份认证插件* 来对 API 请求进行身份验证。当有 HTTP 请求发送到 API server 时，插件会尝试将以下属性关联到请求上：
+  + *用户名* ：标识最终用户的字符串
+    #+BEGIN_EXAMPLE
+      常用值可能是 kube-admin 或 jane@example.com
+    #+END_EXAMPLE
+  + *UID* ：标识最终用户的字符串
+    #+BEGIN_EXAMPLE
+      比用户名更加一致且唯一
+    #+END_EXAMPLE
+  + *组* ：一组将用户和常规用户组相关联的字符串
+  + 额外字段：包含其他有用认证信息的字符串列表的映射 
+
+  #+BEGIN_EXAMPLE
+    所有的值对于认证系统都是不透明的，只有 授权人 才能解释这些值的重要含义
+  #+END_EXAMPLE
+
+  可以一次性启用多种身份验证方式。通常使用至少以下两种认证方式：
+  + 服务帐户的 service account token
+  + 至少一种其他的用户认证的方式
+
+  #+BEGIN_EXAMPLE
+    当启用了多个认证模块时，第一个认证模块成功认证后将短路请求，不会进行第二个模块的认证
+
+    API server 不会保证认证的顺序
+  #+END_EXAMPLE
+
+  _system:authenticated_ 组包含在所有已验证用户的组列表中 
+
+  #+BEGIN_EXAMPLE
+    与其他身份验证协议（LDAP、SAML、Kerberos、x509 方案等）的集成可以使用身份验证代理或身份验证 webhook来实现
+  #+END_EXAMPLE
+** X509 客户端证书
+

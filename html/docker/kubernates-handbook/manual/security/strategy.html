@@ -234,6 +234,19 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="security.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">Kubernetes 中的用户与身份认证授权</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#org6c387b3">用户</a></li>
+<li><a href="#org3f3e079">策略</a>
+<ul>
+<li><a href="#org53c9b78">X509 客户端证书</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
 <pre class="example">
   在安装集群的时候在 master 节点上生成了一堆证书、token，还在 kubelet 的配置中用到了 bootstrap token
 
@@ -247,6 +260,98 @@ for the JavaScript code in this tag.
 <p>
 重点查看 bearer token 和 HTTP 认证中的 token 如 <a href="authentication.html">身份认证</a>
 </p>
+<div id="outline-container-org6c387b3" class="outline-2">
+<h2 id="org6c387b3">用户</h2>
+<div class="outline-text-2" id="text-org6c387b3">
+<p>
+Kubernetes 集群中包含两类用户：
+</p>
+<ul class="org-ul">
+<li>由 Kubernetes 管理的 service account：
+<ul class="org-ul">
+<li>service account 是由 Kubernetes API 管理的帐户</li>
+<li>绑定到了特定的 namespace</li>
+<li>由 API server 自动创建，或者通过 API 调用手动创建</li>
+<li>关联了一套凭证，存储在 Secret，这些凭证同时被挂载到 pod 中，从而允许 pod 与 kubernetes API 之间的调用</li>
+</ul></li>
+<li><p>
+普通用户：普通用户被假定为由外部独立服务管理
+</p>
+<pre class="example">
+      管理员分发私钥，用户存储（如 Keystone 或 Google 帐户），甚至包含用户名和密码列表的文件
+
+      在这方面，Kubernetes 没有代表普通用户帐户的对象，无法通过 API 调用的方式向集群中添加普通用户
+</pre></li>
+</ul>
+
+
+<p>
+API 请求被绑定到普通用户或 serivce account 上，或者作为匿名请求对待
+</p>
+
+<pre class="example">
+这意味着集群内部或外部的每个进程，无论从：
+1. 在工作站上输入 kubectl 的人类用户
+2. 节点上的 kubelet
+3. 控制平面的成员
+
+都必须在向 API Server 发出请求时进行身份验证，或者被视为匿名用户 
+</pre>
+</div>
+</div>
+<div id="outline-container-org3f3e079" class="outline-2">
+<h2 id="org3f3e079">策略</h2>
+<div class="outline-text-2" id="text-org3f3e079">
+<p>
+Kubernetes 使用 <span class="underline">客户端证书</span> 、 <span class="underline">bearer token</span> 、 <span class="underline">身份验证代理</span> 或者 <span class="underline">HTTP 基本身份验证</span> 等 <b>身份认证插件</b> 来对 API 请求进行身份验证。当有 HTTP 请求发送到 API server 时，插件会尝试将以下属性关联到请求上：
+</p>
+<ul class="org-ul">
+<li><p>
+<b>用户名</b> ：标识最终用户的字符串
+</p>
+<pre class="example">
+      常用值可能是 kube-admin 或 jane@example.com
+</pre></li>
+<li><p>
+<b>UID</b> ：标识最终用户的字符串
+</p>
+<pre class="example">
+      比用户名更加一致且唯一
+</pre></li>
+<li><b>组</b> ：一组将用户和常规用户组相关联的字符串</li>
+<li>额外字段：包含其他有用认证信息的字符串列表的映射</li>
+</ul>
+
+<pre class="example">
+    所有的值对于认证系统都是不透明的，只有 授权人 才能解释这些值的重要含义
+</pre>
+
+<p>
+可以一次性启用多种身份验证方式。通常使用至少以下两种认证方式：
+</p>
+<ul class="org-ul">
+<li>服务帐户的 service account token</li>
+<li>至少一种其他的用户认证的方式</li>
+</ul>
+
+<pre class="example">
+当启用了多个认证模块时，第一个认证模块成功认证后将短路请求，不会进行第二个模块的认证
+
+API server 不会保证认证的顺序
+</pre>
+
+<p>
+<span class="underline">system:authenticated</span> 组包含在所有已验证用户的组列表中 
+</p>
+
+<pre class="example">
+    与其他身份验证协议（LDAP、SAML、Kerberos、x509 方案等）的集成可以使用身份验证代理或身份验证 webhook来实现
+</pre>
+</div>
+<div id="outline-container-org53c9b78" class="outline-3">
+<h3 id="org53c9b78">X509 客户端证书</h3>
+</div>
+</div>
 </div>
 <div id="postamble" class="status">
 
