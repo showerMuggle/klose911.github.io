@@ -261,6 +261,7 @@ for the JavaScript code in this tag.
 </li>
 </ul>
 </li>
+<li><a href="#orgfe1d2c7">Webhook Token 认证</a></li>
 </ul>
 </li>
 </ul>
@@ -887,6 +888,126 @@ kubectl config set-credentials USER_NAME \
 </div>
 </div>
 </div>
+</div>
+</div>
+<div id="outline-container-orgfe1d2c7" class="outline-3">
+<h3 id="orgfe1d2c7">Webhook Token 认证</h3>
+<div class="outline-text-3" id="text-orgfe1d2c7">
+<p>
+Webhook 认证是用来认证 bearer token 的 hook：
+</p>
+<ul class="org-ul">
+<li><span class="underline">&#x2013;authentication-token-webhook-config-file</span> 是一个用来描述如何访问远程 webhook 服务的 kubeconfig 文件</li>
+<li><span class="underline">&#x2013;authentication-token-webhook-cache-ttl</span> 缓存身份验证策略的时间。默认为两分钟</li>
+</ul>
+
+<p>
+配置文件使用 kubeconfig 文件格式。文件中的 <span class="underline">user</span> 指的是 API server 的 webhook， <span class="underline">clusters</span> 是指远程服务。见下面的例子：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">clusters refers to the remote service.</span>
+<span style="color: #4eee94;">clusters</span>:
+  - <span style="color: #4eee94;">name</span>: name-of-remote-authn-service
+    <span style="color: #4eee94;">cluster</span>:
+      <span style="color: #4eee94;">certificate-authority</span>: /path/to/ca.pem         <span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">CA for verifying the remote service.</span>
+      <span style="color: #4eee94;">server</span>: https://authn.example.com/authenticate <span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">URL of remote service to query. Must use 'https'.</span>
+
+<span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">users refers to the API server's webhook configuration.</span>
+<span style="color: #4eee94;">users</span>:
+  - <span style="color: #4eee94;">name</span>: name-of-api-server
+    <span style="color: #4eee94;">user</span>:
+      <span style="color: #4eee94;">client-certificate</span>: /path/to/cert.pem <span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">cert for the webhook plugin to use</span>
+      <span style="color: #4eee94;">client-key</span>: /path/to/key.pem          <span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">key matching the cert</span>
+
+<span style="color: #5f9ea0; font-style: italic;"># </span><span style="color: #5f9ea0; font-style: italic;">kubeconfig files require a context. Provide one for the API server.</span>
+<span style="color: #4eee94;">current-context</span>: webhook
+<span style="color: #4eee94;">contexts</span>:
+- <span style="color: #4eee94;">context</span>:
+    <span style="color: #4eee94;">cluster</span>: name-of-remote-authn-service
+    <span style="color: #4eee94;">user</span>: name-of-api-sever
+  <span style="color: #4eee94;">name</span>: webhook
+</pre>
+</div>
+
+<p>
+当客户端尝试使用 bearer token 与API server 进行认证是，认证 webhook 用该 token 的对象 <b>查询</b> <span class="underline">远程服务</span> 
+</p>
+
+<pre class="example">
+     请注意，webhook API对象与其他 Kubernetes API 对象具有相同的 版本控制兼容性规则
+
+     实现者应该意识到 Beta 对象的宽松兼容性承诺，并检查请求的 “apiVersion” 字段以确保正确的反序列化
+
+     此外，API server 必须启用 authentication.k8s.io/v1beta1 API 扩展组 --runtime config =authentication.k8s.io/v1beta1=true 
+</pre>
+
+<p>
+请求远程服务的body类似下面的格式：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-js">{
+  <span style="color: #deb887;">"apiVersion"</span>: <span style="color: #deb887;">"authentication.k8s.io/v1beta1"</span>,
+  <span style="color: #deb887;">"kind"</span>: <span style="color: #deb887;">"TokenReview"</span>,
+  <span style="color: #deb887;">"spec"</span>: {
+    <span style="color: #deb887;">"token"</span>: <span style="color: #deb887;">"(BEARERTOKEN)"</span>
+  }
+}
+</pre>
+</div>
+
+<p>
+远程服务将填写请求的 status 字段以指示登录成功。成功验证后的 bearer token 将返回：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-js">{
+  <span style="color: #deb887;">"apiVersion"</span>: <span style="color: #deb887;">"authentication.k8s.io/v1beta1"</span>,
+  <span style="color: #deb887;">"kind"</span>: <span style="color: #deb887;">"TokenReview"</span>,
+  <span style="color: #deb887;">"status"</span>: {
+    <span style="color: #deb887;">"authenticated"</span>: <span style="color: #ffd700;">true</span>,
+    <span style="color: #deb887;">"user"</span>: {
+      <span style="color: #deb887;">"username"</span>: <span style="color: #deb887;">"janedoe@example.com"</span>,
+      <span style="color: #deb887;">"uid"</span>: <span style="color: #deb887;">"42"</span>,
+      <span style="color: #deb887;">"groups"</span>: [
+        <span style="color: #deb887;">"developers"</span>,
+        <span style="color: #deb887;">"qa"</span>
+      ],
+      <span style="color: #deb887;">"extra"</span>: {
+        <span style="color: #deb887;">"extrafield1"</span>: [
+          <span style="color: #deb887;">"extravalue1"</span>,
+          <span style="color: #deb887;">"extravalue2"</span>
+        ]
+      }
+    }
+  }
+}
+</pre>
+</div>
+
+<pre class="example">
+     响应主体的 spec 字段被忽略，可以省略
+</pre>
+
+<p>
+未成功的请求将返回：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-js">{
+  <span style="color: #deb887;">"apiVersion"</span>: <span style="color: #deb887;">"authentication.k8s.io/v1beta1"</span>,
+  <span style="color: #deb887;">"kind"</span>: <span style="color: #deb887;">"TokenReview"</span>,
+  <span style="color: #deb887;">"status"</span>: {
+    <span style="color: #deb887;">"authenticated"</span>: <span style="color: #ffd700;">false</span>
+  }
+}
+</pre>
+</div>
+
+<p>
+HTTP状态代码可以用来提供额外的错误上下文 
+</p>
 </div>
 </div>
 </div>

@@ -393,5 +393,99 @@
      #+BEGIN_SRC sh 
   $ kubectl --token=eyJhbGciOiJSUzI1NiJ9.eyJpc3MiOiJodHRwczovL21sYi50cmVtb2xvLmxhbjo4MDQzL2F1dGgvaWRwL29pZGMiLCJhdWQiOiJrdWJlcm5ldGVzIiwiZXhwIjoxNDc0NTk2NjY5LCJqdGkiOiI2RDUzNXoxUEpFNjJOR3QxaWVyYm9RIiwiaWF0IjoxNDc0NTk2MzY5LCJuYmYiOjE0NzQ1OTYyNDksInN1YiI6Im13aW5kdSIsInVzZXJfcm9sZSI6WyJ1c2VycyIsIm5ldy1uYW1lc3BhY2Utdmlld2VyIl0sImVtYWlsIjoibXdpbmR1QG5vbW9yZWplZGkuY29tIn0.f2As579n9VNoaKzoF-dOQGmXkFKf1FMyNV0-va_B63jn-_n9LGSCca_6IVMP8pO-Zb4KvRqGyTP0r3HkHxYy5c81AnIh8ijarruczl-TK_yF5akjSTHFZD-0gRzlevBDiH8Q79NAr-ky0P4iIXS8lY9Vnjch5MF74Zx0c3alKJHJUnnpjIACByfF2SCaYzbWFMUNat-K1PaUk5-ujMBG7yYnr95xD-63n8CO8teGUAAEMx6zRjzfhnhbzX-ajwZLGwGUBT4WqjMs70-6a7_8gZmLZb2az1cZynkFRj2BaCkVT3A2RrjeEwZEtGXlMqKJ1_I2ulrOVsYx01_yD35-rw get nodes
      #+END_SRC
+** Webhook Token 认证
+   Webhook 认证是用来认证 bearer token 的 hook：
+   + _--authentication-token-webhook-config-file_ 是一个用来描述如何访问远程 webhook 服务的 kubeconfig 文件
+   + _--authentication-token-webhook-cache-ttl_ 缓存身份验证策略的时间。默认为两分钟 
 
+   配置文件使用 kubeconfig 文件格式。文件中的 _user_ 指的是 API server 的 webhook， _clusters_ 是指远程服务。见下面的例子：
 
+   #+BEGIN_SRC yaml 
+  # clusters refers to the remote service.
+  clusters:
+    - name: name-of-remote-authn-service
+      cluster:
+	certificate-authority: /path/to/ca.pem         # CA for verifying the remote service.
+	server: https://authn.example.com/authenticate # URL of remote service to query. Must use 'https'.
+
+  # users refers to the API server's webhook configuration.
+  users:
+    - name: name-of-api-server
+      user:
+	client-certificate: /path/to/cert.pem # cert for the webhook plugin to use
+	client-key: /path/to/key.pem          # key matching the cert
+
+  # kubeconfig files require a context. Provide one for the API server.
+  current-context: webhook
+  contexts:
+  - context:
+      cluster: name-of-remote-authn-service
+      user: name-of-api-sever
+    name: webhook
+   #+END_SRC
+
+   当客户端尝试使用 bearer token 与API server 进行认证是，认证 webhook 用该 token 的对象 *查询* _远程服务_ 
+
+   #+BEGIN_EXAMPLE
+     请注意，webhook API对象与其他 Kubernetes API 对象具有相同的 版本控制兼容性规则
+
+     实现者应该意识到 Beta 对象的宽松兼容性承诺，并检查请求的 “apiVersion” 字段以确保正确的反序列化
+
+     此外，API server 必须启用 authentication.k8s.io/v1beta1 API 扩展组 --runtime config =authentication.k8s.io/v1beta1=true 
+   #+END_EXAMPLE
+
+   请求远程服务的body类似下面的格式：
+
+   #+BEGIN_SRC js 
+  {
+    "apiVersion": "authentication.k8s.io/v1beta1",
+    "kind": "TokenReview",
+    "spec": {
+      "token": "(BEARERTOKEN)"
+    }
+  }
+   #+END_SRC
+
+   远程服务将填写请求的 status 字段以指示登录成功。成功验证后的 bearer token 将返回：
+
+   #+BEGIN_SRC js 
+  {
+    "apiVersion": "authentication.k8s.io/v1beta1",
+    "kind": "TokenReview",
+    "status": {
+      "authenticated": true,
+      "user": {
+	"username": "janedoe@example.com",
+	"uid": "42",
+	"groups": [
+	  "developers",
+	  "qa"
+	],
+	"extra": {
+	  "extrafield1": [
+	    "extravalue1",
+	    "extravalue2"
+	  ]
+	}
+      }
+    }
+  }
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     响应主体的 spec 字段被忽略，可以省略
+   #+END_EXAMPLE
+
+   未成功的请求将返回：
+
+   #+BEGIN_SRC js 
+  {
+    "apiVersion": "authentication.k8s.io/v1beta1",
+    "kind": "TokenReview",
+    "status": {
+      "authenticated": false
+    }
+  }
+   #+END_SRC
+
+   HTTP状态代码可以用来提供额外的错误上下文 
