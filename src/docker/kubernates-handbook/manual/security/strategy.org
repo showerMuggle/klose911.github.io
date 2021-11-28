@@ -489,3 +489,55 @@
    #+END_SRC
 
    HTTP状态代码可以用来提供额外的错误上下文 
+** 认证代理
+   可以配置 API server 从请求 header 的值中识别用户，例如 _X-Remote-User_ 。这样的设计是用来与请求 header 值的验证代理结合使用。
+   + --requestheader-username-headers: 必需，大小写敏感。按 header 名称和顺序检查用户标识
+     #+BEGIN_EXAMPLE
+       包含值的第一个 header 将被作为用户名
+     #+END_EXAMPLE
+   + --requestheader-group-headers: 可选。大小写敏感。建议为 _X-Remote-Group_ 按 header 名称和顺序检查用户组
+     #+BEGIN_EXAMPLE
+       所有指定的 header 中的所有值都将作为组名
+     #+END_EXAMPLE
+   + --requestheader-extra-headers-prefix: 可选，大小写敏感。建议为 _X-Remote-Extra-_  标题前缀可用于查找有关用户的额外信息（通常由配置的授权插件使用）
+     #+BEGIN_EXAMPLE
+       以任何指定的前缀开头的 header 都会删除前缀，header 名称的其余部分将成为额外的键值，而 header 值则是额外的值 
+     #+END_EXAMPLE
+
+   例如下面的配置：
+   #+BEGIN_EXAMPLE
+     --requestheader-username-headers=X-Remote-User
+     --requestheader-group-headers=X-Remote-Group
+     --requestheader-extra-headers-prefix=X-Remote-Extra-
+   #+END_EXAMPLE
+
+   该请求：
+
+   #+BEGIN_SRC sh 
+  GET / HTTP/1.1
+  X-Remote-User: fido
+  X-Remote-Group: dogs
+  X-Remote-Group: dachshunds
+  X-Remote-Extra-Scopes: openid
+  X-Remote-Extra-Scopes: profile
+   #+END_SRC
+
+   将产生如下的用户信息：
+
+   #+BEGIN_SRC yaml 
+  name: fido
+  groups:
+  - dogs
+  - dachshunds
+  extra:
+    scopes:
+    - openid
+    - profile
+   #+END_SRC
+
+   为了防止 header 欺骗，验证代理需要在验证请求 header 之前向 API server 提供 *有效的* _客户端证书_ ，以对照指定的 CA 进行验证：
+   + --requestheader-client-ca-file: 必需。PEM 编码的证书包。在检查用户名的请求 header 之前，必须针对指定文件中的证书颁发机构提交并验证有效的客户端证书
+   + --requestheader-allowed-names: 可选。Common Name （cn）列表
+     + 如果设置了，则在检查用户名的请求 header 之前， 必须提供指定列表中 Common Name（cn）的有效客户端证书
+     + 如果为空，则允许使用任何 Common Name 
+

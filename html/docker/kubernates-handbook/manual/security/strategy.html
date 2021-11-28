@@ -262,6 +262,7 @@ for the JavaScript code in this tag.
 </ul>
 </li>
 <li><a href="#orgfe1d2c7">Webhook Token 认证</a></li>
+<li><a href="#org4102a96">认证代理</a></li>
 </ul>
 </li>
 </ul>
@@ -1008,6 +1009,85 @@ Webhook 认证是用来认证 bearer token 的 hook：
 <p>
 HTTP状态代码可以用来提供额外的错误上下文 
 </p>
+</div>
+</div>
+<div id="outline-container-org4102a96" class="outline-3">
+<h3 id="org4102a96">认证代理</h3>
+<div class="outline-text-3" id="text-org4102a96">
+<p>
+可以配置 API server 从请求 header 的值中识别用户，例如 <span class="underline">X-Remote-User</span> 。这样的设计是用来与请求 header 值的验证代理结合使用。
+</p>
+<ul class="org-ul">
+<li><p>
+&#x2013;requestheader-username-headers: 必需，大小写敏感。按 header 名称和顺序检查用户标识
+</p>
+<pre class="example">
+       包含值的第一个 header 将被作为用户名
+</pre></li>
+<li><p>
+&#x2013;requestheader-group-headers: 可选。大小写敏感。建议为 <span class="underline">X-Remote-Group</span> 按 header 名称和顺序检查用户组
+</p>
+<pre class="example">
+       所有指定的 header 中的所有值都将作为组名
+</pre></li>
+<li><p>
+&#x2013;requestheader-extra-headers-prefix: 可选，大小写敏感。建议为 <span class="underline">X-Remote-Extra-</span>  标题前缀可用于查找有关用户的额外信息（通常由配置的授权插件使用）
+</p>
+<pre class="example">
+       以任何指定的前缀开头的 header 都会删除前缀，header 名称的其余部分将成为额外的键值，而 header 值则是额外的值 
+</pre></li>
+</ul>
+
+<p>
+例如下面的配置：
+</p>
+<pre class="example">
+--requestheader-username-headers=X-Remote-User
+--requestheader-group-headers=X-Remote-Group
+--requestheader-extra-headers-prefix=X-Remote-Extra-
+</pre>
+
+<p>
+该请求：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">GET / HTTP/1.1
+X-Remote-User: fido
+X-Remote-Group: dogs
+X-Remote-Group: dachshunds
+X-Remote-Extra-Scopes: openid
+X-Remote-Extra-Scopes: profile
+</pre>
+</div>
+
+<p>
+将产生如下的用户信息：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #4eee94;">name</span>: fido
+<span style="color: #4eee94;">groups</span>:
+- dogs
+- dachshunds
+<span style="color: #4eee94;">extra</span>:
+  <span style="color: #4eee94;">scopes</span>:
+  - openid
+  - profile
+</pre>
+</div>
+
+<p>
+为了防止 header 欺骗，验证代理需要在验证请求 header 之前向 API server 提供 <b>有效的</b> <span class="underline">客户端证书</span> ，以对照指定的 CA 进行验证：
+</p>
+<ul class="org-ul">
+<li>&#x2013;requestheader-client-ca-file: 必需。PEM 编码的证书包。在检查用户名的请求 header 之前，必须针对指定文件中的证书颁发机构提交并验证有效的客户端证书</li>
+<li>&#x2013;requestheader-allowed-names: 可选。Common Name （cn）列表
+<ul class="org-ul">
+<li>如果设置了，则在检查用户名的请求 header 之前， 必须提供指定列表中 Common Name（cn）的有效客户端证书</li>
+<li>如果为空，则允许使用任何 Common Name</li>
+</ul></li>
+</ul>
 </div>
 </div>
 </div>
