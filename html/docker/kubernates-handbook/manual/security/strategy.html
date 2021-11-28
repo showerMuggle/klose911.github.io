@@ -250,6 +250,17 @@ for the JavaScript code in this tag.
 <li><a href="#orgb02106d">Bootstrap Token</a></li>
 <li><a href="#org25600ef">静态密码文件</a></li>
 <li><a href="#org3644de3">Service Account Token</a></li>
+<li><a href="#org9f7c139">OpenID Connect Token</a>
+<ul>
+<li><a href="#orga726c90">配置 API Server</a></li>
+<li><a href="#org70a82fe">使用</a>
+<ul>
+<li><a href="#orgc83f0f4">选项 1 - OIDC 身份验证器</a></li>
+<li><a href="#orgb7c4061">选项 2 - 使用 &#x2013;token 选项</a></li>
+</ul>
+</li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -625,6 +636,257 @@ Service account 被验证后：
 
      授予 service account 权限和读取 secret 功能时要谨慎
 </pre>
+</div>
+</div>
+<div id="outline-container-org9f7c139" class="outline-3">
+<h3 id="org9f7c139">OpenID Connect Token</h3>
+<div class="outline-text-3" id="text-org9f7c139">
+<pre class="example">
+OpenID Connect 是由 OAuth2 供应商提供的 OAuth2，特别是 Azure Active Directory、Salesforce 和 Google
+
+对 OAuth2 协议的主要扩展是返回一个称作 ID Token 的格外字段，该 token 是一个 JSON Web Token (JWT) ，有服务器签名，具有众所周知的字段，如用户的电子邮件
+</pre>
+
+<p>
+为了识别用户，认证者使用 OAuth2 token 响应 中的 <b>id_token</b> （而不是 access_token）作为 bearer token
+</p>
+
+
+<div class="figure">
+<p><img src="../../pic/kubernetes-oidc-login.jpg" alt="kubernetes-oidc-login.jpg" width="90%" />
+</p>
+</div>
+
+<ol class="org-ol">
+<li>登陆到身份提供商</li>
+<li>身份提供商将提供一个 <span class="underline">access_token</span> ，一个 <span class="underline">id_token</span> 和一个 <span class="underline">refresh_token</span></li>
+<li>当使用 kubectl 时，使用 <span class="underline">&#x2013;token</span> 标志和 <b>id_token</b> ，或者直接加入到 <span class="underline">kubeconfig</span> 文件中</li>
+<li>kubectl 在调用 API server 时将 id_token 置于 HTTP header 中</li>
+<li>API server 将通过 <b>检查</b> <span class="underline">配置</span> 中指定的 <span class="underline">证书</span> 来确保 JWT 签名有效</li>
+<li>检查以 <b>确保</b> id_token <span class="underline">没有过期</span></li>
+<li><b>确保</b> 用户已 <span class="underline">授权</span></li>
+<li>授权 API server 后向 kubectl 返回结果</li>
+<li>kubectl 向用户提供反馈</li>
+</ol>
+
+<pre class="example">
+     由于所有需要验证您身份的数据都在 id_token 中，Kubernetes 不需要向身份提供商 “phone home”
+
+     在每个请求都是无状态的模型中，这为认证提供了非常可扩展的解决方案
+</pre>
+<p>
+然而它确实提供了一些挑战：
+</p>
+<ul class="org-ul">
+<li><p>
+Kubernetes 没有 ”web 接口“ 来出发验证进程。没有浏览器或界面来收集凭据
+</p>
+<pre class="example">
+       这就是为什么您需要首先认证身份提供商
+</pre></li>
+<li><p>
+id_token 无法撤销，就像一个证书，所以它应该是短暂的（只有几分钟）
+</p>
+<pre class="example">
+       所以每隔几分钟就得到一个新的令牌是非常烦人的
+</pre></li>
+<li><p>
+没有使用 kubectl proxy 命令或注入 id_token 的反向代理
+</p>
+<pre class="example">
+       无法简单地对 Kubernetes dashboard 进行身份验证 
+</pre></li>
+</ul>
+</div>
+<div id="outline-container-orga726c90" class="outline-4">
+<h4 id="orga726c90">配置 API Server</h4>
+<div class="outline-text-4" id="text-orga726c90">
+<p>
+要启用该插件，需要在 API server 中配置如下标志：
+</p>
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+<caption class="t-above"><span class="table-number">Table 1:</span> API server OIDC 配置</caption>
+
+<colgroup>
+<col  class="org-left" />
+
+<col  class="org-left" />
+
+<col  class="org-left" />
+
+<col  class="org-left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="org-left">参数</td>
+<td class="org-left">描述</td>
+<td class="org-left">示例</td>
+<td class="org-left">必需</td>
+</tr>
+
+<tr>
+<td class="org-left">&#x2013;oidc-issuer-url</td>
+<td class="org-left">允许 API server 发现 <span class="underline">公共签名密钥</span> 的 <span class="underline">提供者的 URL</span> 。只接受使用 <a href="https://">https://</a> 的方案</td>
+<td class="org-left">通常是提供商的 URL 地址，不包含路径，例如“<a href="https://accounts.google.com">https://accounts.google.com</a>” 或者 “<a href="https://login.salesforce.com">https://login.salesforce.com</a>" 这个URL 应该指向下面的 .well-known/openid-configuration。如果发现 URL 是 <a href="https://accounts.google.com/.well-known/openid-configuration">https://accounts.google.com/.well-known/openid-configuration</a>  这个值应该是<a href="https://accounts.google.com">https://accounts.google.com</a></td>
+<td class="org-left">是</td>
+</tr>
+
+<tr>
+<td class="org-left">&#x2013;oidc-client-id</td>
+<td class="org-left">所有的 token 必须为其颁发的 <span class="underline">客户端 ID</span></td>
+<td class="org-left">kubernetes</td>
+<td class="org-left">是</td>
+</tr>
+
+<tr>
+<td class="org-left">&#x2013;oidc-username-claim</td>
+<td class="org-left">JWT声明使用的 <span class="underline">用户名</span> 。默认情况下，sub 是最终用户的唯一标识符。管理员可以选择其他声明，如email 或 name，具体取决于他们的提供者。不过，email 以外的其他声明将以发行者的 URL 作为前缀，以防止与其他插件命名冲突</td>
+<td class="org-left">sub</td>
+<td class="org-left">否</td>
+</tr>
+
+<tr>
+<td class="org-left">&#x2013;oidc-groups-claim</td>
+<td class="org-left">JWT声明使用的 <span class="underline">用户组</span> 。它必须是一个字符串数组</td>
+<td class="org-left">groups</td>
+<td class="org-left">否</td>
+</tr>
+
+<tr>
+<td class="org-left">&#x2013;oidc-ca-file</td>
+<td class="org-left">用来签名身份提供商的 <span class="underline">网络 CA 证书的路径</span> 。默认为主机的根 CA</td>
+<td class="org-left">/etc/kubernetes/ssl/kc-ca.pem</td>
+<td class="org-left">否</td>
+</tr>
+</tbody>
+</table>
+
+<p>
+如果为 &#x2013;oidc-username-claim 选择了除 email 以外的其他声明，则该值将以 <span class="underline">&#x2013;oidc-issuer-url</span> 作为前缀，以防止与现有 Kubernetes 名称（例如 system:users）冲突
+</p>
+
+<pre class="example">
+      例如，如果提供商网址是 https://accounts.google.com 而用户名声明映射到 jane
+
+      则插件会将用户身份验证为： https://accounts.google.com#jane
+</pre>
+
+<p>
+重要的一点是：API server 不是 OAuth2 客户端，而只能配置为信任单个发行者
+</p>
+<pre class="example">
+      这允许使用 Google 等公共提供者，而不必信任第三方发行的凭据
+
+      希望利用多个 OAuth 客户端的管理员应该探索支持 azp（授权方）声明的提供者，这是允许一个客户端代表另一个客户端发放令牌的机制
+</pre>
+
+<p>
+Kubernetes不提供 OpenID Connect 身份提供商
+</p>
+
+<pre class="example">
+      可以使用现有的公共 OpenID Connect 标识提供程序（例如Google 或 其他）
+
+      或者，可以运行自己的身份提供程序，例如 CoreOS dex、Keycloak、CloudFoundry UAA 或 Tremolo Security 的 OpenUnison
+</pre>
+
+<p>
+对于身份提供商能够适用于 Kubernetes，必须满足如下条件：
+</p>
+<ol class="org-ol">
+<li>支持 OpenID connect 发现，不必是全部</li>
+<li>使用非过时密码在TLS中运行</li>
+<li><p>
+拥有 CA 签名证书（即使 CA 不是商业 CA 或自签名）
+</p>
+<pre class="example">
+	 有关上述要求3的说明，需要 CA 签名证书：
+
+	 如果部署自己的身份提供商（而不是像 Google 或 Microsoft 之类的云提供商），则必须让自己的身份提供商的 Web 服务器证书由 CA 标志设置为 TRUE 的证书签名，即使是自签名的
+
+	 这是由于 GoLang 的 TLS 客户端实现对证书验证的标准非常严格　
+</pre></li>
+</ol>
+</div>
+</div>
+<div id="outline-container-org70a82fe" class="outline-4">
+<h4 id="org70a82fe">使用</h4>
+<div class="outline-text-4" id="text-org70a82fe">
+</div>
+<div id="outline-container-orgc83f0f4" class="outline-5">
+<h5 id="orgc83f0f4">选项 1 - OIDC 身份验证器</h5>
+<div class="outline-text-5" id="text-orgc83f0f4">
+<p>
+oidc 身份验证器将 id_token、refresh_token 和 OIDC client_secret 自动刷新 token。命令范例如下：
+</p>
+
+<pre class="example">
+kubectl config set-credentials USER_NAME \
+     --auth-provider=oidc \
+     --auth-provider-arg=idp-issuer-url=( issuer url ) \
+     --auth-provider-arg=client-id=( your client id ) \
+     --auth-provider-arg=client-secret=( your client secret ) \
+     --auth-provider-arg=refresh-token=( your refresh token ) \
+     --auth-provider-arg=idp-certificate-authority=( path to your ca certificate ) \
+     --auth-provider-arg=id-token=( your id_token ) \
+     --auth-provider-arg=extra-scopes=( comma separated list of scopes to add to "openid email profile", optional )
+</pre>
+<p>
+例如，在向身份提供者进行身份验证之后运行以下命令：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl config set-credentials mmosley  <span style="color: #deb887;">\</span>
+        --auth-provider=oidc  <span style="color: #deb887;">\</span>
+        --auth-provider-arg=idp-issuer-url=https://oidcidp.tremolo.lan:8443/auth/idp/OidcIdP  <span style="color: #deb887;">\</span>
+        --auth-provider-arg=client-id=kubernetes  <span style="color: #deb887;">\</span>
+        --auth-provider-arg=client-secret=1db158f6-177d-4d9c-8a8b-d36869918ec5  <span style="color: #deb887;">\</span>
+        --auth-provider-arg=refresh-token=q1bKLFOyUiosTfawzA93TzZIDzH2TNa2SMm0zEiPKTUwME6BkEo6Sql5yUWVBSWpKUGphaWpxSVAfekBOZbBhaEW+VlFUeVRGcluyVF5JT4+haZmPsluFoFu5XkpXk5BXqHega4GAXlF+ma+vmYpFcHe5eZR+<span style="color: #4eee94;">slBFpZKtQA</span>= <span style="color: #deb887;">\</span>
+        --auth-provider-arg=idp-certificate-authority=/root/ca.pem <span style="color: #deb887;">\</span>
+        --auth-provider-arg=extra-scopes=groups <span style="color: #deb887;">\</span>
+        --auth-provider-arg=id-token=eyJraWQiOiJDTj1vaWRjaWRwLnRyZW1vbG8ubGFuLCBPVT1EZW1vLCBPPVRybWVvbG8gU2VjdXJpdHksIEw9QXJsaW5ndG9uLCBTVD1WaXJnaW5pYSwgQz1VUy1DTj1rdWJlLWNhLTEyMDIxNDc5MjEwMzYwNzMyMTUyIiwiYWxnIjoiUlMyNTYifQ.eyJpc3MiOiJodHRwczovL29pZGNpZHAudHJlbW9sby5sYW46ODQ0My9hdXRoL2lkcC9PaWRjSWRQIiwiYXVkIjoia3ViZXJuZXRlcyIsImV4cCI6MTQ4MzU0OTUxMSwianRpIjoiMm96US15TXdFcHV4WDlHZUhQdy1hZyIsImlhdCI6MTQ4MzU0OTQ1MSwibmJmIjoxNDgzNTQ5MzMxLCJzdWIiOiI0YWViMzdiYS1iNjQ1LTQ4ZmQtYWIzMC0xYTAxZWU0MWUyMTgifQ.w6p4J_6qQ1HzTG9nrEOrubxIMb9K5hzcMPxc9IxPx2K4xO9l-oFiUw93daH3m5pluP6K7eOE6txBuRVfEcpJSwlelsOsW8gb8VJcnzMS9EnZpeA0tW_p-mnkFc3VcfyXuhe5R3G7aa5d8uHv70yJ9Y3-UhjiN9EhpMdfPAoEB9fYKKkJRzF7utTTIPGrSaSU6d2pcpfYKaxIwePzEkT4DfcQthoZdy9ucNvvLoi1DIC-UocFD8HLs8LYKEqSxQvOcvnThbObJ9af71EwmuE21fO5KzMW20KtAeget1gnldOosPtz1G5EwvaQ401-RPQzPGMVBld0_zMCAwZttJ4knw
+</pre>
+</div>
+
+<p>
+将产生下面的配置：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-yaml"><span style="color: #4eee94;">users</span>:
+- <span style="color: #4eee94;">name</span>: mmosley
+  <span style="color: #4eee94;">user</span>:
+    <span style="color: #4eee94;">auth-provider</span>:
+      <span style="color: #4eee94;">config</span>:
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">client-id</span>: kubernetes
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">client-secret</span>: 1db158f6-177d-4d9c-8a8b-d36869918ec5
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">extra-scopes</span>: groups
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">id-token</span>: eyJraWQiOiJDTj1vaWRjaWRwLnRyZW1vbG8ubGFuLCBPVT1EZW1vLCBPPVRybWVvbG8gU2VjdXJpdHksIEw9QXJsaW5ndG9uLCBTVD1WaXJnaW5pYSwgQz1VUy1DTj1rdWJlLWNhLTEyMDIxNDc5MjEwMzYwNzMyMTUyIiwiYWxnIjoiUlMyNTYifQ.eyJpc3MiOiJodHRwczovL29pZGNpZHAudHJlbW9sby5sYW46ODQ0My9hdXRoL2lkcC9PaWRjSWRQIiwiYXVkIjoia3ViZXJuZXRlcyIsImV4cCI6MTQ4MzU0OTUxMSwianRpIjoiMm96US15TXdFcHV4WDlHZUhQdy1hZyIsImlhdCI6MTQ4MzU0OTQ1MSwibmJmIjoxNDgzNTQ5MzMxLCJzdWIiOiI0YWViMzdiYS1iNjQ1LTQ4ZmQtYWIzMC0xYTAxZWU0MWUyMTgifQ.w6p4J_6qQ1HzTG9nrEOrubxIMb9K5hzcMPxc9IxPx2K4xO9l-oFiUw93daH3m5pluP6K7eOE6txBuRVfEcpJSwlelsOsW8gb8VJcnzMS9EnZpeA0tW_p-mnkFc3VcfyXuhe5R3G7aa5d8uHv70yJ9Y3-UhjiN9EhpMdfPAoEB9fYKKkJRzF7utTTIPGrSaSU6d2pcpfYKaxIwePzEkT4DfcQthoZdy9ucNvvLoi1DIC-UocFD8HLs8LYKEqSxQvOcvnThbObJ9af71EwmuE21fO5KzMW20KtAeget1gnldOosPtz1G5EwvaQ401-RPQzPGMVBld0_zMCAwZttJ4knw
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">idp-certificate-authority</span>: /root/ca.pem
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">idp-issuer-url</span>: https://oidcidp.tremolo.lan:8443/auth/idp/OidcIdP
+<span style="color: #ff0000; background-color: #ff0000; font-weight: bold;">        </span><span style="color: #4eee94;">refresh-token</span>: q1bKLFOyUiosTfawzA93TzZIDzH2TNa2SMm0zEiPKTUwME6BkEo6Sql5yUWVBSWpKUGphaWpxSVAfekBOZbBhaEW+VlFUeVRGcluyVF5JT4+haZmPsluFoFu5XkpXk5BXq
+      <span style="color: #4eee94;">name</span>: oidc
+</pre>
+</div>
+
+<p>
+一旦 id_token 过期，kubectl 将使用 refresh_token 刷新 id_token，然后在 kube/.config 文件的client_secret 中存储 id_token 的值和refresh_token 的新值
+</p>
+</div>
+</div>
+<div id="outline-container-orgb7c4061" class="outline-5">
+<h5 id="orgb7c4061">选项 2 - 使用 &#x2013;token 选项</h5>
+<div class="outline-text-5" id="text-orgb7c4061">
+<p>
+可以在 kubectl 命令的 &#x2013;token 选项中传入 token。简单的拷贝和复制 id_token 到该选项中：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">$ kubectl --token=eyJhbGciOiJSUzI1NiJ9.eyJpc3MiOiJodHRwczovL21sYi50cmVtb2xvLmxhbjo4MDQzL2F1dGgvaWRwL29pZGMiLCJhdWQiOiJrdWJlcm5ldGVzIiwiZXhwIjoxNDc0NTk2NjY5LCJqdGkiOiI2RDUzNXoxUEpFNjJOR3QxaWVyYm9RIiwiaWF0IjoxNDc0NTk2MzY5LCJuYmYiOjE0NzQ1OTYyNDksInN1YiI6Im13aW5kdSIsInVzZXJfcm9sZSI6WyJ1c2VycyIsIm5ldy1uYW1lc3BhY2Utdmlld2VyIl0sImVtYWlsIjoibXdpbmR1QG5vbW9yZWplZGkuY29tIn0.f2As579n9VNoaKzoF-dOQGmXkFKf1FMyNV0-va_B63jn-_n9LGSCca_6IVMP8pO-Zb4KvRqGyTP0r3HkHxYy5c81AnIh8ijarruczl-TK_yF5akjSTHFZD-0gRzlevBDiH8Q79NAr-ky0P4iIXS8lY9Vnjch5MF74Zx0c3alKJHJUnnpjIACByfF2SCaYzbWFMUNat-K1PaUk5-ujMBG7yYnr95xD-63n8CO8teGUAAEMx6zRjzfhnhbzX-ajwZLGwGUBT4WqjMs70-6a7_8gZmLZb2az1cZynkFRj2BaCkVT3A2RrjeEwZEtGXlMqKJ1_I2ulrOVsYx01_yD35-rw get nodes
+</pre>
+</div>
+</div>
+</div>
 </div>
 </div>
 </div>

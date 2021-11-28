@@ -254,3 +254,144 @@
 
      授予 service account 权限和读取 secret 功能时要谨慎
    #+END_EXAMPLE
+** OpenID Connect Token
+   #+BEGIN_EXAMPLE
+     OpenID Connect 是由 OAuth2 供应商提供的 OAuth2，特别是 Azure Active Directory、Salesforce 和 Google
+
+     对 OAuth2 协议的主要扩展是返回一个称作 ID Token 的格外字段，该 token 是一个 JSON Web Token (JWT) ，有服务器签名，具有众所周知的字段，如用户的电子邮件
+   #+END_EXAMPLE
+
+   为了识别用户，认证者使用 OAuth2 token 响应 中的 *id_token* （而不是 access_token）作为 bearer token
+
+   #+ATTR_HTML: image :width 90% 
+   [[file:../../pic/kubernetes-oidc-login.jpg]]
+
+   1. 登陆到身份提供商
+   2. 身份提供商将提供一个 _access_token_ ，一个 _id_token_ 和一个 _refresh_token_
+   3. 当使用 kubectl 时，使用 _--token_ 标志和 *id_token* ，或者直接加入到 _kubeconfig_ 文件中
+   4. kubectl 在调用 API server 时将 id_token 置于 HTTP header 中
+   5. API server 将通过 *检查* _配置_ 中指定的 _证书_ 来确保 JWT 签名有效
+   6. 检查以 *确保* id_token _没有过期_
+   7. *确保* 用户已 _授权_
+   8. 授权 API server 后向 kubectl 返回结果
+   9. kubectl 向用户提供反馈
+
+   #+BEGIN_EXAMPLE
+     由于所有需要验证您身份的数据都在 id_token 中，Kubernetes 不需要向身份提供商 “phone home”
+
+     在每个请求都是无状态的模型中，这为认证提供了非常可扩展的解决方案
+   #+END_EXAMPLE
+   然而它确实提供了一些挑战：
+   + Kubernetes 没有 ”web 接口“ 来出发验证进程。没有浏览器或界面来收集凭据
+     #+BEGIN_EXAMPLE
+       这就是为什么您需要首先认证身份提供商
+     #+END_EXAMPLE
+   + id_token 无法撤销，就像一个证书，所以它应该是短暂的（只有几分钟）
+     #+BEGIN_EXAMPLE
+       所以每隔几分钟就得到一个新的令牌是非常烦人的
+     #+END_EXAMPLE
+   + 没有使用 kubectl proxy 命令或注入 id_token 的反向代理
+     #+BEGIN_EXAMPLE
+       无法简单地对 Kubernetes dashboard 进行身份验证 
+     #+END_EXAMPLE
+*** 配置 API Server
+    要启用该插件，需要在 API server 中配置如下标志：
+    #+CAPTION: API server OIDC 配置
+    #+ATTR_HTML: :border 1 :rules all :frame boader
+    | 参数                  | 描述                                                                                                                                                                                                        | 示例                                                                                                                                                                                                                                                                                        | 必需 |
+    | --oidc-issuer-url     | 允许 API server 发现 _公共签名密钥_ 的 _提供者的 URL_ 。只接受使用 https:// 的方案                                                                                                                          | 通常是提供商的 URL 地址，不包含路径，例如“https://accounts.google.com” 或者 “https://login.salesforce.com" 这个URL 应该指向下面的 .well-known/openid-configuration。如果发现 URL 是 https://accounts.google.com/.well-known/openid-configuration  这个值应该是https://accounts.google.com  | 是   |
+    | --oidc-client-id      | 所有的 token 必须为其颁发的 _客户端 ID_                                                                                                                                                                     | kubernetes                                                                                                                                                                                                                                                                                  | 是   |
+    | --oidc-username-claim | JWT声明使用的 _用户名_ 。默认情况下，sub 是最终用户的唯一标识符。管理员可以选择其他声明，如email 或 name，具体取决于他们的提供者。不过，email 以外的其他声明将以发行者的 URL 作为前缀，以防止与其他插件命名冲突 | sub                                                                                                                                                                                                                                                                                         | 否   |
+    | --oidc-groups-claim   | JWT声明使用的 _用户组_ 。它必须是一个字符串数组                                                                                                                                                      | groups                                                                                                                                                                                                                                                                                      | 否   |
+    | --oidc-ca-file        | 用来签名身份提供商的 _网络 CA 证书的路径_ 。默认为主机的根 CA                                                                                                                                               | /etc/kubernetes/ssl/kc-ca.pem                                                                                                                                                                                                                                                               | 否   |
+
+    如果为 --oidc-username-claim 选择了除 email 以外的其他声明，则该值将以 _--oidc-issuer-url_ 作为前缀，以防止与现有 Kubernetes 名称（例如 system:users）冲突
+
+    #+BEGIN_EXAMPLE
+      例如，如果提供商网址是 https://accounts.google.com 而用户名声明映射到 jane
+
+      则插件会将用户身份验证为： https://accounts.google.com#jane
+    #+END_EXAMPLE
+
+    重要的一点是：API server 不是 OAuth2 客户端，而只能配置为信任单个发行者
+    #+BEGIN_EXAMPLE
+      这允许使用 Google 等公共提供者，而不必信任第三方发行的凭据
+
+      希望利用多个 OAuth 客户端的管理员应该探索支持 azp（授权方）声明的提供者，这是允许一个客户端代表另一个客户端发放令牌的机制
+    #+END_EXAMPLE
+
+    Kubernetes不提供 OpenID Connect 身份提供商
+
+    #+BEGIN_EXAMPLE
+      可以使用现有的公共 OpenID Connect 标识提供程序（例如Google 或 其他）
+
+      或者，可以运行自己的身份提供程序，例如 CoreOS dex、Keycloak、CloudFoundry UAA 或 Tremolo Security 的 OpenUnison
+    #+END_EXAMPLE
+
+    对于身份提供商能够适用于 Kubernetes，必须满足如下条件：
+    1. 支持 OpenID connect 发现，不必是全部
+    2. 使用非过时密码在TLS中运行
+    3. 拥有 CA 签名证书（即使 CA 不是商业 CA 或自签名）
+       #+BEGIN_EXAMPLE
+	 有关上述要求3的说明，需要 CA 签名证书：
+
+	 如果部署自己的身份提供商（而不是像 Google 或 Microsoft 之类的云提供商），则必须让自己的身份提供商的 Web 服务器证书由 CA 标志设置为 TRUE 的证书签名，即使是自签名的
+
+	 这是由于 GoLang 的 TLS 客户端实现对证书验证的标准非常严格　
+       #+END_EXAMPLE
+*** 使用 
+**** 选项 1 - OIDC 身份验证器
+     oidc 身份验证器将 id_token、refresh_token 和 OIDC client_secret 自动刷新 token。命令范例如下：
+
+     #+BEGIN_EXAMPLE
+       kubectl config set-credentials USER_NAME \
+	    --auth-provider=oidc \
+	    --auth-provider-arg=idp-issuer-url=( issuer url ) \
+	    --auth-provider-arg=client-id=( your client id ) \
+	    --auth-provider-arg=client-secret=( your client secret ) \
+	    --auth-provider-arg=refresh-token=( your refresh token ) \
+	    --auth-provider-arg=idp-certificate-authority=( path to your ca certificate ) \
+	    --auth-provider-arg=id-token=( your id_token ) \
+	    --auth-provider-arg=extra-scopes=( comma separated list of scopes to add to "openid email profile", optional )
+     #+END_EXAMPLE
+     例如，在向身份提供者进行身份验证之后运行以下命令：
+
+     #+BEGIN_SRC sh 
+  $ kubectl config set-credentials mmosley  \
+	  --auth-provider=oidc  \
+	  --auth-provider-arg=idp-issuer-url=https://oidcidp.tremolo.lan:8443/auth/idp/OidcIdP  \
+	  --auth-provider-arg=client-id=kubernetes  \
+	  --auth-provider-arg=client-secret=1db158f6-177d-4d9c-8a8b-d36869918ec5  \
+	  --auth-provider-arg=refresh-token=q1bKLFOyUiosTfawzA93TzZIDzH2TNa2SMm0zEiPKTUwME6BkEo6Sql5yUWVBSWpKUGphaWpxSVAfekBOZbBhaEW+VlFUeVRGcluyVF5JT4+haZmPsluFoFu5XkpXk5BXqHega4GAXlF+ma+vmYpFcHe5eZR+slBFpZKtQA= \
+	  --auth-provider-arg=idp-certificate-authority=/root/ca.pem \
+	  --auth-provider-arg=extra-scopes=groups \
+	  --auth-provider-arg=id-token=eyJraWQiOiJDTj1vaWRjaWRwLnRyZW1vbG8ubGFuLCBPVT1EZW1vLCBPPVRybWVvbG8gU2VjdXJpdHksIEw9QXJsaW5ndG9uLCBTVD1WaXJnaW5pYSwgQz1VUy1DTj1rdWJlLWNhLTEyMDIxNDc5MjEwMzYwNzMyMTUyIiwiYWxnIjoiUlMyNTYifQ.eyJpc3MiOiJodHRwczovL29pZGNpZHAudHJlbW9sby5sYW46ODQ0My9hdXRoL2lkcC9PaWRjSWRQIiwiYXVkIjoia3ViZXJuZXRlcyIsImV4cCI6MTQ4MzU0OTUxMSwianRpIjoiMm96US15TXdFcHV4WDlHZUhQdy1hZyIsImlhdCI6MTQ4MzU0OTQ1MSwibmJmIjoxNDgzNTQ5MzMxLCJzdWIiOiI0YWViMzdiYS1iNjQ1LTQ4ZmQtYWIzMC0xYTAxZWU0MWUyMTgifQ.w6p4J_6qQ1HzTG9nrEOrubxIMb9K5hzcMPxc9IxPx2K4xO9l-oFiUw93daH3m5pluP6K7eOE6txBuRVfEcpJSwlelsOsW8gb8VJcnzMS9EnZpeA0tW_p-mnkFc3VcfyXuhe5R3G7aa5d8uHv70yJ9Y3-UhjiN9EhpMdfPAoEB9fYKKkJRzF7utTTIPGrSaSU6d2pcpfYKaxIwePzEkT4DfcQthoZdy9ucNvvLoi1DIC-UocFD8HLs8LYKEqSxQvOcvnThbObJ9af71EwmuE21fO5KzMW20KtAeget1gnldOosPtz1G5EwvaQ401-RPQzPGMVBld0_zMCAwZttJ4knw
+     #+END_SRC
+
+     将产生下面的配置：
+
+     #+BEGIN_SRC yaml 
+  users:
+  - name: mmosley
+    user:
+      auth-provider:
+	config:
+	  client-id: kubernetes
+	  client-secret: 1db158f6-177d-4d9c-8a8b-d36869918ec5
+	  extra-scopes: groups
+	  id-token: eyJraWQiOiJDTj1vaWRjaWRwLnRyZW1vbG8ubGFuLCBPVT1EZW1vLCBPPVRybWVvbG8gU2VjdXJpdHksIEw9QXJsaW5ndG9uLCBTVD1WaXJnaW5pYSwgQz1VUy1DTj1rdWJlLWNhLTEyMDIxNDc5MjEwMzYwNzMyMTUyIiwiYWxnIjoiUlMyNTYifQ.eyJpc3MiOiJodHRwczovL29pZGNpZHAudHJlbW9sby5sYW46ODQ0My9hdXRoL2lkcC9PaWRjSWRQIiwiYXVkIjoia3ViZXJuZXRlcyIsImV4cCI6MTQ4MzU0OTUxMSwianRpIjoiMm96US15TXdFcHV4WDlHZUhQdy1hZyIsImlhdCI6MTQ4MzU0OTQ1MSwibmJmIjoxNDgzNTQ5MzMxLCJzdWIiOiI0YWViMzdiYS1iNjQ1LTQ4ZmQtYWIzMC0xYTAxZWU0MWUyMTgifQ.w6p4J_6qQ1HzTG9nrEOrubxIMb9K5hzcMPxc9IxPx2K4xO9l-oFiUw93daH3m5pluP6K7eOE6txBuRVfEcpJSwlelsOsW8gb8VJcnzMS9EnZpeA0tW_p-mnkFc3VcfyXuhe5R3G7aa5d8uHv70yJ9Y3-UhjiN9EhpMdfPAoEB9fYKKkJRzF7utTTIPGrSaSU6d2pcpfYKaxIwePzEkT4DfcQthoZdy9ucNvvLoi1DIC-UocFD8HLs8LYKEqSxQvOcvnThbObJ9af71EwmuE21fO5KzMW20KtAeget1gnldOosPtz1G5EwvaQ401-RPQzPGMVBld0_zMCAwZttJ4knw
+	  idp-certificate-authority: /root/ca.pem
+	  idp-issuer-url: https://oidcidp.tremolo.lan:8443/auth/idp/OidcIdP
+	  refresh-token: q1bKLFOyUiosTfawzA93TzZIDzH2TNa2SMm0zEiPKTUwME6BkEo6Sql5yUWVBSWpKUGphaWpxSVAfekBOZbBhaEW+VlFUeVRGcluyVF5JT4+haZmPsluFoFu5XkpXk5BXq
+	name: oidc
+     #+END_SRC
+
+     一旦 id_token 过期，kubectl 将使用 refresh_token 刷新 id_token，然后在 kube/.config 文件的client_secret 中存储 id_token 的值和refresh_token 的新值
+**** 选项 2 - 使用 --token 选项
+     可以在 kubectl 命令的 --token 选项中传入 token。简单的拷贝和复制 id_token 到该选项中：
+
+     #+BEGIN_SRC sh 
+  $ kubectl --token=eyJhbGciOiJSUzI1NiJ9.eyJpc3MiOiJodHRwczovL21sYi50cmVtb2xvLmxhbjo4MDQzL2F1dGgvaWRwL29pZGMiLCJhdWQiOiJrdWJlcm5ldGVzIiwiZXhwIjoxNDc0NTk2NjY5LCJqdGkiOiI2RDUzNXoxUEpFNjJOR3QxaWVyYm9RIiwiaWF0IjoxNDc0NTk2MzY5LCJuYmYiOjE0NzQ1OTYyNDksInN1YiI6Im13aW5kdSIsInVzZXJfcm9sZSI6WyJ1c2VycyIsIm5ldy1uYW1lc3BhY2Utdmlld2VyIl0sImVtYWlsIjoibXdpbmR1QG5vbW9yZWplZGkuY29tIn0.f2As579n9VNoaKzoF-dOQGmXkFKf1FMyNV0-va_B63jn-_n9LGSCca_6IVMP8pO-Zb4KvRqGyTP0r3HkHxYy5c81AnIh8ijarruczl-TK_yF5akjSTHFZD-0gRzlevBDiH8Q79NAr-ky0P4iIXS8lY9Vnjch5MF74Zx0c3alKJHJUnnpjIACByfF2SCaYzbWFMUNat-K1PaUk5-ujMBG7yYnr95xD-63n8CO8teGUAAEMx6zRjzfhnhbzX-ajwZLGwGUBT4WqjMs70-6a7_8gZmLZb2az1cZynkFRj2BaCkVT3A2RrjeEwZEtGXlMqKJ1_I2ulrOVsYx01_yD35-rw get nodes
+     #+END_SRC
+
+
