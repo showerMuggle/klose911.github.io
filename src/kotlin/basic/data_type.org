@@ -1,7 +1,7 @@
 #+TITLE: 基本类型
 #+HTML_HEAD: <link rel="stylesheet" type="text/css" href="../css/main.css" />
 #+HTML_LINK_HOME: ./basic.html
-#+OPTIONS: num:nil timestamp:nil ^:nil
+#+OPTIONS: num:nil timestamp:nil 
 
 #+begin_example
   在 Kotlin 中，所有东西都是对象，在这个意义上讲可以在任何变量上调用成员函数与属性
@@ -9,5 +9,251 @@
   一些类型可以有特殊的内部表示——例如，数字、字符以及布尔值可以在运行时表示为原生类型值，但是对于用户来说，它们看起来就像普通的类
 #+end_example
 
-接下来会描述 Kotlin 中使用的基本类型：数字、字符、布尔值、数组与字符串
+接下来会描述 Kotlin 中使用的基本类型： _数字_ 、 _字符_ 、 _布尔值_ 、 _数组_ 与 _字符串_ 
 * 数字
+
+  Kotlin 提供了一组表示数字的内置类型。 对于整数，有四种不同大小的类型，因此值的范围也不同：
+
+  #+CAPTION:  kotlin 整数
+  #+ATTR_HTML: :border 1 :rules all :frame boader
+  | 类型	 | 大小（比特数） | 最小值                             | 最大值                               |
+  | Byte	 |              8 | -128                               | 127                                  |
+  | Short        |             16 | -32768                             | 32767                                |
+  | Int	  |             32 | -2,147,483,648 (-2^31)             | 2,147,483,647 (2^31 - 1)             |
+  | Long         |             64 | -9,223,372,036,854,775,808 (-2^63) | 9,223,372,036,854,775,807 (2^63 - 1) |
+
+  + 所有以未超出 Int 最大值的整型值初始化的变量都会推断为 Int 类型
+  + 如果初始值超过了其最大值，那么推断为 Long 类型
+  + 如需显式指定 Long 型值，请在该值后追加 L 后缀 
+
+  #+BEGIN_SRC kotlin 
+  val one = 1 // Int
+  val threeBillion = 3000000000 // Long
+  val oneLong = 1L // Long
+  val oneByte: Byte = 1
+  #+END_SRC
+
+  对于浮点数，Kotlin 提供了 _Float_ 与 _Double_ 类型
+
+  #+BEGIN_EXAMPLE
+    根据 IEEE 754 标准， 两种浮点类型的十进制位数（即可以存储多少位十进制数）不同。 Float 反映了 IEEE 754 单精度，而 Double 提供了双精度
+  #+END_EXAMPLE
+
+  #+CAPTION:  kotlin 浮点数
+  #+ATTR_HTML: :border 1 :rules all :frame boader
+  | 类型	  | 大小（比特数） | 有效数字比特数 | 指数比特数	 | 十进制位数 |
+  | Float	 |             32 |             24 |                  8 |        6-7 |
+  | Double        |             64 |             53 |                 11 |      15-16 |
+
+
+  + 对于以小数初始化的变量，编译器会推断为 Double 类型
+  + 如需将一个值显式指定为 Float 类型，请添加 f 或 F 后缀
+    + 如果这样的值包含多于 6～7 位十进制数，那么会将其舍入 
+
+  #+BEGIN_SRC kotlin 
+  val pi = 3.14 // Double
+  val e = 2.7182818284 // Double
+  val eFloat = 2.7182818284f // Float，实际值为 2.7182817
+  #+END_SRC 
+
+  请注意，与一些其他语言不同，Kotlin 中的数字没有隐式拓宽转换
+
+  #+BEGIN_EXAMPLE
+    例如，具有 Double 参数的函数只能对 Double 值调用，而不能对 Float、 Int 或者其他数字值调用
+  #+END_EXAMPLE
+
+  #+BEGIN_SRC kotlin 
+
+  fun main() {
+      fun printDouble(d: Double) { print(d) }
+
+      val i = 1    
+      val d = 1.1
+      val f = 1.1f 
+
+      printDouble(d)
+  //    printDouble(i) // 错误：类型不匹配
+  //    printDouble(f) // 错误：类型不匹配
+  }
+  #+END_SRC
+** 字面常量
+   数值常量字面值有以下几种:
+   + 十进制: 123
+   + Long 类型用大写 L 标记: 123L
+   + 十六进制: 0x0F
+   + 二进制: 0b00001011
+
+   #+BEGIN_EXAMPLE
+     注意: 不支持八进制
+   #+END_EXAMPLE
+
+   Kotlin 同样支持浮点数的常规表示方法:
+   + 默认 double：123.5、123.5e10
+   + Float 用 f 或者 F 标记: 123.5f
+
+*** 数字字面值中的下划线
+    可以使用下划线使数字常量更易读：
+    #+BEGIN_SRC kotlin 
+  val oneMillion = 1_000_000
+  val creditCardNumber = 1234_5678_9012_3456L
+  val socialSecurityNumber = 999_99_9999L
+  val hexBytes = 0xFF_EC_DE_5E
+  val bytes = 0b11010010_01101001_10010100_10010010
+    #+END_SRC
+
+*** 表示方式
+    #+BEGIN_EXAMPLE
+      在 Java 平台数字是物理存储为 JVM 的原生类型，除非需要一个可空的引用（如 Int?）或泛型
+    #+END_EXAMPLE
+
+    后者情况下会把数字装箱。注意数字装箱 *不一定保留同一性* :
+
+    #+BEGIN_SRC kotlin 
+  fun main() {
+  //sampleStart
+      val a: Int = 10000
+      println(a === a) // 输出“true”
+      val boxedA: Int? = a
+      val anotherBoxedA: Int? = a
+      println(boxedA === anotherBoxedA) // ！！！输出“false”！！！
+  //sampleEnd
+  }
+    #+END_SRC
+
+    另一方面，它 *保留了相等性* : 
+
+    #+BEGIN_SRC kotlin 
+  fun main() {
+  //sampleStart
+      val a: Int = 10000
+      println(a == a) // 输出“true”
+      val boxedA: Int? = a
+      val anotherBoxedA: Int? = a
+      println(boxedA == anotherBoxedA) // 输出“true”
+  //sampleEnd
+  }
+    #+END_SRC
+
+** 显式转换
+
+   由于不同的表示方式，较小类型并不是较大类型的子类型。 如果它们是的话，就会出现下述问题：
+
+   #+BEGIN_SRC kotlin 
+  // 假想的代码，实际上并不能编译：
+  val a: Int? = 1 // 一个装箱的 Int (java.lang.Integer)
+  val b: Long? = a // 隐式转换产生一个装箱的 Long (java.lang.Long)
+  print(b == a) // 惊！这将输出“false”鉴于 Long 的 equals() 会检测另一个是否也为 Long
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+   所以相等性会在所有地方悄无声息地失去，更别说同一性了
+   #+END_EXAMPLE
+
+   因此较小的类型不能隐式转换为较大的类型。这意味着在不进行显式转换的情况下不能把 Byte 型值赋给一个 Int 变量
+
+   #+BEGIN_SRC kotlin 
+  fun main() {
+  //sampleStart
+      val b: Byte = 1 // OK, 字面值是静态检测的
+      val i: Int = b // 错误
+  //sampleEnd
+  }
+   #+END_SRC
+
+   可以 _显式转换_ 来拓宽数字
+
+   #+BEGIN_SRC kotlin 
+  fun main() {
+      val b: Byte = 1
+  //sampleStart
+      val i: Int = b.toInt() // OK：显式拓宽
+      print(i)
+  //sampleEnd
+  }
+   #+END_SRC
+
+   每个数字类型支持如下的转换:
+   + toByte(): Byte
+   + toShort(): Short
+   + toInt(): Int
+   + toLong(): Long
+   + toFloat(): Float
+   + toDouble(): Double
+   + toChar(): Char
+
+   缺乏隐式类型转换很少会引起注意，因为类型会从上下文推断出来，而算术运算会有重载做适当转换，例如：
+
+   #+BEGIN_SRC kotlin 
+  val l = 1L + 3 // Long + Int => Long
+   #+END_SRC
+
+** 运算
+
+   Kotlin支持数字运算的标准集（+ - * / %），运算被定义为相应的类成员（但编译器会将函数调用优化为相应的指令）
+
+*** 整数除法
+
+    请注意，整数间的除法总是返回整数。会丢弃任何小数部分。例如：
+
+    #+BEGIN_SRC kotlin 
+  fun main() {
+  //sampleStart
+      val x = 5 / 2
+      //println(x == 2.5) // ERROR: Operator '==' cannot be applied to 'Int' and 'Double'
+      println(x == 2)
+  //sampleEnd
+  }
+    #+END_SRC
+
+    对于任何两个整数类型之间的除法来说都是如此：
+    #+BEGIN_SRC kotlin 
+  fun main() {
+  //sampleStart
+      val x = 5L / 2
+      println(x == 2L)
+  //sampleEnd
+  }
+    #+END_SRC
+
+    如需返回浮点类型，请将其中的一个参数显式转换为浮点类型：
+
+    #+BEGIN_SRC kotlin 
+  fun main() {
+  //sampleStart
+      val x = 5 / 2.toDouble()
+      println(x == 2.5)
+  //sampleEnd
+  }
+    #+END_SRC
+
+*** 位运算
+    对于位运算，没有特殊字符来表示，而只可用中缀方式调用具名函数，例如:
+
+    #+BEGIN_SRC kotlin 
+  val x = (1 shl 2) and 0x000FF000
+    #+END_SRC
+    这是完整的位运算列表（只用于 Int 与 Long）：
+    + shl(bits): 有符号左移
+    + shr(bits): 有符号右移
+    + ushr(bits): 无符号右移
+    + and(bits): 位与
+    + or(bits): 位或
+    + xor(bits): 位异或
+    + inv(): 位非
+
+** 浮点数比较
+   浮点数操作如下：
+   + 相等性检测： _a == b_ 与 _a != b_
+   + 比较操作符： _a < b_ 、  _a > b_ 、 _a <= b_ 、 _a >= b_
+   + 区间实例以及区间检测： _a..b_ 、 _x in a..b_ 、  _x !in a..b_ 
+
+   #+BEGIN_EXAMPLE
+     当其中的操作数 a 与 b 都是静态已知的 Float 或 Double 或者它们对应的可空类型（声明为该类型，或者推断为该类型，或者智能类型转换的结果是该类型），两数字所形成的操作或者区间遵循 IEEE 754 浮点运算标准
+   #+END_EXAMPLE
+
+   然而，为了支持泛型场景并提供全序支持，当这些操作数并非静态类型为浮点数（例如是 _Any_ 、 _Comparable<……>_ 、 类型参数）时，这些操作使用为 Float 与 Double 实现的不符合标准的 equals 与 compareTo，这会出现：
+   + 认为 NaN 与其自身相等
+   + 认为 NaN 比包括正无穷大 _POSITIVE_INFINITY_ 在内的任何其他元素都大
+   + 认为 _-0.0_ 小于 _0.0_ 
+
+* 字符

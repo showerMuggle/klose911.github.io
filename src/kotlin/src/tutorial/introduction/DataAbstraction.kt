@@ -1,4 +1,4 @@
-package tutorial.base
+package tutorial.introduction
 
 fun main() {
     val rectangle = Rectangle(5.0, 2.0)

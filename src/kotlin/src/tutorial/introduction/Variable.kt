@@ -1,4 +1,4 @@
-package tutorial.base
+package tutorial.introduction
 
 val PI = 3.14
 var y = 0

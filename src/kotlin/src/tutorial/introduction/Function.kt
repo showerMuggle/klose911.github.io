@@ -1,4 +1,4 @@
-package tutorial.base
+package tutorial.introduction
 
 fun sum1(a: Int, b: Int): Int {
     return a + b

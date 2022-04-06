@@ -1,4 +1,4 @@
-package tutorial.base
+package tutorial.introduction
 
 fun main() {
     val items = listOf("apple", "banana", "kiwifruit")

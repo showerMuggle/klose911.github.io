@@ -1,4 +1,4 @@
-package tutorial.base
+package tutorial.introduction
 
 fun describe(obj: Any): String =
     when (obj) {

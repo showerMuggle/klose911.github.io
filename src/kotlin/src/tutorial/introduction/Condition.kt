@@ -1,4 +1,4 @@
-package tutorial.base
+package tutorial.introduction
 
 fun maxOf(a: Int, b: Int): Int {
     if (a > b) {

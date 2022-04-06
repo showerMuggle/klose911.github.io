@@ -1,4 +1,4 @@
-package tutorial.base
+package tutorial.introduction
 
 fun main() {
     val x = 10

@@ -1,4 +1,4 @@
-package tutorial.base
+package tutorial.introduction
 
 fun getStringLength1(obj: Any): Int? {
     if (obj is String) {
