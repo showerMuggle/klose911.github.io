@@ -257,3 +257,108 @@
    + 认为 _-0.0_ 小于 _0.0_ 
 
 * 字符
+  字符用 _Char_ 类型表示。它们不能直接当作数字
+
+  #+BEGIN_SRC kotlin 
+  fun check(c: Char) {
+      if (c == 1) { // 错误：类型不兼容
+	  // ……
+      }
+  }
+  #+END_SRC
+
+  字符字面值用单引号括起来: '1'
+  #+BEGIN_EXAMPLE
+    特殊字符可以用反斜杠转义：
+
+    支持这几个转义序列：\t、 \b、\n、\r、\'、\"、\\ 与 \$
+
+    编码其他字符要用 Unicode 转义序列语法：'\uFF00'
+  #+END_EXAMPLE
+
+  可以显式把字符转换为 Int 数字：
+
+  #+BEGIN_SRC kotlin 
+  fun decimalDigitValue(c: Char): Int {
+      if (c !in '0'..'9')
+	  throw IllegalArgumentException("Out of range")
+      return c.toInt() - '0'.toInt() // 显式转换为数字
+  }
+  #+END_SRC
+  当需要可空引用时，像数字、字符会被装箱。装箱操作不会保留同一性
+
+* 布尔
+  布尔用 _Boolean_ 类型表示：
+  + 它有两个值： _true_ 与 _false_
+  + 若需要可空引用布尔会被装箱
+  + 内置的布尔运算有：
+    + || : 逻辑或
+    + && : 逻辑与
+    + ! : 逻辑非
+
+* 数组
+
+  数组在 Kotlin 中使用 _Array_ 类来表示，它定义了 _get_ 与 _set_ 函数（按照运算符重载约定这会转变为 []）以及 _size_ 属性，以及一些其他有用的成员函数：
+
+  #+BEGIN_SRC kotlin 
+  class Array<T> private constructor() {
+      val size: Int
+      operator fun get(index: Int): T
+      operator fun set(index: Int, value: T): Unit
+
+      operator fun iterator(): Iterator<T>
+      // ……
+  }
+  #+END_SRC
+
+  + 可以使用库函数 _arrayOf()_ 来创建一个数组并传递元素值给它
+    #+BEGIN_EXAMPLE
+      arrayOf(1, 2, 3) 创建了 array [1, 2, 3]
+    #+END_EXAMPLE
+  + 库函数 _arrayOfNulls()_ 可以用于创建一个指定大小的、所有元素都为空的数组
+  + 也可以用接受数组大小以及一个函数参数的 Array 构造函数，用作参数的函数能够返回给定索引的每个元素初始值：
+    #+BEGIN_SRC kotlin 
+      fun main() {
+      //sampleStart
+	  // 创建一个 Array<String> 初始化为 ["0", "1", "4", "9", "16"]
+	  val asc = Array(5) { i -> (i * i).toString() }
+	  asc.forEach { println(it) }
+      //sampleEnd
+      }
+    #+END_SRC
+
+  Kotlin 中数组是 *不变的* （invariant）
+
+  #+BEGIN_EXAMPLE
+    这意味着 Kotlin 不能把 Array<String> 赋值给 Array<Any>，以防止可能的运行时失败
+
+    （但是可以使用 Array<out Any>）
+  #+END_EXAMPLE
+
+** 原生类型数组
+   Kotlin 也有无装箱开销的专门的类来表示原生类型数组: _ByteArray_ 、 _ShortArray_ 、 _IntArray_ 等等。它们也都有相应的工厂方法:
+
+   #+BEGIN_SRC kotlin 
+  val x: IntArray = intArrayOf(1, 2, 3)
+  x[0] = x[1] + x[2]
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     注意：这些类与 Array 并没有继承关系，但是它们有同样的方法属性集
+   #+END_EXAMPLE
+
+   #+BEGIN_SRC kotlin 
+  // 大小为 5、值为 [0, 0, 0, 0, 0] 的整型数组
+  val arr = IntArray(5)
+
+  // 例如：用常量初始化数组中的值
+  // 大小为 5、值为 [42, 42, 42, 42, 42] 的整型数组
+  val arr = IntArray(5) { 42 }
+
+  // 例如：使用 lambda 表达式初始化数组中的值
+  // 大小为 5、值为 [0, 1, 2, 3, 4] 的整型数组（值初始化为其索引值）
+  var arr = IntArray(5) { it * 1 }
+   #+END_SRC
+
+* 字符串
+
