@@ -1,5 +1,7 @@
 package tutorial.basic
 
+fun List<String>.getLongestString() { /*……*/}
+
 fun main() {
     // 创建一个 Array<String> 初始化为 ["0", "1", "4", "9", "16"]
     val asc = Array(5) { i -> (i * i).toString() }
