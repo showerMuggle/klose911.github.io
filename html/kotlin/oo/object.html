@@ -234,6 +234,17 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="./oo.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">对象表达式与对象声明</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#orgb9646e7">对象表达式</a></li>
+<li><a href="#org8307477">对象声明</a></li>
+<li><a href="#orgdb5d895">伴生对象</a></li>
+<li><a href="#org5c9cd06">对象表达式和对象声明之间的语义差异</a></li>
+</ul>
+</div>
+</div>
 <p>
 有时候，需要创建一个对某个类做了轻微改动的类的对象，而不用为之显式声明新的子类
 </p>
@@ -241,6 +252,274 @@ for the JavaScript code in this tag.
 <pre class="example">
 Kotlin 用对象表达式和对象声明处理这种情况
 </pre>
+
+<div id="outline-container-orgb9646e7" class="outline-2">
+<h2 id="orgb9646e7">对象表达式</h2>
+<div class="outline-text-2" id="text-orgb9646e7">
+<p>
+要创建一个继承自某个（或某些）类型的匿名类的对象，会这么写：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin">window.addMouseListener(<span style="color: #00bfff; font-weight: bold;">object</span> : <span style="color: #98f5ff;">MouseAdapter</span>() {
+    <span style="color: #00bfff; font-weight: bold;">override</span> <span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">mouseClicked</span>(e: <span style="color: #98f5ff;">MouseEvent</span>) { <span style="color: #5f9ea0; font-style: italic;">/*</span><span style="color: #5f9ea0; font-style: italic;">&#8230;&#8230;*/</span> }
+
+    <span style="color: #00bfff; font-weight: bold;">override</span> <span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">mouseEntered</span>(e: <span style="color: #98f5ff;">MouseEvent</span>) { <span style="color: #5f9ea0; font-style: italic;">/*</span><span style="color: #5f9ea0; font-style: italic;">&#8230;&#8230;*/</span> }
+})
+</pre>
+</div>
+
+<p>
+如果超类型有一个 <span class="underline">构造函数</span> ，则必须传递适当的构造函数参数给它。 多个超类型可以由跟在 <span class="underline">冒号</span> 后面的 <span class="underline">逗号</span> 分隔的列表指定：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">open</span> <span style="color: #00bfff; font-weight: bold;">class</span> <span style="color: #98f5ff;">A</span>(x: <span style="color: #98f5ff;">Int</span>) {
+    <span style="color: #00bfff; font-weight: bold;">public</span> <span style="color: #00bfff; font-weight: bold;">open</span> <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">y</span>: <span style="color: #98f5ff;">Int</span> = x
+}
+
+<span style="color: #00bfff; font-weight: bold;">interface</span> <span style="color: #98f5ff;">B</span> { <span style="color: #5f9ea0; font-style: italic;">/*</span><span style="color: #5f9ea0; font-style: italic;">&#8230;&#8230;*/</span> }
+
+<span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">ab</span>: <span style="color: #98f5ff;">A</span> = <span style="color: #00bfff; font-weight: bold;">object</span> : <span style="color: #98f5ff;">A</span>(1), <span style="color: #98f5ff;">B</span> {
+    <span style="color: #00bfff; font-weight: bold;">override</span> <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">y</span> = 15
+}
+</pre>
+</div>
+
+<p>
+任何时候，如果只需要“一个对象而已”，并不需要特殊超类型，那么可以简单地写：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">foo</span>() {
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">adHoc</span> = <span style="color: #00bfff; font-weight: bold;">object</span> {
+        <span style="color: #00bfff; font-weight: bold;">var</span> <span style="color: #4eee94;">x</span>: <span style="color: #98f5ff;">Int</span> = 0
+        <span style="color: #00bfff; font-weight: bold;">var</span> <span style="color: #4eee94;">y</span>: <span style="color: #98f5ff;">Int</span> = 0
+    }
+    print(adHoc.x + adHoc.y)
+}
+</pre>
+</div>
+
+<p>
+请注意，匿名对象可以用作只在 <span class="underline">本地</span> 和 <span class="underline">私有</span> 作用域中声明的类型：
+</p>
+<ul class="org-ul">
+<li>如果使用匿名对象作为公有函数的返回类型或者用作公有属性的类型，那么该函数或属性的实际类型会是匿名对象声明的超类型
+<ul class="org-ul">
+<li>如果没有声明任何超类型，就会是 Any。在匿名对象中添加的成员将无法访问</li>
+</ul></li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">class</span> <span style="color: #98f5ff;">C</span> {
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#31169;&#26377;&#20989;&#25968;&#65292;&#25152;&#20197;&#20854;&#36820;&#22238;&#31867;&#22411;&#26159;&#21311;&#21517;&#23545;&#35937;&#31867;&#22411;</span>
+    <span style="color: #00bfff; font-weight: bold;">private</span> <span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">foo</span>() = <span style="color: #00bfff; font-weight: bold;">object</span> {
+        <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">x</span>: <span style="color: #98f5ff;">String</span> = <span style="color: #deb887;">"x"</span>
+    }
+
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20844;&#26377;&#20989;&#25968;&#65292;&#25152;&#20197;&#20854;&#36820;&#22238;&#31867;&#22411;&#26159; Any</span>
+    <span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">publicFoo</span>() = <span style="color: #00bfff; font-weight: bold;">object</span> {
+        <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">x</span>: <span style="color: #98f5ff;">String</span> = <span style="color: #deb887;">"x"</span>
+    }
+
+    <span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">bar</span>() {
+        <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">x1</span> = foo().x        <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#27809;&#38382;&#39064;</span>
+        <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">x2</span> = publicFoo().x  <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#38169;&#35823;&#65306;&#26410;&#33021;&#35299;&#26512;&#30340;&#24341;&#29992;&#8220;x&#8221;</span>
+    }
+}
+</pre>
+</div>
+
+<p>
+<span class="underline">对象表达式</span> 中的代码可以访问来自 <span class="underline">包含它</span> 的 <b>作用域</b> 的 <span class="underline">变量</span> ：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">countClicks</span>(window: <span style="color: #98f5ff;">JComponent</span>) {
+    <span style="color: #00bfff; font-weight: bold;">var</span> <span style="color: #4eee94;">clickCount</span> = 0
+    <span style="color: #00bfff; font-weight: bold;">var</span> <span style="color: #4eee94;">enterCount</span> = 0
+
+    window.addMouseListener(<span style="color: #00bfff; font-weight: bold;">object</span> : <span style="color: #98f5ff;">MouseAdapter</span>() {
+        <span style="color: #00bfff; font-weight: bold;">override</span> <span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">mouseClicked</span>(e: <span style="color: #98f5ff;">MouseEvent</span>) {
+            clickCount++
+        }
+
+        <span style="color: #00bfff; font-weight: bold;">override</span> <span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">mouseEntered</span>(e: <span style="color: #98f5ff;">MouseEvent</span>) {
+            enterCount++
+        }
+    })
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#8230;&#8230;</span>
+}
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org8307477" class="outline-2">
+<h2 id="org8307477">对象声明</h2>
+<div class="outline-text-2" id="text-org8307477">
+<p>
+单例模式在一些场景中很有用， 而 Kotlin 使单例声明变得很容易：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">object</span> <span style="color: #98f5ff;">DataProviderManager</span> {
+    <span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">registerDataProvider</span>(provider: <span style="color: #98f5ff;">DataProvider</span>) {
+        <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#8230;&#8230;</span>
+    }
+
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">allDataProviders</span>: <span style="color: #98f5ff;">Collection&lt;DataProvider&gt;</span>
+        <span style="color: #00bfff; font-weight: bold;">get</span>() = <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#8230;&#8230;</span>
+}
+</pre>
+</div>
+
+
+<p>
+这称为 <span class="underline">对象声明</span> 。并且它总是在 object 关键字后跟一个名称
+</p>
+<ul class="org-ul">
+<li>就像变量声明一样，对象声明 <b>不是一个表达式</b> ，不能用在赋值语句的右边</li>
+<li>对象声明的初始化过程是 <b>线程安全</b> 的并且在 <b>首次访问</b> 时进行</li>
+</ul>
+
+<p>
+如需引用该对象，直接使用其名称即可：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #98f5ff;">DataProviderManager.registerDataProvider</span>(&#8230;&#8230;)
+</pre>
+</div>
+
+<p>
+这些对象可以有超类型：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">object</span> <span style="color: #98f5ff;">DefaultListener</span> : <span style="color: #98f5ff;">MouseAdapter</span>() {
+    <span style="color: #00bfff; font-weight: bold;">override</span> <span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">mouseClicked</span>(e: <span style="color: #98f5ff;">MouseEvent</span>) { <span style="color: #5f9ea0; font-style: italic;">/*</span><span style="color: #5f9ea0; font-style: italic;">&#8230;&#8230;*/</span> }
+
+    <span style="color: #00bfff; font-weight: bold;">override</span> <span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">mouseEntered</span>(e: <span style="color: #98f5ff;">MouseEvent</span>) { <span style="color: #5f9ea0; font-style: italic;">/*</span><span style="color: #5f9ea0; font-style: italic;">&#8230;&#8230;*/</span> }
+}
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-orgdb5d895" class="outline-2">
+<h2 id="orgdb5d895">伴生对象</h2>
+<div class="outline-text-2" id="text-orgdb5d895">
+<p>
+类内部的对象声明可以用 <span class="underline">companion</span> 关键字标记：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">class</span> <span style="color: #98f5ff;">MyClass</span> {
+    <span style="color: #00bfff; font-weight: bold;">companion</span> <span style="color: #00bfff; font-weight: bold;">object</span> <span style="color: #98f5ff;">Factory</span> {
+        <span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">create</span>(): <span style="color: #98f5ff;">MyClass</span> = <span style="color: #98f5ff;">MyClass</span>()
+    }
+}
+</pre>
+</div>
+
+<p>
+该伴生对象的成员可通过只使用 <span class="underline">类名</span> 作为 <span class="underline">限定符</span> 来调用：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">instance</span> = <span style="color: #98f5ff;">MyClass.create</span>()
+</pre>
+</div>
+
+
+<p>
+可以省略伴生对象的名称，在这种情况下将使用名称 Companion：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">class</span> <span style="color: #98f5ff;">MyClass</span> {
+    <span style="color: #00bfff; font-weight: bold;">companion</span> <span style="color: #00bfff; font-weight: bold;">object</span> { }
+}
+
+<span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">x</span> = <span style="color: #98f5ff;">MyClass.Companion</span>
+</pre>
+</div>
+
+<p>
+其自身所用的类的名称（不是另一个名称的限定符）可用作对该类的伴生对象 （无论是否具名）的引用：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">class</span> <span style="color: #98f5ff;">MyClass1</span> {
+    <span style="color: #00bfff; font-weight: bold;">companion</span> <span style="color: #00bfff; font-weight: bold;">object</span> <span style="color: #98f5ff;">Named</span> { }
+}
+
+<span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">x</span> = <span style="color: #98f5ff;">MyClass1</span>
+
+<span style="color: #00bfff; font-weight: bold;">class</span> <span style="color: #98f5ff;">MyClass2</span> {
+    <span style="color: #00bfff; font-weight: bold;">companion</span> <span style="color: #00bfff; font-weight: bold;">object</span> { }
+}
+
+<span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">y</span> = <span style="color: #98f5ff;">MyClass2</span>
+</pre>
+</div>
+
+<p>
+请注意，即使伴生对象的成员看起来像其他语言的静态成员，在运行时他们仍然是真实对象的 <b>实例成员</b> ，而且，例如还可以实现接口：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">interface</span> <span style="color: #98f5ff;">Factory&lt;T&gt;</span> {
+    <span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">create</span>(): <span style="color: #98f5ff;">T</span>
+}
+
+<span style="color: #00bfff; font-weight: bold;">class</span> <span style="color: #98f5ff;">MyClass</span> {
+    <span style="color: #00bfff; font-weight: bold;">companion</span> <span style="color: #00bfff; font-weight: bold;">object</span> : <span style="color: #98f5ff;">Factory&lt;MyClass&gt;</span> {
+        <span style="color: #00bfff; font-weight: bold;">override</span> <span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">create</span>(): <span style="color: #98f5ff;">MyClass</span> = <span style="color: #98f5ff;">MyClass</span>()
+    }
+}
+
+<span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">f</span>: <span style="color: #98f5ff;">Factory&lt;MyClass&gt;</span> = <span style="color: #98f5ff;">MyClass</span>
+</pre>
+</div>
+
+<pre class="example">
+    当然，在 JVM 平台，如果使用 @JvmStatic 注解，可以将伴生对象的成员生成为真正的静态方法和字段
+</pre>
+</div>
+</div>
+<div id="outline-container-org5c9cd06" class="outline-2">
+<h2 id="org5c9cd06">对象表达式和对象声明之间的语义差异</h2>
+<div class="outline-text-2" id="text-org5c9cd06">
+<p>
+对象表达式和对象声明之间有一个重要的语义差别：
+</p>
+<ul class="org-ul">
+<li>对象表达式是在 <span class="underline">使用</span> 他们的地方 <b>立即</b> 执行（及初始化）的</li>
+<li>对象声明是在第一次被 <span class="underline">访问</span> 到时 <b>延迟</b> 初始化的</li>
+<li>伴生对象的初始化是在相应的 <span class="underline">类</span> 被 <b>加载</b> （解析）时，与 Java 静态初始化器的语义相匹配。</li>
+</ul>
+
+<table border="2" cellspacing="0" cellpadding="6" rules="groups" frame="hsides">
+
+
+<colgroup>
+<col  class="org-left" />
+
+<col  class="org-left" />
+
+<col  class="org-left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="org-left"><a href="alias.html">Next：类型别名</a></td>
+<td class="org-left"><a href="enum.html">Previous：枚举类</a></td>
+<td class="org-left"><a href="oo.html">Home：面向对象</a></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 </div>
 <div id="postamble" class="status">
 
