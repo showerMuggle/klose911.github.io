@@ -239,6 +239,14 @@ for the JavaScript code in this tag.
 <div id="text-table-of-contents">
 <ul>
 <li><a href="#orgcdfb6b0">高阶函数</a></li>
+<li><a href="#org6b7f495">函数类型</a>
+<ul>
+<li><a href="#org142a893">函数类型实例化</a></li>
+<li><a href="#orgb10a5e5">函数类型实例调用</a></li>
+</ul>
+</li>
+<li><a href="#org9889e00">内联函数</a></li>
+<li><a href="#orgd4cf28c">Lambda 表达式与匿名函数</a></li>
 </ul>
 </div>
 </div>
@@ -251,6 +259,298 @@ Kotlin 函数都是 <b>头等</b> 的，这意味着它们可以存储在变量�
 </pre>
 <div id="outline-container-orgcdfb6b0" class="outline-2">
 <h2 id="orgcdfb6b0">高阶函数</h2>
+<div class="outline-text-2" id="text-orgcdfb6b0">
+<p>
+高阶函数是将 <span class="underline">函数</span> 用作 <b>参数</b> 或 <b>返回值</b> 的函数 
+</p>
+
+<pre class="example">
+    一个不错的示例：是集合的函数式风格fold函数， 它接受一个初始累积值与一个接合函数，并通过将当前累积值与每个集合元素连续接合起来代入累积值来构建返回值
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">fun</span> &lt;<span style="color: #98f5ff;">T</span>, <span style="color: #98f5ff;">R&gt;</span> <span style="color: #98f5ff;">Collection&lt;T&gt;.fold</span>(
+    initial: <span style="color: #98f5ff;">R</span>, 
+    combine: (acc: <span style="color: #98f5ff;">R</span>, nextElement: <span style="color: #98f5ff;">T</span>) -&gt; <span style="color: #98f5ff;">R</span>
+): <span style="color: #98f5ff;">R</span> {
+    <span style="color: #00bfff; font-weight: bold;">var</span> <span style="color: #4eee94;">accumulator</span>: <span style="color: #98f5ff;">R</span> = initial
+    <span style="color: #00bfff; font-weight: bold;">for</span> (element: <span style="color: #98f5ff;">T</span> <span style="color: #00bfff; font-weight: bold;">in</span> <span style="color: #00bfff; font-weight: bold;">this</span>) {
+        accumulator = combine(accumulator, element)
+    }
+    <span style="color: #00bfff; font-weight: bold;">return</span> accumulator
+}
+</pre>
+</div>
+
+<pre class="example">
+    在上述代码中，参数 combine 具有函数类型 (R, T) -&gt; R
+
+    因此 fold 接受一个函数作为参数，该函数接受类型分别为 R 与 T 的两个参数并返回一个 R 类型的值
+
+    在 for-循环内部调用该函数，然后将其返回值赋值给 accumulator
+</pre>
+
+<p>
+为了调用 fold，需要传给它一个 <span class="underline">函数类型</span> 的 <b>实例</b> 作为 <span class="underline">参数</span> 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+    <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">sampleStart</span>
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">items</span> = listOf(1, 2, 3, 4, 5)
+
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">Lambdas &#34920;&#36798;&#24335;&#26159;&#33457;&#25324;&#21495;&#25324;&#36215;&#26469;&#30340;&#20195;&#30721;&#22359;&#12290;</span>
+    items.fold(0, { 
+        <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#22914;&#26524;&#19968;&#20010; lambda &#34920;&#36798;&#24335;&#26377;&#21442;&#25968;&#65292;&#21069;&#38754;&#26159;&#21442;&#25968;&#65292;&#21518;&#36319;&#8220;-&gt;&#8221;</span>
+        acc: <span style="color: #98f5ff;">Int</span>, i: <span style="color: #98f5ff;">Int</span> -&gt; 
+        print(<span style="color: #deb887;">"acc = </span><span style="color: #4eee94;">$acc</span><span style="color: #deb887;">, i = </span><span style="color: #4eee94;">$i</span><span style="color: #deb887;">, "</span>) 
+        <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">result</span> = acc + i
+        println(<span style="color: #deb887;">"result = </span><span style="color: #4eee94;">$result</span><span style="color: #deb887;">"</span>)
+        <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">lambda &#34920;&#36798;&#24335;&#20013;&#30340;&#26368;&#21518;&#19968;&#20010;&#34920;&#36798;&#24335;&#26159;&#36820;&#22238;&#20540;&#65306;</span>
+        result
+    })
+
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">lambda &#34920;&#36798;&#24335;&#30340;&#21442;&#25968;&#31867;&#22411;&#26159;&#21487;&#36873;&#30340;&#65292;&#22914;&#26524;&#33021;&#22815;&#25512;&#26029;&#20986;&#26469;&#30340;&#35805;&#65306;</span>
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">joinedToString</span> = items.fold(<span style="color: #deb887;">"Elements:"</span>, { acc, i -&gt; acc + <span style="color: #deb887;">" "</span> + i })
+
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20989;&#25968;&#24341;&#29992;&#20063;&#21487;&#20197;&#29992;&#20110;&#39640;&#38454;&#20989;&#25968;&#35843;&#29992;&#65306;</span>
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">product</span> = items.fold(1, <span style="color: #98f5ff;">Int</span>::times)
+    <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">sampleEnd</span>
+    println(<span style="color: #deb887;">"joinedToString = </span><span style="color: #4eee94;">$joinedToString</span><span style="color: #deb887;">"</span>)
+    println(<span style="color: #deb887;">"product = </span><span style="color: #4eee94;">$product</span><span style="color: #deb887;">"</span>)
+}
+</pre>
+</div>
+
+<pre class="example">
+    而在高阶函数调用处，lambda 表达 式广泛用于此目的
+</pre>
+</div>
+</div>
+<div id="outline-container-org6b7f495" class="outline-2">
+<h2 id="org6b7f495">函数类型</h2>
+<div class="outline-text-2" id="text-org6b7f495">
+<p>
+Kotlin 使用类似 <span class="underline">(Int) -&gt; String</span> 的一系列函数类型来处理函数的声明
+</p>
+
+<pre class="example">
+val onClick: () -&gt; Unit = …… 
+</pre>
+
+<p>
+这些类型具有与函数签名相对应的特殊表示法，即它们的 <span class="underline">参数</span> 和 <span class="underline">返回值</span> ：
+</p>
+<ul class="org-ul">
+<li>所有函数类型都有一个 <span class="underline">圆括号</span> 括起来的 <b>参数类型列表</b> 以及一个 <b>返回类型</b></li>
+</ul>
+<pre class="example">
+(A, B) -&gt; C 表示接受类型分别为 A 与 B 两个参数并返回一个 C 类型值的函数类型
+</pre>
+<ul class="org-ul">
+<li><p>
+参数类型列表可以为空
+</p>
+<pre class="example">
+      如 () -&gt; A
+</pre></li>
+<li>Unit 返回类型不可省略</li>
+<li><p>
+函数类型可以有一个额外的 <b>接收者类型</b> ，它在表示法中的 <span class="underline">点之前</span> 指定 
+</p>
+<pre class="example">
+      类型 A.(B) -&gt; C 表示可以在 A 的接收者对象上以一个 B 类型参数来调用并返回一个 C 类型值的函数
+
+      带有接收者的函数字面值通常与这些类型一起使用
+</pre></li>
+<li><p>
+<b>挂起</b> 函数属于特殊种类的函数类型，它的表示法中有一个 <span class="underline">suspend</span> 修饰符
+</p>
+<pre class="example">
+      例如 suspend () -&gt; Unit 或者 suspend A.(B) -&gt; C
+</pre></li>
+</ul>
+
+<p>
+函数类型表示法可以选择性地包含函数的参数名： <span class="underline">(x: Int, y: Int) -&gt; Point</span> 这些名称可用于表明参数的含义
+</p>
+
+<pre class="example">
+    如需将函数类型指定为可空，请使用圆括号：((Int, Int) -&gt; Int)?。
+
+    函数类型可以使用圆括号进行接合：(Int) -&gt; ((Int) -&gt; Unit)
+
+    箭头表示法是右结合的，(Int) -&gt; (Int) -&gt; Unit 与前述示例等价，但不等于 ((Int) -&gt; (Int)) -&gt; Unit
+</pre>
+
+
+<p>
+还可以通过使用类型别名给函数类型起一个别称：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">typealias</span> <span style="color: #98f5ff;">ClickHandler</span> = (<span style="color: #98f5ff;">Button</span>, <span style="color: #98f5ff;">ClickEvent</span>) -&gt; <span style="color: #98f5ff;">Unit</span>
+</pre>
+</div>
+</div>
+<div id="outline-container-org142a893" class="outline-3">
+<h3 id="org142a893">函数类型实例化</h3>
+<div class="outline-text-3" id="text-org142a893">
+<p>
+有几种方法可以获得函数类型的实例：
+</p>
+<ul class="org-ul">
+<li>使用 <b>函数字面值的代码块</b> ，采用以下形式之一：
+<ul class="org-ul">
+<li><p>
+<span class="underline">lambda 表达式</span>  
+</p>
+<div class="org-src-container">
+<pre class="src src-kotlin">{ a, b -&gt; a + b }
+</pre>
+</div></li>
+<li><p>
+匿名函数 
+</p>
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">fun</span>(s: <span style="color: #98f5ff;">String</span>): <span style="color: #98f5ff;">Int</span> { <span style="color: #00bfff; font-weight: bold;">return</span> s.toIntOrNull() ?: 0 }
+</pre>
+</div></li>
+</ul></li>
+<li>带有 <span class="underline">接收者</span> 的 <b>函数字面值</b> 可用作带有接收者的函数类型的值</li>
+<li>使用 <b>已有声明</b> 的 <span class="underline">可调用引用</span> ：
+<ul class="org-ul">
+<li><p>
+顶层、局部、成员、扩展函数
+</p>
+<div class="org-src-container">
+<pre class="src src-kotlin">::isOdd
+
+<span style="color: #98f5ff;">String</span>::toInt 
+</pre>
+</div></li>
+<li><p>
+顶层、成员、扩展属性
+</p>
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #98f5ff;">List&lt;Int&gt;</span>::size
+</pre>
+</div></li>
+<li><p>
+构造函数：
+</p>
+<pre class="example">
+::Regex
+</pre></li>
+<li><p>
+这包括指向 <b>特定实例</b> <span class="underline">成员</span> 的 <b>绑定</b> 的 <span class="underline">可调用引用</span> 
+</p>
+<div class="org-src-container">
+<pre class="src src-kotlin">foo::toString
+</pre>
+</div></li>
+</ul></li>
+<li><p>
+使用实现函数类型接口的自定义类的实例：
+</p>
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">class</span> <span style="color: #98f5ff;">IntTransformer</span>: (<span style="color: #98f5ff;">Int</span>) -&gt; <span style="color: #98f5ff;">Int</span> {
+    <span style="color: #00bfff; font-weight: bold;">override</span> <span style="color: #00bfff; font-weight: bold;">operator</span> <span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">invoke</span>(x: <span style="color: #98f5ff;">Int</span>): <span style="color: #98f5ff;">Int</span> = <span style="color: #98f5ff;">TODO</span>()
+}
+
+<span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">intFunction</span>: (<span style="color: #98f5ff;">Int</span>) -&gt; <span style="color: #98f5ff;">Int</span> = <span style="color: #98f5ff;">IntTransformer</span>()
+</pre>
+</div></li>
+</ul>
+
+<p>
+如果有足够信息，编译器可以推断变量的函数类型：
+</p>
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">a</span> = { i: <span style="color: #98f5ff;">Int</span> -&gt; i + 1 } <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#25512;&#26029;&#20986;&#30340;&#31867;&#22411;&#26159; (Int) -&gt; Int</span>
+</pre>
+</div>
+
+<p>
+带与不带接收者的函数类型非字面值可以互换，其中接收者可以替代第一个参数，反之亦然
+</p>
+
+<pre class="example">
+     例如，(A, B) -&gt; C 类型的值可以传给或赋值给期待 A.(B) -&gt; C 的地方，反之亦然
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+    <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">sampleStart</span>
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">repeatFun</span>: <span style="color: #98f5ff;">String.</span>(<span style="color: #98f5ff;">Int</span>) -&gt; <span style="color: #98f5ff;">String</span> = { times -&gt; <span style="color: #00bfff; font-weight: bold;">this</span>.repeat(times) }
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">twoParameters</span>: (<span style="color: #98f5ff;">String</span>, <span style="color: #98f5ff;">Int</span>) -&gt; <span style="color: #98f5ff;">String</span> = repeatFun <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">OK</span>
+
+    <span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">runTransformation</span>(f: (<span style="color: #98f5ff;">String</span>, <span style="color: #98f5ff;">Int</span>) -&gt; <span style="color: #98f5ff;">String</span>): <span style="color: #98f5ff;">String</span> {
+        <span style="color: #00bfff; font-weight: bold;">return</span> f(<span style="color: #deb887;">"hello"</span>, 3)
+    }
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">result</span> = runTransformation(repeatFun) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">OK</span>
+    <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">sampleEnd</span>
+    println(<span style="color: #deb887;">"result = </span><span style="color: #4eee94;">$result</span><span style="color: #deb887;">"</span>)
+}
+</pre>
+</div>
+
+<pre class="example">
+     请注意，默认情况下推断出的是没有接收者的函数类型，即使变量是通过扩展函数引用来初始化的
+
+     如需改变这点，请显式指定变量类型
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orgb10a5e5" class="outline-3">
+<h3 id="orgb10a5e5">函数类型实例调用</h3>
+<div class="outline-text-3" id="text-orgb10a5e5">
+<p>
+函数类型的值可以通过其 <span class="underline">invoke(……)</span> 操作符调用：f.invoke(x) 或者直接 <span class="underline">f(x)</span> 
+</p>
+<ul class="org-ul">
+<li>如果该值具有 <span class="underline">接收者类型</span> ，那么应该将接收者对象作为 <b>第一个参数</b> 传递
+<ul class="org-ul">
+<li><p>
+调用带有接收者的函数类型值的另一个方式是在其 <span class="underline">前面</span> 加上 <b>接收者对象</b> 
+</p>
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+    <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">sampleStart</span>
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">stringPlus</span>: (<span style="color: #98f5ff;">String</span>, <span style="color: #98f5ff;">String</span>) -&gt; <span style="color: #98f5ff;">String</span> = <span style="color: #98f5ff;">String</span>::plus
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">intPlus</span>: <span style="color: #98f5ff;">Int.</span>(<span style="color: #98f5ff;">Int</span>) -&gt; <span style="color: #98f5ff;">Int</span> = <span style="color: #98f5ff;">Int</span>::plus
+
+    println(stringPlus.invoke(<span style="color: #deb887;">"&lt;-"</span>, <span style="color: #deb887;">"-&gt;"</span>))
+    println(stringPlus(<span style="color: #deb887;">"Hello, "</span>, <span style="color: #deb887;">"world!"</span>)) 
+
+    println(intPlus.invoke(1, 1))
+    println(intPlus(1, 2))
+    println(2.intPlus(3)) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#31867;&#25193;&#23637;&#35843;&#29992;</span>
+    <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">sampleEnd</span>
+}
+</pre>
+</div>
+
+<pre class="example">
+	 就好比该值是一个扩展函数：1.foo(2)
+</pre></li>
+</ul></li>
+</ul>
+</div>
+</div>
+</div>
+<div id="outline-container-org9889e00" class="outline-2">
+<h2 id="org9889e00">内联函数</h2>
+<div class="outline-text-2" id="text-org9889e00">
+<p>
+有时使用内联函数可以为高阶函数提供灵活的控制流 
+</p>
+</div>
+</div>
+
+<div id="outline-container-orgd4cf28c" class="outline-2">
+<h2 id="orgd4cf28c">Lambda 表达式与匿名函数</h2>
 </div>
 </div>
 <div id="postamble" class="status">
