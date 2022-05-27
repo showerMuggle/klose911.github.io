@@ -234,6 +234,38 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="./coroutine.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">异步流</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#orgbb0ce32">表示多个值</a>
+<ul>
+<li><a href="#orgaf4da82">序列</a></li>
+<li><a href="#org5795a4e">挂起</a></li>
+<li><a href="#orgae7a2bd">流</a></li>
+</ul>
+</li>
+<li><a href="#org201cabb">流是异步的</a></li>
+<li><a href="#org2540ada">取消流</a></li>
+<li><a href="#org8b026b5">流构建器</a></li>
+<li><a href="#orgf1540ec">过渡流操作符</a>
+<ul>
+<li><a href="#orgc3e15b7">转换操作符</a></li>
+<li><a href="#org273bddf">限长操作符</a></li>
+</ul>
+</li>
+<li><a href="#org263ae97">末端流操作符</a></li>
+<li><a href="#org7dd2745">流是连续的</a></li>
+<li><a href="#org6a53612">流上下文</a>
+<ul>
+<li><a href="#orgb375e3d">withContext 发出错误</a></li>
+<li><a href="#orgae9e9ec">flowOn 操作符</a></li>
+</ul>
+</li>
+<li><a href="#org70939ad">缓冲</a></li>
+</ul>
+</div>
+</div>
 <p>
 挂起函数可以异步的返回单个值，但是该如何异步返回多个计算好的值呢
 </p>
@@ -241,6 +273,724 @@ for the JavaScript code in this tag.
 <pre class="example">
   这正是 Kotlin 流（Flow）的用武之地
 </pre>
+<div id="outline-container-orgbb0ce32" class="outline-2">
+<h2 id="orgbb0ce32">表示多个值</h2>
+<div class="outline-text-2" id="text-orgbb0ce32">
+<p>
+在 Kotlin 中可以使用集合来表示多个值
+</p>
+
+<pre class="example">
+    比如说，可以拥有一个函数 foo()，它返回一个包含三个数字的 List， 然后使用 forEach 打印它们
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">foo</span>(): <span style="color: #98f5ff;">List&lt;Int&gt;</span> = listOf(1, 2, 3)
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+    foo().forEach { value -&gt; println(value) } 
+}
+</pre>
+</div>
+</div>
+<div id="outline-container-orgaf4da82" class="outline-3">
+<h3 id="orgaf4da82">序列</h3>
+<div class="outline-text-3" id="text-orgaf4da82">
+<p>
+如果使用一些消耗 CPU 资源的阻塞代码计算数字（每次计算需要 100 毫秒）那么可以使用 <span class="underline">Sequence</span> 来表示数字：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">foo</span>(): <span style="color: #98f5ff;">Sequence&lt;Int&gt;</span> = sequence { <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#24207;&#21015;&#26500;&#24314;&#22120;</span>
+    <span style="color: #00bfff; font-weight: bold;">for</span> (i <span style="color: #00bfff; font-weight: bold;">in</span> 1..3) {
+        <span style="color: #98f5ff;">Thread.sleep</span>(100) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20551;&#35013;&#25105;&#20204;&#27491;&#22312;&#35745;&#31639;</span>
+        yield(i) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20135;&#29983;&#19979;&#19968;&#20010;&#20540;</span>
+    }
+}
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+    foo().forEach { value -&gt; println(value) } 
+}
+</pre>
+</div>
+
+
+<pre class="example">
+     这段代码输出相同的数字，但在打印每个数字之前等待 100 毫秒
+</pre>
+</div>
+</div>
+<div id="outline-container-org5795a4e" class="outline-3">
+<h3 id="org5795a4e">挂起</h3>
+<div class="outline-text-3" id="text-org5795a4e">
+<pre class="example">
+     然而，计算过程阻塞运行该代码的主线程
+</pre>
+<p>
+当这些值由异步代码计算时，可以使用 <span class="underline">suspend</span> 修饰符标记函数 foo， 这样它就可以在 <b>不阻塞</b> 的情况下执行其工作并将结果作为列表返回：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.</span>*                 
+
+<span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">sampleStart</span>
+<span style="color: #00bfff; font-weight: bold;">suspend</span> <span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">foo</span>(): <span style="color: #98f5ff;">List&lt;Int&gt;</span> {
+    delay(1000) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20551;&#35013;&#25105;&#20204;&#22312;&#36825;&#37324;&#20570;&#20102;&#19968;&#20123;&#24322;&#27493;&#30340;&#20107;&#24773;</span>
+    <span style="color: #00bfff; font-weight: bold;">return</span> listOf(1, 2, 3)
+}
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking&lt;<span style="color: #98f5ff;">Unit&gt;</span> {
+    foo().forEach { value -&gt; println(value) } 
+}
+<span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">sampleEnd</span>
+</pre>
+</div>
+
+<pre class="example">
+     这段代码将会在等待一秒之后打印数字
+</pre>
+</div>
+</div>
+<div id="outline-container-orgae7a2bd" class="outline-3">
+<h3 id="orgae7a2bd">流</h3>
+<div class="outline-text-3" id="text-orgae7a2bd">
+<pre class="example">
+     使用 List 结果类型，意味着只能一次返回所有值
+</pre>
+
+<p>
+为了表示异步计算的值流 <span class="underline">stream</span> ，可以使用 <b>Flow</b> 类型（正如同步计算值会使用 Sequence 类型）： 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.delay</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.Flow</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.flow</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.launch</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.runBlocking</span>
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">foo3</span>(): <span style="color: #98f5ff;">Flow&lt;Int&gt;</span> = flow { <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#27969;&#26500;&#24314;&#22120;</span>
+    <span style="color: #00bfff; font-weight: bold;">for</span> (i <span style="color: #00bfff; font-weight: bold;">in</span> 1..3) {
+        delay(100) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20551;&#35013;&#25105;&#20204;&#22312;&#36825;&#37324;&#20570;&#20102;&#19968;&#20123;&#26377;&#29992;&#30340;&#20107;&#24773;</span>
+        emit(i) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#21457;&#36865;&#19979;&#19968;&#20010;&#20540;</span>
+    }
+}
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking {
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#21551;&#21160;&#24182;&#21457;&#30340;&#21327;&#31243;&#20197;&#39564;&#35777;&#20027;&#32447;&#31243;&#24182;&#26410;&#38459;&#22622;</span>
+    launch {
+        <span style="color: #00bfff; font-weight: bold;">for</span> (k <span style="color: #00bfff; font-weight: bold;">in</span> 1..3) {
+            println(<span style="color: #deb887;">"I'm not blocked </span><span style="color: #4eee94;">$k</span><span style="color: #deb887;">"</span>)
+            delay(100)
+        }
+    }
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#25910;&#38598;&#36825;&#20010;&#27969;</span>
+    foo3().collect { value -&gt; println(value) }
+}
+</pre>
+</div>
+
+<pre class="example">
+     这段代码在不阻塞主线程的情况下每等待 100 毫秒打印一个数字
+
+     在主线程中运行一个单独的协程每 100 毫秒打印一次 “I'm not blocked” 已经经过了验证
+</pre>
+
+<p>
+输出如下： 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">I<span style="color: #deb887;">'m not blocked 1</span>
+<span style="color: #deb887;">1</span>
+<span style="color: #deb887;">I'</span>m not blocked 2
+2
+I<span style="color: #deb887;">'m not blocked 3</span>
+<span style="color: #deb887;">3</span>
+</pre>
+</div>
+
+<p>
+注意使用 Flow 的代码与先前示例的下述区别：
+</p>
+<ul class="org-ul">
+<li>名为 <span class="underline">flow</span> 的 <b>Flow 类型构建器</b> 函数</li>
+<li><span class="underline">flow { &#x2026; } 构建块</span> 中的代码 <b>可以挂起</b></li>
+<li>函数 <span class="underline">foo</span> () <b>不再</b> 标有 <span class="underline">suspend</span> 修饰符</li>
+<li>流使用 <span class="underline">emit</span> 函数 <b>发射</b> 值</li>
+<li>流使用 <span class="underline">collect</span> 函数 <b>收集</b> 值</li>
+</ul>
+
+<pre class="example">
+     可以在 foo 的 flow { ... } 函数体内使用 delay 代替 Thread.sleep 以观察主线程在本案例中被阻塞了
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org201cabb" class="outline-2">
+<h2 id="org201cabb">流是异步的</h2>
+<div class="outline-text-2" id="text-org201cabb">
+<p>
+Flow 是一种类似于序列的异步流
+</p>
+<pre class="example">
+flow 构建器中的代码直到流被收集的时候才运行
+</pre>
+
+<p>
+这在以下的示例中非常明显：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.delay</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.Flow</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.flow</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.runBlocking</span>
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">foo4</span>(): <span style="color: #98f5ff;">Flow&lt;Int&gt;</span> = flow {
+    println(<span style="color: #deb887;">"Flow started"</span>)
+    <span style="color: #00bfff; font-weight: bold;">for</span> (i <span style="color: #00bfff; font-weight: bold;">in</span> 1..3) {
+        delay(100)
+        emit(i)
+    }
+}
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking {
+    println(<span style="color: #deb887;">"Calling foo..."</span>)
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">flow</span> = foo4()
+    println(<span style="color: #deb887;">"Calling collect..."</span>)
+    flow.collect { value -&gt; println(value) }
+    println(<span style="color: #deb887;">"Calling collect again..."</span>)
+    flow.collect { value -&gt; println(value) }
+}
+</pre>
+</div>
+
+<p>
+输出如下： 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">Calling foo...
+Calling collect...
+Flow started
+1
+2
+3
+Calling collect again...
+Flow started
+1
+2
+3
+</pre>
+</div>
+
+<pre class="example">
+    返回一个流的 foo() 函数没有标记 suspend 修饰符的主要原因：通过它自己，foo() 会尽快返回且不会进行任何等待
+
+
+    流在每次收集的时候启动：当再次调用 collect 时会看到“Flow started”
+</pre>
+</div>
+</div>
+<div id="outline-container-org2540ada" class="outline-2">
+<h2 id="org2540ada">取消流</h2>
+<div class="outline-text-2" id="text-org2540ada">
+<p>
+流采用与协程同样的协作取消。然而，流的基础设施未引入其他取消点。取消完全透明
+</p>
+
+<pre class="example">
+    像往常一样，流的收集只有在当流在一个可取消的挂起函数（例如 delay）中挂起的时候取消，否则不能取消
+</pre>
+
+<p>
+下面的示例展示了当 withTimeoutOrNull 块中代码在运行的时候流是如何在超时的情况下取消并停止执行其代码的：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.delay</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.Flow</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.flow</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.runBlocking</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.withTimeoutOrNull</span>
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">foo5</span>(): <span style="color: #98f5ff;">Flow&lt;Int&gt;</span> = flow {
+    <span style="color: #00bfff; font-weight: bold;">for</span> (i <span style="color: #00bfff; font-weight: bold;">in</span> 1..3) {
+        delay(100)
+        println(<span style="color: #deb887;">"Emitting </span><span style="color: #4eee94;">$i</span><span style="color: #deb887;">"</span>)
+        emit(i)
+    }
+}
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking {
+    withTimeoutOrNull(250) { <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#22312; 250 &#27627;&#31186;&#21518;&#36229;&#26102;</span>
+        foo5().collect { value -&gt; println(value) }
+    }
+    println(<span style="color: #deb887;">"Done"</span>)
+}
+</pre>
+</div>
+
+<p>
+在 foo() 函数中流仅发射两个数字，产生以下输出：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">Emitting 1
+1
+Emitting 2
+2
+Done
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org8b026b5" class="outline-2">
+<h2 id="org8b026b5">流构建器</h2>
+<div class="outline-text-2" id="text-org8b026b5">
+<pre class="example">
+    先前示例中的 flow { ... } 构建器是最基础的一个
+</pre>
+<p>
+还有其它构建器使流的声明更简单：
+</p>
+<ul class="org-ul">
+<li><span class="underline">flowOf</span> 构建器定义了一个发射 <span class="underline">固定值</span> 集的流</li>
+<li>使用 <span class="underline">.asFlow()</span> 扩展函数，可以将各种集合与序列转换为流</li>
+</ul>
+
+<p>
+因此，从流中打印从 1 到 3 的数字的示例可以写成：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.asFlow</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.runBlocking</span>
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking&lt;<span style="color: #98f5ff;">Unit&gt;</span> {
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#23558;&#19968;&#20010;&#25972;&#25968;&#21306;&#38388;&#36716;&#21270;&#20026;&#27969;</span>
+    (1..3).asFlow().collect { value -&gt; println(value) }
+}
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-orgf1540ec" class="outline-2">
+<h2 id="orgf1540ec">过渡流操作符</h2>
+<div class="outline-text-2" id="text-orgf1540ec">
+<pre class="example">
+    可以使用操作符转换流，就像使用集合与序列一样
+</pre>
+
+<p>
+过渡操作符 <b>应用</b> 于 <span class="underline">上游流</span> ，并 <b>返回</b> <span class="underline">下游流</span> ，基础的操作符拥有相似的名字，比如 map 与 filter
+</p>
+<ul class="org-ul">
+<li><p>
+这些操作符也是冷操作符，就像流一样
+</p>
+<pre class="example">
+      这类操作符本身不是挂起函数。它运行的速度很快，返回新的转换流的定义
+</pre></li>
+<li>流与序列的主要区别在于这些操作符中的代码 <b>可以</b> 调用 <span class="underline">挂起</span> 函数</li>
+</ul>
+
+<p>
+举例来说，一个请求中的流可以使用 map 操作符映射出结果，即使执行一个长时间的请求操作也可以使用挂起函数来实现：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.delay</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.asFlow</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.map</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.runBlocking</span>
+
+<span style="color: #00bfff; font-weight: bold;">suspend</span> <span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">performRequest</span>(request: <span style="color: #98f5ff;">Int</span>): <span style="color: #98f5ff;">String</span> {
+    delay(1000) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#27169;&#20223;&#38271;&#26102;&#38388;&#36816;&#34892;&#30340;&#24322;&#27493;&#24037;&#20316;</span>
+    <span style="color: #00bfff; font-weight: bold;">return</span> <span style="color: #deb887;">"response </span><span style="color: #4eee94;">$request</span><span style="color: #deb887;">"</span>
+}
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking {
+    (1..3).asFlow() <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#19968;&#20010;&#35831;&#27714;&#27969;</span>
+        .map { request -&gt; performRequest(request) }
+        .collect { response -&gt; println(response) }
+}
+</pre>
+</div>
+
+<p>
+它产生以下三行，每一行每秒出现一次：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">response 1
+response 2
+response 3
+</pre>
+</div>
+</div>
+<div id="outline-container-orgc3e15b7" class="outline-3">
+<h3 id="orgc3e15b7">转换操作符</h3>
+<div class="outline-text-3" id="text-orgc3e15b7">
+<p>
+在流转换操作符中，最通用的一种称为 <span class="underline">transform</span> 。它可以用来模仿简单的转换，例如 map 与 filter，以及实施更复杂的转换。 使用 transform 操作符，可以 <b>发射</b> 任意值任意次
+</p>
+
+<pre class="example">
+     比如说，使用 transform 可以在执行长时间运行的异步请求之前发射一个字符串并跟踪这个响应
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.asFlow</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.transform</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.runBlocking</span>
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking {
+    (1..3).asFlow() <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#19968;&#20010;&#35831;&#27714;&#27969;</span>
+        .transform { request -&gt;
+            emit(<span style="color: #deb887;">"Making request </span><span style="color: #4eee94;">$request</span><span style="color: #deb887;">"</span>)
+            emit(performRequest(request))
+        }
+        .collect { response -&gt; println(response) }
+}
+</pre>
+</div>
+
+<p>
+这段代码的输出如下：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">Making request 1
+response 1
+Making request 2
+response 2
+Making request 3
+response 3
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org273bddf" class="outline-3">
+<h3 id="org273bddf">限长操作符</h3>
+<div class="outline-text-3" id="text-org273bddf">
+<p>
+<span class="underline">限长</span> 过渡操作符（例如 <span class="underline">take</span> ）在流 <b>触及</b> 相应 <span class="underline">限制</span> 的时候会将它的 <span class="underline">执行</span> <b>取消</b> 
+</p>
+
+<pre class="example">
+     协程中的取消操作总是通过抛出异常来执行，这样所有的资源管理函数（如 try {...} finally {...} 块）会在取消的情况下正常运行
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.Flow</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.flow</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.take</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.runBlocking</span>
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">numbers</span>(): <span style="color: #98f5ff;">Flow&lt;Int&gt;</span> = flow {
+    <span style="color: #00bfff; font-weight: bold;">try</span> {                          
+        emit(1)
+        emit(2) 
+        println(<span style="color: #deb887;">"This line will not execute"</span>)
+        emit(3)    
+    } <span style="color: #00bfff; font-weight: bold;">finally</span> {
+        println(<span style="color: #deb887;">"Finally in numbers"</span>)
+    }
+}
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking&lt;<span style="color: #98f5ff;">Unit&gt;</span> {
+    numbers() 
+        .take(2) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#21482;&#33719;&#21462;&#21069;&#20004;&#20010;</span>
+        .collect { value -&gt; println(value) }
+}  
+</pre>
+</div>
+
+<pre class="example">
+     这段代码的输出清楚地表明，numbers() 函数中对 flow {...} 函数体的执行在发射出第二个数字后停止
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-sh">1
+2
+Finally<span style="color: #00bfff; font-weight: bold;"> in</span> numbers
+</pre>
+</div>
+</div>
+</div>
+</div>
+<div id="outline-container-org263ae97" class="outline-2">
+<h2 id="org263ae97">末端流操作符</h2>
+<div class="outline-text-2" id="text-org263ae97">
+<p>
+<span class="underline">末端操作符</span> 是在流上用于 <b>启动</b> <span class="underline">流收集</span> 的 <b>挂起</b> 函数
+</p>
+
+<pre class="example">
+collect 是最基础的末端操作符
+</pre>
+
+<p>
+还有另外一些更方便使用的末端操作符：
+</p>
+<ul class="org-ul">
+<li>转化为各种集合，例如 <span class="underline">toList</span> 与 <span class="underline">toSet</span></li>
+<li>获取第一个 <span class="underline">first</span> 值与确保流发射单个 <span class="underline">single</span> 值的操作符</li>
+<li>使用 <span class="underline">reduce</span> 与 <span class="underline">fold</span> 将流规约到单个值</li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.asFlow</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.map</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.reduce</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.runBlocking</span>
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking&lt;<span style="color: #98f5ff;">Unit&gt;</span> {
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">sum</span> = (1..5).asFlow()
+        .map { <span style="color: #00bfff; font-weight: bold;">it</span> * <span style="color: #00bfff; font-weight: bold;">it</span> } <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#25968;&#23383; 1 &#33267; 5 &#30340;&#24179;&#26041;</span>
+        .reduce { a, b -&gt; a + b } <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#27714;&#21644;&#65288;&#26411;&#31471;&#25805;&#20316;&#31526;&#65289;</span>
+    println(sum)
+}
+</pre>
+</div>
+
+<pre class="example">
+  打印单个数字： 55 
+</pre>
+</div>
+</div>
+<div id="outline-container-org7dd2745" class="outline-2">
+<h2 id="org7dd2745">流是连续的</h2>
+<div class="outline-text-2" id="text-org7dd2745">
+<p>
+流的每次单独收集都是按 <b>顺序</b> 执行的，除非进行特殊操作的操作符使用多个流。该收集过程直接在 <span class="underline">协程</span> 中运行，该协程 <b>调用</b> <span class="underline">末端操作符</span> ：
+</p>
+<ul class="org-ul">
+<li>默认情况下不启动新协程</li>
+<li>从上游到下游 <b>每个</b> <span class="underline">过渡操作符</span> 都会 <b>处理</b> 每个 <span class="underline">发射出的值</span> 然后再交给末端操作符</li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.filter</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.map</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.runBlocking</span>
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking {
+    (1..5).asFlow()
+        .filter {
+            println(<span style="color: #deb887;">"Filter </span><span style="color: #4eee94;">$it</span><span style="color: #deb887;">"</span>)
+            <span style="color: #00bfff; font-weight: bold;">it</span> % 2 == 0
+        }
+        .map {
+            println(<span style="color: #deb887;">"Map </span><span style="color: #4eee94;">$it</span><span style="color: #deb887;">"</span>)
+            <span style="color: #deb887;">"string </span><span style="color: #4eee94;">$it</span><span style="color: #deb887;">"</span>
+        }.collect {
+            println(<span style="color: #deb887;">"Collect </span><span style="color: #4eee94;">$it</span><span style="color: #deb887;">"</span>)
+        }
+}
+</pre>
+</div>
+
+<p>
+输出：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">Filter 1
+Filter 2
+Map 2
+Collect string 2
+Filter 3
+Filter 4
+Map 4
+Collect string 4
+Filter 5
+</pre>
+</div>
+
+<pre class="example">
+    过滤偶数并将其映射到字符串
+</pre>
+</div>
+</div>
+<div id="outline-container-org6a53612" class="outline-2">
+<h2 id="org6a53612">流上下文</h2>
+<div class="outline-text-2" id="text-org6a53612">
+<p>
+流的收集总是在 <b>调用</b> <span class="underline">协程</span> 的 <span class="underline">上下文</span> 中发生
+</p>
+
+<pre class="example">
+    例如，如果有一个流 foo，然后以下代码在它的编写者指定的上下文中运行，而无论流 foo 的实现细节如何
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-kotlin">withContext(context) {
+    foo.collect { value -&gt;
+        println(value) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#36816;&#34892;&#22312;&#25351;&#23450;&#19978;&#19979;&#25991;&#20013;</span>
+    }
+}
+</pre>
+</div>
+
+<p>
+流的该属性称为 <span class="underline">上下文保存</span> 
+</p>
+
+<pre class="example">
+    默认的，flow { ... } 构建器中的代码运行在相应流的收集器提供的上下文中
+
+    举例来说，考虑打印线程的 foo 的实现， 它被调用并发射三个数字
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.Flow</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.flow</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.runBlocking</span>
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">log</span>(msg: <span style="color: #98f5ff;">String</span>) = println(<span style="color: #deb887;">"[${</span><span style="color: #98f5ff;">Thread.currentThread</span>().name<span style="color: #deb887;">}] </span><span style="color: #4eee94;">$msg</span><span style="color: #deb887;">"</span>)
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">foo</span>(): <span style="color: #98f5ff;">Flow&lt;Int&gt;</span> = flow {
+    log(<span style="color: #deb887;">"Started foo flow"</span>)
+    <span style="color: #00bfff; font-weight: bold;">for</span> (i <span style="color: #00bfff; font-weight: bold;">in</span> 1..3) {
+        emit(i)
+    }
+}
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking {
+    foo().collect { value -&gt; log(<span style="color: #deb887;">"Collected </span><span style="color: #4eee94;">$value</span><span style="color: #deb887;">"</span>) }
+}
+</pre>
+</div>
+
+<p>
+运行这段代码：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">[main @coroutine#1] Started foo flow
+[main @coroutine#1] Collected 1
+[main @coroutine#1] Collected 2
+[main @coroutine#1] Collected 3
+</pre>
+</div>
+
+<pre class="example">
+  由于 foo().collect 是在主线程调用的，则 foo 的流主体也是在主线程调用的
+</pre>
+
+<p>
+这是快速运行或异步代码的理想默认形式，它 <b>不关心执行的上下文</b> 并且 <b>不会阻塞调用者</b> 
+</p>
+</div>
+<div id="outline-container-orgb375e3d" class="outline-3">
+<h3 id="orgb375e3d">withContext 发出错误</h3>
+<div class="outline-text-3" id="text-orgb375e3d">
+<pre class="example">
+     然而，长时间运行的消耗 CPU 的代码也许需要在 Dispatchers.Default 上下文中执行，并且更新 UI 的代码也许需要在 Dispatchers.Main 中执行
+</pre>
+<p>
+通常，withContext 用于在 Kotlin 协程中改变代码的上下文，但是 flow {&#x2026;} 构建器中的代码必须遵循上下文保存属性，并且不允许从其他上下文中发射（emit） 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.Dispatchers</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.Flow</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.flow</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.runBlocking</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.withContext</span>
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">foo7</span>(): <span style="color: #98f5ff;">Flow&lt;Int&gt;</span> = flow {
+    <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#22312;&#27969;&#26500;&#24314;&#22120;&#20013;&#26356;&#25913;&#28040;&#32791; CPU &#20195;&#30721;&#30340;&#19978;&#19979;&#25991;&#30340;&#38169;&#35823;&#26041;&#24335;</span>
+    withContext(<span style="color: #98f5ff;">Dispatchers.Default</span>) {
+        <span style="color: #00bfff; font-weight: bold;">for</span> (i <span style="color: #00bfff; font-weight: bold;">in</span> 1..3) {
+            <span style="color: #98f5ff;">Thread.sleep</span>(100) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20551;&#35013;&#25105;&#20204;&#20197;&#28040;&#32791; CPU &#30340;&#26041;&#24335;&#36827;&#34892;&#35745;&#31639;</span>
+            emit(i) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#21457;&#23556;&#19979;&#19968;&#20010;&#20540;</span>
+        }
+    }
+}
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking {
+    foo7().collect { value -&gt; println(value) }
+}    
+</pre>
+</div>
+
+<p>
+这段代码产生如下的异常：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">Exception<span style="color: #00bfff; font-weight: bold;"> in</span> thread <span style="color: #deb887;">"main"</span> java.lang.IllegalStateException: Flow invariant is violated:
+                Flow was collected<span style="color: #00bfff; font-weight: bold;"> in</span> [BlockingCoroutine{Active}@2eb45460, BlockingEventLoop@4861502a],
+                but emission happened<span style="color: #00bfff; font-weight: bold;"> in</span> [DispatchedCoroutine{Active}@31ddf337, Dispatchers.Default].
+                Please refer to <span style="color: #deb887;">'flow'</span> documentation or use <span style="color: #deb887;">'flowOn'</span> instead
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-orgae9e9ec" class="outline-3">
+<h3 id="orgae9e9ec">flowOn 操作符</h3>
+<div class="outline-text-3" id="text-orgae9e9ec">
+<p>
+<span class="underline">flowOn</span> 函数用于 <b>更改</b> <span class="underline">流发射的上下文</span> 
+</p>
+
+<pre class="example">
+     以下示例展示了更改流上下文的正确方法，该示例还通过打印相应线程的名字以展示它们的工作方式
+</pre>
+
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.Dispatchers</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.Flow</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.flow</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.flowOn</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.runBlocking</span>
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">foo8</span>(): <span style="color: #98f5ff;">Flow&lt;Int&gt;</span> = flow {
+    <span style="color: #00bfff; font-weight: bold;">for</span> (i <span style="color: #00bfff; font-weight: bold;">in</span> 1..3) {
+        <span style="color: #98f5ff;">Thread.sleep</span>(100) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20551;&#35013;&#25105;&#20204;&#20197;&#28040;&#32791; CPU &#30340;&#26041;&#24335;&#36827;&#34892;&#35745;&#31639;</span>
+        log(<span style="color: #deb887;">"Emitting </span><span style="color: #4eee94;">$i</span><span style="color: #deb887;">"</span>)
+        emit(i) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#21457;&#23556;&#19979;&#19968;&#20010;&#20540;</span>
+    }
+}.flowOn(<span style="color: #98f5ff;">Dispatchers.Default</span>) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#22312;&#27969;&#26500;&#24314;&#22120;&#20013;&#25913;&#21464;&#28040;&#32791; CPU &#20195;&#30721;&#19978;&#19979;&#25991;&#30340;&#27491;&#30830;&#26041;&#24335;</span>
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking {
+    foo8().collect { value -&gt; log(<span style="color: #deb887;">"Collected </span><span style="color: #4eee94;">$value</span><span style="color: #deb887;">"</span>) }
+}
+</pre>
+</div>
+
+<p>
+输出如下：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">[DefaultDispatcher-worker-1 @coroutine#2] Emitting 1
+[main @coroutine#1] Collected 1
+[DefaultDispatcher-worker-1 @coroutine#2] Emitting 2
+[main @coroutine#1] Collected 2
+[DefaultDispatcher-worker-1 @coroutine#2] Emitting 3
+[main @coroutine#1] Collected 3
+</pre>
+</div>
+
+<pre class="example">
+     收集发生在一个协程中（“coroutine#1”）而发射发生在运行于另一个线程中与收集协程并发运行的另一个协程（“coroutine#2”）中
+</pre>
+
+<p>
+当上游流必须改变其上下文中的 CoroutineDispatcher 的时候，flowOn 操作符 <b>创建</b> 了 <span class="underline">另一个协程</span> 
+</p>
+</div>
+</div>
+</div>
+<div id="outline-container-org70939ad" class="outline-2">
+<h2 id="org70939ad">缓冲</h2>
+</div>
 </div>
 <div id="postamble" class="status">
 

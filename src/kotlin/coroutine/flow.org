@@ -9,5 +9,565 @@
 #+BEGIN_EXAMPLE
   这正是 Kotlin 流（Flow）的用武之地
 #+END_EXAMPLE
+* 表示多个值
 
+  在 Kotlin 中可以使用集合来表示多个值
+
+  #+BEGIN_EXAMPLE
+    比如说，可以拥有一个函数 foo()，它返回一个包含三个数字的 List， 然后使用 forEach 打印它们
+  #+END_EXAMPLE
+
+  #+BEGIN_SRC kotlin 
+  fun foo(): List<Int> = listOf(1, 2, 3)
+
+  fun main() {
+      foo().forEach { value -> println(value) } 
+  }
+  #+END_SRC
+** 序列
+
+   如果使用一些消耗 CPU 资源的阻塞代码计算数字（每次计算需要 100 毫秒）那么可以使用 _Sequence_ 来表示数字：
+
+   #+BEGIN_SRC kotlin 
+  fun foo(): Sequence<Int> = sequence { // 序列构建器
+      for (i in 1..3) {
+	  Thread.sleep(100) // 假装我们正在计算
+	  yield(i) // 产生下一个值
+      }
+  }
+
+  fun main() {
+      foo().forEach { value -> println(value) } 
+  }
+   #+END_SRC
+
+
+   #+BEGIN_EXAMPLE
+     这段代码输出相同的数字，但在打印每个数字之前等待 100 毫秒
+   #+END_EXAMPLE
+** 挂起
+   #+BEGIN_EXAMPLE
+     然而，计算过程阻塞运行该代码的主线程
+   #+END_EXAMPLE
+   当这些值由异步代码计算时，可以使用 _suspend_ 修饰符标记函数 foo， 这样它就可以在 *不阻塞* 的情况下执行其工作并将结果作为列表返回：
+
+   #+BEGIN_SRC kotlin 
+  import kotlinx.coroutines.*                 
+
+  //sampleStart
+  suspend fun foo(): List<Int> {
+      delay(1000) // 假装我们在这里做了一些异步的事情
+      return listOf(1, 2, 3)
+  }
+
+  fun main() = runBlocking<Unit> {
+      foo().forEach { value -> println(value) } 
+  }
+  //sampleEnd
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     这段代码将会在等待一秒之后打印数字
+   #+END_EXAMPLE
+** 流
+
+   #+BEGIN_EXAMPLE
+     使用 List 结果类型，意味着只能一次返回所有值
+   #+END_EXAMPLE
+
+   为了表示异步计算的值流 _stream_ ，可以使用 *Flow* 类型（正如同步计算值会使用 Sequence 类型）： 
+
+   #+BEGIN_SRC kotlin 
+  import kotlinx.coroutines.delay
+  import kotlinx.coroutines.flow.Flow
+  import kotlinx.coroutines.flow.flow
+  import kotlinx.coroutines.launch
+  import kotlinx.coroutines.runBlocking
+
+  fun foo3(): Flow<Int> = flow { // 流构建器
+      for (i in 1..3) {
+	  delay(100) // 假装我们在这里做了一些有用的事情
+	  emit(i) // 发送下一个值
+      }
+  }
+
+  fun main() = runBlocking {
+      // 启动并发的协程以验证主线程并未阻塞
+      launch {
+	  for (k in 1..3) {
+	      println("I'm not blocked $k")
+	      delay(100)
+	  }
+      }
+      // 收集这个流
+      foo3().collect { value -> println(value) }
+  }
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     这段代码在不阻塞主线程的情况下每等待 100 毫秒打印一个数字
+
+     在主线程中运行一个单独的协程每 100 毫秒打印一次 “I'm not blocked” 已经经过了验证
+   #+END_EXAMPLE
+
+   输出如下： 
+
+   #+BEGIN_SRC sh 
+  I'm not blocked 1
+  1
+  I'm not blocked 2
+  2
+  I'm not blocked 3
+  3
+   #+END_SRC
+
+   注意使用 Flow 的代码与先前示例的下述区别：
+   + 名为 _flow_ 的 *Flow 类型构建器* 函数
+   + _flow { ... } 构建块_ 中的代码 *可以挂起*
+   + 函数 _foo_ () *不再* 标有 _suspend_ 修饰符
+   + 流使用 _emit_ 函数 *发射* 值
+   + 流使用 _collect_ 函数 *收集* 值 
+
+   #+BEGIN_EXAMPLE
+     可以在 foo 的 flow { ... } 函数体内使用 delay 代替 Thread.sleep 以观察主线程在本案例中被阻塞了
+   #+END_EXAMPLE
+* 流是异步的
+
+  Flow 是一种类似于序列的异步流
+  #+BEGIN_EXAMPLE
+    flow 构建器中的代码直到流被收集的时候才运行
+  #+END_EXAMPLE
+
+  这在以下的示例中非常明显：
+
+  #+BEGIN_SRC kotlin 
+  import kotlinx.coroutines.delay
+  import kotlinx.coroutines.flow.Flow
+  import kotlinx.coroutines.flow.flow
+  import kotlinx.coroutines.runBlocking
+
+  fun foo4(): Flow<Int> = flow {
+      println("Flow started")
+      for (i in 1..3) {
+	  delay(100)
+	  emit(i)
+      }
+  }
+
+  fun main() = runBlocking {
+      println("Calling foo...")
+      val flow = foo4()
+      println("Calling collect...")
+      flow.collect { value -> println(value) }
+      println("Calling collect again...")
+      flow.collect { value -> println(value) }
+  }
+  #+END_SRC
+
+  输出如下： 
+
+  #+BEGIN_SRC sh 
+  Calling foo...
+  Calling collect...
+  Flow started
+  1
+  2
+  3
+  Calling collect again...
+  Flow started
+  1
+  2
+  3
+  #+END_SRC
+
+  #+BEGIN_EXAMPLE
+    返回一个流的 foo() 函数没有标记 suspend 修饰符的主要原因：通过它自己，foo() 会尽快返回且不会进行任何等待
+
+
+    流在每次收集的时候启动：当再次调用 collect 时会看到“Flow started”
+  #+END_EXAMPLE
+* 取消流
+  流采用与协程同样的协作取消。然而，流的基础设施未引入其他取消点。取消完全透明
+
+  #+BEGIN_EXAMPLE
+    像往常一样，流的收集只有在当流在一个可取消的挂起函数（例如 delay）中挂起的时候取消，否则不能取消
+  #+END_EXAMPLE
+
+  下面的示例展示了当 withTimeoutOrNull 块中代码在运行的时候流是如何在超时的情况下取消并停止执行其代码的：
+
+  #+BEGIN_SRC kotlin 
+  import kotlinx.coroutines.delay
+  import kotlinx.coroutines.flow.Flow
+  import kotlinx.coroutines.flow.flow
+  import kotlinx.coroutines.runBlocking
+  import kotlinx.coroutines.withTimeoutOrNull
+
+  fun foo5(): Flow<Int> = flow {
+      for (i in 1..3) {
+	  delay(100)
+	  println("Emitting $i")
+	  emit(i)
+      }
+  }
+
+  fun main() = runBlocking {
+      withTimeoutOrNull(250) { // 在 250 毫秒后超时
+	  foo5().collect { value -> println(value) }
+      }
+      println("Done")
+  }
+  #+END_SRC
+
+  在 foo() 函数中流仅发射两个数字，产生以下输出：
+
+  #+BEGIN_SRC sh 
+  Emitting 1
+  1
+  Emitting 2
+  2
+  Done
+  #+END_SRC
+* 流构建器
+
+  #+BEGIN_EXAMPLE
+    先前示例中的 flow { ... } 构建器是最基础的一个
+  #+END_EXAMPLE
+  还有其它构建器使流的声明更简单：
+  + _flowOf_ 构建器定义了一个发射 _固定值_ 集的流
+  + 使用 _.asFlow()_ 扩展函数，可以将各种集合与序列转换为流
+
+  因此，从流中打印从 1 到 3 的数字的示例可以写成：
+
+  #+BEGIN_SRC kotlin 
+  import kotlinx.coroutines.flow.asFlow
+  import kotlinx.coroutines.runBlocking
+
+  fun main() = runBlocking<Unit> {
+      // 将一个整数区间转化为流
+      (1..3).asFlow().collect { value -> println(value) }
+  }
+  #+END_SRC
+* 过渡流操作符
+
+  #+BEGIN_EXAMPLE
+    可以使用操作符转换流，就像使用集合与序列一样
+  #+END_EXAMPLE
+
+  过渡操作符 *应用* 于 _上游流_ ，并 *返回* _下游流_ ，基础的操作符拥有相似的名字，比如 map 与 filter
+  + 这些操作符也是冷操作符，就像流一样
+    #+BEGIN_EXAMPLE
+      这类操作符本身不是挂起函数。它运行的速度很快，返回新的转换流的定义
+    #+END_EXAMPLE
+  + 流与序列的主要区别在于这些操作符中的代码 *可以* 调用 _挂起_ 函数 
+
+  举例来说，一个请求中的流可以使用 map 操作符映射出结果，即使执行一个长时间的请求操作也可以使用挂起函数来实现：
+
+  #+BEGIN_SRC kotlin 
+  import kotlinx.coroutines.delay
+  import kotlinx.coroutines.flow.asFlow
+  import kotlinx.coroutines.flow.map
+  import kotlinx.coroutines.runBlocking
+
+  suspend fun performRequest(request: Int): String {
+      delay(1000) // 模仿长时间运行的异步工作
+      return "response $request"
+  }
+
+  fun main() = runBlocking {
+      (1..3).asFlow() // 一个请求流
+	  .map { request -> performRequest(request) }
+	  .collect { response -> println(response) }
+  }
+  #+END_SRC
+
+  它产生以下三行，每一行每秒出现一次：
+
+  #+BEGIN_SRC sh 
+  response 1
+  response 2
+  response 3
+  #+END_SRC
+** 转换操作符
+
+   在流转换操作符中，最通用的一种称为 _transform_ 。它可以用来模仿简单的转换，例如 map 与 filter，以及实施更复杂的转换。 使用 transform 操作符，可以 *发射* 任意值任意次
+
+   #+BEGIN_EXAMPLE
+     比如说，使用 transform 可以在执行长时间运行的异步请求之前发射一个字符串并跟踪这个响应
+   #+END_EXAMPLE
+
+   #+BEGIN_SRC kotlin 
+  import kotlinx.coroutines.flow.asFlow
+  import kotlinx.coroutines.flow.transform
+  import kotlinx.coroutines.runBlocking
+
+  fun main() = runBlocking {
+      (1..3).asFlow() // 一个请求流
+	  .transform { request ->
+	      emit("Making request $request")
+	      emit(performRequest(request))
+	  }
+	  .collect { response -> println(response) }
+  }
+   #+END_SRC
+
+   这段代码的输出如下：
+
+   #+BEGIN_SRC sh 
+  Making request 1
+  response 1
+  Making request 2
+  response 2
+  Making request 3
+  response 3
+   #+END_SRC
+** 限长操作符
+   _限长_ 过渡操作符（例如 _take_ ）在流 *触及* 相应 _限制_ 的时候会将它的 _执行_ *取消* 
+
+   #+BEGIN_EXAMPLE
+     协程中的取消操作总是通过抛出异常来执行，这样所有的资源管理函数（如 try {...} finally {...} 块）会在取消的情况下正常运行
+   #+END_EXAMPLE
+
+   #+BEGIN_SRC kotlin 
+  import kotlinx.coroutines.flow.Flow
+  import kotlinx.coroutines.flow.flow
+  import kotlinx.coroutines.flow.take
+  import kotlinx.coroutines.runBlocking
+
+  fun numbers(): Flow<Int> = flow {
+      try {                          
+	  emit(1)
+	  emit(2) 
+	  println("This line will not execute")
+	  emit(3)    
+      } finally {
+	  println("Finally in numbers")
+      }
+  }
+
+  fun main() = runBlocking<Unit> {
+      numbers() 
+	  .take(2) // 只获取前两个
+	  .collect { value -> println(value) }
+  }  
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     这段代码的输出清楚地表明，numbers() 函数中对 flow {...} 函数体的执行在发射出第二个数字后停止
+   #+END_EXAMPLE
+
+   #+BEGIN_SRC sh 
+  1
+  2
+  Finally in numbers
+   #+END_SRC
+* 末端流操作符
+
+  _末端操作符_ 是在流上用于 *启动* _流收集_ 的 *挂起* 函数
+
+  #+BEGIN_EXAMPLE
+    collect 是最基础的末端操作符
+  #+END_EXAMPLE
+
+  还有另外一些更方便使用的末端操作符：
+  + 转化为各种集合，例如 _toList_ 与 _toSet_ 
+  + 获取第一个 _first_ 值与确保流发射单个 _single_ 值的操作符
+  + 使用 _reduce_ 与 _fold_ 将流规约到单个值 
+
+  #+BEGIN_SRC kotlin 
+  import kotlinx.coroutines.flow.asFlow
+  import kotlinx.coroutines.flow.map
+  import kotlinx.coroutines.flow.reduce
+  import kotlinx.coroutines.runBlocking
+
+  fun main() = runBlocking<Unit> {
+      val sum = (1..5).asFlow()
+	  .map { it * it } // 数字 1 至 5 的平方
+	  .reduce { a, b -> a + b } // 求和（末端操作符）
+      println(sum)
+  }
+  #+END_SRC
+
+  #+BEGIN_EXAMPLE
+  打印单个数字： 55 
+  #+END_EXAMPLE
+* 流是连续的
+  流的每次单独收集都是按 *顺序* 执行的，除非进行特殊操作的操作符使用多个流。该收集过程直接在 _协程_ 中运行，该协程 *调用* _末端操作符_ ：
+  + 默认情况下不启动新协程
+  + 从上游到下游 *每个* _过渡操作符_ 都会 *处理* 每个 _发射出的值_ 然后再交给末端操作符 
+
+  #+BEGIN_SRC kotlin 
+  import kotlinx.coroutines.flow.filter
+  import kotlinx.coroutines.flow.map
+  import kotlinx.coroutines.runBlocking
+
+  fun main() = runBlocking {
+      (1..5).asFlow()
+	  .filter {
+	      println("Filter $it")
+	      it % 2 == 0
+	  }
+	  .map {
+	      println("Map $it")
+	      "string $it"
+	  }.collect {
+	      println("Collect $it")
+	  }
+  }
+  #+END_SRC
+
+  输出：
+
+  #+BEGIN_SRC sh 
+  Filter 1
+  Filter 2
+  Map 2
+  Collect string 2
+  Filter 3
+  Filter 4
+  Map 4
+  Collect string 4
+  Filter 5
+  #+END_SRC
+
+  #+BEGIN_EXAMPLE
+    过滤偶数并将其映射到字符串
+  #+END_EXAMPLE
+* 流上下文
+
+  流的收集总是在 *调用* _协程_ 的 _上下文_ 中发生
+
+  #+BEGIN_EXAMPLE
+    例如，如果有一个流 foo，然后以下代码在它的编写者指定的上下文中运行，而无论流 foo 的实现细节如何
+  #+END_EXAMPLE
+
+  #+BEGIN_SRC kotlin 
+  withContext(context) {
+      foo.collect { value ->
+	  println(value) // 运行在指定上下文中
+      }
+  }
+  #+END_SRC
+
+  流的该属性称为 _上下文保存_ 
+
+  #+BEGIN_EXAMPLE
+    默认的，flow { ... } 构建器中的代码运行在相应流的收集器提供的上下文中
+
+    举例来说，考虑打印线程的 foo 的实现， 它被调用并发射三个数字
+  #+END_EXAMPLE
+
+  #+BEGIN_SRC kotlin 
+  import kotlinx.coroutines.flow.Flow
+  import kotlinx.coroutines.flow.flow
+  import kotlinx.coroutines.runBlocking
+
+  fun log(msg: String) = println("[${Thread.currentThread().name}] $msg")
+
+  fun foo(): Flow<Int> = flow {
+      log("Started foo flow")
+      for (i in 1..3) {
+	  emit(i)
+      }
+  }
+
+  fun main() = runBlocking {
+      foo().collect { value -> log("Collected $value") }
+  }
+  #+END_SRC
+
+  运行这段代码：
+
+  #+BEGIN_SRC sh 
+  [main @coroutine#1] Started foo flow
+  [main @coroutine#1] Collected 1
+  [main @coroutine#1] Collected 2
+  [main @coroutine#1] Collected 3
+  #+END_SRC
+
+  #+BEGIN_EXAMPLE
+  由于 foo().collect 是在主线程调用的，则 foo 的流主体也是在主线程调用的
+  #+END_EXAMPLE
+
+  这是快速运行或异步代码的理想默认形式，它 *不关心执行的上下文* 并且 *不会阻塞调用者* 
+** withContext 发出错误
+   #+BEGIN_EXAMPLE
+     然而，长时间运行的消耗 CPU 的代码也许需要在 Dispatchers.Default 上下文中执行，并且更新 UI 的代码也许需要在 Dispatchers.Main 中执行
+   #+END_EXAMPLE
+   通常，withContext 用于在 Kotlin 协程中改变代码的上下文，但是 flow {...} 构建器中的代码必须遵循上下文保存属性，并且不允许从其他上下文中发射（emit） 
+
+   #+BEGIN_SRC kotlin 
+  import kotlinx.coroutines.Dispatchers
+  import kotlinx.coroutines.flow.Flow
+  import kotlinx.coroutines.flow.flow
+  import kotlinx.coroutines.runBlocking
+  import kotlinx.coroutines.withContext
+
+  fun foo7(): Flow<Int> = flow {
+      // 在流构建器中更改消耗 CPU 代码的上下文的错误方式
+      withContext(Dispatchers.Default) {
+	  for (i in 1..3) {
+	      Thread.sleep(100) // 假装我们以消耗 CPU 的方式进行计算
+	      emit(i) // 发射下一个值
+	  }
+      }
+  }
+
+  fun main() = runBlocking {
+      foo7().collect { value -> println(value) }
+  }    
+   #+END_SRC
+
+   这段代码产生如下的异常：
+
+   #+BEGIN_SRC sh 
+  Exception in thread "main" java.lang.IllegalStateException: Flow invariant is violated:
+		  Flow was collected in [BlockingCoroutine{Active}@2eb45460, BlockingEventLoop@4861502a],
+		  but emission happened in [DispatchedCoroutine{Active}@31ddf337, Dispatchers.Default].
+		  Please refer to 'flow' documentation or use 'flowOn' instead
+   #+END_SRC
+** flowOn 操作符
+   _flowOn_ 函数用于 *更改* _流发射的上下文_ 
+
+   #+BEGIN_EXAMPLE
+     以下示例展示了更改流上下文的正确方法，该示例还通过打印相应线程的名字以展示它们的工作方式
+   #+END_EXAMPLE
+
+
+   #+BEGIN_SRC kotlin 
+  import kotlinx.coroutines.Dispatchers
+  import kotlinx.coroutines.flow.Flow
+  import kotlinx.coroutines.flow.flow
+  import kotlinx.coroutines.flow.flowOn
+  import kotlinx.coroutines.runBlocking
+
+  fun foo8(): Flow<Int> = flow {
+      for (i in 1..3) {
+	  Thread.sleep(100) // 假装我们以消耗 CPU 的方式进行计算
+	  log("Emitting $i")
+	  emit(i) // 发射下一个值
+      }
+  }.flowOn(Dispatchers.Default) // 在流构建器中改变消耗 CPU 代码上下文的正确方式
+
+  fun main() = runBlocking {
+      foo8().collect { value -> log("Collected $value") }
+  }
+   #+END_SRC
+
+   输出如下：
+
+   #+BEGIN_SRC sh 
+  [DefaultDispatcher-worker-1 @coroutine#2] Emitting 1
+  [main @coroutine#1] Collected 1
+  [DefaultDispatcher-worker-1 @coroutine#2] Emitting 2
+  [main @coroutine#1] Collected 2
+  [DefaultDispatcher-worker-1 @coroutine#2] Emitting 3
+  [main @coroutine#1] Collected 3
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     收集发生在一个协程中（“coroutine#1”）而发射发生在运行于另一个线程中与收集协程并发运行的另一个协程（“coroutine#2”）中
+   #+END_EXAMPLE
+
+   当上游流必须改变其上下文中的 CoroutineDispatcher 的时候，flowOn 操作符 *创建* 了 _另一个协程_ 
+* 缓冲
 
