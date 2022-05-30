@@ -262,7 +262,19 @@ for the JavaScript code in this tag.
 <li><a href="#orgae9e9ec">flowOn 操作符</a></li>
 </ul>
 </li>
-<li><a href="#org70939ad">缓冲</a></li>
+<li><a href="#org70939ad">缓冲</a>
+<ul>
+<li><a href="#orge8fbfe4">合并</a></li>
+<li><a href="#org8f87842">处理最新值</a></li>
+</ul>
+</li>
+<li><a href="#orgfa2504e">组合多个流</a>
+<ul>
+<li><a href="#orgb652f67">zip</a></li>
+<li><a href="#org64a9e57">Combine</a></li>
+</ul>
+</li>
+<li><a href="#org7b31137">流展平</a></li>
 </ul>
 </div>
 </div>
@@ -990,6 +1002,358 @@ Filter 5
 </div>
 <div id="outline-container-org70939ad" class="outline-2">
 <h2 id="org70939ad">缓冲</h2>
+<div class="outline-text-2" id="text-org70939ad">
+<p>
+从收集流所花费的时间来看，将流的不同部分运行在不同的协程中将会很有帮助，特别是当涉及到长时间运行的异步操作时
+</p>
+
+<pre class="example">
+    例如 foo() 流的发射很慢，它每花费 100 毫秒才产生一个元素；而收集器也非常慢， 需要花费 300 毫秒来处理元素
+
+    看看从该流收集三个数字要花费多长时间
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.delay</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.Flow</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.flow</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.runBlocking</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlin.system.measureTimeMillis</span>
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">foo9</span>(): <span style="color: #98f5ff;">Flow&lt;Int&gt;</span> = flow {
+    <span style="color: #00bfff; font-weight: bold;">for</span> (i <span style="color: #00bfff; font-weight: bold;">in</span> 1..3) {
+        delay(100) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20551;&#35013;&#25105;&#20204;&#24322;&#27493;&#31561;&#24453;&#20102; 100 &#27627;&#31186;</span>
+        emit(i) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#21457;&#23556;&#19979;&#19968;&#20010;&#20540;</span>
+    }
+}
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking {
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">time</span> = measureTimeMillis {
+        foo9().collect { value -&gt;
+            delay(300) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20551;&#35013;&#25105;&#20204;&#33457;&#36153; 300 &#27627;&#31186;&#26469;&#22788;&#29702;&#23427;</span>
+            println(value)
+        }
+    }
+    println(<span style="color: #deb887;">"Collected in </span><span style="color: #4eee94;">$time</span><span style="color: #deb887;"> ms"</span>)
+}
+</pre>
+</div>
+
+<p>
+它会产生这样的结果，整个收集过程大约需要 1200 毫秒（3 个数字，每个花费 400 毫秒）：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">1
+2
+3
+Collected<span style="color: #00bfff; font-weight: bold;"> in</span> 1279 ms
+</pre>
+</div>
+
+<p>
+可以在流上使用 <span class="underline">buffer</span> 操作符来 <b>并发</b> 运行 foo() 中发射元素的代码以及收集的代码， 而不是顺序运行它们：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">foo</span>(): <span style="color: #98f5ff;">Flow&lt;Int&gt;</span> = flow {
+    <span style="color: #00bfff; font-weight: bold;">for</span> (i <span style="color: #00bfff; font-weight: bold;">in</span> 1..3) {
+        delay(100) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20551;&#35013;&#25105;&#20204;&#24322;&#27493;&#31561;&#24453;&#20102; 100 &#27627;&#31186;</span>
+        emit(i) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#21457;&#23556;&#19979;&#19968;&#20010;&#20540;</span>
+    }
+}
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking&lt;<span style="color: #98f5ff;">Unit&gt;</span> { 
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">time</span> = measureTimeMillis {
+        foo()
+            .buffer() <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#32531;&#20914;&#21457;&#23556;&#39033;&#65292;&#26080;&#38656;&#31561;&#24453;</span>
+            .collect { value -&gt; 
+                delay(300) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20551;&#35013;&#25105;&#20204;&#33457;&#36153; 300 &#27627;&#31186;&#26469;&#22788;&#29702;&#23427;</span>
+                println(value) 
+            } 
+    }   
+    println(<span style="color: #deb887;">"Collected in </span><span style="color: #4eee94;">$time</span><span style="color: #deb887;"> ms"</span>)
+}
+</pre>
+</div>
+
+<p>
+它产生了相同的数字，只是更快了：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">1
+2
+3
+Collected<span style="color: #00bfff; font-weight: bold;"> in</span> 1071 ms
+</pre>
+</div>
+
+<pre class="example">
+    由于高效地创建了处理流水线， 仅仅需要等待第一个数字产生的 100 毫秒以及处理每个数字各需花费的 300 毫秒
+
+    这种方式大约花费了 1000 毫秒来运行
+</pre>
+</div>
+<div id="outline-container-orge8fbfe4" class="outline-3">
+<h3 id="orge8fbfe4">合并</h3>
+<div class="outline-text-3" id="text-orge8fbfe4">
+<pre class="example">
+     当流代表部分操作结果或操作状态更新时，可能没有必要处理每个值，而是只处理最新的那个
+</pre>
+
+<p>
+在本示例中，当收集器处理它们太慢的时候， <span class="underline">conflate</span> 操作符可以用于跳过中间值
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.delay</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.Flow</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.conflate</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.flow</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.runBlocking</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlin.system.measureTimeMillis</span>
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">foo10</span>(): <span style="color: #98f5ff;">Flow&lt;Int&gt;</span> = flow {
+    <span style="color: #00bfff; font-weight: bold;">for</span> (i <span style="color: #00bfff; font-weight: bold;">in</span> 1..3) {
+        delay(100) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20551;&#35013;&#25105;&#20204;&#24322;&#27493;&#31561;&#24453;&#20102; 100 &#27627;&#31186;</span>
+        emit(i) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#21457;&#23556;&#19979;&#19968;&#20010;&#20540;</span>
+    }
+}
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking {
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">time</span> = measureTimeMillis {
+        foo10()
+            .conflate() <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#21512;&#24182;&#21457;&#23556;&#39033;&#65292;&#19981;&#23545;&#27599;&#20010;&#20540;&#36827;&#34892;&#22788;&#29702;</span>
+            .collect { value -&gt;
+                delay(300) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20551;&#35013;&#25105;&#20204;&#33457;&#36153; 300 &#27627;&#31186;&#26469;&#22788;&#29702;&#23427;</span>
+                println(value)
+            }
+    }
+    println(<span style="color: #deb887;">"Collected in </span><span style="color: #4eee94;">$time</span><span style="color: #deb887;"> ms"</span>)
+}
+</pre>
+</div>
+
+<p>
+虽然第一个数字仍在处理中，但第二个和第三个数字已经产生，因此第二个是 conflated ，只有最新的（第三个）被交付给收集器：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">1
+3
+Collected<span style="color: #00bfff; font-weight: bold;"> in</span> 758 ms
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org8f87842" class="outline-3">
+<h3 id="org8f87842">处理最新值</h3>
+<div class="outline-text-3" id="text-org8f87842">
+<pre class="example">
+     当发射器和收集器都很慢的时候，合并是加快处理速度的一种方式。它通过删除发射值来实现
+</pre>
+<p>
+另一种方式是 <b>取消</b> 缓慢的收集器，并在每次 <span class="underline">发射</span> 新值的时候 <b>重新启动</b> 它。有一组与 xxx 操作符执行相同基本逻辑的 <span class="underline">xxxLatest</span> 操作符，但是在新值产生的时候取消执行其块中的代码。在先前的示例中尝试更换 conflate 为 <span class="underline">collectLatest</span> ：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.delay</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.Flow</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.collectLatest</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.flow</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.runBlocking</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlin.system.measureTimeMillis</span>
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">foo</span>(): <span style="color: #98f5ff;">Flow&lt;Int&gt;</span> = flow {
+    <span style="color: #00bfff; font-weight: bold;">for</span> (i <span style="color: #00bfff; font-weight: bold;">in</span> 1..3) {
+        delay(100) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20551;&#35013;&#25105;&#20204;&#24322;&#27493;&#31561;&#24453;&#20102; 100 &#27627;&#31186;</span>
+        emit(i) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#21457;&#23556;&#19979;&#19968;&#20010;&#20540;</span>
+    }
+}
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking {
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">time</span> = measureTimeMillis {
+        foo()
+            .collectLatest { value -&gt; <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#21462;&#28040;&#24182;&#37325;&#26032;&#21457;&#23556;&#26368;&#21518;&#19968;&#20010;&#20540;</span>
+                println(<span style="color: #deb887;">"Collecting </span><span style="color: #4eee94;">$value</span><span style="color: #deb887;">"</span>)
+                delay(300) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20551;&#35013;&#25105;&#20204;&#33457;&#36153; 300 &#27627;&#31186;&#26469;&#22788;&#29702;&#23427;</span>
+                println(<span style="color: #deb887;">"Done </span><span style="color: #4eee94;">$value</span><span style="color: #deb887;">"</span>)
+            }
+    }
+    println(<span style="color: #deb887;">"Collected in </span><span style="color: #4eee94;">$time</span><span style="color: #deb887;"> ms"</span>)
+}
+</pre>
+</div>
+
+<p>
+由于 collectLatest 的函数体需要花费 300 毫秒，但是新值每 100 秒发射一次，看到该代码块对每个值运行，但是只收集最后一个值：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">Collecting 1
+Collecting 2
+Collecting 3
+Done 3
+Collected<span style="color: #00bfff; font-weight: bold;"> in</span> 741 ms
+</pre>
+</div>
+</div>
+</div>
+</div>
+<div id="outline-container-orgfa2504e" class="outline-2">
+<h2 id="orgfa2504e">组合多个流</h2>
+<div class="outline-text-2" id="text-orgfa2504e">
+<p>
+组合多个流有很多种方式 
+</p>
+</div>
+<div id="outline-container-orgb652f67" class="outline-3">
+<h3 id="orgb652f67">zip</h3>
+<div class="outline-text-3" id="text-orgb652f67">
+<pre class="example">
+   就像 Kotlin 标准库中的 Sequence.zip 扩展函数一样
+</pre>
+<p>
+流拥有一个 <span class="underline">zip</span> 操作符用于 <b>组合</b> 两个流中的相关值：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.asFlow</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.flowOf</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.zip</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.runBlocking</span>
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking {
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">nums</span> = (1..3).asFlow() <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#25968;&#23383; 1..3</span>
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">strs</span> = flowOf(<span style="color: #deb887;">"one"</span>, <span style="color: #deb887;">"two"</span>, <span style="color: #deb887;">"three"</span>) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#23383;&#31526;&#20018;</span>
+    nums.zip(strs) { a, b -&gt; <span style="color: #deb887;">"</span><span style="color: #4eee94;">$a</span><span style="color: #deb887;"> -&gt; </span><span style="color: #4eee94;">$b</span><span style="color: #deb887;">"</span> } <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#32452;&#21512;&#21333;&#20010;&#23383;&#31526;&#20018;</span>
+        .collect { println(<span style="color: #00bfff; font-weight: bold;">it</span>) } <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#25910;&#38598;&#24182;&#25171;&#21360;</span>
+}
+</pre>
+</div>
+<p>
+示例打印如下：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">1 -&gt; one
+2 -&gt; two
+3 -&gt; three
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org64a9e57" class="outline-3">
+<h3 id="org64a9e57">Combine</h3>
+<div class="outline-text-3" id="text-org64a9e57">
+<p>
+当流表示一个变量或操作的最新值时，可能需要执行计算，这依赖于相应流的最新值，并且每当上游流产生值的时候都需要重新计算。这种相应的操作符家族称为 <span class="underline">combine</span> 
+</p>
+
+<pre class="example">
+     例如，先前示例中的数字如果每 300 毫秒更新一次，但字符串每 400 毫秒更新一次， 然后使用 zip 操作符合并它们，但仍会产生相同的结果， 尽管每 400 毫秒打印一次结果
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.delay</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.asFlow</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.flowOf</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.onEach</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.zip</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.runBlocking</span>
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking {
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">nums</span> = (1..3).asFlow().onEach { delay(300) } <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#21457;&#23556;&#25968;&#23383; 1..3&#65292;&#38388;&#38548; 300 &#27627;&#31186;</span>
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">strs</span> = flowOf(<span style="color: #deb887;">"one"</span>, <span style="color: #deb887;">"two"</span>, <span style="color: #deb887;">"three"</span>).onEach { delay(400) } <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#27599; 400 &#27627;&#31186;&#21457;&#23556;&#19968;&#27425;&#23383;&#31526;&#20018;</span>
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">startTime</span> = <span style="color: #98f5ff;">System.currentTimeMillis</span>() <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#35760;&#24405;&#24320;&#22987;&#30340;&#26102;&#38388;</span>
+    nums.zip(strs) { a, b -&gt; <span style="color: #deb887;">"</span><span style="color: #4eee94;">$a</span><span style="color: #deb887;"> -&gt; </span><span style="color: #4eee94;">$b</span><span style="color: #deb887;">"</span> } <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20351;&#29992;&#8220;zip&#8221;&#32452;&#21512;&#21333;&#20010;&#23383;&#31526;&#20018;</span>
+        .collect { value -&gt; <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#25910;&#38598;&#24182;&#25171;&#21360;</span>
+            println(<span style="color: #deb887;">"</span><span style="color: #4eee94;">$value</span><span style="color: #deb887;"> at ${</span><span style="color: #98f5ff;">System.currentTimeMillis</span>() - startTime<span style="color: #deb887;">} ms from start"</span>)
+        }
+}
+</pre>
+</div>
+
+<p>
+输出如下：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">1 -&gt; one at 493 ms from start
+2 -&gt; two at 893 ms from start
+3 -&gt; three at 1297 ms from start
+</pre>
+</div>
+
+<pre class="example">
+     示例中使用 onEach 过渡操作符来延时每次元素发射并使该流更具说明性以及更简洁
+</pre>
+
+<p>
+然而，当在这里使用 <span class="underline">combine</span> 操作符来替换 zip：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.</span>*
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.</span>*
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking&lt;<span style="color: #98f5ff;">Unit&gt;</span> { 
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">nums</span> = (1..3).asFlow().onEach { delay(300) } <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#21457;&#23556;&#25968;&#23383; 1..3&#65292;&#38388;&#38548; 300 &#27627;&#31186;</span>
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">strs</span> = flowOf(<span style="color: #deb887;">"one"</span>, <span style="color: #deb887;">"two"</span>, <span style="color: #deb887;">"three"</span>).onEach { delay(400) } <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#27599; 400 &#27627;&#31186;&#21457;&#23556;&#19968;&#27425;&#23383;&#31526;&#20018;</span>
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">startTime</span> = <span style="color: #98f5ff;">System.currentTimeMillis</span>() <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#35760;&#24405;&#24320;&#22987;&#30340;&#26102;&#38388;</span>
+    nums.combine(strs) { a, b -&gt; <span style="color: #deb887;">"</span><span style="color: #4eee94;">$a</span><span style="color: #deb887;"> -&gt; </span><span style="color: #4eee94;">$b</span><span style="color: #deb887;">"</span> } <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20351;&#29992;&#8220;combine&#8221;&#32452;&#21512;&#21333;&#20010;&#23383;&#31526;&#20018;</span>
+        .collect { value -&gt; <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#25910;&#38598;&#24182;&#25171;&#21360;</span>
+            println(<span style="color: #deb887;">"</span><span style="color: #4eee94;">$value</span><span style="color: #deb887;"> at ${</span><span style="color: #98f5ff;">System.currentTimeMillis</span>() - startTime<span style="color: #deb887;">} ms from start"</span>) 
+        } 
+}
+</pre>
+</div>
+
+<p>
+这次得到了完全不同的输出，其中，nums 或 strs 流中的每次发射都会打印一行：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">1 -&gt; one at 532 ms from start
+2 -&gt; one at 737 ms from start
+2 -&gt; two at 933 ms from start
+3 -&gt; two at 1038 ms from start
+3 -&gt; three at 1334 ms from start
+</pre>
+</div>
+</div>
+</div>
+</div>
+<div id="outline-container-org7b31137" class="outline-2">
+<h2 id="org7b31137">流展平</h2>
+<div class="outline-text-2" id="text-org7b31137">
+<pre class="example">
+    流是用来异步地接收一系列的值，所以它很容易遇到这样的场景：每个值都会触发一个请求去获取另外一系列的值
+</pre>
+
+
+<p>
+例如：下面的函数会先发射字符串 First, 再间隔500ms发射另一个字符串 Second 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">requestFlow</span>(i: <span style="color: #98f5ff;">Int</span>): <span style="color: #98f5ff;">Flow&lt;String&gt;</span> = flow {
+    emit(<span style="color: #deb887;">"</span><span style="color: #4eee94;">$i</span><span style="color: #deb887;">: First"</span>) 
+    delay(500) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">wait 500 ms</span>
+    emit(<span style="color: #deb887;">"</span><span style="color: #4eee94;">$i</span><span style="color: #deb887;">: Second"</span>)    
+}
+</pre>
+</div>
+
+<p>
+现在如果有一个三个整形值组成的流，然后每个值都去调用 requestFlow 函数：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin">(1..3).asFlow().map { requestFlow(<span style="color: #00bfff; font-weight: bold;">it</span>) }
+</pre>
+</div>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
