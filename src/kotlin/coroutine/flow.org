@@ -833,7 +833,7 @@
   #+END_EXAMPLE
 
 
-  例如：下面的函数会先发射字符串 First, 再间隔500ms发射另一个字符串 Second 
+  例如：下面的函数会先发射字符串 "First"，再间隔500ms发射另一个字符串 "Second" 
 
   #+BEGIN_SRC kotlin 
   fun requestFlow(i: Int): Flow<String> = flow {
@@ -843,10 +843,323 @@
   }
   #+END_SRC
 
-  现在如果有一个三个整形值组成的流，然后每个值都去调用 requestFlow 函数：
+  现在有一条由三个整形值组成的流，其中每一个值都去调用 requestFlow 函数：
 
   #+BEGIN_SRC kotlin 
   (1..3).asFlow().map { requestFlow(it) }
   #+END_SRC
 
+最后就得到了一条由流组成的流 _Flow<Flow<String>>_ ，如果要进一步处理，就需要把它 *展平* 到一条单独的流去
+
+#+begin_example
+  集合和Sequence有对应的 flatten 和 flattenMap 操作符
+
+  然而由于流的异步特性，展平的时候会有不同的模式，因此流也有一系列的操作符对应不同的模式
+#+end_example
+** flatMapConcat
+   Concatenating 模式通过 _flatMapConcat_ 和 _flattenConcat_ 操作符实现. 这是最直接的一种模式，内部流的每一个值都收集完毕才开始外部流下一个值的收集:
+
+   #+begin_src kotlin 
+     import kotlinx.coroutines.delay
+     import kotlinx.coroutines.flow.*
+     import kotlinx.coroutines.runBlocking
+
+
+     fun requestFlow(i: Int): Flow<String> = flow {
+	 emit("$i: First")
+	 delay(500) // wait 500 ms
+	 emit("$i: Second")
+     }
+
+     fun main() = runBlocking {
+	 val startTime = System.currentTimeMillis() // remember the start time
+	 (1..3).asFlow().onEach { delay(100) } // a number every 100 ms
+	     .flatMapConcat { requestFlow(it) }
+	     .collect { value -> // collect and print
+		 println("$value at ${System.currentTimeMillis() - startTime} ms from start")
+	     }
+     }
+   #+end_src
+   
+** flatMapMerge
+   这种模式是 *并发* 地 _收集_ 流输入然后把值 *合并* 到一条单独的流，这样可以让值尽可能快地发射出来。这种模式由  _flatMapMerge_ and _flattenMerge_ 操作符实现
+
+   #+begin_example
+     这两个操作符都接受一个可选的并发参数，用来限制在同一时间并发收集的流数量
+
+     默认值 DEFAULT_CONCURRENCY 
+   #+end_example
+
+   #+begin_src kotlin 
+     import kotlinx.coroutines.delay
+     import kotlinx.coroutines.flow.asFlow
+     import kotlinx.coroutines.flow.flatMapMerge
+     import kotlinx.coroutines.flow.onEach
+     import kotlinx.coroutines.runBlocking
+
+     fun main() = runBlocking {
+	 val startTime = System.currentTimeMillis() // remember the start time
+	 (1..3).asFlow().onEach { delay(100) } // a number every 100 ms
+	     .flatMapMerge { requestFlow(it) }
+	     .collect { value -> // collect and print
+		 println("$value at ${System.currentTimeMillis() - startTime} ms from start")
+	     }
+     }
+   #+end_src
+
+   输出结果如下：
+
+   #+begin_src sh 
+     1: First at 136 ms from start
+     2: First at 231 ms from start
+     3: First at 333 ms from start
+     1: Second at 639 ms from start
+     2: Second at 732 ms from start
+     3: Second at 833 ms from start
+   #+end_src
+   
+   #+begin_example
+     注意：flatMapMerge 顺序地调用  ({ requestFlow(it) } 代码段, 但是对于结果流的收集是并发地
+
+     这等同于执行一个顺序地映射 { requestFlow(it) } 然后在对结果调用 flattenMerge 
+   #+end_example
+** flatMapLatest
+
+类似于 collectLatest，另外一种展平模式是只收集最新的值：如果新的流开始发射，前面流的集合就会被抛弃。这种模式是由 flatMapLatest 操作符实现：
+
+#+begin_src kotlin 
+  import kotlinx.coroutines.delay
+  import kotlinx.coroutines.flow.asFlow
+  import kotlinx.coroutines.flow.flatMapLatest
+  import kotlinx.coroutines.flow.onEach
+  import kotlinx.coroutines.runBlocking
+
+  fun main() = runBlocking {
+      val startTime = System.currentTimeMillis() // remember the start time
+      (1..3).asFlow().onEach { delay(100) } // a number every 100 ms
+	  .flatMapLatest { requestFlow(it) }
+	  .collect { value -> // collect and print
+	      println("$value at ${System.currentTimeMillis() - startTime} ms from start")
+	  }
+  }
+#+end_src
+
+下面的输出是一个很好的例子：
+
+#+begin_src sh 
+  1: First at 320 ms from start
+  2: First at 430 ms from start
+  3: First at 533 ms from start
+  3: Second at 1044 ms from start
+#+end_src
+
+#+begin_example
+  注意：每当有一个新的值 在 ({ requestFlow(it) } 产生，会取消所有已经收集到的数字流
+
+  哪怕这里 requestFlow 函数运行很快，非挂起，不允许取消，行为也是这样
+#+end_example
+* 流异常
+流收集可能以异常来完成收集：
++ 发射值的时候抛出异常
++ 收集的时候抛出异常
+
+  有不同的方式来处理这些异常
+
+** 收集器 try 与 catch
+   收集操作符可以使用  _try/catch_ 代码块来处理异常：
+
+   #+begin_src kotlin 
+     import kotlinx.coroutines.flow.Flow
+     import kotlinx.coroutines.flow.flow
+     import kotlinx.coroutines.runBlocking
+
+     fun foo11(): Flow<Int> = flow {
+	 for (i in 1..3) {
+	     println("Emitting $i")
+	     emit(i) // emit next value
+	 }
+     }
+
+     fun main() = runBlocking {
+	 try {
+	     foo11().collect { value ->
+		 println(value)
+		 check(value <= 1) { "Collected $value" }
+	     }
+	 } catch (e: Throwable) {
+	     println("Caught $e")
+	 }
+     }
+   #+end_src
+
+   在成功捕获了 _collect_ 操作符内产生的异常后， *不再* 有新的值被 _发射_ 出来：
+
+   #+begin_src sh 
+     Emitting 1
+     1
+     Emitting 2
+     2
+     Caught java.lang.IllegalStateException: Collected 2
+   #+end_src
+
+** 一切都已捕获
+   #+begin_example
+     实际上前面的例子会捕获任何来自于发射或收集时候产生的异常
+   #+end_example
+
+   现在试着让异常产生于发射的代码内：
+
+   #+begin_src kotlin 
+     fun foo(): Flow<String> = 
+	 flow {
+	     for (i in 1..3) {
+		 println("Emitting $i")
+		 emit(i) // emit next value
+	     }
+	 }
+	 .map { value ->
+	     check(value <= 1) { "Crashed on $value" }                 
+	     "string $value"
+	 }
+
+     fun main() = runBlocking<Unit> {
+	 try {
+	     foo().collect { value -> println(value) }
+	 } catch (e: Throwable) {
+	     println("Caught $e")
+	 } 
+     }
+   #+end_src
+
+   类似地，异常同样被捕获，收集也被停止了
+   #+begin_src sh 
+     Emitting 1
+     string 1
+     Emitting 2
+     Caught java.lang.IllegalStateException: Crashed on 2
+   #+end_src
+   
+* 异常透明性
+#+begin_example
+  美中不足的是，这里的代码无法隐藏处理异常的逻辑
+
+  一般来说流应该对异常透明，因为这保证了在收集时候捕获的异常是收集时候的代码所产生的
+#+end_example
+发射器可以使用 _catch_ 操作符来维持异常透明性，并 *包装* _异常处理逻辑_ 。一般是分析错误，并且根据不同的错误做出不同的反应：
++ 异常被再次扔出
++ 异常转换成另外一个值发射出去
++ 异常被忽略，记录，或被其他代码处理
+  
+#+begin_src kotlin 
+  fun foo15(): Flow<String> =
+      flow {
+	  for (i in 1..3) {
+	      println("Emitting $i")
+	      emit(i) // emit next value
+	  }
+      }
+	  .map { value ->
+	      check(value <= 1) { "Crashed on $value" }
+	      "string $value"
+	  }
+
+  fun main() = runBlocking<Unit> {
+      foo15()
+	  .catch { e -> emit("Caught $e") } // emit on exception
+	  .collect { value -> println(value) }
+  }
+#+end_src
+
+虽然这里的输出和前面一样，但是不再有 try/catch 显示处理了
+
+#+begin_src sh 
+  Emitting 1
+  string 1
+  Emitting 2
+  Caught java.lang.IllegalStateException: Crashed on 2
+#+end_src
+
+** 异常逃逸
+   #+begin_example
+     然而上面的例子却无法处理收集器内 collect 代码块产生的异常
+   #+end_example
+
+   #+begin_src kotlin 
+     import kotlinx.coroutines.flow.Flow
+     import kotlinx.coroutines.flow.catch
+     import kotlinx.coroutines.flow.flow
+     import kotlinx.coroutines.runBlocking
+
+     fun foo16(): Flow<Int> = flow {
+	 for (i in 1..3) {
+	     println("Emitting $i")
+	     emit(i)
+	 }
+     }
+
+     fun main() = runBlocking {
+	 foo16()
+	     .catch { e -> println("Caught $e") } // does not catch downstream exceptions
+	     .collect { value ->
+		 check(value <= 1) { "Collected $value" }
+		 println(value)
+	     }
+     }
+   #+end_src
+
+   输出如下：
+
+   #+begin_src sh 
+     Emitting 1
+     1
+     Emitting 2
+     Exception in thread "main" java.lang.IllegalStateException: Collected 2
+	     at tutorial.coroutine.flow.FlowExceptionEscapeKt$main$1$2.emit(FlowExceptionEscape.kt:19)
+   #+end_src
+
+   
+** 声明式捕获
+做为改进可以把 collect 操作符里的代码移动到一个 _onEach_ 操作符内，并把 onEach 操作符放在 _catch_ 操作符前面：
+
+#+begin_src kotlin 
+  import kotlinx.coroutines.flow.Flow
+  import kotlinx.coroutines.flow.catch
+  import kotlinx.coroutines.flow.flow
+  import kotlinx.coroutines.flow.onEach
+  import kotlinx.coroutines.runBlocking
+
+  fun foo17(): Flow<Int> = flow {
+      for (i in 1..3) {
+	  println("Emitting $i")
+	  emit(i)
+      }
+  }
+
+  fun main() = runBlocking {
+      foo17()
+	  .onEach { value ->
+	      check(value <= 1) { "Collected $value" }
+	      println(value)
+	  }
+	  .catch { e -> println("Caught $e") }
+	  .collect {}
+  }
+#+end_src
+
+现在可以看到一条类似以 "Caught..." 开头的消息被打印出来
+
+#+begin_src sh 
+  Emitting 1
+  1
+  Emitting 2
+  Caught java.lang.IllegalStateException: Collected 2
+#+end_src
+
+#+begin_example
+  这里既使用了 catch 操作符的声明性，并且也处理了所有的异常
+
+  但也要注意：这里的 collect 不能有任何额外的逻辑
+#+end_example
+
+* 流完成
 

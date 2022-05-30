@@ -39,7 +39,7 @@
   }
   pre.src {
     position: relative;
-    overflow: visible;
+    overflow: auto;
     padding-top: 1.2em;
   }
   pre.src:before {
@@ -51,7 +51,7 @@
     padding: 3px;
     border: 1px solid black;
   }
-  pre.src:hover:before { display: inline;}
+  pre.src:hover:before { display: inline; margin-top: 14px;}
   /* Languages per Org manual */
   pre.src-asymptote:before { content: 'Asymptote'; }
   pre.src-awk:before { content: 'Awk'; }
@@ -160,6 +160,19 @@
   .footdef  { margin-bottom: 1em; }
   .figure { padding: 1em; }
   .figure p { text-align: center; }
+  .equation-container {
+    display: table;
+    text-align: center;
+    width: 100%;
+  }
+  .equation {
+    vertical-align: middle;
+  }
+  .equation-label {
+    display: table-cell;
+    text-align: right;
+    vertical-align: middle;
+  }
   .inlinetask {
     padding: 10px;
     border: 2px solid gray;
@@ -181,50 +194,26 @@
 </style>
 <link rel="stylesheet" type="text/css" href="../css/main.css" />
 <script type="text/javascript">
-/*
-@licstart  The following is the entire license notice for the
-JavaScript code in this tag.
-
-Copyright (C) 2012-2019 Free Software Foundation, Inc.
-
-The JavaScript code in this tag is free software: you can
-redistribute it and/or modify it under the terms of the GNU
-General Public License (GNU GPL) as published by the Free Software
-Foundation, either version 3 of the License, or (at your option)
-any later version.  The code is distributed WITHOUT ANY WARRANTY;
-without even the implied warranty of MERCHANTABILITY or FITNESS
-FOR A PARTICULAR PURPOSE.  See the GNU GPL for more details.
-
-As additional permission under GNU GPL version 3 section 7, you
-may distribute non-source (e.g., minimized or compacted) forms of
-that code without the copy of the GNU GPL normally required by
-section 4, provided you include this license notice and a URL
-through which recipients can access the Corresponding Source.
-
-
-@licend  The above is the entire license notice
-for the JavaScript code in this tag.
-*/
+// @license magnet:?xt=urn:btih:e95b018ef3580986a04669f1b5879592219e2a7a&dn=public-domain.txt Public Domain
 <!--/*--><![CDATA[/*><!--*/
- function CodeHighlightOn(elem, id)
- {
-   var target = document.getElementById(id);
-   if(null != target) {
-     elem.cacheClassElem = elem.className;
-     elem.cacheClassTarget = target.className;
-     target.className = "code-highlighted";
-     elem.className   = "code-highlighted";
-   }
- }
- function CodeHighlightOff(elem, id)
- {
-   var target = document.getElementById(id);
-   if(elem.cacheClassElem)
-     elem.className = elem.cacheClassElem;
-   if(elem.cacheClassTarget)
-     target.className = elem.cacheClassTarget;
- }
-/*]]>*///-->
+     function CodeHighlightOn(elem, id)
+     {
+       var target = document.getElementById(id);
+       if(null != target) {
+         elem.classList.add("code-highlighted");
+         target.classList.add("code-highlighted");
+       }
+     }
+     function CodeHighlightOff(elem, id)
+     {
+       var target = document.getElementById(id);
+       if(null != target) {
+         elem.classList.remove("code-highlighted");
+         target.classList.remove("code-highlighted");
+       }
+     }
+    /*]]>*///-->
+// @license-end
 </script>
 </head>
 <body>
@@ -238,20 +227,20 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org3de0396">协程调度器</a></li>
-<li><a href="#org1da26dc">非受限调度器</a></li>
-<li><a href="#org96ac00a">调试协程与线程</a>
+<li><a href="#orga90c80b">协程调度器</a></li>
+<li><a href="#org7d1d267">非受限调度器</a></li>
+<li><a href="#orgc6f9acc">调试协程与线程</a>
 <ul>
-<li><a href="#orgfc1d307">在不同线程间跳转</a></li>
+<li><a href="#orgf9f5e92">在不同线程间跳转</a></li>
 </ul>
 </li>
-<li><a href="#org761b854">上下文中的作业</a></li>
-<li><a href="#org37592d8">子协程</a></li>
-<li><a href="#orgb88804c">父协程</a></li>
-<li><a href="#org357cdfc">命名协程</a></li>
-<li><a href="#orgeb016db">组合上下文中的元素</a></li>
-<li><a href="#org12bb01b">协程作用域</a></li>
-<li><a href="#org80cbe9a">线程局部数据</a></li>
+<li><a href="#orgeb7d596">上下文中的作业</a></li>
+<li><a href="#orgc52a242">子协程</a></li>
+<li><a href="#org4259ef8">父协程</a></li>
+<li><a href="#org5aa11a8">命名协程</a></li>
+<li><a href="#org754168a">组合上下文中的元素</a></li>
+<li><a href="#org1d556d7">协程作用域</a></li>
+<li><a href="#org183b4c8">线程局部数据</a></li>
 </ul>
 </div>
 </div>
@@ -259,16 +248,16 @@ for the JavaScript code in this tag.
 协程总是运行在一些以 <span class="underline">CoroutineContext</span> 类型为代表的上下文中
 </p>
 
-<pre class="example">
-  这些上下文被定义在了 Kotlin 的标准库里，它是各种不同元素的集合，其中主元素是协程中的 Job
+<pre class="example" id="org8088e5d">
+这些上下文被定义在了 Kotlin 的标准库里，它是各种不同元素的集合，其中主元素是协程中的 Job
 </pre>
 
 <p>
 接下来将对它的调度器进行介绍
 </p>
-<div id="outline-container-org3de0396" class="outline-2">
-<h2 id="org3de0396">协程调度器</h2>
-<div class="outline-text-2" id="text-org3de0396">
+<div id="outline-container-orga90c80b" class="outline-2">
+<h2 id="orga90c80b">协程调度器</h2>
+<div class="outline-text-2" id="text-orga90c80b">
 <p>
 <span class="underline">协程上下文</span> 包含一个 <b>协程调度器</b> ，它确定了哪些 <span class="underline">线程</span> 或与线程相对应的协程执行。协程调度器可以：
 </p>
@@ -325,36 +314,36 @@ main runBlocking : I<span style="color: #deb887;">'m working in thread main</spa
 当调用 launch { …… } 时不传参数，它从启动了它的 CoroutineScope 中承袭了上下文（以及调度器）
 </p>
 
-<pre class="example">
-    在这个案例中，它从 main 线程中的 runBlocking 主协程承袭了上下文
+<pre class="example" id="orgeda6692">
+在这个案例中，它从 main 线程中的 runBlocking 主协程承袭了上下文
 </pre>
 <ul class="org-ul">
 <li><p>
 <span class="underline">Dispatchers.Unconfined</span> 是一个特殊的调度器且似乎也运行在 main 线程中
 </p>
-<pre class="example">
-      但实际上， 它是一种不同的机制，接下来会。
+<pre class="example" id="org7064c7a">
+但实际上， 它是一种不同的机制，接下来会。
 </pre></li>
 <li><p>
 <span class="underline">Dispatchers.Default</span> : 默认调度器，当协程在 GlobalScope 中启动的时候使用， 它代表 Dispatchers.Default 使用了 <b>共享</b> 的 <span class="underline">后台线程池</span> 
 </p>
-<pre class="example">
-      所以 GlobalScope.launch { …… } 也可以使用相同的调度器: launch(Dispatchers.Default) { …… }
+<pre class="example" id="org81acc44">
+所以 GlobalScope.launch { …… } 也可以使用相同的调度器: launch(Dispatchers.Default) { …… }
 </pre></li>
 <li><p>
 <span class="underline">newSingleThreadContext</span> : 为协程的运行 <b>启动</b> 了一个 <span class="underline">线程</span> 
 </p>
-<pre class="example">
-      一个专用的线程是一种非常昂贵的资源
+<pre class="example" id="org0dce0f5">
+一个专用的线程是一种非常昂贵的资源
 
-      在真实的应用程序中两者都必须被释放，当不再需要的时候，使用 close 函数，或存储在一个顶层变量中使它在整个应用程序中被重用
+在真实的应用程序中两者都必须被释放，当不再需要的时候，使用 close 函数，或存储在一个顶层变量中使它在整个应用程序中被重用
 </pre></li>
 </ul>
 </div>
 </div>
-<div id="outline-container-org1da26dc" class="outline-2">
-<h2 id="org1da26dc">非受限调度器</h2>
-<div class="outline-text-2" id="text-org1da26dc">
+<div id="outline-container-org7d1d267" class="outline-2">
+<h2 id="org7d1d267">非受限调度器</h2>
+<div class="outline-text-2" id="text-org7d1d267">
 <p>
 <span class="underline">Dispatchers.Unconfined</span> :
 </p>
@@ -362,14 +351,14 @@ main runBlocking : I<span style="color: #deb887;">'m working in thread main</spa
 <li><p>
 协程调度器在调用它的线程启动了一个协程，但它仅仅只是运行到第一个挂起点。挂起后，它恢复线程中的协程，而这完全由被调用的挂起函数来决定
 </p>
-<pre class="example">
-      非受限的调度器非常适用于执行不消耗 CPU 时间的任务，以及不更新局限于特定线程的任何共享数据（如UI）的协程
+<pre class="example" id="orgf39a1f5">
+非受限的调度器非常适用于执行不消耗 CPU 时间的任务，以及不更新局限于特定线程的任何共享数据（如UI）的协程
 </pre></li>
 <li><p>
 另一方面，该调度器默认继承了外部的 CoroutineScope
 </p>
-<pre class="example">
-      比如 runBlocking 协程的默认调度器，当它被限制在了调用者线程时，继承自它将会有效地限制协程在该线程运行并且具有可预测的 FIFO 调度
+<pre class="example" id="org1e32f96">
+比如 runBlocking 协程的默认调度器，当它被限制在了调用者线程时，继承自它将会有效地限制协程在该线程运行并且具有可预测的 FIFO 调度
 </pre></li>
 </ul>
 
@@ -415,24 +404,24 @@ main runBlocking: After delay<span style="color: #00bfff; font-weight: bold;"> i
 该协程的上下文继承自 runBlocking {&#x2026;} 协程并在 main 线程中运行，当 delay 函数调用的时候，非受限的那个协程在默认的执行者线程中恢复执行 
 </p>
 
-<pre class="example">
-    非受限的调度器是一种高级机制：可以在某些极端情况下提供帮助而不需要调度协程以便稍后执行或产生不希望的副作用，因为某些操作必须立即在协程中执行
+<pre class="example" id="orgef66175">
+非受限的调度器是一种高级机制：可以在某些极端情况下提供帮助而不需要调度协程以便稍后执行或产生不希望的副作用，因为某些操作必须立即在协程中执行
 
-    非受限调度器不应该在通常的代码中使用
+非受限调度器不应该在通常的代码中使用
 </pre>
 </div>
 </div>
-<div id="outline-container-org96ac00a" class="outline-2">
-<h2 id="org96ac00a">调试协程与线程</h2>
-<div class="outline-text-2" id="text-org96ac00a">
+<div id="outline-container-orgc6f9acc" class="outline-2">
+<h2 id="orgc6f9acc">调试协程与线程</h2>
+<div class="outline-text-2" id="text-orgc6f9acc">
 <p>
 协程可以在一个线程上挂起并在其它线程上恢复。甚至一个单线程的调度器也是难以弄清楚协程在何时何地正在做什么事情
 </p>
 
-<pre class="example">
-    使用通常调试应用程序的方法是让线程在每一个日志文件的日志声明中打印线程的名字，这种特性在日志框架中是普遍受支持的
+<pre class="example" id="org8c8e139">
+使用通常调试应用程序的方法是让线程在每一个日志文件的日志声明中打印线程的名字，这种特性在日志框架中是普遍受支持的
 
-    但是在使用协程时，单独的线程名称不会给出很多协程上下文信息，所以 kotlinx.coroutines 包含了调试工具来让它更简单
+但是在使用协程时，单独的线程名称不会给出很多协程上下文信息，所以 kotlinx.coroutines 包含了调试工具来让它更简单
 </pre>
 
 <p>
@@ -483,14 +472,14 @@ main runBlocking: After delay<span style="color: #00bfff; font-weight: bold;"> i
 这个 log 函数在方括号种打印了线程的名字，并且可以看到它是 main 线程，并且附带了当前正在其上执行的协程的标识符。这个标识符在调试模式开启时，将连续分配给所有创建的协程 
 </p>
 
-<pre class="example">
-    当 JVM 以 -ea 参数配置运行时，调试模式也会开启
+<pre class="example" id="orgdee9a61">
+当 JVM 以 -ea 参数配置运行时，调试模式也会开启
 </pre>
 </div>
 
-<div id="outline-container-orgfc1d307" class="outline-3">
-<h3 id="orgfc1d307">在不同线程间跳转</h3>
-<div class="outline-text-3" id="text-orgfc1d307">
+<div id="outline-container-orgf9f5e92" class="outline-3">
+<h3 id="orgf9f5e92">在不同线程间跳转</h3>
+<div class="outline-text-3" id="text-orgf9f5e92">
 <p>
 使用 -Dkotlinx.coroutines.debug JVM 参数运行下面的代码：
 </p>
@@ -528,16 +517,16 @@ main runBlocking: After delay<span style="color: #00bfff; font-weight: bold;"> i
 </pre>
 </div>
 
-<pre class="example">
-     注意，在这个例子中，当不再需要某个在 newSingleThreadContext 中创建的线程的时候， 它使用了 Kotlin 标准库中的 use 函数来释放该线程
+<pre class="example" id="org534920d">
+注意，在这个例子中，当不再需要某个在 newSingleThreadContext 中创建的线程的时候， 它使用了 Kotlin 标准库中的 use 函数来释放该线程
 </pre>
 </div>
 </div>
 </div>
 
-<div id="outline-container-org761b854" class="outline-2">
-<h2 id="org761b854">上下文中的作业</h2>
-<div class="outline-text-2" id="text-org761b854">
+<div id="outline-container-orgeb7d596" class="outline-2">
+<h2 id="orgeb7d596">上下文中的作业</h2>
+<div class="outline-text-2" id="text-orgeb7d596">
 <p>
 协程的 Job 是上下文的一部分，并且可以使用 <span class="underline">coroutineContext [Job]</span> 表达式在上下文中检索它：
 </p>
@@ -561,15 +550,15 @@ main runBlocking: After delay<span style="color: #00bfff; font-weight: bold;"> i
 </pre>
 </div>
 
-<pre class="example">
-    请注意，CoroutineScope 中的 isActive 只是 coroutineContext[Job]?.isActive == true 的一种方便的快捷方式
+<pre class="example" id="org40788ec">
+请注意，CoroutineScope 中的 isActive 只是 coroutineContext[Job]?.isActive == true 的一种方便的快捷方式
 </pre>
 </div>
 </div>
 
-<div id="outline-container-org37592d8" class="outline-2">
-<h2 id="org37592d8">子协程</h2>
-<div class="outline-text-2" id="text-org37592d8">
+<div id="outline-container-orgc52a242" class="outline-2">
+<h2 id="orgc52a242">子协程</h2>
+<div class="outline-text-2" id="text-orgc52a242">
 <p>
 当一个协程被其它协程在 CoroutineScope 中启动的时候， 它将通过 CoroutineScope.coroutineContext 来承袭上下文，并且这个新协程的 Job 将会成为父协程作业的 <span class="underline">子</span> 作业：
 </p>
@@ -578,8 +567,8 @@ main runBlocking: After delay<span style="color: #00bfff; font-weight: bold;"> i
 <li><p>
 然当使用 GlobalScope 来启动一个协程时，则新协程的作业 <b>没有</b> 父作业
 </p>
-<pre class="example">
-      因此它与这个启动的作用域无关且独立运作
+<pre class="example" id="orgde5d275">
+因此它与这个启动的作用域无关且独立运作
 </pre></li>
 </ul>
 
@@ -628,9 +617,9 @@ main: Who has survived request cancellation?
 </div>
 </div>
 
-<div id="outline-container-orgb88804c" class="outline-2">
-<h2 id="orgb88804c">父协程</h2>
-<div class="outline-text-2" id="text-orgb88804c">
+<div id="outline-container-org4259ef8" class="outline-2">
+<h2 id="org4259ef8">父协程</h2>
+<div class="outline-text-2" id="text-org4259ef8">
 <p>
 一个父协程总是 <b>等待</b> 所有的 <span class="underline">子协程</span> 执行 <span class="underline">结束</span> 。父协程并不显式的跟踪所有子协程的启动，并且不必使用 Job.join 在最后的时候等待它们：
 </p>
@@ -673,13 +662,13 @@ Now processing of the request is complete
 </div>
 </div>
 
-<div id="outline-container-org357cdfc" class="outline-2">
-<h2 id="org357cdfc">命名协程</h2>
-<div class="outline-text-2" id="text-org357cdfc">
-<pre class="example">
-    当协程经常打印日志并且只需要关联来自同一个协程的日志记录时， 则自动分配的 id 是非常好的
+<div id="outline-container-org5aa11a8" class="outline-2">
+<h2 id="org5aa11a8">命名协程</h2>
+<div class="outline-text-2" id="text-org5aa11a8">
+<pre class="example" id="orgfeff8ca">
+当协程经常打印日志并且只需要关联来自同一个协程的日志记录时， 则自动分配的 id 是非常好的
 
-    然而，当一个协程与特定请求的处理相关联时或做一些特定的后台任务，最好将其明确命名以用于调试目的
+然而，当一个协程与特定请求的处理相关联时或做一些特定的后台任务，最好将其明确命名以用于调试目的
 </pre>
 <p>
 <span class="underline">CoroutineName</span> 上下文元素与线程名具有相同的目的。当调试模式开启时，它被包含在正在执行此协程的线程名中 
@@ -723,15 +712,15 @@ Now processing of the request is complete
 </div>
 </div>
 
-<div id="outline-container-orgeb016db" class="outline-2">
-<h2 id="orgeb016db">组合上下文中的元素</h2>
-<div class="outline-text-2" id="text-orgeb016db">
+<div id="outline-container-org754168a" class="outline-2">
+<h2 id="org754168a">组合上下文中的元素</h2>
+<div class="outline-text-2" id="text-org754168a">
 <p>
 有时需要在协程上下文中定义多个元素。可以使用 <span class="underline">+</span> 操作符来实现
 </p>
 
-<pre class="example">
-    比如说，们可以显式指定一个调度器来启动协程并且同时显式指定一个命名
+<pre class="example" id="org03fa717">
+比如说，们可以显式指定一个调度器来启动协程并且同时显式指定一个命名
 </pre>
 
 <div class="org-src-container">
@@ -759,33 +748,33 @@ Now processing of the request is complete
 </div>
 </div>
 
-<div id="outline-container-org12bb01b" class="outline-2">
-<h2 id="org12bb01b">协程作用域</h2>
-<div class="outline-text-2" id="text-org12bb01b">
+<div id="outline-container-org1d556d7" class="outline-2">
+<h2 id="org1d556d7">协程作用域</h2>
+<div class="outline-text-2" id="text-org1d556d7">
 <p>
 接下来将关于上下文，子协程以及作业的知识综合在一起
 </p>
 
-<pre class="example">
-    假设应用程序拥有一个具有生命周期的对象，但这个对象并不是一个协程
+<pre class="example" id="org90aba48">
+假设应用程序拥有一个具有生命周期的对象，但这个对象并不是一个协程
 
-    举例来说，编写了一个 Android 应用程序并在 Android 的 activity 上下文中启动了一组协程来使用异步操作拉取并更新数据以及执行动画等等
+举例来说，编写了一个 Android 应用程序并在 Android 的 activity 上下文中启动了一组协程来使用异步操作拉取并更新数据以及执行动画等等
 
-    所有这些协程必须在这个 activity 销毁的时候取消以避免内存泄漏
+所有这些协程必须在这个 activity 销毁的时候取消以避免内存泄漏
 
-    当然也可以手动操作上下文与作业，以结合 activity 的生命周期与它的协程，但是 kotlinx.coroutines 提供了一个封装：CoroutineScope 的抽象
+当然也可以手动操作上下文与作业，以结合 activity 的生命周期与它的协程，但是 kotlinx.coroutines 提供了一个封装：CoroutineScope 的抽象
 
-    我们应该已经熟悉了协程作用域，因为所有的协程构建器都声明为在它之上的扩展
+我们应该已经熟悉了协程作用域，因为所有的协程构建器都声明为在它之上的扩展
 </pre>
 
 <p>
 通过创建一个 <span class="underline">CoroutineScope</span> 实例来管理协程的生命周期，并使它与 <span class="underline">activit</span> 的生命周期相关联。CoroutineScope 可以通过 <span class="underline">CoroutineScope()</span> 创建或者通过 <span class="underline">MainScope()</span> 工厂函数
 </p>
 
-<pre class="example">
-    前者创建了一个通用作用域
+<pre class="example" id="orgd592304">
+前者创建了一个通用作用域
 
-    后者为使用 Dispatchers.Main 作为默认调度器的 UI 应用程序 创建作用域
+后者为使用 Dispatchers.Main 作为默认调度器的 UI 应用程序 创建作用域
 </pre>
 
 <div class="org-src-container">
@@ -808,8 +797,8 @@ Now processing of the request is complete
 </pre>
 </div>
 
-<pre class="example">
-    现在可以在这个 Activity 的作用域中启动协程，且没有明确指定它们的上下文
+<pre class="example" id="org1a2393d">
+现在可以在这个 Activity 的作用域中启动协程，且没有明确指定它们的上下文
 </pre>
 <p>
 接下来启动了十个协程并延迟不同的时间：
@@ -834,10 +823,10 @@ Now processing of the request is complete
 在 main 函数中创建 activity，调用测试函数 doSomething，并且在 500 毫秒后销毁这个 activity
 </p>
 
-<pre class="example">
-    这取消了从 doSomething 启动的所有协程
+<pre class="example" id="org3fe5d11">
+这取消了从 doSomething 启动的所有协程
 
-    可以观察到这些是由于在销毁之后， 即使再等一会儿，activity 也不再打印消息
+可以观察到这些是由于在销毁之后， 即使再等一会儿，activity 也不再打印消息
 </pre>
 
 <p>
@@ -885,19 +874,19 @@ Destroying activity!
 </pre>
 </div>
 
-<pre class="example">
-    可以看到，只有前两个协程打印了消息，而另一个协程在 Activity.destroy() 中单次调用了 job.cancel()
+<pre class="example" id="org643a59b">
+可以看到，只有前两个协程打印了消息，而另一个协程在 Activity.destroy() 中单次调用了 job.cancel()
 </pre>
 </div>
 </div>
 
-<div id="outline-container-org80cbe9a" class="outline-2">
-<h2 id="org80cbe9a">线程局部数据</h2>
-<div class="outline-text-2" id="text-org80cbe9a">
-<pre class="example">
-    有时，能够将一些线程局部数据传递到协程与协程之间是很方便的
+<div id="outline-container-org183b4c8" class="outline-2">
+<h2 id="org183b4c8">线程局部数据</h2>
+<div class="outline-text-2" id="text-org183b4c8">
+<pre class="example" id="org2f59212">
+有时，能够将一些线程局部数据传递到协程与协程之间是很方便的
 
-    然而，由于它们不受任何特定线程的约束，如果手动完成，可能会导致出现样板代码
+然而，由于它们不受任何特定线程的约束，如果手动完成，可能会导致出现样板代码
 </pre>
 <p>
 <span class="underline">ThreadLocal</span> ，  <span class="underline">asContextElement</span> 扩展函数在这里会充当救兵。它创建了额外的上下文元素， 且保留给定 ThreadLocal 的值，并在每次协程切换其上下文时恢复它 
@@ -922,10 +911,10 @@ Destroying activity!
 </pre>
 </div>
 
-<pre class="example">
-    在这个例子中使用 Dispatchers.Default 在后台线程池中启动了一个新的协程，所以它工作在线程池中的不同线程中，但它仍然具有线程局部变量的值
+<pre class="example" id="org207a381">
+在这个例子中使用 Dispatchers.Default 在后台线程池中启动了一个新的协程，所以它工作在线程池中的不同线程中，但它仍然具有线程局部变量的值
 
-    指定使用 threadLocal.asContextElement(value = "launch")， 无论协程执行在什么线程中都是没有问题的
+指定使用 threadLocal.asContextElement(value = "launch")， 无论协程执行在什么线程中都是没有问题的
 </pre>
 <p>
 因此，其输出如所示：
@@ -939,30 +928,30 @@ Post-main, current thread: Thread[main @coroutine#1,5,main], thread local value:
 </pre>
 </div>
 
-<pre class="example">
-    但这很容易忘记去设置相应的上下文元素
+<pre class="example" id="org066af91">
+但这很容易忘记去设置相应的上下文元素
 
-    如果运行协程的线程不同， 在协程中访问的线程局部变量则可能会产生意外的值
+如果运行协程的线程不同， 在协程中访问的线程局部变量则可能会产生意外的值
 
-    为了避免这种情况，建议使用 ensurePresent 方法并且在不正确的使用时快速失败
+为了避免这种情况，建议使用 ensurePresent 方法并且在不正确的使用时快速失败
 
 </pre>
 <p>
 ThreadLocal 具有一流的支持，可以与任何 kotlinx.coroutines 提供的原语一起使用
 </p>
 
-<pre class="example">
-    但它有一个关键限制，即：当一个线程局部变量变化时，则这个新值不会传播给协程调用者（因为上下文元素无法追踪所有 ThreadLocal 对象访问），并且下次挂起时更新的值将丢失
+<pre class="example" id="org881e9fe">
+但它有一个关键限制，即：当一个线程局部变量变化时，则这个新值不会传播给协程调用者（因为上下文元素无法追踪所有 ThreadLocal 对象访问），并且下次挂起时更新的值将丢失
 </pre>
 
 <p>
 所以不得不使用 <span class="underline">withContext</span> 在协程中更新线程局部变量
 </p>
 
-<pre class="example">
-    另外，一个值可以存储在一个可变的域中，例如 class Counter(var i: Int)，但是就必须手动保证对对这个可变的属性正确地并发修改 
+<pre class="example" id="orge3ad0a5">
+另外，一个值可以存储在一个可变的域中，例如 class Counter(var i: Int)，但是就必须手动保证对对这个可变的属性正确地并发修改 
 
-    对于高级的使用，例如，那些在内部使用线程局部传递数据的用于与日志记录 MDC 集成，以及事务上下文或任何其它库，可以参考 ThreadContextElement 接口的文档
+对于高级的使用，例如，那些在内部使用线程局部传递数据的用于与日志记录 MDC 集成，以及事务上下文或任何其它库，可以参考 ThreadContextElement 接口的文档
 </pre>
 
 <table border="2" cellspacing="0" cellpadding="6" rules="groups" frame="hsides">
