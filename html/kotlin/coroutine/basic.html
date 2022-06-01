@@ -39,7 +39,7 @@
   }
   pre.src {
     position: relative;
-    overflow: auto;
+    overflow: visible;
     padding-top: 1.2em;
   }
   pre.src:before {
@@ -51,7 +51,7 @@
     padding: 3px;
     border: 1px solid black;
   }
-  pre.src:hover:before { display: inline; margin-top: 14px;}
+  pre.src:hover:before { display: inline;}
   /* Languages per Org manual */
   pre.src-asymptote:before { content: 'Asymptote'; }
   pre.src-awk:before { content: 'Awk'; }
@@ -160,19 +160,6 @@
   .footdef  { margin-bottom: 1em; }
   .figure { padding: 1em; }
   .figure p { text-align: center; }
-  .equation-container {
-    display: table;
-    text-align: center;
-    width: 100%;
-  }
-  .equation {
-    vertical-align: middle;
-  }
-  .equation-label {
-    display: table-cell;
-    text-align: right;
-    vertical-align: middle;
-  }
   .inlinetask {
     padding: 10px;
     border: 2px solid gray;
@@ -194,26 +181,50 @@
 </style>
 <link rel="stylesheet" type="text/css" href="../css/main.css" />
 <script type="text/javascript">
-// @license magnet:?xt=urn:btih:e95b018ef3580986a04669f1b5879592219e2a7a&dn=public-domain.txt Public Domain
+/*
+@licstart  The following is the entire license notice for the
+JavaScript code in this tag.
+
+Copyright (C) 2012-2019 Free Software Foundation, Inc.
+
+The JavaScript code in this tag is free software: you can
+redistribute it and/or modify it under the terms of the GNU
+General Public License (GNU GPL) as published by the Free Software
+Foundation, either version 3 of the License, or (at your option)
+any later version.  The code is distributed WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU GPL for more details.
+
+As additional permission under GNU GPL version 3 section 7, you
+may distribute non-source (e.g., minimized or compacted) forms of
+that code without the copy of the GNU GPL normally required by
+section 4, provided you include this license notice and a URL
+through which recipients can access the Corresponding Source.
+
+
+@licend  The above is the entire license notice
+for the JavaScript code in this tag.
+*/
 <!--/*--><![CDATA[/*><!--*/
-     function CodeHighlightOn(elem, id)
-     {
-       var target = document.getElementById(id);
-       if(null != target) {
-         elem.classList.add("code-highlighted");
-         target.classList.add("code-highlighted");
-       }
-     }
-     function CodeHighlightOff(elem, id)
-     {
-       var target = document.getElementById(id);
-       if(null != target) {
-         elem.classList.remove("code-highlighted");
-         target.classList.remove("code-highlighted");
-       }
-     }
-    /*]]>*///-->
-// @license-end
+ function CodeHighlightOn(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(null != target) {
+     elem.cacheClassElem = elem.className;
+     elem.cacheClassTarget = target.className;
+     target.className = "code-highlighted";
+     elem.className   = "code-highlighted";
+   }
+ }
+ function CodeHighlightOff(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(elem.cacheClassElem)
+     elem.className = elem.cacheClassElem;
+   if(elem.cacheClassTarget)
+     target.className = elem.cacheClassTarget;
+ }
+/*]]>*///-->
 </script>
 </head>
 <body>
@@ -227,23 +238,23 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org821468b">第一个协程程序</a>
+<li><a href="#org5980cdb">第一个协程程序</a>
 <ul>
-<li><a href="#org6d3c80c">阻塞与非阻塞</a></li>
-<li><a href="#org146ffac">等待一个作业</a></li>
-<li><a href="#orgc2503a6">结构化的并发</a></li>
-<li><a href="#orga77fe07">作用域构建器</a></li>
-<li><a href="#org6a30cb9">提取函数重构</a></li>
-<li><a href="#org8f18684">协程很轻量</a></li>
+<li><a href="#orgea2d0b9">阻塞与非阻塞</a></li>
+<li><a href="#org257de27">等待一个作业</a></li>
+<li><a href="#org224e94f">结构化的并发</a></li>
+<li><a href="#org924b565">作用域构建器</a></li>
+<li><a href="#orgd230146">提取函数重构</a></li>
+<li><a href="#orgef61680">协程很轻量</a></li>
 </ul>
 </li>
-<li><a href="#org0ab3776">全局协程</a></li>
+<li><a href="#orgfc8161f">全局协程</a></li>
 </ul>
 </div>
 </div>
-<div id="outline-container-org821468b" class="outline-2">
-<h2 id="org821468b">第一个协程程序</h2>
-<div class="outline-text-2" id="text-org821468b">
+<div id="outline-container-org5980cdb" class="outline-2">
+<h2 id="org5980cdb">第一个协程程序</h2>
+<div class="outline-text-2" id="text-org5980cdb">
 <p>
 运行以下代码：
 </p>
@@ -276,16 +287,16 @@ World!
 本质上， <span class="underline">协程</span> 是 <b>轻量级</b> 的 <span class="underline">线程</span> 。 它们在某些 <span class="underline">CoroutineScope</span> <b>上下文</b> 中与 <span class="underline">launch</span> *协程构建器( 一起启动
 </p>
 
-<pre class="example" id="org9eb5001">
-这里在 GlobalScope 中启动了一个新的协程，这意味着新协程的生命周期只受整个应用程序的生命周期限制 
+<pre class="example">
+    这里在 GlobalScope 中启动了一个新的协程，这意味着新协程的生命周期只受整个应用程序的生命周期限制 
 </pre>
 
 <p>
 可以将 <span class="underline">GlobalScope.launch { …… }</span> 替换为 thread { …… }，将 <span class="underline">delay(……)</span> 替换为 Thread.sleep(……) 达到同样目的
 </p>
 
-<pre class="example" id="orgba7c2e7">
-不要忘记导入 kotlin.concurrent.thread
+<pre class="example">
+    不要忘记导入 kotlin.concurrent.thread
 </pre>
 
 <p>
@@ -301,13 +312,13 @@ World!
 这是因为 <span class="underline">delay</span> 是一个特殊的 <b>挂起</b> 函数 ，它不会造成线程阻塞，但是会 <span class="underline">挂起</span> 协程，并且 <b>只能</b> 在 <span class="underline">协程</span> 中使用 
 </p>
 </div>
-<div id="outline-container-org6d3c80c" class="outline-3">
-<h3 id="org6d3c80c">阻塞与非阻塞</h3>
-<div class="outline-text-3" id="text-org6d3c80c">
-<pre class="example" id="org72aaa75">
-上个示例在同一段代码中混用了 非阻塞的 delay(……) 与 阻塞的 Thread.sleep(……)
+<div id="outline-container-orgea2d0b9" class="outline-3">
+<h3 id="orgea2d0b9">阻塞与非阻塞</h3>
+<div class="outline-text-3" id="text-orgea2d0b9">
+<pre class="example">
+     上个示例在同一段代码中混用了 非阻塞的 delay(……) 与 阻塞的 Thread.sleep(……)
 
-这容易记混哪个是阻塞的、哪个是非阻塞的
+     这容易记混哪个是阻塞的、哪个是非阻塞的
 </pre>
 <p>
 显式使用 <span class="underline">runBlocking</span> 协程构建器来阻塞：
@@ -334,8 +345,8 @@ World!
 这里的 <span class="underline">runBlocking&lt;Unit&gt; { …… }</span> 作为用来 <b>启动</b> <span class="underline">顶层主协程</span> 的 <span class="underline">适配器</span> ， 调用了 runBlocking 的主线程会一直 <b>阻塞</b> 直到 runBlocking 内部的协程执行完毕 
 </p>
 
-<pre class="example" id="orgf4e68a4">
-显式指定了其返回类型 Unit，因为在 Kotlin 中 main 函数必须返回 Unit 类型
+<pre class="example">
+     显式指定了其返回类型 Unit，因为在 Kotlin 中 main 函数必须返回 Unit 类型
 </pre>
 
 <p>
@@ -353,11 +364,11 @@ World!
 </div>
 </div>
 </div>
-<div id="outline-container-org146ffac" class="outline-3">
-<h3 id="org146ffac">等待一个作业</h3>
-<div class="outline-text-3" id="text-org146ffac">
-<pre class="example" id="org2121f06">
-延迟一段时间来等待另一个协程运行并不是一个好的选择
+<div id="outline-container-org257de27" class="outline-3">
+<h3 id="org257de27">等待一个作业</h3>
+<div class="outline-text-3" id="text-org257de27">
+<pre class="example">
+     延迟一段时间来等待另一个协程运行并不是一个好的选择
 </pre>
 
 <p>
@@ -376,20 +387,20 @@ World!
 </pre>
 </div>
 
-<pre class="example" id="orgaeecf64">
-现在，结果仍然相同，但是主协程与后台作业的持续时间没有任何关系了。好多了
+<pre class="example">
+     现在，结果仍然相同，但是主协程与后台作业的持续时间没有任何关系了。好多了
 </pre>
 </div>
 </div>
-<div id="outline-container-orgc2503a6" class="outline-3">
-<h3 id="orgc2503a6">结构化的并发</h3>
-<div class="outline-text-3" id="text-orgc2503a6">
-<pre class="example" id="org1967b17">
-协程的实际使用还有一些需要改进的地方：当使用 GlobalScope.launch 时，会创建一个顶层协程。虽然它很轻量，但它运行时仍会消耗一些内存资源
+<div id="outline-container-org224e94f" class="outline-3">
+<h3 id="org224e94f">结构化的并发</h3>
+<div class="outline-text-3" id="text-org224e94f">
+<pre class="example">
+     协程的实际使用还有一些需要改进的地方：当使用 GlobalScope.launch 时，会创建一个顶层协程。虽然它很轻量，但它运行时仍会消耗一些内存资源
 
-如果忘记保持对新启动的协程的引用，它还会继续运行。如果协程中的代码挂起了会怎么样（例如，错误地延迟了太长时间）
+     如果忘记保持对新启动的协程的引用，它还会继续运行。如果协程中的代码挂起了会怎么样（例如，错误地延迟了太长时间）
 
-如果启动了太多的协程并导致内存不足会怎么样？ 必须手动保持对所有已启动协程的引用并 join 是很容易出错
+     如果启动了太多的协程并导致内存不足会怎么样？ 必须手动保持对所有已启动协程的引用并 join 是很容易出错
 </pre>
 
 <p>
@@ -410,14 +421,14 @@ World!
 在示例中，使用 runBlocking 协程构建器将 main 函数转换为协程。 包括 runBlocking 在内的每个协程构建器都将 CoroutineScope 的实例添加到其代码块所在的作用域中
 </p>
 
-<pre class="example" id="org4e12663">
-可以在这个作用域中启动协程而无需显式 join 之，因为外部协程（示例中的 runBlocking）直到在其作用域中启动的所有协程都执行完毕后才会结束
+<pre class="example">
+     可以在这个作用域中启动协程而无需显式 join 之，因为外部协程（示例中的 runBlocking）直到在其作用域中启动的所有协程都执行完毕后才会结束
 </pre>
 </div>
 </div>
-<div id="outline-container-orga77fe07" class="outline-3">
-<h3 id="orga77fe07">作用域构建器</h3>
-<div class="outline-text-3" id="text-orga77fe07">
+<div id="outline-container-org924b565" class="outline-3">
+<h3 id="org924b565">作用域构建器</h3>
+<div class="outline-text-3" id="text-org924b565">
 <p>
 除了由不同的构建器提供协程作用域之外，还可以使用 <span class="underline">coroutineScope</span> 构建器声明自己的作用域。它会 <b>创建</b> 一个 <span class="underline">协程作用域</span> 并且在 <b>所有</b> <span class="underline">已启动子协程</span> <b>执行完毕</b> 之前 <b>不会</b> <span class="underline">结束</span> 。runBlocking 与 coroutineScope 可能看起来很类似，因为它们都会等待其协程体以及所有子协程结束。 这两者的主要区别在于：
 </p>
@@ -426,8 +437,8 @@ World!
 <li>coroutineScope 只是 <b>挂起</b> ，会释放底层线程用于其他用途</li>
 </ul>
 
-<pre class="example" id="org9eb2329">
-由于存在这点差异，runBlocking 是常规函数，而 coroutineScope 是挂起函数
+<pre class="example">
+     由于存在这点差异，runBlocking 是常规函数，而 coroutineScope 是挂起函数
 </pre>
 
 <p>
@@ -458,15 +469,15 @@ World!
 </pre>
 </div>
 
-<pre class="example" id="org141c654">
-请注意，当等待内嵌 launch 时，紧挨“Task from coroutine scope”消息之后， 就会执行并输出“Task from runBlocking”，尽管 coroutineScope 尚未结束，正好说明非阻塞
+<pre class="example">
+     请注意，当等待内嵌 launch 时，紧挨“Task from coroutine scope”消息之后， 就会执行并输出“Task from runBlocking”，尽管 coroutineScope 尚未结束，正好说明非阻塞
 </pre>
 </div>
 </div>
 
-<div id="outline-container-org6a30cb9" class="outline-3">
-<h3 id="org6a30cb9">提取函数重构</h3>
-<div class="outline-text-3" id="text-org6a30cb9">
+<div id="outline-container-orgd230146" class="outline-3">
+<h3 id="orgd230146">提取函数重构</h3>
+<div class="outline-text-3" id="text-orgd230146">
 <p>
 将 <span class="underline">launch { …… }</span> 内部的代码块提取到独立的函数中。当对这段代码执行 <span class="underline">提取函数</span> 重构时，会得到一个带有 <span class="underline">suspend</span> 修饰符的新函数
 </p>
@@ -503,23 +514,23 @@ World!
 </p>
 
 
-<pre class="example" id="org981e976">
-但是如果提取出的函数包含一个在当前作用域中调用的协程构建器的话，该怎么办？ 在这种情况下，所提取函数上只有 suspend 修饰符是不够的
+<pre class="example">
+     但是如果提取出的函数包含一个在当前作用域中调用的协程构建器的话，该怎么办？ 在这种情况下，所提取函数上只有 suspend 修饰符是不够的
 
-为 CoroutineScope 写一个 doWorld 扩展方法是其中一种解决方案，但这可能并非总是适用，因为它并没有使 API 更加清晰
+     为 CoroutineScope 写一个 doWorld 扩展方法是其中一种解决方案，但这可能并非总是适用，因为它并没有使 API 更加清晰
 
-惯用的解决方案是要么显式将 CoroutineScope 作为包含该函数的类的一个字段， 要么当外部类实现了 CoroutineScope 时隐式取得
+     惯用的解决方案是要么显式将 CoroutineScope 作为包含该函数的类的一个字段， 要么当外部类实现了 CoroutineScope 时隐式取得
 
-作为最后的手段，可以使用 CoroutineScope(coroutineContext)，不过这种方法结构上不安全， 因为不能再控制该方法执行的作用域
+     作为最后的手段，可以使用 CoroutineScope(coroutineContext)，不过这种方法结构上不安全， 因为不能再控制该方法执行的作用域
 
-只有私有 API 才能使用这个构建器 
+     只有私有 API 才能使用这个构建器 
 </pre>
 </div>
 </div>
 
-<div id="outline-container-org8f18684" class="outline-3">
-<h3 id="org8f18684">协程很轻量</h3>
-<div class="outline-text-3" id="text-org8f18684">
+<div id="outline-container-orgef61680" class="outline-3">
+<h3 id="orgef61680">协程很轻量</h3>
+<div class="outline-text-3" id="text-orgef61680">
 <p>
 运行以下代码：
 </p>
@@ -541,17 +552,17 @@ World!
 </pre>
 </div>
 
-<pre class="example" id="org6b4469d">
-它启动了 10 万个协程，并且在一秒钟后，每个协程都输出一个点
+<pre class="example">
+     它启动了 10 万个协程，并且在一秒钟后，每个协程都输出一个点
 
-现在，尝试使用线程来实现。会发生什么？（很可能代码会产生某种内存不足的错误）
+     现在，尝试使用线程来实现。会发生什么？（很可能代码会产生某种内存不足的错误）
 </pre>
 </div>
 </div>
 </div>
-<div id="outline-container-org0ab3776" class="outline-2">
-<h2 id="org0ab3776">全局协程</h2>
-<div class="outline-text-2" id="text-org0ab3776">
+<div id="outline-container-orgfc8161f" class="outline-2">
+<h2 id="orgfc8161f">全局协程</h2>
+<div class="outline-text-2" id="text-orgfc8161f">
 <p>
 以下代码在 GlobalScope 中启动了一个长期运行的协程，该协程每秒输出“I'm sleeping”两次，之后在主函数中延迟一段时间后返回
 </p>
@@ -586,8 +597,8 @@ I<span style="color: #deb887;">'m sleeping 2 ...</span>
 </pre>
 </div>
 
-<pre class="example" id="org0456050">
-在 GlobalScope 中启动的活动协程并不会使进程保活。它们就像守护线程
+<pre class="example">
+    在 GlobalScope 中启动的活动协程并不会使进程保活。它们就像守护线程
 </pre>
 
 <table border="2" cellspacing="0" cellpadding="6" rules="groups" frame="hsides">

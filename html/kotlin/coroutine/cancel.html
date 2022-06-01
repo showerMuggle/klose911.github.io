@@ -39,7 +39,7 @@
   }
   pre.src {
     position: relative;
-    overflow: auto;
+    overflow: visible;
     padding-top: 1.2em;
   }
   pre.src:before {
@@ -51,7 +51,7 @@
     padding: 3px;
     border: 1px solid black;
   }
-  pre.src:hover:before { display: inline; margin-top: 14px;}
+  pre.src:hover:before { display: inline;}
   /* Languages per Org manual */
   pre.src-asymptote:before { content: 'Asymptote'; }
   pre.src-awk:before { content: 'Awk'; }
@@ -160,19 +160,6 @@
   .footdef  { margin-bottom: 1em; }
   .figure { padding: 1em; }
   .figure p { text-align: center; }
-  .equation-container {
-    display: table;
-    text-align: center;
-    width: 100%;
-  }
-  .equation {
-    vertical-align: middle;
-  }
-  .equation-label {
-    display: table-cell;
-    text-align: right;
-    vertical-align: middle;
-  }
   .inlinetask {
     padding: 10px;
     border: 2px solid gray;
@@ -194,26 +181,50 @@
 </style>
 <link rel="stylesheet" type="text/css" href="../css/main.css" />
 <script type="text/javascript">
-// @license magnet:?xt=urn:btih:e95b018ef3580986a04669f1b5879592219e2a7a&dn=public-domain.txt Public Domain
+/*
+@licstart  The following is the entire license notice for the
+JavaScript code in this tag.
+
+Copyright (C) 2012-2019 Free Software Foundation, Inc.
+
+The JavaScript code in this tag is free software: you can
+redistribute it and/or modify it under the terms of the GNU
+General Public License (GNU GPL) as published by the Free Software
+Foundation, either version 3 of the License, or (at your option)
+any later version.  The code is distributed WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU GPL for more details.
+
+As additional permission under GNU GPL version 3 section 7, you
+may distribute non-source (e.g., minimized or compacted) forms of
+that code without the copy of the GNU GPL normally required by
+section 4, provided you include this license notice and a URL
+through which recipients can access the Corresponding Source.
+
+
+@licend  The above is the entire license notice
+for the JavaScript code in this tag.
+*/
 <!--/*--><![CDATA[/*><!--*/
-     function CodeHighlightOn(elem, id)
-     {
-       var target = document.getElementById(id);
-       if(null != target) {
-         elem.classList.add("code-highlighted");
-         target.classList.add("code-highlighted");
-       }
-     }
-     function CodeHighlightOff(elem, id)
-     {
-       var target = document.getElementById(id);
-       if(null != target) {
-         elem.classList.remove("code-highlighted");
-         target.classList.remove("code-highlighted");
-       }
-     }
-    /*]]>*///-->
-// @license-end
+ function CodeHighlightOn(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(null != target) {
+     elem.cacheClassElem = elem.className;
+     elem.cacheClassTarget = target.className;
+     target.className = "code-highlighted";
+     elem.className   = "code-highlighted";
+   }
+ }
+ function CodeHighlightOff(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(elem.cacheClassElem)
+     elem.className = elem.cacheClassElem;
+   if(elem.cacheClassTarget)
+     target.className = elem.cacheClassTarget;
+ }
+/*]]>*///-->
 </script>
 </head>
 <body>
@@ -227,31 +238,31 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org68e8e74">取消协程的执行</a>
+<li><a href="#org9aacfbd">取消协程的执行</a>
 <ul>
-<li><a href="#orgb84e634">取消是协作的</a></li>
-<li><a href="#org9da1aaa">取消计算代码</a>
+<li><a href="#org7953664">取消是协作的</a></li>
+<li><a href="#org1c58a28">取消计算代码</a>
 <ul>
-<li><a href="#orgcb832b3">在 finally 中释放资源</a></li>
+<li><a href="#org9f1da55">在 finally 中释放资源</a></li>
 </ul>
 </li>
-<li><a href="#org6a66fe5">运行不能取消的代码块</a></li>
+<li><a href="#org06edf27">运行不能取消的代码块</a></li>
 </ul>
 </li>
-<li><a href="#orga4dfc4d">超时</a></li>
+<li><a href="#org1960042">超时</a></li>
 </ul>
 </div>
 </div>
 
-<div id="outline-container-org68e8e74" class="outline-2">
-<h2 id="org68e8e74">取消协程的执行</h2>
-<div class="outline-text-2" id="text-org68e8e74">
+<div id="outline-container-org9aacfbd" class="outline-2">
+<h2 id="org9aacfbd">取消协程的执行</h2>
+<div class="outline-text-2" id="text-org9aacfbd">
 <p>
 在一个长时间运行的应用程序中，也许需要对后台协程进行细粒度的控制 
 </p>
 
-<pre class="example" id="orgbe06d18">
-比如说，一个用户也许关闭了一个启动了协程的界面，那么现在协程的执行结果已经不再被需要了，这时，它应该是可以被取消的
+<pre class="example">
+    比如说，一个用户也许关闭了一个启动了协程的界面，那么现在协程的执行结果已经不再被需要了，这时，它应该是可以被取消的
 </pre>
 
 <p>
@@ -298,20 +309,20 @@ main: Now I can quit.
 一旦 main 函数调用了 <span class="underline">job.cancel</span> ，在其它的协程中就看不到任何输出，因为它被取消了
 </p>
 
-<pre class="example" id="orgcca1229">
-这里也有一个可以使 Job 挂起的函数 cancelAndJoin 它合并了对 cancel 以及 join 的调用
+<pre class="example">
+    这里也有一个可以使 Job 挂起的函数 cancelAndJoin 它合并了对 cancel 以及 join 的调用
 </pre>
 </div>
 
-<div id="outline-container-orgb84e634" class="outline-3">
-<h3 id="orgb84e634">取消是协作的</h3>
-<div class="outline-text-3" id="text-orgb84e634">
+<div id="outline-container-org7953664" class="outline-3">
+<h3 id="org7953664">取消是协作的</h3>
+<div class="outline-text-3" id="text-org7953664">
 <p>
 协程的取消是 <b>协作</b> 的。一段协程代码必须协作才能被取消。 所有 kotlinx.coroutines 中的 <span class="underline">挂起</span> 函数都是 <b>可被取消的</b> 
 </p>
 
-<pre class="example" id="orge404b6d">
-它们检查协程的取消， 并在取消时抛出 CancellationException 
+<pre class="example">
+     它们检查协程的取消， 并在取消时抛出 CancellationException 
 </pre>
 
 <p>
@@ -343,15 +354,15 @@ main: Now I can quit.
 </pre>
 </div>
 
-<pre class="example" id="org29e6ee1">
-运行示例代码，可以看到它连续打印出了“I'm sleeping”，甚至在调用取消后， 作业仍然执行了五次循环迭代并运行到了它结束为止
+<pre class="example">
+     运行示例代码，可以看到它连续打印出了“I'm sleeping”，甚至在调用取消后， 作业仍然执行了五次循环迭代并运行到了它结束为止
 </pre>
 </div>
 </div>
 
-<div id="outline-container-org9da1aaa" class="outline-3">
-<h3 id="org9da1aaa">取消计算代码</h3>
-<div class="outline-text-3" id="text-org9da1aaa">
+<div id="outline-container-org1c58a28" class="outline-3">
+<h3 id="org1c58a28">取消计算代码</h3>
+<div class="outline-text-3" id="text-org1c58a28">
 <p>
 有两种方法来使执行计算的代码可以被取消：
 </p>
@@ -392,14 +403,14 @@ main: Now I can quit.
 <p>
 <span class="underline">isActive</span> 是一个可以被使用在 CoroutineScope 中的 <b>扩展</b> 属性
 </p>
-<pre class="example" id="orgbf86ce2">
-可以看到，现在循环被取消了
+<pre class="example">
+     可以看到，现在循环被取消了
 </pre>
 </div>
 
-<div id="outline-container-orgcb832b3" class="outline-4">
-<h4 id="orgcb832b3">在 finally 中释放资源</h4>
-<div class="outline-text-4" id="text-orgcb832b3">
+<div id="outline-container-org9f1da55" class="outline-4">
+<h4 id="org9f1da55">在 finally 中释放资源</h4>
+<div class="outline-text-4" id="text-org9f1da55">
 <p>
 通常使用如下的方法处理在被取消时抛出 CancellationException 的可被取消的挂起函数。比如说， <span class="underline">try {……} finally {……}</span>  表达式以及 Kotlin 的 <span class="underline">use</span> 函数一般在协程被取消的时候执行它们的终结动作：
 </p>
@@ -447,13 +458,13 @@ job: I<span style="color: #deb887;">'m running finally</span>
 </div>
 </div>
 
-<div id="outline-container-org6a66fe5" class="outline-3">
-<h3 id="org6a66fe5">运行不能取消的代码块</h3>
-<div class="outline-text-3" id="text-org6a66fe5">
-<pre class="example" id="org272eaf8">
-在前一个例子中任何尝试在 finally 块中调用挂起函数的行为都会抛出 CancellationException，因为这里持续运行的代码是可以被取消的
+<div id="outline-container-org06edf27" class="outline-3">
+<h3 id="org06edf27">运行不能取消的代码块</h3>
+<div class="outline-text-3" id="text-org06edf27">
+<pre class="example">
+     在前一个例子中任何尝试在 finally 块中调用挂起函数的行为都会抛出 CancellationException，因为这里持续运行的代码是可以被取消的
 
-通常，这并不是一个问题，所有良好的关闭操作（关闭一个文件、取消一个作业、或是关闭任何一种通信通道）通常都是非阻塞的，并且不会调用任何挂起函数
+     通常，这并不是一个问题，所有良好的关闭操作（关闭一个文件、取消一个作业、或是关闭任何一种通信通道）通常都是非阻塞的，并且不会调用任何挂起函数
 </pre>
 <p>
 然而，在真实的案例中，当需要挂起一个被取消的协程，可以将相应的代码包装在 <span class="underline">withContext(NonCancellable) {……}</span> 中，并使用 withContext 函数以及 NonCancellable 上下文：
@@ -488,13 +499,13 @@ job: I<span style="color: #deb887;">'m running finally</span>
 </div>
 </div>
 
-<div id="outline-container-orga4dfc4d" class="outline-2">
-<h2 id="orga4dfc4d">超时</h2>
-<div class="outline-text-2" id="text-orga4dfc4d">
-<pre class="example" id="org6203080">
-在实践中绝大多数取消一个协程的理由是它有可能超时
+<div id="outline-container-org1960042" class="outline-2">
+<h2 id="org1960042">超时</h2>
+<div class="outline-text-2" id="text-org1960042">
+<pre class="example">
+    在实践中绝大多数取消一个协程的理由是它有可能超时
 
-接下来一个例子是手动追踪一个相关 Job 的引用并启动了一个单独的协程在延迟后取消追踪
+    接下来一个例子是手动追踪一个相关 Job 的引用并启动了一个单独的协程在延迟后取消追踪
 </pre>
 <p>
 可以使用 <span class="underline">withTimeout</span> 函数来做这件事：
@@ -532,10 +543,10 @@ I<span style="color: #deb887;">'m sleeping 2 ...</span>
 withTimeout 抛出了 TimeoutCancellationException，它是 CancellationException 的子类
 </p>
 
-<pre class="example" id="org5c9dc7a">
-之前没有在控制台上看到堆栈跟踪信息的打印，这是因为在被取消的协程中 CancellationException 被认为是协程执行结束的正常原因
+<pre class="example">
+    之前没有在控制台上看到堆栈跟踪信息的打印，这是因为在被取消的协程中 CancellationException 被认为是协程执行结束的正常原因
 
-然而，在这个示例中在 main 函数中正确地使用了 withTimeout
+    然而，在这个示例中在 main 函数中正确地使用了 withTimeout
 </pre>
 
 <p>
