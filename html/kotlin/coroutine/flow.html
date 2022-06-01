@@ -282,7 +282,18 @@
 <li><a href="#org3507e7d">声明式捕获</a></li>
 </ul>
 </li>
-<li><a href="#org308b09f">流完成</a></li>
+<li><a href="#org308b09f">流完成</a>
+<ul>
+<li><a href="#org0a6e2f1">命令式 finally 块</a></li>
+<li><a href="#org81e4928">声明式处理</a>
+<ul>
+<li><a href="#org6c17885">仅限上游异常</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#org3464cd3">流启动</a></li>
+<li><a href="#org3fc2edf">流 与 响应式流</a></li>
 </ul>
 </div>
 </div>
@@ -290,7 +301,7 @@
 挂起函数可以异步的返回单个值，但是该如何异步返回多个计算好的值呢
 </p>
 
-<pre class="example" id="orgb018216">
+<pre class="example" id="org4947b60">
 这正是 Kotlin 流（Flow）的用武之地
 </pre>
 <div id="outline-container-orgfe976dd" class="outline-2">
@@ -300,7 +311,7 @@
 在 Kotlin 中可以使用集合来表示多个值
 </p>
 
-<pre class="example" id="org5057db1">
+<pre class="example" id="org7e68377">
 比如说，可以拥有一个函数 foo()，它返回一个包含三个数字的 List， 然后使用 forEach 打印它们
 </pre>
 
@@ -322,10 +333,10 @@
 
 <div class="org-src-container">
 <pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">foo</span>(): <span style="color: #98f5ff;">Sequence&lt;Int&gt;</span> = sequence { <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#24207;&#21015;&#26500;&#24314;&#22120;</span>
-    <span style="color: #00bfff; font-weight: bold;">for</span> (i <span style="color: #00bfff; font-weight: bold;">in</span> 1..3) {
-        <span style="color: #98f5ff;">Thread.sleep</span>(100) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20551;&#35013;&#25105;&#20204;&#27491;&#22312;&#35745;&#31639;</span>
-        yield(i) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20135;&#29983;&#19979;&#19968;&#20010;&#20540;</span>
-    }
+                                      <span style="color: #00bfff; font-weight: bold;">for</span> (i <span style="color: #00bfff; font-weight: bold;">in</span> 1..3) {
+                                          <span style="color: #98f5ff;">Thread.sleep</span>(100) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20551;&#35013;&#25105;&#20204;&#27491;&#22312;&#35745;&#31639;</span>
+                                          yield(i) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20135;&#29983;&#19979;&#19968;&#20010;&#20540;</span>
+                                      }
 }
 
 <span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
@@ -335,7 +346,7 @@
 </div>
 
 
-<pre class="example" id="org9ad1db6">
+<pre class="example" id="org8b0e4a0">
 这段代码输出相同的数字，但在打印每个数字之前等待 100 毫秒
 </pre>
 </div>
@@ -343,7 +354,7 @@
 <div id="outline-container-org9c38518" class="outline-3">
 <h3 id="org9c38518">挂起</h3>
 <div class="outline-text-3" id="text-org9c38518">
-<pre class="example" id="orgca76a7f">
+<pre class="example" id="org6a52b4c">
 然而，计算过程阻塞运行该代码的主线程
 </pre>
 <p>
@@ -366,7 +377,7 @@
 </pre>
 </div>
 
-<pre class="example" id="org9e78a53">
+<pre class="example" id="orgcce337d">
 这段代码将会在等待一秒之后打印数字
 </pre>
 </div>
@@ -374,7 +385,7 @@
 <div id="outline-container-orgf6b52ab" class="outline-3">
 <h3 id="orgf6b52ab">流</h3>
 <div class="outline-text-3" id="text-orgf6b52ab">
-<pre class="example" id="org2382ded">
+<pre class="example" id="orga5919e3">
 使用 List 结果类型，意味着只能一次返回所有值
 </pre>
 
@@ -390,10 +401,10 @@
 <span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.runBlocking</span>
 
 <span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">foo3</span>(): <span style="color: #98f5ff;">Flow&lt;Int&gt;</span> = flow { <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#27969;&#26500;&#24314;&#22120;</span>
-    <span style="color: #00bfff; font-weight: bold;">for</span> (i <span style="color: #00bfff; font-weight: bold;">in</span> 1..3) {
-        delay(100) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20551;&#35013;&#25105;&#20204;&#22312;&#36825;&#37324;&#20570;&#20102;&#19968;&#20123;&#26377;&#29992;&#30340;&#20107;&#24773;</span>
-        emit(i) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#21457;&#36865;&#19979;&#19968;&#20010;&#20540;</span>
-    }
+                               <span style="color: #00bfff; font-weight: bold;">for</span> (i <span style="color: #00bfff; font-weight: bold;">in</span> 1..3) {
+                                   delay(100) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20551;&#35013;&#25105;&#20204;&#22312;&#36825;&#37324;&#20570;&#20102;&#19968;&#20123;&#26377;&#29992;&#30340;&#20107;&#24773;</span>
+                                   emit(i) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#21457;&#36865;&#19979;&#19968;&#20010;&#20540;</span>
+                               }
 }
 
 <span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking {
@@ -410,7 +421,7 @@
 </pre>
 </div>
 
-<pre class="example" id="orgb97b6a0">
+<pre class="example" id="org557bea2">
 这段代码在不阻塞主线程的情况下每等待 100 毫秒打印一个数字
 
 在主线程中运行一个单独的协程每 100 毫秒打印一次 “I'm not blocked” 已经经过了验证
@@ -441,7 +452,7 @@ I<span style="color: #deb887;">'m not blocked 3</span>
 <li>流使用 <span class="underline">collect</span> 函数 <b>收集</b> 值</li>
 </ul>
 
-<pre class="example" id="orgf4c9b26">
+<pre class="example" id="org1325494">
 可以在 foo 的 flow { ... } 函数体内使用 delay 代替 Thread.sleep 以观察主线程在本案例中被阻塞了
 </pre>
 </div>
@@ -453,7 +464,7 @@ I<span style="color: #deb887;">'m not blocked 3</span>
 <p>
 Flow 是一种类似于序列的异步流
 </p>
-<pre class="example" id="org5ca1c12">
+<pre class="example" id="orgcb916ff">
 flow 构建器中的代码直到流被收集的时候才运行
 </pre>
 
@@ -505,7 +516,7 @@ Flow started
 </pre>
 </div>
 
-<pre class="example" id="org54fca7d">
+<pre class="example" id="orgbe096cf">
 返回一个流的 foo() 函数没有标记 suspend 修饰符的主要原因：通过它自己，foo() 会尽快返回且不会进行任何等待
 
 
@@ -520,7 +531,7 @@ Flow started
 流采用与协程同样的协作取消。然而，流的基础设施未引入其他取消点。取消完全透明
 </p>
 
-<pre class="example" id="org58f5af6">
+<pre class="example" id="orge296482">
 像往常一样，流的收集只有在当流在一个可取消的挂起函数（例如 delay）中挂起的时候取消，否则不能取消
 </pre>
 
@@ -545,7 +556,7 @@ Flow started
 
 <span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking {
     withTimeoutOrNull(250) { <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#22312; 250 &#27627;&#31186;&#21518;&#36229;&#26102;</span>
-        foo5().collect { value -&gt; println(value) }
+                             foo5().collect { value -&gt; println(value) }
     }
     println(<span style="color: #deb887;">"Done"</span>)
 }
@@ -569,7 +580,7 @@ Done
 <div id="outline-container-org16ca0a9" class="outline-2">
 <h2 id="org16ca0a9">流构建器</h2>
 <div class="outline-text-2" id="text-org16ca0a9">
-<pre class="example" id="org85701cc">
+<pre class="example" id="orge828e43">
 先前示例中的 flow { ... } 构建器是最基础的一个
 </pre>
 <p>
@@ -599,7 +610,7 @@ Done
 <div id="outline-container-orgbf22fcf" class="outline-2">
 <h2 id="orgbf22fcf">过渡流操作符</h2>
 <div class="outline-text-2" id="text-orgbf22fcf">
-<pre class="example" id="org6fc366e">
+<pre class="example" id="org5d32f19">
 可以使用操作符转换流，就像使用集合与序列一样
 </pre>
 
@@ -610,7 +621,7 @@ Done
 <li><p>
 这些操作符也是冷操作符，就像流一样
 </p>
-<pre class="example" id="orgb6d6bc1">
+<pre class="example" id="orgbe22e0d">
 这类操作符本身不是挂起函数。它运行的速度很快，返回新的转换流的定义
 </pre></li>
 <li>流与序列的主要区别在于这些操作符中的代码 <b>可以</b> 调用 <span class="underline">挂起</span> 函数</li>
@@ -657,7 +668,7 @@ response 3
 在流转换操作符中，最通用的一种称为 <span class="underline">transform</span> 。它可以用来模仿简单的转换，例如 map 与 filter，以及实施更复杂的转换。 使用 transform 操作符，可以 <b>发射</b> 任意值任意次
 </p>
 
-<pre class="example" id="org8504d35">
+<pre class="example" id="orgc5dcc77">
 比如说，使用 transform 可以在执行长时间运行的异步请求之前发射一个字符串并跟踪这个响应
 </pre>
 
@@ -669,8 +680,8 @@ response 3
 <span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking {
     (1..3).asFlow() <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#19968;&#20010;&#35831;&#27714;&#27969;</span>
         .transform { request -&gt;
-            emit(<span style="color: #deb887;">"Making request </span><span style="color: #4eee94;">$request</span><span style="color: #deb887;">"</span>)
-            emit(performRequest(request))
+                         emit(<span style="color: #deb887;">"Making request </span><span style="color: #4eee94;">$request</span><span style="color: #deb887;">"</span>)
+                     emit(performRequest(request))
         }
         .collect { response -&gt; println(response) }
 }
@@ -699,7 +710,7 @@ response 3
 <span class="underline">限长</span> 过渡操作符（例如 <span class="underline">take</span> ）在流 <b>触及</b> 相应 <span class="underline">限制</span> 的时候会将它的 <span class="underline">执行</span> <b>取消</b> 
 </p>
 
-<pre class="example" id="orgada16c7">
+<pre class="example" id="org9140cf0">
 协程中的取消操作总是通过抛出异常来执行，这样所有的资源管理函数（如 try {...} finally {...} 块）会在取消的情况下正常运行
 </pre>
 
@@ -711,10 +722,10 @@ response 3
 
 <span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">numbers</span>(): <span style="color: #98f5ff;">Flow&lt;Int&gt;</span> = flow {
     <span style="color: #00bfff; font-weight: bold;">try</span> {                          
-        emit(1)
-        emit(2) 
-        println(<span style="color: #deb887;">"This line will not execute"</span>)
-        emit(3)    
+                                   emit(1)
+                                   emit(2) 
+                                   println(<span style="color: #deb887;">"This line will not execute"</span>)
+                                   emit(3)    
     } <span style="color: #00bfff; font-weight: bold;">finally</span> {
         println(<span style="color: #deb887;">"Finally in numbers"</span>)
     }
@@ -728,7 +739,7 @@ response 3
 </pre>
 </div>
 
-<pre class="example" id="org5eedcc3">
+<pre class="example" id="org2a3477c">
 这段代码的输出清楚地表明，numbers() 函数中对 flow {...} 函数体的执行在发射出第二个数字后停止
 </pre>
 
@@ -748,7 +759,7 @@ Finally<span style="color: #00bfff; font-weight: bold;"> in</span> numbers
 <span class="underline">末端操作符</span> 是在流上用于 <b>启动</b> <span class="underline">流收集</span> 的 <b>挂起</b> 函数
 </p>
 
-<pre class="example" id="orgaf18aee">
+<pre class="example" id="org732fd14">
 collect 是最基础的末端操作符
 </pre>
 
@@ -776,7 +787,7 @@ collect 是最基础的末端操作符
 </pre>
 </div>
 
-<pre class="example" id="org7a63136">
+<pre class="example" id="org0abf03a">
 打印单个数字： 55 
 </pre>
 </div>
@@ -830,7 +841,7 @@ Filter 5
 </pre>
 </div>
 
-<pre class="example" id="org2d618e2">
+<pre class="example" id="orga74867a">
 过滤偶数并将其映射到字符串
 </pre>
 </div>
@@ -842,14 +853,14 @@ Filter 5
 流的收集总是在 <b>调用</b> <span class="underline">协程</span> 的 <span class="underline">上下文</span> 中发生
 </p>
 
-<pre class="example" id="org4fd35e4">
+<pre class="example" id="org90192ad">
 例如，如果有一个流 foo，然后以下代码在它的编写者指定的上下文中运行，而无论流 foo 的实现细节如何
 </pre>
 
 <div class="org-src-container">
 <pre class="src src-kotlin">withContext(context) {
     foo.collect { value -&gt;
-        println(value) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#36816;&#34892;&#22312;&#25351;&#23450;&#19978;&#19979;&#25991;&#20013;</span>
+                      println(value) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#36816;&#34892;&#22312;&#25351;&#23450;&#19978;&#19979;&#25991;&#20013;</span>
     }
 }
 </pre>
@@ -859,7 +870,7 @@ Filter 5
 流的该属性称为 <span class="underline">上下文保存</span> 
 </p>
 
-<pre class="example" id="orgd7d87a9">
+<pre class="example" id="orge947467">
 默认的，flow { ... } 构建器中的代码运行在相应流的收集器提供的上下文中
 
 举例来说，考虑打印线程的 foo 的实现， 它被调用并发射三个数字
@@ -897,7 +908,7 @@ Filter 5
 </pre>
 </div>
 
-<pre class="example" id="orge369027">
+<pre class="example" id="org9de121c">
 由于 foo().collect 是在主线程调用的，则 foo 的流主体也是在主线程调用的
 </pre>
 
@@ -908,7 +919,7 @@ Filter 5
 <div id="outline-container-orgfad236c" class="outline-3">
 <h3 id="orgfad236c">withContext 发出错误</h3>
 <div class="outline-text-3" id="text-orgfad236c">
-<pre class="example" id="org034efc5">
+<pre class="example" id="org2c70090">
 然而，长时间运行的消耗 CPU 的代码也许需要在 Dispatchers.Default 上下文中执行，并且更新 UI 的代码也许需要在 Dispatchers.Main 中执行
 </pre>
 <p>
@@ -944,9 +955,9 @@ Filter 5
 
 <div class="org-src-container">
 <pre class="src src-sh">Exception<span style="color: #00bfff; font-weight: bold;"> in</span> thread <span style="color: #deb887;">"main"</span> java.lang.IllegalStateException: Flow invariant is violated:
-                Flow was collected<span style="color: #00bfff; font-weight: bold;"> in</span> [BlockingCoroutine{Active}@2eb45460, BlockingEventLoop@4861502a],
-                but emission happened<span style="color: #00bfff; font-weight: bold;"> in</span> [DispatchedCoroutine{Active}@31ddf337, Dispatchers.Default].
-                Please refer to <span style="color: #deb887;">'flow'</span> documentation or use <span style="color: #deb887;">'flowOn'</span> instead
+Flow was collected<span style="color: #00bfff; font-weight: bold;"> in</span> [BlockingCoroutine{Active}@2eb45460, BlockingEventLoop@4861502a],
+but emission happened<span style="color: #00bfff; font-weight: bold;"> in</span> [DispatchedCoroutine{Active}@31ddf337, Dispatchers.Default].
+Please refer to <span style="color: #deb887;">'flow'</span> documentation or use <span style="color: #deb887;">'flowOn'</span> instead
 </pre>
 </div>
 </div>
@@ -958,7 +969,7 @@ Filter 5
 <span class="underline">flowOn</span> 函数用于 <b>更改</b> <span class="underline">流发射的上下文</span> 
 </p>
 
-<pre class="example" id="org525c02f">
+<pre class="example" id="orgd960653">
 以下示例展示了更改流上下文的正确方法，该示例还通过打印相应线程的名字以展示它们的工作方式
 </pre>
 
@@ -998,7 +1009,7 @@ Filter 5
 </pre>
 </div>
 
-<pre class="example" id="orgeaf181d">
+<pre class="example" id="orga679318">
 收集发生在一个协程中（“coroutine#1”）而发射发生在运行于另一个线程中与收集协程并发运行的另一个协程（“coroutine#2”）中
 </pre>
 
@@ -1015,7 +1026,7 @@ Filter 5
 从收集流所花费的时间来看，将流的不同部分运行在不同的协程中将会很有帮助，特别是当涉及到长时间运行的异步操作时
 </p>
 
-<pre class="example" id="org3a948d7">
+<pre class="example" id="orgbc6f8ef">
 例如 foo() 流的发射很慢，它每花费 100 毫秒才产生一个元素；而收集器也非常慢， 需要花费 300 毫秒来处理元素
 
 看看从该流收集三个数字要花费多长时间
@@ -1038,8 +1049,8 @@ Filter 5
 <span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking {
     <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">time</span> = measureTimeMillis {
         foo9().collect { value -&gt;
-            delay(300) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20551;&#35013;&#25105;&#20204;&#33457;&#36153; 300 &#27627;&#31186;&#26469;&#22788;&#29702;&#23427;</span>
-            println(value)
+                             delay(300) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20551;&#35013;&#25105;&#20204;&#33457;&#36153; 300 &#27627;&#31186;&#26469;&#22788;&#29702;&#23427;</span>
+                         println(value)
         }
     }
     println(<span style="color: #deb887;">"Collected in </span><span style="color: #4eee94;">$time</span><span style="color: #deb887;"> ms"</span>)
@@ -1072,15 +1083,15 @@ Collected<span style="color: #00bfff; font-weight: bold;"> in</span> 1279 ms
 }
 
 <span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking&lt;<span style="color: #98f5ff;">Unit&gt;</span> { 
-    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">time</span> = measureTimeMillis {
-        foo()
-            .buffer() <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#32531;&#20914;&#21457;&#23556;&#39033;&#65292;&#26080;&#38656;&#31561;&#24453;</span>
-            .collect { value -&gt; 
-                delay(300) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20551;&#35013;&#25105;&#20204;&#33457;&#36153; 300 &#27627;&#31186;&#26469;&#22788;&#29702;&#23427;</span>
-                println(value) 
-            } 
-    }   
-    println(<span style="color: #deb887;">"Collected in </span><span style="color: #4eee94;">$time</span><span style="color: #deb887;"> ms"</span>)
+                                 <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">time</span> = measureTimeMillis {
+                                     foo()
+                                         .buffer() <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#32531;&#20914;&#21457;&#23556;&#39033;&#65292;&#26080;&#38656;&#31561;&#24453;</span>
+                                         .collect { value -&gt; 
+                                                        delay(300) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20551;&#35013;&#25105;&#20204;&#33457;&#36153; 300 &#27627;&#31186;&#26469;&#22788;&#29702;&#23427;</span>
+                                                    println(value) 
+                                         } 
+                                 }   
+                                 println(<span style="color: #deb887;">"Collected in </span><span style="color: #4eee94;">$time</span><span style="color: #deb887;"> ms"</span>)
 }
 </pre>
 </div>
@@ -1097,7 +1108,7 @@ Collected<span style="color: #00bfff; font-weight: bold;"> in</span> 1071 ms
 </pre>
 </div>
 
-<pre class="example" id="org9ba88cc">
+<pre class="example" id="orga69342c">
 由于高效地创建了处理流水线， 仅仅需要等待第一个数字产生的 100 毫秒以及处理每个数字各需花费的 300 毫秒
 
 这种方式大约花费了 1000 毫秒来运行
@@ -1106,7 +1117,7 @@ Collected<span style="color: #00bfff; font-weight: bold;"> in</span> 1071 ms
 <div id="outline-container-org4b8a864" class="outline-3">
 <h3 id="org4b8a864">合并</h3>
 <div class="outline-text-3" id="text-org4b8a864">
-<pre class="example" id="orgc2a0b39">
+<pre class="example" id="org075c0ab">
 当流代表部分操作结果或操作状态更新时，可能没有必要处理每个值，而是只处理最新的那个
 </pre>
 
@@ -1134,8 +1145,8 @@ Collected<span style="color: #00bfff; font-weight: bold;"> in</span> 1071 ms
         foo10()
             .conflate() <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#21512;&#24182;&#21457;&#23556;&#39033;&#65292;&#19981;&#23545;&#27599;&#20010;&#20540;&#36827;&#34892;&#22788;&#29702;</span>
             .collect { value -&gt;
-                delay(300) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20551;&#35013;&#25105;&#20204;&#33457;&#36153; 300 &#27627;&#31186;&#26469;&#22788;&#29702;&#23427;</span>
-                println(value)
+                           delay(300) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20551;&#35013;&#25105;&#20204;&#33457;&#36153; 300 &#27627;&#31186;&#26469;&#22788;&#29702;&#23427;</span>
+                       println(value)
             }
     }
     println(<span style="color: #deb887;">"Collected in </span><span style="color: #4eee94;">$time</span><span style="color: #deb887;"> ms"</span>)
@@ -1158,7 +1169,7 @@ Collected<span style="color: #00bfff; font-weight: bold;"> in</span> 758 ms
 <div id="outline-container-orgf3e6c0b" class="outline-3">
 <h3 id="orgf3e6c0b">处理最新值</h3>
 <div class="outline-text-3" id="text-orgf3e6c0b">
-<pre class="example" id="org0141328">
+<pre class="example" id="org0fee4ea">
 当发射器和收集器都很慢的时候，合并是加快处理速度的一种方式。它通过删除发射值来实现
 </pre>
 <p>
@@ -1184,9 +1195,9 @@ Collected<span style="color: #00bfff; font-weight: bold;"> in</span> 758 ms
     <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">time</span> = measureTimeMillis {
         foo()
             .collectLatest { value -&gt; <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#21462;&#28040;&#24182;&#37325;&#26032;&#21457;&#23556;&#26368;&#21518;&#19968;&#20010;&#20540;</span>
-                println(<span style="color: #deb887;">"Collecting </span><span style="color: #4eee94;">$value</span><span style="color: #deb887;">"</span>)
-                delay(300) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20551;&#35013;&#25105;&#20204;&#33457;&#36153; 300 &#27627;&#31186;&#26469;&#22788;&#29702;&#23427;</span>
-                println(<span style="color: #deb887;">"Done </span><span style="color: #4eee94;">$value</span><span style="color: #deb887;">"</span>)
+                             println(<span style="color: #deb887;">"Collecting </span><span style="color: #4eee94;">$value</span><span style="color: #deb887;">"</span>)
+                             delay(300) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20551;&#35013;&#25105;&#20204;&#33457;&#36153; 300 &#27627;&#31186;&#26469;&#22788;&#29702;&#23427;</span>
+                             println(<span style="color: #deb887;">"Done </span><span style="color: #4eee94;">$value</span><span style="color: #deb887;">"</span>)
             }
     }
     println(<span style="color: #deb887;">"Collected in </span><span style="color: #4eee94;">$time</span><span style="color: #deb887;"> ms"</span>)
@@ -1219,7 +1230,7 @@ Collected<span style="color: #00bfff; font-weight: bold;"> in</span> 741 ms
 <div id="outline-container-org3bad95c" class="outline-3">
 <h3 id="org3bad95c">zip</h3>
 <div class="outline-text-3" id="text-org3bad95c">
-<pre class="example" id="org87c5e54">
+<pre class="example" id="orgc930e9b">
 就像 Kotlin 标准库中的 Sequence.zip 扩展函数一样
 </pre>
 <p>
@@ -1259,7 +1270,7 @@ Collected<span style="color: #00bfff; font-weight: bold;"> in</span> 741 ms
 当流表示一个变量或操作的最新值时，可能需要执行计算，这依赖于相应流的最新值，并且每当上游流产生值的时候都需要重新计算。这种相应的操作符家族称为 <span class="underline">combine</span> 
 </p>
 
-<pre class="example" id="org958ae57">
+<pre class="example" id="orgb098f74">
 例如，先前示例中的数字如果每 300 毫秒更新一次，但字符串每 400 毫秒更新一次， 然后使用 zip 操作符合并它们，但仍会产生相同的结果， 尽管每 400 毫秒打印一次结果
 </pre>
 
@@ -1277,7 +1288,7 @@ Collected<span style="color: #00bfff; font-weight: bold;"> in</span> 741 ms
     <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">startTime</span> = <span style="color: #98f5ff;">System.currentTimeMillis</span>() <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#35760;&#24405;&#24320;&#22987;&#30340;&#26102;&#38388;</span>
     nums.zip(strs) { a, b -&gt; <span style="color: #deb887;">"</span><span style="color: #4eee94;">$a</span><span style="color: #deb887;"> -&gt; </span><span style="color: #4eee94;">$b</span><span style="color: #deb887;">"</span> } <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20351;&#29992;&#8220;zip&#8221;&#32452;&#21512;&#21333;&#20010;&#23383;&#31526;&#20018;</span>
         .collect { value -&gt; <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#25910;&#38598;&#24182;&#25171;&#21360;</span>
-            println(<span style="color: #deb887;">"</span><span style="color: #4eee94;">$value</span><span style="color: #deb887;"> at ${</span><span style="color: #98f5ff;">System.currentTimeMillis</span>() - startTime<span style="color: #deb887;">} ms from start"</span>)
+                   println(<span style="color: #deb887;">"</span><span style="color: #4eee94;">$value</span><span style="color: #deb887;"> at ${</span><span style="color: #98f5ff;">System.currentTimeMillis</span>() - startTime<span style="color: #deb887;">} ms from start"</span>)
         }
 }
 </pre>
@@ -1293,7 +1304,7 @@ Collected<span style="color: #00bfff; font-weight: bold;"> in</span> 741 ms
 </pre>
 </div>
 
-<pre class="example" id="org33e08bb">
+<pre class="example" id="orgc4dcb64">
 示例中使用 onEach 过渡操作符来延时每次元素发射并使该流更具说明性以及更简洁
 </pre>
 
@@ -1306,13 +1317,13 @@ Collected<span style="color: #00bfff; font-weight: bold;"> in</span> 741 ms
 <span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.</span>*
 
 <span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking&lt;<span style="color: #98f5ff;">Unit&gt;</span> { 
-    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">nums</span> = (1..3).asFlow().onEach { delay(300) } <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#21457;&#23556;&#25968;&#23383; 1..3&#65292;&#38388;&#38548; 300 &#27627;&#31186;</span>
-    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">strs</span> = flowOf(<span style="color: #deb887;">"one"</span>, <span style="color: #deb887;">"two"</span>, <span style="color: #deb887;">"three"</span>).onEach { delay(400) } <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#27599; 400 &#27627;&#31186;&#21457;&#23556;&#19968;&#27425;&#23383;&#31526;&#20018;</span>
-    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">startTime</span> = <span style="color: #98f5ff;">System.currentTimeMillis</span>() <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#35760;&#24405;&#24320;&#22987;&#30340;&#26102;&#38388;</span>
-    nums.combine(strs) { a, b -&gt; <span style="color: #deb887;">"</span><span style="color: #4eee94;">$a</span><span style="color: #deb887;"> -&gt; </span><span style="color: #4eee94;">$b</span><span style="color: #deb887;">"</span> } <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20351;&#29992;&#8220;combine&#8221;&#32452;&#21512;&#21333;&#20010;&#23383;&#31526;&#20018;</span>
-        .collect { value -&gt; <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#25910;&#38598;&#24182;&#25171;&#21360;</span>
-            println(<span style="color: #deb887;">"</span><span style="color: #4eee94;">$value</span><span style="color: #deb887;"> at ${</span><span style="color: #98f5ff;">System.currentTimeMillis</span>() - startTime<span style="color: #deb887;">} ms from start"</span>) 
-        } 
+                                 <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">nums</span> = (1..3).asFlow().onEach { delay(300) } <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#21457;&#23556;&#25968;&#23383; 1..3&#65292;&#38388;&#38548; 300 &#27627;&#31186;</span>
+                                 <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">strs</span> = flowOf(<span style="color: #deb887;">"one"</span>, <span style="color: #deb887;">"two"</span>, <span style="color: #deb887;">"three"</span>).onEach { delay(400) } <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#27599; 400 &#27627;&#31186;&#21457;&#23556;&#19968;&#27425;&#23383;&#31526;&#20018;</span>
+                                 <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">startTime</span> = <span style="color: #98f5ff;">System.currentTimeMillis</span>() <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#35760;&#24405;&#24320;&#22987;&#30340;&#26102;&#38388;</span>
+                                 nums.combine(strs) { a, b -&gt; <span style="color: #deb887;">"</span><span style="color: #4eee94;">$a</span><span style="color: #deb887;"> -&gt; </span><span style="color: #4eee94;">$b</span><span style="color: #deb887;">"</span> } <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20351;&#29992;&#8220;combine&#8221;&#32452;&#21512;&#21333;&#20010;&#23383;&#31526;&#20018;</span>
+                                     .collect { value -&gt; <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#25910;&#38598;&#24182;&#25171;&#21360;</span>
+                                                println(<span style="color: #deb887;">"</span><span style="color: #4eee94;">$value</span><span style="color: #deb887;"> at ${</span><span style="color: #98f5ff;">System.currentTimeMillis</span>() - startTime<span style="color: #deb887;">} ms from start"</span>) 
+                                     } 
 }
 </pre>
 </div>
@@ -1335,7 +1346,7 @@ Collected<span style="color: #00bfff; font-weight: bold;"> in</span> 741 ms
 <div id="outline-container-org7aa2f62" class="outline-2">
 <h2 id="org7aa2f62">流展平</h2>
 <div class="outline-text-2" id="text-org7aa2f62">
-<pre class="example" id="org9c6b56d">
+<pre class="example" id="org98ddbd7">
 流是用来异步地接收一系列的值，所以它很容易遇到这样的场景：每个值都会触发一个请求去获取另外一系列的值
 </pre>
 
@@ -1366,7 +1377,7 @@ Collected<span style="color: #00bfff; font-weight: bold;"> in</span> 741 ms
 最后就得到了一条由流组成的流 <span class="underline">Flow&lt;Flow&lt;String&gt;&gt;</span> ，如果要进一步处理，就需要把它 <b>展平</b> 到一条单独的流去
 </p>
 
-<pre class="example" id="orgf2cc236">
+<pre class="example" id="orgc986772">
 集合和Sequence有对应的 flatten 和 flattenMap 操作符
 
 然而由于流的异步特性，展平的时候会有不同的模式，因此流也有一系列的操作符对应不同的模式
@@ -1396,7 +1407,7 @@ Concatenating 模式通过 <span class="underline">flatMapConcat</span> 和 <spa
     (1..3).asFlow().onEach { delay(100) } <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">a number every 100 ms</span>
         .flatMapConcat { requestFlow(<span style="color: #00bfff; font-weight: bold;">it</span>) }
         .collect { value -&gt; <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">collect and print</span>
-            println(<span style="color: #deb887;">"</span><span style="color: #4eee94;">$value</span><span style="color: #deb887;"> at ${</span><span style="color: #98f5ff;">System.currentTimeMillis</span>() - startTime<span style="color: #deb887;">} ms from start"</span>)
+                   println(<span style="color: #deb887;">"</span><span style="color: #4eee94;">$value</span><span style="color: #deb887;"> at ${</span><span style="color: #98f5ff;">System.currentTimeMillis</span>() - startTime<span style="color: #deb887;">} ms from start"</span>)
         }
 }
 </pre>
@@ -1411,7 +1422,7 @@ Concatenating 模式通过 <span class="underline">flatMapConcat</span> 和 <spa
 这种模式是 <b>并发</b> 地 <span class="underline">收集</span> 流输入然后把值 <b>合并</b> 到一条单独的流，这样可以让值尽可能快地发射出来。这种模式由  <span class="underline">flatMapMerge</span> and <span class="underline">flattenMerge</span> 操作符实现
 </p>
 
-<pre class="example" id="orga8dade9">
+<pre class="example" id="org9df329b">
 这两个操作符都接受一个可选的并发参数，用来限制在同一时间并发收集的流数量
 
 默认值 DEFAULT_CONCURRENCY 
@@ -1429,7 +1440,7 @@ Concatenating 模式通过 <span class="underline">flatMapConcat</span> 和 <spa
     (1..3).asFlow().onEach { delay(100) } <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">a number every 100 ms</span>
         .flatMapMerge { requestFlow(<span style="color: #00bfff; font-weight: bold;">it</span>) }
         .collect { value -&gt; <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">collect and print</span>
-            println(<span style="color: #deb887;">"</span><span style="color: #4eee94;">$value</span><span style="color: #deb887;"> at ${</span><span style="color: #98f5ff;">System.currentTimeMillis</span>() - startTime<span style="color: #deb887;">} ms from start"</span>)
+                   println(<span style="color: #deb887;">"</span><span style="color: #4eee94;">$value</span><span style="color: #deb887;"> at ${</span><span style="color: #98f5ff;">System.currentTimeMillis</span>() - startTime<span style="color: #deb887;">} ms from start"</span>)
         }
 }
 </pre>
@@ -1449,7 +1460,7 @@ Concatenating 模式通过 <span class="underline">flatMapConcat</span> 和 <spa
 </pre>
 </div>
 
-<pre class="example" id="org296069c">
+<pre class="example" id="org62f3ee7">
 注意：flatMapMerge 顺序地调用  ({ requestFlow(it) } 代码段, 但是对于结果流的收集是并发地
 
 这等同于执行一个顺序地映射 { requestFlow(it) } 然后在对结果调用 flattenMerge 
@@ -1475,7 +1486,7 @@ Concatenating 模式通过 <span class="underline">flatMapConcat</span> 和 <spa
     (1..3).asFlow().onEach { delay(100) } <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">a number every 100 ms</span>
         .flatMapLatest { requestFlow(<span style="color: #00bfff; font-weight: bold;">it</span>) }
         .collect { value -&gt; <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">collect and print</span>
-            println(<span style="color: #deb887;">"</span><span style="color: #4eee94;">$value</span><span style="color: #deb887;"> at ${</span><span style="color: #98f5ff;">System.currentTimeMillis</span>() - startTime<span style="color: #deb887;">} ms from start"</span>)
+                   println(<span style="color: #deb887;">"</span><span style="color: #4eee94;">$value</span><span style="color: #deb887;"> at ${</span><span style="color: #98f5ff;">System.currentTimeMillis</span>() - startTime<span style="color: #deb887;">} ms from start"</span>)
         }
 }
 </pre>
@@ -1493,7 +1504,7 @@ Concatenating 模式通过 <span class="underline">flatMapConcat</span> 和 <spa
 </pre>
 </div>
 
-<pre class="example" id="org0a4bdb6">
+<pre class="example" id="org831a42a">
 注意：每当有一个新的值 在 ({ requestFlow(it) } 产生，会取消所有已经收集到的数字流
 
 哪怕这里 requestFlow 函数运行很快，非挂起，不允许取消，行为也是这样
@@ -1541,8 +1552,8 @@ Concatenating 模式通过 <span class="underline">flatMapConcat</span> 和 <spa
 <span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking {
     <span style="color: #00bfff; font-weight: bold;">try</span> {
         foo11().collect { value -&gt;
-            println(value)
-            check(value &lt;= 1) { <span style="color: #deb887;">"Collected </span><span style="color: #4eee94;">$value</span><span style="color: #deb887;">"</span> }
+                              println(value)
+                          check(value &lt;= 1) { <span style="color: #deb887;">"Collected </span><span style="color: #4eee94;">$value</span><span style="color: #deb887;">"</span> }
         }
     } <span style="color: #00bfff; font-weight: bold;">catch</span> (e: <span style="color: #98f5ff;">Throwable</span>) {
         println(<span style="color: #deb887;">"Caught </span><span style="color: #4eee94;">$e</span><span style="color: #deb887;">"</span>)
@@ -1569,7 +1580,7 @@ Caught java.lang.IllegalStateException: Collected 2
 <div id="outline-container-orgba24a1d" class="outline-3">
 <h3 id="orgba24a1d">一切都已捕获</h3>
 <div class="outline-text-3" id="text-orgba24a1d">
-<pre class="example" id="org04d4e94">
+<pre class="example" id="org303e571">
 实际上前面的例子会捕获任何来自于发射或收集时候产生的异常
 </pre>
 
@@ -1579,16 +1590,16 @@ Caught java.lang.IllegalStateException: Collected 2
 
 <div class="org-src-container">
 <pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">foo</span>(): <span style="color: #98f5ff;">Flow&lt;String&gt;</span> = 
-    flow {
-        <span style="color: #00bfff; font-weight: bold;">for</span> (i <span style="color: #00bfff; font-weight: bold;">in</span> 1..3) {
-            println(<span style="color: #deb887;">"Emitting </span><span style="color: #4eee94;">$i</span><span style="color: #deb887;">"</span>)
-            emit(i) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">emit next value</span>
-        }
+flow {
+    <span style="color: #00bfff; font-weight: bold;">for</span> (i <span style="color: #00bfff; font-weight: bold;">in</span> 1..3) {
+        println(<span style="color: #deb887;">"Emitting </span><span style="color: #4eee94;">$i</span><span style="color: #deb887;">"</span>)
+        emit(i) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">emit next value</span>
     }
-    .map { value -&gt;
-        check(value &lt;= 1) { <span style="color: #deb887;">"Crashed on </span><span style="color: #4eee94;">$value</span><span style="color: #deb887;">"</span> }                 
-        <span style="color: #deb887;">"string </span><span style="color: #4eee94;">$value</span><span style="color: #deb887;">"</span>
-    }
+}
+.map { value -&gt;
+           check(value &lt;= 1) { <span style="color: #deb887;">"Crashed on </span><span style="color: #4eee94;">$value</span><span style="color: #deb887;">"</span> }                 
+       <span style="color: #deb887;">"string </span><span style="color: #4eee94;">$value</span><span style="color: #deb887;">"</span>
+}
 
 <span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking&lt;<span style="color: #98f5ff;">Unit&gt;</span> {
     <span style="color: #00bfff; font-weight: bold;">try</span> {
@@ -1617,7 +1628,7 @@ Caught java.lang.IllegalStateException: Crashed on 2
 <div id="outline-container-orgf751653" class="outline-2">
 <h2 id="orgf751653">异常透明性</h2>
 <div class="outline-text-2" id="text-orgf751653">
-<pre class="example" id="org73288e7">
+<pre class="example" id="orgae3dd1b">
 美中不足的是，这里的代码无法隐藏处理异常的逻辑
 
 一般来说流应该对异常透明，因为这保证了在收集时候捕获的异常是收集时候的代码所产生的
@@ -1633,16 +1644,16 @@ Caught java.lang.IllegalStateException: Crashed on 2
 
 <div class="org-src-container">
 <pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">foo15</span>(): <span style="color: #98f5ff;">Flow&lt;String&gt;</span> =
-    flow {
-        <span style="color: #00bfff; font-weight: bold;">for</span> (i <span style="color: #00bfff; font-weight: bold;">in</span> 1..3) {
-            println(<span style="color: #deb887;">"Emitting </span><span style="color: #4eee94;">$i</span><span style="color: #deb887;">"</span>)
-            emit(i) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">emit next value</span>
-        }
+flow {
+    <span style="color: #00bfff; font-weight: bold;">for</span> (i <span style="color: #00bfff; font-weight: bold;">in</span> 1..3) {
+        println(<span style="color: #deb887;">"Emitting </span><span style="color: #4eee94;">$i</span><span style="color: #deb887;">"</span>)
+        emit(i) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">emit next value</span>
     }
-        .map { value -&gt;
-            check(value &lt;= 1) { <span style="color: #deb887;">"Crashed on </span><span style="color: #4eee94;">$value</span><span style="color: #deb887;">"</span> }
-            <span style="color: #deb887;">"string </span><span style="color: #4eee94;">$value</span><span style="color: #deb887;">"</span>
-        }
+}
+.map { value -&gt;
+           check(value &lt;= 1) { <span style="color: #deb887;">"Crashed on </span><span style="color: #4eee94;">$value</span><span style="color: #deb887;">"</span> }
+       <span style="color: #deb887;">"string </span><span style="color: #4eee94;">$value</span><span style="color: #deb887;">"</span>
+}
 
 <span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking&lt;<span style="color: #98f5ff;">Unit&gt;</span> {
     foo15()
@@ -1668,7 +1679,7 @@ Caught java.lang.IllegalStateException: Crashed on 2
 <div id="outline-container-org767985e" class="outline-3">
 <h3 id="org767985e">异常逃逸</h3>
 <div class="outline-text-3" id="text-org767985e">
-<pre class="example" id="org2dbfabf">
+<pre class="example" id="orgc554d9d">
 然而上面的例子却无法处理收集器内 collect 代码块产生的异常
 </pre>
 
@@ -1689,8 +1700,8 @@ Caught java.lang.IllegalStateException: Crashed on 2
     foo16()
         .<span style="color: #00bfff; font-weight: bold;">catch</span> { e -&gt; println(<span style="color: #deb887;">"Caught </span><span style="color: #4eee94;">$e</span><span style="color: #deb887;">"</span>) } <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">does not catch downstream exceptions</span>
         .collect { value -&gt;
-            check(value &lt;= 1) { <span style="color: #deb887;">"Collected </span><span style="color: #4eee94;">$value</span><span style="color: #deb887;">"</span> }
-            println(value)
+                       check(value &lt;= 1) { <span style="color: #deb887;">"Collected </span><span style="color: #4eee94;">$value</span><span style="color: #deb887;">"</span> }
+                   println(value)
         }
 }
 </pre>
@@ -1705,7 +1716,7 @@ Caught java.lang.IllegalStateException: Crashed on 2
 1
 Emitting 2
 Exception<span style="color: #00bfff; font-weight: bold;"> in</span> thread <span style="color: #deb887;">"main"</span> java.lang.IllegalStateException: Collected 2
-        at tutorial.coroutine.flow.FlowExceptionEscapeKt$<span style="color: #4eee94;">main</span>$<span style="color: #4eee94;">1</span>$<span style="color: #4eee94;">2</span>.emit(FlowExceptionEscape.kt:19)
+at tutorial.coroutine.flow.FlowExceptionEscapeKt$<span style="color: #4eee94;">main</span>$<span style="color: #4eee94;">1</span>$<span style="color: #4eee94;">2</span>.emit(FlowExceptionEscape.kt:19)
 </pre>
 </div>
 </div>
@@ -1736,8 +1747,8 @@ Exception<span style="color: #00bfff; font-weight: bold;"> in</span> thread <spa
 <span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking {
     foo17()
         .onEach { value -&gt;
-            check(value &lt;= 1) { <span style="color: #deb887;">"Collected </span><span style="color: #4eee94;">$value</span><span style="color: #deb887;">"</span> }
-            println(value)
+                      check(value &lt;= 1) { <span style="color: #deb887;">"Collected </span><span style="color: #4eee94;">$value</span><span style="color: #deb887;">"</span> }
+                  println(value)
         }
         .<span style="color: #00bfff; font-weight: bold;">catch</span> { e -&gt; println(<span style="color: #deb887;">"Caught </span><span style="color: #4eee94;">$e</span><span style="color: #deb887;">"</span>) }
         .collect {}
@@ -1757,7 +1768,7 @@ Caught java.lang.IllegalStateException: Collected 2
 </pre>
 </div>
 
-<pre class="example" id="org7051d09">
+<pre class="example" id="org1207ba7">
 这里既使用了 catch 操作符的声明性，并且也处理了所有的异常
 
 但也要注意：这里的 collect 不能有任何额外的逻辑
@@ -1768,6 +1779,249 @@ Caught java.lang.IllegalStateException: Collected 2
 
 <div id="outline-container-org308b09f" class="outline-2">
 <h2 id="org308b09f">流完成</h2>
+<div class="outline-text-2" id="text-org308b09f">
+<p>
+当流收集完成以后（无论正常或有异常），可能会需要执行某些逻辑。这同样可以通过两种方式实现：命令式和声明式
+</p>
+</div>
+
+<div id="outline-container-org0a6e2f1" class="outline-3">
+<h3 id="org0a6e2f1">命令式 finally 块</h3>
+<div class="outline-text-3" id="text-org0a6e2f1">
+<p>
+在 try/catch 块之外，收集器可以使用 <span class="underline">finally</span> 块来执行某些收集完成之后的逻辑：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.Flow</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.asFlow</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.runBlocking</span>
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">foo18</span>(): <span style="color: #98f5ff;">Flow&lt;Int&gt;</span> = (1..3).asFlow()
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking {
+    <span style="color: #00bfff; font-weight: bold;">try</span> {
+        foo18().collect { value -&gt; println(value) }
+    } <span style="color: #00bfff; font-weight: bold;">finally</span> {
+        println(<span style="color: #deb887;">"Done"</span>)
+    }
+}    
+</pre>
+</div>
+
+<p>
+打印了3个数字，最后会打印 "Done" 字符串
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">1
+2
+3
+Done
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org81e4928" class="outline-3">
+<h3 id="org81e4928">声明式处理</h3>
+<div class="outline-text-3" id="text-org81e4928">
+<p>
+流同样也有一个声明式的操作符 onCompletion 来调用流收集完成后的逻辑。相对于命令式的做法，最主要的优点在于 onCompletion 有一个可为空的 <span class="underline">Throwable</span> 参数来表示 <span class="underline">收集</span> 是否 <b>正常</b> 结束：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.Flow</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> kotlinx.coroutines.flow.<span style="color: #00bfff; font-weight: bold;">catch</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.flow</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.onCompletionOn</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.runBlocking</span>
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">foo19</span>(): <span style="color: #98f5ff;">Flow&lt;Int&gt;</span> = flow {
+    emit(1)
+    <span style="color: #00bfff; font-weight: bold;">throw</span> <span style="color: #98f5ff;">RuntimeException</span>()
+}
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking {
+    foo19()
+        .onCompletion { cause -&gt; <span style="color: #00bfff; font-weight: bold;">if</span> (cause != <span style="color: #ffd700;">null</span>) println(<span style="color: #deb887;">"Flow completed exceptionally"</span>) }
+        .<span style="color: #00bfff; font-weight: bold;">catch</span> { cause -&gt; println(<span style="color: #deb887;">"Caught exception"</span>) }
+        .collect { value -&gt; println(value) }
+}
+</pre>
+</div>
+
+<p>
+输出如下：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">1
+Flow completed exceptionally
+Caught exception
+</pre>
+</div>
+
+<pre class="example" id="org7a79ac2">
+onCompletion 操作符 与 catch 不同，它并不处理异常
+
+异常是传递给下一个方法，然后在 catch 操作符里被处理
+</pre>
+</div>
+
+<div id="outline-container-org6c17885" class="outline-4">
+<h4 id="org6c17885">仅限上游异常</h4>
+<div class="outline-text-4" id="text-org6c17885">
+<p>
+和 catch 操作符类似， onCompletion 操作符也仅能捕获到上游传过来的异常，而无法感知下游产生的异常：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.Flow</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.asFlow</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.onCompletion</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.runBlocking</span>
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">foo20</span>(): <span style="color: #98f5ff;">Flow&lt;Int&gt;</span> = (1..3).asFlow()
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking {
+    foo20()
+        .onCompletion { cause -&gt; println(<span style="color: #deb887;">"Flow completed with </span><span style="color: #4eee94;">$cause</span><span style="color: #deb887;">"</span>) }
+        .collect { value -&gt;
+            check(value &lt;= 1) { <span style="color: #deb887;">"Collected </span><span style="color: #4eee94;">$value</span><span style="color: #deb887;">"</span> }
+            println(value)
+        }
+}
+</pre>
+</div>
+
+<p>
+可以看到 onCompletion 里的 cause 为空，但整个收集依旧是以异常而终止：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">1
+Flow completed with java.lang.IllegalStateException: Collected 2
+Exception<span style="color: #00bfff; font-weight: bold;"> in</span> thread <span style="color: #deb887;">"main"</span> java.lang.IllegalStateException: Collected 2
+</pre>
+</div>
+
+<pre class="example" id="org6bb1bbe">
+现在已经看过分别用命令式和声明式来处理错误和完成收集，那么究竟应该使用哪种呢？
+
+做为一个库，两种方式都是有效的。如何选择应该由个人爱好和编程风格所决定
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org3464cd3" class="outline-2">
+<h2 id="org3464cd3">流启动</h2>
+<div class="outline-text-2" id="text-org3464cd3">
+<pre class="example" id="orgfd5e5f3">
+流非常适合用来表示从某些源头异步发送的事件
+
+这种情况下，需要注册一个类似于 AddEventListener 的函数，这个函数代码里包含了如何处理接收到的事件
+</pre>
+
+<p>
+<span class="underline">onEach</span> 操作符可以起到注册的职责。然而 onEach 操作符只是一个中端操作符，仍然需要一个末端操作符来收集流，否则只调用 onEach 不起作用
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.delay</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.Flow</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.asFlow</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.onEach</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.runBlocking</span>
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">events</span>(): <span style="color: #98f5ff;">Flow&lt;Int&gt;</span> = (1..3).asFlow().onEach { delay(1000) }
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking {
+    events()
+        .onEach { event -&gt; println(<span style="color: #deb887;">"Event: </span><span style="color: #4eee94;">$event</span><span style="color: #deb887;">"</span>) }
+        .collect{} <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&lt;--- Collecting the flow waits</span>
+    println(<span style="color: #deb887;">"Done"</span>)
+}
+</pre>
+</div>
+
+<p>
+输出如下：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">Event: 1
+Event: 2
+Event: 3
+Done
+</pre>
+</div>
+
+<pre class="example" id="orge6357bb">
+在 onEach 后面加上 collect 操作符，所有 collect {} 之后的代码（打印 "Done" 字符串）会在流被收集完毕之后才执行
+</pre>
+
+<p>
+如果使用 <span class="underline">lauchIn</span> 来替换 collect 操作符，可以让 <span class="underline">流收集</span> 运行在另外一个 <b>单独</b> 的 <span class="underline">协程</span> 中，lauchIn 后面的代码会 <b>立刻</b> 执行：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.launchIn</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.flow.onEach</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.runBlocking</span>
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking {
+    events()
+        .onEach { event -&gt; println(<span style="color: #deb887;">"Event: </span><span style="color: #4eee94;">$event</span><span style="color: #deb887;">"</span>) }
+        .launchIn(<span style="color: #00bfff; font-weight: bold;">this</span>) <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&lt;--- Launching the flow in a separate coroutine</span>
+    println(<span style="color: #deb887;">"Done"</span>)
+}  
+</pre>
+</div>
+
+<p>
+这时的输出如下：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">Done
+Event: 1
+Event: 2
+Event: 3
+</pre>
+</div>
+
+<p>
+lauchIn 必须的参数是一个 <span class="underline">CoroutineScope</span> : 流收集跑在哪个协程上下文里
+</p>
+<pre class="example" id="org23a99a7">
+实例中这个协程上下文参数是来自于 runBlocking 构造器
+
+因此当流在运行时，会继续执行main函数里其他代码，并等待所有子协程跑完
+</pre>
+
+<p>
+实际应用中如果这个上下文来自于一个有限生命周期的实例，当这个实例终止时，协程会被取消，同样收集流的协程也会被取消
+</p>
+<pre class="example" id="org976f46f">
+这时候，onEach { ... }.launchIn(scope) 的工作方式和 addEventListener 相似
+
+然而不需要显示地调用 removeEventListener ，因为协程取消隐式地包含了这一点
+</pre>
+
+<p>
+注意： launchIn 也会返回一个 Job。这个 Job 也可以被用来单独取消流收集
+</p>
+
+<pre class="example" id="orgf11ec89">
+这种情况适用于 不取消 CoroutineScope 参数对应的协程，只取消收集流对应的协程
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org3fc2edf" class="outline-2">
+<h2 id="org3fc2edf">流 与 响应式流</h2>
 </div>
 </div>
 <div id="postamble" class="status">
