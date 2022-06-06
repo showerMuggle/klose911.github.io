@@ -234,6 +234,18 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="./coroutine.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">异常处理</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#org40d1735">异常的传播</a></li>
+<li><a href="#org5022eed">CoroutineExceptionHandler</a></li>
+<li><a href="#orgc182af8">取消与异常</a></li>
+<li><a href="#org7a09708">异常聚合</a></li>
+<li><a href="#org17df1a9">监督</a></li>
+</ul>
+</div>
+</div>
 <p>
 这部分内容包括 <span class="underline">异常处理</span> 以及 <span class="underline">取消异常</span> 
 </p>
@@ -243,6 +255,332 @@ for the JavaScript code in this tag.
 
   但是如果一个异常在取消期间被抛出或多个子协程在同一个父协程中抛出异常将会发生什么？
 </pre>
+<div id="outline-container-org40d1735" class="outline-2">
+<h2 id="org40d1735">异常的传播</h2>
+<div class="outline-text-2" id="text-org40d1735">
+<p>
+协程构建器有两种风格：
+</p>
+<ol class="org-ol">
+<li><p>
+<b>自动</b> 的传播异常 <span class="underline">launch</span> 以及 <span class="underline">actor</span> 对待异常是不处理的
+</p>
+<pre class="example">
+       类似于 Java 的 Thread.uncaughtExceptionHandler
+</pre></li>
+<li><p>
+将它们暴露给 <b>用户</b> <span class="underline">async</span> 以及 <span class="underline">produce</span> 依赖用户来最终消耗异常
+</p>
+<pre class="example">
+       比如说，通过 await 或 receive 
+</pre></li>
+</ol>
+
+<p>
+可以通过一个在 GlobalScope 中创建协程的简单示例来进行演示：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.GlobalScope</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.async</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.launch</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.runBlocking</span>
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking {
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">job</span> = <span style="color: #98f5ff;">GlobalScope.launch</span> {
+        println(<span style="color: #deb887;">"Throwing exception from launch"</span>)
+        <span style="color: #00bfff; font-weight: bold;">throw</span> <span style="color: #98f5ff;">IndexOutOfBoundsException</span>() <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#25105;&#20204;&#23558;&#22312;&#25511;&#21046;&#21488;&#25171;&#21360; Thread.defaultUncaughtExceptionHandler</span>
+    }
+    job.join()
+    println(<span style="color: #deb887;">"Joined failed job"</span>)
+
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">deferred</span> = <span style="color: #98f5ff;">GlobalScope.async</span> {
+        println(<span style="color: #deb887;">"Throwing exception from async"</span>)
+        <span style="color: #00bfff; font-weight: bold;">throw</span> <span style="color: #98f5ff;">ArithmeticException</span>() <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#27809;&#26377;&#25171;&#21360;&#20219;&#20309;&#19996;&#35199;&#65292;&#20381;&#36182;&#29992;&#25143;&#21435;&#35843;&#29992;&#31561;&#24453;</span>
+    }
+    <span style="color: #00bfff; font-weight: bold;">try</span> {
+        deferred.await()
+        println(<span style="color: #deb887;">"Unreached"</span>)
+    } <span style="color: #00bfff; font-weight: bold;">catch</span> (e: <span style="color: #98f5ff;">ArithmeticException</span>) {
+        println(<span style="color: #deb887;">"Caught ArithmeticException"</span>)
+    }
+} 
+</pre>
+</div>
+
+<p>
+这段代码的输出如下（调试）：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">Throwing exception from launch
+Exception<span style="color: #00bfff; font-weight: bold;"> in</span> thread <span style="color: #deb887;">"DefaultDispatcher-worker-2 @coroutine#2"</span> java.lang.IndexOutOfBoundsException
+Joined failed job
+Throwing exception from async
+Caught ArithmeticException
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org5022eed" class="outline-2">
+<h2 id="org5022eed">CoroutineExceptionHandler</h2>
+<div class="outline-text-2" id="text-org5022eed">
+<pre class="example">
+    但是如果不想将所有的异常打印在控制台中呢？ 
+</pre>
+<p>
+<span class="underline">CoroutineExceptionHandler</span> 上下文元素被用来将 <span class="underline">通用的 catch 代码块</span> 用于在 <b>协程</b> 中自定义日志记录或异常处理
+</p>
+
+<pre class="example">
+    它和使用 Thread.uncaughtExceptionHandler 很相似
+</pre>
+
+<p>
+在 JVM 中可以重定义一个 <b>全局的</b> <span class="underline">异常处理者</span> 来将所有的 <span class="underline">协程</span> 通过 <span class="underline">ServiceLoader</span>  <b>注册</b> 到 CoroutineExceptionHandler
+</p>
+
+<pre class="example">
+    全局异常处理者就如同 Thread.defaultUncaughtExceptionHandler 一样，在没有更多的指定的异常处理者被注册的时候被使用
+
+    在 Android 中， uncaughtExceptionPreHandler 被设置在全局协程异常处理者中
+</pre>
+
+<p>
+CoroutineExceptionHandler 仅在预计不会由用户处理的异常上调用， 所以在 async 构建器中注册它没有任何效果 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.</span>*
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking {
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">handler</span> = <span style="color: #98f5ff;">CoroutineExceptionHandler</span> { _, exception -&gt; println(<span style="color: #deb887;">"Caught </span><span style="color: #4eee94;">$exception</span><span style="color: #deb887;">"</span>) }
+
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">job</span> = <span style="color: #98f5ff;">GlobalScope.launch</span>(handler) {
+        <span style="color: #00bfff; font-weight: bold;">throw</span> <span style="color: #98f5ff;">AssertionError</span>()
+    }
+
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">deferred</span> = <span style="color: #98f5ff;">GlobalScope.async</span>(handler) {
+        <span style="color: #00bfff; font-weight: bold;">throw</span> <span style="color: #98f5ff;">ArithmeticException</span>() <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#27809;&#26377;&#25171;&#21360;&#20219;&#20309;&#19996;&#35199;&#65292;&#20381;&#36182;&#29992;&#25143;&#21435;&#35843;&#29992; deferred.await()</span>
+    }
+    joinAll(job, deferred)
+} 
+</pre>
+</div>
+
+<p>
+输出如下：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">Caught java.lang.AssertionError
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-orgc182af8" class="outline-2">
+<h2 id="orgc182af8">取消与异常</h2>
+<div class="outline-text-2" id="text-orgc182af8">
+<p>
+取消与异常紧密相关。协程内部使用 <span class="underline">CancellationException</span> 来进行取消，这个异常会被 <span class="underline">所有的处理者</span> <b>忽略</b>
+</p>
+
+<pre class="example">
+    所以那些可以被 catch 代码块捕获的异常仅仅应该被用来作为额外调试信息的资源
+</pre>
+
+<p>
+当一个协程使用 <span class="underline">Job.cancel</span> 取消的时候，它会被 <b>终止</b> ，但是它 <b>不会取消</b> 它的 <span class="underline">父协程</span> 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.delay</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.launch</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.runBlocking</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.yield</span>
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking {
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">job</span> = launch {
+        <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">child</span> = launch {
+            <span style="color: #00bfff; font-weight: bold;">try</span> {
+                delay(<span style="color: #98f5ff;">Long.MAX</span>_<span style="color: #98f5ff;">VALUE</span>)
+            } <span style="color: #00bfff; font-weight: bold;">finally</span> {
+                println(<span style="color: #deb887;">"Child is cancelled"</span>)
+            }
+        }
+
+        yield()
+        println(<span style="color: #deb887;">"Cancelling child"</span>)
+        child.cancel()
+        child.join()
+        yield()
+        println(<span style="color: #deb887;">"Parent is not cancelled"</span>)
+    }
+    job.join()
+} 
+</pre>
+</div>
+
+<p>
+输出如下：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">Cancelling child
+Child is cancelled
+Parent is not cancelled
+</pre>
+</div>
+
+<p>
+如果协程遇到 <span class="underline">除 CancellationException 以外</span> 的异常，它将 <b>取消</b> 具有该异常的 <span class="underline">父协程</span> ：
+</p>
+<ul class="org-ul">
+<li>这种行为不能被覆盖</li>
+<li>它被用来提供一个稳定的协程层次结构来进行结构化并发而无需依赖 CoroutineExceptionHandler 的实现</li>
+<li>且当所有的 <span class="underline">子协程</span> 被 <b>终止</b> 的时候，原本的异常被 <span class="underline">父协程</span> 所 <b>处理</b></li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.</span>*
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking {
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">handler</span> = <span style="color: #98f5ff;">CoroutineExceptionHandler</span> { _, exception -&gt; println(<span style="color: #deb887;">"Caught </span><span style="color: #4eee94;">$exception</span><span style="color: #deb887;">"</span>) }
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">job</span> = <span style="color: #98f5ff;">GlobalScope.launch</span>(handler) {
+        launch { <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#31532;&#19968;&#20010;&#23376;&#21327;&#31243;</span>
+            <span style="color: #00bfff; font-weight: bold;">try</span> {
+                delay(<span style="color: #98f5ff;">Long.MAX</span>_<span style="color: #98f5ff;">VALUE</span>)
+            } <span style="color: #00bfff; font-weight: bold;">finally</span> {
+                withContext(<span style="color: #98f5ff;">NonCancellable</span>) {
+                    println(<span style="color: #deb887;">"Children are cancelled, but exception is not handled until all children terminate"</span>)
+                    delay(100)
+                    println(<span style="color: #deb887;">"The first child finished its non cancellable block"</span>)
+                }
+            }
+        }
+        launch { <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#31532;&#20108;&#20010;&#23376;&#21327;&#31243;</span>
+            delay(10)
+            println(<span style="color: #deb887;">"Second child throws an exception"</span>)
+            <span style="color: #00bfff; font-weight: bold;">throw</span> <span style="color: #98f5ff;">ArithmeticException</span>()
+        }
+    }
+    job.join()
+} 
+</pre>
+</div>
+
+<p>
+输出如下：
+</p>
+<div class="org-src-container">
+<pre class="src src-sh">Second child throws an exception
+Children are cancelled, but exception is not handled until all children terminate
+The first child finished its non cancellable block
+Caught java.lang.ArithmeticException
+</pre>
+</div>
+
+<pre class="example">
+CoroutineExceptionHandler 总是被设置在由 GlobalScope 启动的协程中
+
+将异常处理者设置在 runBlocking 主作用域内启动的协程中是没有意义的，尽管子协程已经设置了异常处理者， 但是主协程也总是会被取消的
+</pre>
+</div>
+</div>
+<div id="outline-container-org7a09708" class="outline-2">
+<h2 id="org7a09708">异常聚合</h2>
+<div class="outline-text-2" id="text-org7a09708">
+<pre class="example">
+    如果一个协程的多个子协程抛出异常将会发生什么？ 
+</pre>
+
+<p>
+通常的规则是“第一个异常赢得了胜利”，所以第一个被抛出的异常将会暴露给处理者
+</p>
+
+<pre class="example">
+    但也许这会是异常丢失的原因，比如说一个协程在 finally 块中抛出了一个异常。这时，多余的异常将会被压制
+</pre>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.</span>*
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">java.io.IOException</span>
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking {
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">handler</span> =
+        <span style="color: #98f5ff;">CoroutineExceptionHandler</span> { _, exception -&gt; println(<span style="color: #deb887;">"Caught </span><span style="color: #4eee94;">$exception</span><span style="color: #deb887;"> with suppressed ${</span>exception.suppressed.contentToString()<span style="color: #deb887;">}"</span>) }
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">job</span> = <span style="color: #98f5ff;">GlobalScope.launch</span>(handler) {
+        launch {
+            <span style="color: #00bfff; font-weight: bold;">try</span> {
+                delay(<span style="color: #98f5ff;">Long.MAX</span>_<span style="color: #98f5ff;">VALUE</span>)
+            } <span style="color: #00bfff; font-weight: bold;">finally</span> {
+                <span style="color: #00bfff; font-weight: bold;">throw</span> <span style="color: #98f5ff;">ArithmeticException</span>()
+            }
+        }
+
+        launch {
+            delay(100)
+            <span style="color: #00bfff; font-weight: bold;">throw</span> <span style="color: #98f5ff;">IOException</span>()
+        }
+        delay(<span style="color: #98f5ff;">Long.MAX</span>_<span style="color: #98f5ff;">VALUE</span>)
+    }
+    job.join()
+}
+</pre>
+</div>
+
+<p>
+输出如下：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">Caught java.io.IOException with suppressed [java.lang.ArithmeticException]
+</pre>
+</div>
+
+<pre class="example">
+    其中一个解决方法是分别抛出异常， 但是接下来 Deferred.await 应该有相同的机制来避免行为不一致并且会导致协程的实现细节（是否已将其部分工作委托给子协程） 泄漏到异常处理者中
+</pre>
+
+<p>
+<span class="underline">CancellationException</span> 是 <b>透明</b> 的并且会在默认情况下 <span class="underline">解包</span> ：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.</span>*
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">java.io.IOException</span>
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking {
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">handler</span> = <span style="color: #98f5ff;">CoroutineExceptionHandler</span> { _, exception -&gt; println(<span style="color: #deb887;">"Caught original </span><span style="color: #4eee94;">$exception</span><span style="color: #deb887;">"</span>) }
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">job</span> = <span style="color: #98f5ff;">GlobalScope.launch</span>(handler) {
+        <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">inner</span> = launch {
+            launch {
+                launch {
+                    <span style="color: #00bfff; font-weight: bold;">throw</span> <span style="color: #98f5ff;">IOException</span>()
+                }
+            }
+        }
+        <span style="color: #00bfff; font-weight: bold;">try</span> {
+            <span style="color: #00bfff; font-weight: bold;">inner</span>.join()
+        } <span style="color: #00bfff; font-weight: bold;">catch</span> (e: <span style="color: #98f5ff;">CancellationException</span>) {
+            println(<span style="color: #deb887;">"Rethrowing CancellationException with original cause"</span>)
+            <span style="color: #00bfff; font-weight: bold;">throw</span> e
+        }
+    }
+    job.join()
+} 
+</pre>
+</div>
+
+<div class="org-src-container">
+<pre class="src src-sh">Rethrowing CancellationException with original cause
+Caught original java.io.IOException
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org17df1a9" class="outline-2">
+<h2 id="org17df1a9">监督</h2>
+</div>
 </div>
 <div id="postamble" class="status">
 
