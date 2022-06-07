@@ -12,4 +12,89 @@
   协程领域对这个问题的一些解决方案类似于多线程领域中的解决方案，但另外解决方案则是独一无二的
 #+END_EXAMPLE
 * 问题
+  启动一百个协程，它们都做一千次相同的操作。同时会测量它们的完成时间以便进一步的比较：
+
+  #+BEGIN_SRC kotlin 
+  suspend fun massiveRun(action: suspend () -> Unit) {
+      val n = 100 // 启动的协程数量
+      val k = 1000 // 每个协程重复执行同一动作的次数
+      val time = measureTimeMillis {
+	  coroutineScope {
+	      // 协程的作用域
+	      repeat(n) {
+		  launch {
+		      repeat(k) {
+			  action()
+		      }
+		  }
+	      }
+	  }
+      } println("Completed ${n * k} actions in $time ms")
+  }
+  #+END_SRC
+
+  先从一个非常简单的动作开始：使用多线程的 Dispatchers.Default 来递增一个共享的可变变量 
+
+  #+BEGIN_SRC kotlin 
+  import kotlinx.coroutines.*
+  import kotlin.system.measureTimeMillis
+
+  suspend fun massiveRun(action: suspend () -> Unit) {
+      val n = 100 // 启动的协程数量
+      val k = 1000 // 每个协程重复执行同一动作的次数
+      val time = measureTimeMillis {
+	  coroutineScope {
+	      // 协程的作用域
+	      repeat(n) {
+		  launch {
+		      repeat(k) {
+			  action()
+		      }
+		  }
+	      }
+	  }
+      }
+      println("Completed ${n * k} actions in $time ms")
+  }
+
+  var counter = 0
+
+  fun main() = runBlocking {
+      withContext(Dispatchers.Default) {
+	  massiveRun {
+	      counter++
+	  }
+      }
+      println("Counter = $counter")
+  }
+  #+END_SRC
+
+  #+BEGIN_EXAMPLE
+    这段代码最后打印出什么结果？
+
+    它不太可能打印出“Counter = 100000”，因为一百个协程在多个线程中同时递增计数器但没有做并发处理
+  #+END_EXAMPLE
+** volatile 无济于事
+   有一种常见的误解：volatile 可以解决并发问题。尝试一下：
+
+   #+BEGIN_SRC kotlin 
+  @Volatile
+  var counter2 = 0
+
+  fun main() = runBlocking {
+      withContext(Dispatchers.Default) {
+	  massiveRun {
+	      counter2++
+	  }
+      }
+      println("Counter = $counter2")
+  }
+   #+END_SRC
+
+   #+BEGIN_EXAMPLE
+     这段代码运行速度更慢了，但最后仍然没有得到“Counter = 100000”这个结果
+
+     因为 volatile 变量保证并发下的可见性，但在大量并发（示例中即“递增”操作）修改时并不提供原子性
+   #+END_EXAMPLE
+* 线程安全的数据结构
 

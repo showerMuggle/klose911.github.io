@@ -238,7 +238,12 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgc234670">问题</a></li>
+<li><a href="#orgc234670">问题</a>
+<ul>
+<li><a href="#orgf838e0d">volatile 无济于事</a></li>
+</ul>
+</li>
+<li><a href="#org0a45a80">线程安全的数据结构</a></li>
 </ul>
 </div>
 </div>
@@ -253,6 +258,108 @@ for the JavaScript code in this tag.
 </pre>
 <div id="outline-container-orgc234670" class="outline-2">
 <h2 id="orgc234670">问题</h2>
+<div class="outline-text-2" id="text-orgc234670">
+<p>
+启动一百个协程，它们都做一千次相同的操作。同时会测量它们的完成时间以便进一步的比较：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">suspend</span> <span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">massiveRun</span>(action: <span style="color: #00bfff; font-weight: bold;">suspend</span> () -&gt; <span style="color: #98f5ff;">Unit</span>) {
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">n</span> = 100 <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#21551;&#21160;&#30340;&#21327;&#31243;&#25968;&#37327;</span>
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">k</span> = 1000 <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#27599;&#20010;&#21327;&#31243;&#37325;&#22797;&#25191;&#34892;&#21516;&#19968;&#21160;&#20316;&#30340;&#27425;&#25968;</span>
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">time</span> = measureTimeMillis {
+        coroutineScope {
+            <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#21327;&#31243;&#30340;&#20316;&#29992;&#22495;</span>
+            repeat(n) {
+                launch {
+                    repeat(k) {
+                        action()
+                    }
+                }
+            }
+        }
+    } println(<span style="color: #deb887;">"Completed ${</span>n * k<span style="color: #deb887;">} actions in </span><span style="color: #4eee94;">$time</span><span style="color: #deb887;"> ms"</span>)
+}
+</pre>
+</div>
+
+<p>
+先从一个非常简单的动作开始：使用多线程的 Dispatchers.Default 来递增一个共享的可变变量 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.</span>*
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlin.system.measureTimeMillis</span>
+
+<span style="color: #00bfff; font-weight: bold;">suspend</span> <span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">massiveRun</span>(action: <span style="color: #00bfff; font-weight: bold;">suspend</span> () -&gt; <span style="color: #98f5ff;">Unit</span>) {
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">n</span> = 100 <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#21551;&#21160;&#30340;&#21327;&#31243;&#25968;&#37327;</span>
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">k</span> = 1000 <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#27599;&#20010;&#21327;&#31243;&#37325;&#22797;&#25191;&#34892;&#21516;&#19968;&#21160;&#20316;&#30340;&#27425;&#25968;</span>
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">time</span> = measureTimeMillis {
+        coroutineScope {
+            <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#21327;&#31243;&#30340;&#20316;&#29992;&#22495;</span>
+            repeat(n) {
+                launch {
+                    repeat(k) {
+                        action()
+                    }
+                }
+            }
+        }
+    }
+    println(<span style="color: #deb887;">"Completed ${</span>n * k<span style="color: #deb887;">} actions in </span><span style="color: #4eee94;">$time</span><span style="color: #deb887;"> ms"</span>)
+}
+
+<span style="color: #00bfff; font-weight: bold;">var</span> <span style="color: #4eee94;">counter</span> = 0
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking {
+    withContext(<span style="color: #98f5ff;">Dispatchers.Default</span>) {
+        massiveRun {
+            counter++
+        }
+    }
+    println(<span style="color: #deb887;">"Counter = </span><span style="color: #4eee94;">$counter</span><span style="color: #deb887;">"</span>)
+}
+</pre>
+</div>
+
+<pre class="example">
+    这段代码最后打印出什么结果？
+
+    它不太可能打印出“Counter = 100000”，因为一百个协程在多个线程中同时递增计数器但没有做并发处理
+</pre>
+</div>
+<div id="outline-container-orgf838e0d" class="outline-3">
+<h3 id="orgf838e0d">volatile 无济于事</h3>
+<div class="outline-text-3" id="text-orgf838e0d">
+<p>
+有一种常见的误解：volatile 可以解决并发问题。尝试一下：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin">@<span style="color: #98f5ff;">Volatile</span>
+<span style="color: #00bfff; font-weight: bold;">var</span> <span style="color: #4eee94;">counter2</span> = 0
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking {
+    withContext(<span style="color: #98f5ff;">Dispatchers.Default</span>) {
+        massiveRun {
+            counter2++
+        }
+    }
+    println(<span style="color: #deb887;">"Counter = </span><span style="color: #4eee94;">$counter2</span><span style="color: #deb887;">"</span>)
+}
+</pre>
+</div>
+
+<pre class="example">
+     这段代码运行速度更慢了，但最后仍然没有得到“Counter = 100000”这个结果
+
+     因为 volatile 变量保证并发下的可见性，但在大量并发（示例中即“递增”操作）修改时并不提供原子性
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org0a45a80" class="outline-2">
+<h2 id="org0a45a80">线程安全的数据结构</h2>
 </div>
 </div>
 <div id="postamble" class="status">
