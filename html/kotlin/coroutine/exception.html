@@ -242,7 +242,13 @@ for the JavaScript code in this tag.
 <li><a href="#org5022eed">CoroutineExceptionHandler</a></li>
 <li><a href="#orgc182af8">取消与异常</a></li>
 <li><a href="#org7a09708">异常聚合</a></li>
-<li><a href="#org17df1a9">监督</a></li>
+<li><a href="#org17df1a9">监督</a>
+<ul>
+<li><a href="#org2ccd408">监督作业</a></li>
+<li><a href="#org39701f1">监督作业的作用域</a></li>
+<li><a href="#orgd790dca">监督作业中的异常</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
@@ -580,6 +586,184 @@ Caught original java.io.IOException
 </div>
 <div id="outline-container-org17df1a9" class="outline-2">
 <h2 id="org17df1a9">监督</h2>
+<div class="outline-text-2" id="text-org17df1a9">
+<pre class="example">
+    取消是一种双向机制，在协程的整个层次结构之间传播。但是如果需要单向取消怎么办？
+
+    一个良好示例是在其作用域内定义作业的 UI 组件。如果任何一个 UI 的子作业执行失败了，它并不总是有必要取消（有效地杀死）整个 UI 组件， 但是如果 UI 组件被销毁了（并且它的作业也被取消了），由于它的结果不再被需要了，它有必要使所有的子作业执行失败
+
+    另一个例子是服务进程孵化了一些子作业并且需要 监督 它们的执行，追踪它们的故障并在这些子作业执行失败的时候重启
+</pre>
+</div>
+<div id="outline-container-org2ccd408" class="outline-3">
+<h3 id="org2ccd408">监督作业</h3>
+<div class="outline-text-3" id="text-org2ccd408">
+<p>
+<span class="underline">SupervisorJob</span> 可以被用于这些目的。它类似于常规的 Job，唯一的不同是：SupervisorJob 的 <span class="underline">取消</span> 只会 <b>向下</b> <span class="underline">传播</span> 。这是非常容易从示例中观察到的：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.</span>*
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking {
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">supervisor</span> = <span style="color: #98f5ff;">SupervisorJob</span>()
+    with(<span style="color: #98f5ff;">CoroutineScope</span>(coroutineContext + supervisor)) {
+        <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#21551;&#21160;&#31532;&#19968;&#20010;&#23376;&#20316;&#19994;&#8212;&#8212;&#36825;&#20010;&#31034;&#20363;&#23558;&#20250;&#24573;&#30053;&#23427;&#30340;&#24322;&#24120;&#65288;&#19981;&#35201;&#22312;&#23454;&#36341;&#20013;&#36825;&#20040;&#20570;&#65281;&#65289;</span>
+        <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">firstChild</span> = launch(<span style="color: #98f5ff;">CoroutineExceptionHandler</span> { _, _ -&gt; }) {
+            println(<span style="color: #deb887;">"First child is failing"</span>)
+            <span style="color: #00bfff; font-weight: bold;">throw</span> <span style="color: #98f5ff;">AssertionError</span>(<span style="color: #deb887;">"First child is cancelled"</span>)
+        }
+
+        <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#21551;&#21160;&#31532;&#20004;&#20010;&#23376;&#20316;&#19994;</span>
+        <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">secondChild</span> = launch {
+            firstChild.join()
+            <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#21462;&#28040;&#20102;&#31532;&#19968;&#20010;&#23376;&#20316;&#19994;&#19988;&#27809;&#26377;&#20256;&#25773;&#32473;&#31532;&#20108;&#20010;&#23376;&#20316;&#19994;</span>
+            println(<span style="color: #deb887;">"First child is cancelled: ${</span>firstChild.isCancelled<span style="color: #deb887;">}, but second one is still active"</span>)
+            <span style="color: #00bfff; font-weight: bold;">try</span> {
+                delay(<span style="color: #98f5ff;">Long.MAX</span>_<span style="color: #98f5ff;">VALUE</span>)
+            } <span style="color: #00bfff; font-weight: bold;">finally</span> { <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20294;&#26159;&#21462;&#28040;&#20102;&#30417;&#30563;&#30340;&#20256;&#25773;</span>
+                println(<span style="color: #deb887;">"Second child is cancelled because supervisor is cancelled"</span>)
+            }
+        }
+
+        <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#31561;&#24453;&#30452;&#21040;&#31532;&#19968;&#20010;&#23376;&#20316;&#19994;&#22833;&#36133;&#19988;&#25191;&#34892;&#23436;&#25104;</span>
+        firstChild.join()
+        println(<span style="color: #deb887;">"Cancelling supervisor"</span>)
+        supervisor.cancel()
+        secondChild.join()
+    }
+}
+</pre>
+</div>
+
+<p>
+这段代码的输出如下：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">First child is failing
+First child is cancelled: true, but second one is still active
+Cancelling supervisor
+Second child is cancelled because supervisor is cancelled
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org39701f1" class="outline-3">
+<h3 id="org39701f1">监督作业的作用域</h3>
+<div class="outline-text-3" id="text-org39701f1">
+<p>
+对于作用域的并发，supervisorScope 可以被用来替代 coroutineScope 来实现相同的目的：
+</p>
+<ul class="org-ul">
+<li>它只会单向的传播并且当 <span class="underline">作业</span> <b>自身</b> 执行 <span class="underline">失败</span> 的时候将 <b>所有子作业</b> 全部 <span class="underline">取消</span></li>
+<li>作业 <b>自身</b> 也会在 <span class="underline">所有的子作业</span> 执行结束前 <b>等待</b></li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.</span>*
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking {
+    <span style="color: #00bfff; font-weight: bold;">try</span> {
+        supervisorScope {
+            <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">child</span> = launch {
+                <span style="color: #00bfff; font-weight: bold;">try</span> {
+                    println(<span style="color: #deb887;">"Child is sleeping"</span>)
+                    delay(<span style="color: #98f5ff;">Long.MAX</span>_<span style="color: #98f5ff;">VALUE</span>)
+                } <span style="color: #00bfff; font-weight: bold;">finally</span> {
+                    println(<span style="color: #deb887;">"Child is cancelled"</span>)
+                }
+            }
+            <span style="color: #5f9ea0; font-style: italic;">// </span><span style="color: #5f9ea0; font-style: italic;">&#20351;&#29992; yield &#26469;&#32473;&#25105;&#20204;&#30340;&#23376;&#20316;&#19994;&#19968;&#20010;&#26426;&#20250;&#26469;&#25191;&#34892;&#25171;&#21360;</span>
+            yield()
+            println(<span style="color: #deb887;">"Throwing exception from scope"</span>)
+            <span style="color: #00bfff; font-weight: bold;">throw</span> <span style="color: #98f5ff;">AssertionError</span>()
+        }
+    } <span style="color: #00bfff; font-weight: bold;">catch</span> (e: <span style="color: #98f5ff;">AssertionError</span>) {
+        println(<span style="color: #deb887;">"Caught assertion error"</span>)
+    }
+} 
+</pre>
+</div>
+
+<p>
+输出如下：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">Child is sleeping
+Throwing exception from scope
+Child is cancelled
+Caught assertion error
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgd790dca" class="outline-3">
+<h3 id="orgd790dca">监督作业中的异常</h3>
+<div class="outline-text-3" id="text-orgd790dca">
+<p>
+常规的作业和监督作业之间的另一个重要区别是 <span class="underline">异常处理</span> ，监督协程中的 <span class="underline">每一个子作业</span> 应该通过 <span class="underline">异常处理机制</span> <b>处理</b> <span class="underline">自身的异常</span> 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.CoroutineExceptionHandler</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.launch</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.runBlocking</span>
+<span style="color: #00bfff; font-weight: bold;">import</span> <span style="color: #deb887;">kotlinx.coroutines.supervisorScope</span>
+
+<span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() = runBlocking {
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">handler</span> = <span style="color: #98f5ff;">CoroutineExceptionHandler</span> { _, exception -&gt; println(<span style="color: #deb887;">"Caught </span><span style="color: #4eee94;">$exception</span><span style="color: #deb887;">"</span>) }
+    supervisorScope {
+        <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">child</span> = launch(handler) {
+            println(<span style="color: #deb887;">"Child throws an exception"</span>)
+            <span style="color: #00bfff; font-weight: bold;">throw</span> <span style="color: #98f5ff;">AssertionError</span>()
+        }
+        println(<span style="color: #deb887;">"Scope is completing"</span>)
+    }
+    println(<span style="color: #deb887;">"Scope is completed"</span>)
+}
+</pre>
+</div>
+
+<p>
+输出如下：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-sh">Scope is completing
+Child throws an exception
+Caught java.lang.AssertionError
+Scope is completed
+</pre>
+</div>
+
+<pre class="example">
+     这种差异来自于子作业的执行失败不会传播给它的父作业的事实
+</pre>
+
+<table border="2" cellspacing="0" cellpadding="6" rules="groups" frame="hsides">
+
+
+<colgroup>
+<col  class="org-left" />
+
+<col  class="org-left" />
+
+<col  class="org-left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="org-left"><a href="shared_state.html">Next：共享状态</a></td>
+<td class="org-left"><a href="channel.html">Previous：通道</a></td>
+<td class="org-left"><a href="coroutine.html">Home：协程</a></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
