@@ -209,9 +209,9 @@ _select 表达式_ 可以 同时 *等待* _多个挂起函数_ ，并 *选择* �
   + 当通道已经关闭时， 会立即选择 onReceiveCatching 
 
 * select 发送通道
-Select 表达式具有 _onSend_ 子句，可以有选择的发送到某些通道。下面是一个整数生成器的示例，当主通道上的消费者无法跟上它时，它会将值发送到 side 通道上： 
+  Select 表达式具有 _onSend_ 子句，可以有选择的发送到某些通道。下面是一个整数生成器的示例，当主通道上的消费者无法跟上它时，它会将值发送到 side 通道上： 
 
-#+BEGIN_SRC kotlin 
+  #+BEGIN_SRC kotlin 
   suspend fun CoroutineScope.produceNumbers(side: SendChannel<Int>) = produce<Int> {
       for (num in 1..10) {
 	  // 生产从 1 到 10 的 10 个数值
@@ -222,11 +222,11 @@ Select 表达式具有 _onSend_ 子句，可以有选择的发送到某些通道
 	  }
       }
   }
-#+END_SRC
+  #+END_SRC
 
-消费者将会非常缓慢，每个数值处理需要 250 毫秒：
+  消费者将会非常缓慢，每个数值处理需要 250 毫秒：
 
-#+BEGIN_SRC kotlin 
+  #+BEGIN_SRC kotlin 
   fun main() = runBlocking {
       val side = Channel<Int>() // 分配 side 通道
       launch {
@@ -244,11 +244,11 @@ Select 表达式具有 _onSend_ 子句，可以有选择的发送到某些通道
       println("Done consuming")
       coroutineContext.cancelChildren()
   } 
-#+END_SRC
+  #+END_SRC
 
-看看会发生什么：
+  看看会发生什么：
 
-#+BEGIN_SRC sh 
+  #+BEGIN_SRC sh 
   Consuming 1
   Side channel has 2
   Side channel has 3
@@ -260,31 +260,31 @@ Select 表达式具有 _onSend_ 子句，可以有选择的发送到某些通道
   Side channel has 9
   Consuming 10
   Done consuming
-#+END_SRC
+  #+END_SRC
 * 选择延迟值
-Select 延迟值可以使用 _onAwait_ 子句查询。 启动一个异步函数，它在随机的延迟后会延迟返回字符串：
+  Select 延迟值可以使用 _onAwait_ 子句查询。 启动一个异步函数，它在随机的延迟后会延迟返回字符串：
 
-#+BEGIN_SRC kotlin 
+  #+BEGIN_SRC kotlin 
   fun CoroutineScope.asyncString(time: Int) = async {
       delay(time.toLong())
       "Waited for $time ms"
   }
-#+END_SRC
+  #+END_SRC
 
-随机启动十余个异步函数，每个都延迟随机的时间：
+  随机启动十余个异步函数，每个都延迟随机的时间：
 
-#+BEGIN_SRC kotlin 
+  #+BEGIN_SRC kotlin 
   fun CoroutineScope.asyncStringsList(): List<Deferred<String>> {
       val random = Random(3)
       return List(12) {
 	  asyncString(random.nextInt(1000))
       }
   }
-#+END_SRC
+  #+END_SRC
 
-现在 main 函数在等待第一个函数完成，并统计仍处于激活状态的延迟值的数量：
+  现在 main 函数在等待第一个函数完成，并统计仍处于激活状态的延迟值的数量：
 
-#+BEGIN_SRC kotlin 
+  #+BEGIN_SRC kotlin 
   fun main() = runBlocking {
       val list = asyncStringsList()
       val result = select<String> {
@@ -301,24 +301,24 @@ Select 延迟值可以使用 _onAwait_ 子句查询。 启动一个异步函数�
       }
       println("$countActive coroutines are still active")
   }
-#+END_SRC
+  #+END_SRC
 
-输出并不固定，类似于：
-#+BEGIN_SRC sh 
+  输出并不固定，类似于：
+  #+BEGIN_SRC sh 
   Deferred 6 produced answer 'Waited for 43 ms'
   11 coroutines are still active
-#+END_SRC
+  #+END_SRC
 
 
-#+BEGIN_EXAMPLE
-  注意，在这里使用 select 表达式事实上是作为一种 Kotlin DSL， 因此可以用任意代码为它提供子句
+  #+BEGIN_EXAMPLE
+    注意，在这里使用 select 表达式事实上是作为一种 Kotlin DSL， 因此可以用任意代码为它提供子句
 
-  在这种情况下，遍历一个延迟值的队列，并为每个延迟值提供 onAwait 子句的调用
-#+END_EXAMPLE
+    在这种情况下，遍历一个延迟值的队列，并为每个延迟值提供 onAwait 子句的调用
+  #+END_EXAMPLE
 * 在延迟通道上切换
-现在来编写一个通道生产者函数，它消费一个产生延迟字符串的通道，并等待每个接收的延迟值，但它只在下一个延迟值到达或者通道关闭之前处于运行状态。此示例将 _onReceiveCatching_ 和 _onAwait_ 子句放在同一个 select 中：
+  现在来编写一个通道生产者函数，它消费一个产生延迟字符串的通道，并等待每个接收的延迟值，但它只在下一个延迟值到达或者通道关闭之前处于运行状态。此示例将 _onReceiveCatching_ 和 _onAwait_ 子句放在同一个 select 中：
 
-#+BEGIN_SRC kotlin 
+  #+BEGIN_SRC kotlin 
   fun CoroutineScope.switchMapDeferreds(input: ReceiveChannel<Deferred<String>>) = produce<String> {
       var current = input.receive() // start with first received deferred value
       while (isActive) { // loop while not cancelled/closed
@@ -339,20 +339,20 @@ Select 延迟值可以使用 _onAwait_ 子句查询。 启动一个异步函数�
 	  }
       }
   }
-#+END_SRC
+  #+END_SRC
 
-为了测试它，用一个简单的异步函数，它在特定的延迟后返回特定的字符串：
+  为了测试它，用一个简单的异步函数，它在特定的延迟后返回特定的字符串：
 
-#+BEGIN_SRC kotlin 
+  #+BEGIN_SRC kotlin 
   fun CoroutineScope.asyncString(str: String, time: Long) = async {
       delay(time)
       str
   }
-#+END_SRC
+  #+END_SRC
 
-main 函数只是启动一个协程来打印 switchMapDeferreds 的结果并向它发送一些测试数据：
+  main 函数只是启动一个协程来打印 switchMapDeferreds 的结果并向它发送一些测试数据：
 
-#+BEGIN_SRC kotlin 
+  #+BEGIN_SRC kotlin 
   fun main() = runBlocking {
       val chan = Channel<Deferred<String>>() // the channel for test
       launch { // launch printing coroutine
@@ -370,14 +370,15 @@ main 函数只是启动一个协程来打印 switchMapDeferreds 的结果并向�
       chan.close() // close the channel ...
       delay(500) // and wait some time to let it finish
   }
-#+END_SRC
+  #+END_SRC
 
-这段代码的执行结果：
+  这段代码的执行结果：
 
-#+BEGIN_SRC sh 
+  #+BEGIN_SRC sh 
   BEGIN
   Replace
   END
   Channel was closed
-#+END_SRC
+  #+END_SRC
 
+  | [[file:shared_state.org][Previous：共享状态]] | [[file:coroutine.org][Home：协程]] |
