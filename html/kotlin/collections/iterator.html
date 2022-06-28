@@ -234,7 +234,170 @@ for the JavaScript code in this tag.
  <a accesskey="H" href="./collections.html"> HOME </a>
 </div><div id="content">
 <h1 class="title">迭代器</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#org4e94346">List 迭代器</a></li>
+<li><a href="#orgf952333">可变迭代器</a></li>
+</ul>
+</div>
+</div>
+<p>
+对于 <b>遍历</b> 集合元素， Kotlin 标准库支持 <span class="underline">迭代器</span> 的常用机制：对象可按顺序提供对元素的访问权限，而不会暴露集合的底层结构
+</p>
 
+<pre class="example">
+  当需要逐个处理集合的所有元素（例如打印值或对其进行类似更新）时，迭代器非常有用
+</pre>
+
+<p>
+<span class="underline">Iterable&lt;T&gt;</span> 接口的继承者（包括 Set 与 List）可以通过调用 <span class="underline">iterator()</span> 函数获得迭代器：
+</p>
+<ol class="org-ol">
+<li>一旦获得迭代器它就指向集合的第一个元素</li>
+<li>调用 next() 函数将返回此元素，并将迭代器指向下一个元素（如果下一个元素存在）</li>
+<li>一旦迭代器通过了最后一个元素，它就不能再用于检索元素。也无法重新指向到以前的任何位置</li>
+<li>要再次遍历集合，请创建一个新的迭代器</li>
+</ol>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+    <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">sampleStart</span>
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">numbers</span> = listOf(<span style="color: #deb887;">"one"</span>, <span style="color: #deb887;">"two"</span>, <span style="color: #deb887;">"three"</span>, <span style="color: #deb887;">"four"</span>)
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">numbersIterator</span> = numbers.iterator()
+    <span style="color: #00bfff; font-weight: bold;">while</span> (numbersIterator.hasNext()) {
+        println(numbersIterator.next())
+    }
+    <span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">sampleEnd</span>
+}
+</pre>
+</div>
+
+<p>
+遍历 Iterable 集合的另一种方法是众所周知的 <span class="underline">for 循环</span> 。在集合中使用 for 循环时，将隐式获取迭代器。因此，以下代码与上面的示例等效：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+<span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">sampleStart</span>
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">numbers</span> = listOf(<span style="color: #deb887;">"one"</span>, <span style="color: #deb887;">"two"</span>, <span style="color: #deb887;">"three"</span>, <span style="color: #deb887;">"four"</span>)
+    <span style="color: #00bfff; font-weight: bold;">for</span> (item <span style="color: #00bfff; font-weight: bold;">in</span> numbers) {
+        println(item)
+    }
+<span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">sampleEnd</span>
+}
+</pre>
+</div>
+
+<p>
+最后，有一个好用的 <span class="underline">forEach()</span> 函数，可自动迭代集合并为每个元素执行给定的代码。因此，等效的示例如下所示：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+<span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">sampleStart</span>
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">numbers</span> = listOf(<span style="color: #deb887;">"one"</span>, <span style="color: #deb887;">"two"</span>, <span style="color: #deb887;">"three"</span>, <span style="color: #deb887;">"four"</span>)
+    numbers.forEach {
+        println(<span style="color: #00bfff; font-weight: bold;">it</span>)
+    }
+<span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">sampleEnd</span>
+}
+</pre>
+</div>
+<div id="outline-container-org4e94346" class="outline-2">
+<h2 id="org4e94346">List 迭代器</h2>
+<div class="outline-text-2" id="text-org4e94346">
+<p>
+对于列表，有一个特殊的迭代器实现： ListIterator 它支持列表 <b>双向</b> 迭代：正向与反向：
+</p>
+<ul class="org-ul">
+<li>反向迭代由 <span class="underline">hasPrevious()</span> 和 <span class="underline">previous()</span> 函数实现</li>
+<li>此外， ListIterator 通过 <span class="underline">nextIndex()</span> 与 <span class="underline">previousIndex()</span> 函数提供有关元素索引的信息</li>
+</ul>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">numbers</span> = listOf(<span style="color: #deb887;">"one"</span>, <span style="color: #deb887;">"two"</span>, <span style="color: #deb887;">"three"</span>, <span style="color: #deb887;">"four"</span>)
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">listIterator</span> = numbers.listIterator()
+    <span style="color: #00bfff; font-weight: bold;">while</span> (listIterator.hasNext()) listIterator.next()
+        println(<span style="color: #deb887;">"Iterating backwards:"</span>)
+    <span style="color: #00bfff; font-weight: bold;">while</span> (listIterator.hasPrevious()) {
+        print(<span style="color: #deb887;">"Index: ${</span>listIterator.previousIndex()<span style="color: #deb887;">}"</span>)
+        println(<span style="color: #deb887;">", value: ${</span>listIterator.previous()<span style="color: #deb887;">}"</span>)
+    }
+}
+</pre>
+</div>
+
+<pre class="example">
+    具有双向迭代的能力意味着 ListIterator 在到达最后一个元素后仍可以使用
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orgf952333" class="outline-2">
+<h2 id="orgf952333">可变迭代器</h2>
+<div class="outline-text-2" id="text-orgf952333">
+<p>
+为了迭代可变集合，于是有了 <span class="underline">MutableIterator</span> 来扩展 Iterator 使其具有元素 <b>删除</b> 函数 <span class="underline">remove()</span> 。因此，可以在迭代时从集合中删除元素 
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+<span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">sampleStart</span>
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">numbers</span> = mutableListOf(<span style="color: #deb887;">"one"</span>, <span style="color: #deb887;">"two"</span>, <span style="color: #deb887;">"three"</span>, <span style="color: #deb887;">"four"</span>) 
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">mutableIterator</span> = numbers.iterator()
+
+    mutableIterator.next()
+    mutableIterator.remove()    
+    println(<span style="color: #deb887;">"After removal: </span><span style="color: #4eee94;">$numbers</span><span style="color: #deb887;">"</span>)
+<span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">sampleEnd</span>
+}
+</pre>
+</div>
+
+<p>
+除了删除元素， MutableListIterator 还可以在迭代列表时 <span class="underline">插入</span> 和 <span class="underline">替换</span> 元素：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-kotlin"><span style="color: #00bfff; font-weight: bold;">fun</span> <span style="color: #daa520; font-weight: bold;">main</span>() {
+<span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">sampleStart</span>
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">numbers</span> = mutableListOf(<span style="color: #deb887;">"one"</span>, <span style="color: #deb887;">"four"</span>, <span style="color: #deb887;">"four"</span>) 
+    <span style="color: #00bfff; font-weight: bold;">val</span> <span style="color: #4eee94;">mutableListIterator</span> = numbers.listIterator()
+
+    mutableListIterator.next()
+    mutableListIterator.add(<span style="color: #deb887;">"two"</span>)
+    mutableListIterator.next()
+    mutableListIterator.<span style="color: #00bfff; font-weight: bold;">set</span>(<span style="color: #deb887;">"three"</span>)   
+    println(numbers)
+<span style="color: #5f9ea0; font-style: italic;">//</span><span style="color: #5f9ea0; font-style: italic;">sampleEnd</span>
+}
+</pre>
+</div>
+
+
+<table border="1" cellspacing="0" cellpadding="6" rules="all" frame="boader">
+
+
+<colgroup>
+<col  class="org-left" />
+
+<col  class="org-left" />
+
+<col  class="org-left" />
+</colgroup>
+<tbody>
+<tr>
+<td class="org-left"><a href="range.html">Next：区间</a></td>
+<td class="org-left"><a href="constructor.html">Previous：构造</a></td>
+<td class="org-left"><a href="collections.html">Home：集合</a></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 </div>
 <div id="postamble" class="status">
 

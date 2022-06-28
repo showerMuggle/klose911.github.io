@@ -8,6 +8,6 @@ fun main() {
     val numberSet = setOf(1, 2, 3)
     println(numberSet.map { it * 3 })
     println(numberSet.mapIndexed { idx, value -> value * idx })
-    
+
     println(numberList.associateWith { it.length })
 }
